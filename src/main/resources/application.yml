@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: lattice-app
+  ai:
+    mcp:
+      server:
+        protocol: STREAMABLE
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

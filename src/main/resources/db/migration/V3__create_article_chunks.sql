@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS article_chunks (
+    id BIGSERIAL PRIMARY KEY,
+    article_id BIGINT NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    chunk_text TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS source_files (
+    id BIGSERIAL PRIMARY KEY,
+    file_path VARCHAR(512) NOT NULL UNIQUE,
+    content_preview TEXT NOT NULL,
+    format VARCHAR(32) NOT NULL,
+    file_size BIGINT NOT NULL,
+    indexed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
