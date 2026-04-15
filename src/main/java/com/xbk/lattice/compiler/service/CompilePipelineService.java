@@ -1,7 +1,10 @@
 package com.xbk.lattice.compiler.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.config.CompilerProperties;
 import com.xbk.lattice.compiler.model.AnalyzedConcept;
+import com.xbk.lattice.compiler.model.ConceptSection;
 import com.xbk.lattice.compiler.model.MergedConcept;
 import com.xbk.lattice.compiler.model.RawSource;
 import com.xbk.lattice.compiler.model.SourceBatch;
@@ -10,6 +13,7 @@ import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -28,8 +32,11 @@ import java.util.Map;
  * @author xiexu
  */
 @Service
+@Slf4j
 @Profile("jdbc")
 public class CompilePipelineService {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final IngestNode ingestNode;
 
@@ -79,6 +86,7 @@ public class CompilePipelineService {
      * @throws IOException IO 异常
      */
     public CompileResult compile(Path sourceDir) throws IOException {
+        log.info("Compile started sourceDir: {}", sourceDir);
         List<RawSource> rawSources = ingestNode.ingest(sourceDir);
         persistSourceFiles(rawSources);
         Map<String, List<RawSource>> groupedSources = groupNode.group(rawSources);
@@ -95,7 +103,9 @@ public class CompilePipelineService {
             articleChunkJdbcRepository.replaceChunks(mergedConcept.getConceptId(), mergedConcept.getSnippets());
         }
 
-        return new CompileResult(mergedConcepts.size());
+        CompileResult compileResult = new CompileResult(mergedConcepts.size());
+        log.info("Compile completed sourceDir: {}, persistedCount: {}", sourceDir, compileResult.getPersistedCount());
+        return compileResult;
     }
 
     /**
@@ -107,6 +117,8 @@ public class CompilePipelineService {
     private ArticleRecord toArticleRecord(MergedConcept mergedConcept) {
         StringBuilder contentBuilder = new StringBuilder();
         contentBuilder.append("# ").append(mergedConcept.getTitle()).append("\n\n");
+        appendSummary(contentBuilder, mergedConcept.getDescription());
+        appendSections(contentBuilder, mergedConcept.getSections());
         contentBuilder.append("## Sources").append("\n");
         for (String sourcePath : mergedConcept.getSourcePaths()) {
             contentBuilder.append("- ").append(sourcePath).append("\n");
@@ -121,8 +133,64 @@ public class CompilePipelineService {
                 mergedConcept.getTitle(),
                 contentBuilder.toString().trim(),
                 "ACTIVE",
-                OffsetDateTime.now()
+                OffsetDateTime.now(),
+                mergedConcept.getSourcePaths(),
+                buildMetadataJson(mergedConcept)
         );
+    }
+
+    /**
+     * 追加文章摘要段落。
+     *
+     * @param contentBuilder 内容构建器
+     * @param description 概念描述
+     */
+    private void appendSummary(StringBuilder contentBuilder, String description) {
+        if (description == null || description.isBlank()) {
+            return;
+        }
+        contentBuilder.append("## Summary").append("\n");
+        contentBuilder.append(description.trim()).append("\n\n");
+    }
+
+    /**
+     * 追加结构化章节。
+     *
+     * @param contentBuilder 内容构建器
+     * @param sections 章节列表
+     */
+    private void appendSections(StringBuilder contentBuilder, List<ConceptSection> sections) {
+        for (ConceptSection section : sections) {
+            contentBuilder.append("## ").append(section.getHeading().trim()).append("\n");
+            for (String contentLine : section.getContentLines()) {
+                contentBuilder.append("- ").append(contentLine.trim()).append("\n");
+            }
+            if (!section.getSourceRefs().isEmpty()) {
+                contentBuilder.append("> Sources: ").append(String.join(", ", section.getSourceRefs())).append("\n");
+            }
+            contentBuilder.append("\n");
+        }
+    }
+
+    /**
+     * 构建最小文章元数据 JSON。
+     *
+     * @param mergedConcept 合并概念
+     * @return 元数据 JSON
+     */
+    private String buildMetadataJson(MergedConcept mergedConcept) {
+        java.util.Map<String, Object> metadata = new java.util.LinkedHashMap<String, Object>();
+        metadata.put("description", mergedConcept.getDescription());
+        metadata.put("structured", !mergedConcept.getSections().isEmpty());
+        metadata.put("sourceCount", mergedConcept.getSourcePaths().size());
+        metadata.put("snippetCount", mergedConcept.getSnippets().size());
+        metadata.put("sectionCount", mergedConcept.getSections().size());
+        try {
+            return OBJECT_MAPPER.writeValueAsString(metadata);
+        }
+        catch (JsonProcessingException ex) {
+            throw new IllegalStateException("构建文章 metadata 失败", ex);
+        }
     }
 
     /**

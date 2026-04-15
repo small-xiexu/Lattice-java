@@ -2,6 +2,7 @@ package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.config.CompilerProperties;
 import com.xbk.lattice.compiler.model.RawSource;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -22,6 +23,7 @@ import java.util.stream.Stream;
  *
  * @author xiexu
  */
+@Slf4j
 public class IngestNode {
 
     private static final Set<String> SUPPORTED_TEXT_FORMATS = Collections.unmodifiableSet(
@@ -100,6 +102,7 @@ public class IngestNode {
             return RawSource.text(relativePath, trimmedContent, format, fileSize);
         }
         catch (IOException ex) {
+            log.error("Failed to read source file path: {}", path, ex);
             throw new IllegalStateException("读取源文件失败: " + path, ex);
         }
     }

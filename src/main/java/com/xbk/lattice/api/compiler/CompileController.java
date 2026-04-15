@@ -2,6 +2,7 @@ package com.xbk.lattice.api.compiler;
 
 import com.xbk.lattice.compiler.service.CompilePipelineService;
 import com.xbk.lattice.compiler.service.CompileResult;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
@@ -19,6 +21,7 @@ import java.nio.file.Path;
  * @author xiexu
  */
 @RestController
+@Slf4j
 @Profile("jdbc")
 @RequestMapping("/api/v1/compile")
 public class CompileController {
@@ -44,7 +47,20 @@ public class CompileController {
     @PostMapping
     public CompileResponse compile(@RequestBody CompileRequest compileRequest) throws IOException {
         Path sourceDir = Path.of(compileRequest.getSourceDir());
+        validateSourceDir(sourceDir);
+        log.info("Compile request received sourceDir: {}", sourceDir);
         CompileResult compileResult = compilePipelineService.compile(sourceDir);
         return new CompileResponse(compileResult.getPersistedCount());
+    }
+
+    /**
+     * 校验编译源目录。
+     *
+     * @param sourceDir 源目录
+     */
+    private void validateSourceDir(Path sourceDir) {
+        if (!Files.exists(sourceDir) || !Files.isDirectory(sourceDir)) {
+            throw new IllegalArgumentException("sourceDir 不存在或不是目录");
+        }
     }
 }

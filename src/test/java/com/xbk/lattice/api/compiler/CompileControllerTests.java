@@ -79,6 +79,25 @@ class CompileControllerTests {
     }
 
     /**
+     * 验证编译接口在 sourceDir 不存在时返回可读错误。
+     *
+     * @param tempDir 临时目录
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldReturnReadableErrorWhenSourceDirectoryDoesNotExist(@TempDir Path tempDir) throws Exception {
+        Path missingDir = tempDir.resolve("missing-dir");
+        String requestBody = "{\"sourceDir\":\"" + escapeJson(missingDir.toString()) + "\"}";
+
+        mockMvc.perform(post("/api/v1/compile")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMPILE_REQUEST_INVALID"))
+                .andExpect(jsonPath("$.message").value("sourceDir 不存在或不是目录"));
+    }
+
+    /**
      * 转义 JSON 字符串。
      *
      * @param value 原始值

@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
+import java.util.Arrays;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,7 +60,9 @@ class ArticleJdbcRepositoryTests {
                 "Ingest Node",
                 "# Ingest Node",
                 "ACTIVE",
-                OffsetDateTime.now()
+                OffsetDateTime.now(),
+                Arrays.asList("docs/ingest.md"),
+                "{\"description\":\"ingest summary\",\"structured\":true}"
         );
 
         articleJdbcRepository.upsert(articleRecord);
@@ -68,5 +71,8 @@ class ArticleJdbcRepositoryTests {
         assertThat(loaded).isPresent();
         assertThat(loaded.orElseThrow().getTitle()).isEqualTo("Ingest Node");
         assertThat(loaded.orElseThrow().getContent()).isEqualTo("# Ingest Node");
+        assertThat(loaded.orElseThrow().getSourcePaths()).containsExactly("docs/ingest.md");
+        assertThat(loaded.orElseThrow().getMetadataJson()).contains("ingest summary");
+        assertThat(loaded.orElseThrow().getMetadataJson()).contains("structured");
     }
 }

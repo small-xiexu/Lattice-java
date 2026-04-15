@@ -1,5 +1,6 @@
 package com.xbk.lattice.compiler.model;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -15,9 +16,39 @@ public class AnalyzedConcept {
 
     private final String title;
 
+    private final String description;
+
     private final List<String> sourcePaths;
 
     private final List<String> snippets;
+
+    private final List<ConceptSection> sections;
+
+    /**
+     * 创建分析后的概念。
+     *
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param description 描述
+     * @param sourcePaths 来源路径
+     * @param snippets 片段摘要
+     * @param sections 章节列表
+     */
+    public AnalyzedConcept(
+            String conceptId,
+            String title,
+            String description,
+            List<String> sourcePaths,
+            List<String> snippets,
+            List<ConceptSection> sections
+    ) {
+        this.conceptId = conceptId;
+        this.title = title;
+        this.description = description;
+        this.sourcePaths = sourcePaths;
+        this.snippets = snippets;
+        this.sections = sections;
+    }
 
     /**
      * 创建分析后的概念。
@@ -28,10 +59,26 @@ public class AnalyzedConcept {
      * @param snippets 片段摘要
      */
     public AnalyzedConcept(String conceptId, String title, List<String> sourcePaths, List<String> snippets) {
-        this.conceptId = conceptId;
-        this.title = title;
-        this.sourcePaths = sourcePaths;
-        this.snippets = snippets;
+        this(conceptId, title, "", sourcePaths, snippets, Collections.<ConceptSection>emptyList());
+    }
+
+    /**
+     * 创建分析后的概念。
+     *
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param description 描述
+     * @param sourcePaths 来源路径
+     * @param snippets 片段摘要
+     */
+    public AnalyzedConcept(
+            String conceptId,
+            String title,
+            String description,
+            List<String> sourcePaths,
+            List<String> snippets
+    ) {
+        this(conceptId, title, description, sourcePaths, snippets, Collections.<ConceptSection>emptyList());
     }
 
     /**
@@ -53,6 +100,15 @@ public class AnalyzedConcept {
     }
 
     /**
+     * 获取描述。
+     *
+     * @return 描述
+     */
+    public String getDescription() {
+        return description;
+    }
+
+    /**
      * 获取来源路径。
      *
      * @return 来源路径
@@ -68,5 +124,14 @@ public class AnalyzedConcept {
      */
     public List<String> getSnippets() {
         return snippets;
+    }
+
+    /**
+     * 获取章节列表。
+     *
+     * @return 章节列表
+     */
+    public List<ConceptSection> getSections() {
+        return sections;
     }
 }

@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: lattice_b1_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ai-rag-knowledge
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai-rag-knowledge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - lattice_b1_pgdata:/var/lib/postgresql/data
+
+volumes:
+  lattice_b1_pgdata:

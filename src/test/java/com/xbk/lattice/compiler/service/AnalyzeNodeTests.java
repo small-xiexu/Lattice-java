@@ -1,6 +1,7 @@
 package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.model.AnalyzedConcept;
+import com.xbk.lattice.compiler.model.ConceptSection;
 import com.xbk.lattice.compiler.model.RawSource;
 import com.xbk.lattice.compiler.model.SourceBatch;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,126 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author xiexu
  */
 class AnalyzeNodeTests {
+
+    /**
+     * 验证分析节点会把带噪音的分组键收敛为稳定 conceptId。
+     */
+    @Test
+    void shouldNormalizeNoisyGroupKeyIntoStableConceptId() {
+        AnalyzeNode analyzeNode = new AnalyzeNode();
+        List<SourceBatch> sourceBatches = Arrays.asList(
+                new SourceBatch("batch-1", "  Payment__Service---Core  ", Arrays.asList(
+                        RawSource.text("payment/a.md", "snippet-a", "md", 9L)
+                ))
+        );
+
+        List<AnalyzedConcept> analyzedConcepts = analyzeNode.analyze("  Payment__Service---Core  ", sourceBatches);
+
+        assertThat(analyzedConcepts).hasSize(1);
+        assertThat(analyzedConcepts.get(0).getConceptId()).isEqualTo("payment-service-core");
+        assertThat(analyzedConcepts.get(0).getTitle()).isEqualTo("Payment Service Core");
+    }
+
+    /**
+     * 验证分析节点会清理空白片段，避免把噪音写入后续链路。
+     */
+    @Test
+    void shouldTrimSnippetsAndDropBlankEntries() {
+        AnalyzeNode analyzeNode = new AnalyzeNode();
+        List<SourceBatch> sourceBatches = Arrays.asList(
+                new SourceBatch("batch-1", "payment-service", Arrays.asList(
+                        RawSource.text("payment/c.md", " refund-flow ", "md", 11L),
+                        RawSource.text("payment/a.md", "   ", "md", 3L),
+                        RawSource.text("payment/b.md", "\norder-flow\n", "md", 12L)
+                ))
+        );
+
+        List<AnalyzedConcept> analyzedConcepts = analyzeNode.analyze("payment-service", sourceBatches);
+
+        assertThat(analyzedConcepts).hasSize(1);
+        assertThat(analyzedConcepts.get(0).getSnippets()).containsExactly("order-flow", "refund-flow");
+    }
+
+    /**
+     * 验证分析节点会优先采用结构化 JSON 中的概念结果，而不是退回分组级单概念。
+     */
+    @Test
+    void shouldPreferStructuredJsonConceptsWhenPayloadIsValid() {
+        AnalyzeNode analyzeNode = new AnalyzeNode();
+        String jsonPayload = "{"
+                + "\"concepts\":["
+                + "{\"id\":\"payment_timeout\",\"title\":\"Payment Timeout\",\"description\":\" Handles payment timeout recovery \","
+                + "\"snippets\":[\" order timeout \",\"refund timeout\"],"
+                + "\"sections\":[{\"heading\":\" Timeout Rules \",\"content\":[\" retry=3 \",\"interval=30s\"],\"sources\":[\"payment/rules.md#timeout-rules\"]}]},"
+                + "{\"id\":\"payment-channel\",\"title\":\"Payment Channel\",\"description\":\"Routes payment through enabled channels\","
+                + "\"snippets\":[\"wechat-pay\",\"   \"],"
+                + "\"sections\":[{\"heading\":\"Available Channels\",\"content\":[\"wechat\",\"alipay\"]}]}"
+                + "]"
+                + "}";
+        List<SourceBatch> sourceBatches = Arrays.asList(
+                new SourceBatch("batch-1", "payment-service", Arrays.asList(
+                        RawSource.text("payment/analyze.json", jsonPayload, "json", 128L)
+                ))
+        );
+
+        List<AnalyzedConcept> analyzedConcepts = analyzeNode.analyze("payment-service", sourceBatches);
+
+        assertThat(analyzedConcepts).hasSize(2);
+        assertThat(analyzedConcepts.get(0).getConceptId()).isEqualTo("payment-timeout");
+        assertThat(analyzedConcepts.get(0).getTitle()).isEqualTo("Payment Timeout");
+        assertThat(analyzedConcepts.get(0).getDescription()).isEqualTo("Handles payment timeout recovery");
+        assertThat(analyzedConcepts.get(0).getSourcePaths()).containsExactly("payment/analyze.json");
+        assertThat(analyzedConcepts.get(0).getSnippets()).containsExactly("order timeout", "refund timeout");
+        assertThat(analyzedConcepts.get(0).getSections()).containsExactly(
+                new ConceptSection(
+                        "Timeout Rules",
+                        Arrays.asList("retry=3", "interval=30s"),
+                        Arrays.asList("payment/rules.md#timeout-rules")
+                )
+        );
+        assertThat(analyzedConcepts.get(1).getConceptId()).isEqualTo("payment-channel");
+        assertThat(analyzedConcepts.get(1).getTitle()).isEqualTo("Payment Channel");
+        assertThat(analyzedConcepts.get(1).getDescription()).isEqualTo("Routes payment through enabled channels");
+        assertThat(analyzedConcepts.get(1).getSourcePaths()).containsExactly("payment/analyze.json");
+        assertThat(analyzedConcepts.get(1).getSnippets()).containsExactly("wechat-pay");
+        assertThat(analyzedConcepts.get(1).getSections()).containsExactly(
+                new ConceptSection(
+                        "Available Channels",
+                        Arrays.asList("wechat", "alipay"),
+                        Arrays.asList("payment/analyze.json#Available Channels")
+                )
+        );
+    }
+
+    /**
+     * 验证分析节点会从截断 JSON 中抢救出已完整输出的概念。
+     */
+    @Test
+    void shouldSalvageCompletedConceptsFromTruncatedJsonPayload() {
+        AnalyzeNode analyzeNode = new AnalyzeNode();
+        String truncatedJsonPayload = "{"
+                + "\"concepts\":["
+                + "{\"id\":\"payment-timeout\",\"title\":\"Payment Timeout\",\"description\":\"Timeout description\",\"snippets\":[\"timeout-a\"]},"
+                + "{\"id\":\"refund-status\",\"title\":\"Refund Status\",\"description\":\"Refund state machine\",\"snippets\":[\"refund-created\",\"refund-paid\"]},"
+                + "{\"id\":\"broken\",\"title\":\"Broken";
+        List<SourceBatch> sourceBatches = Arrays.asList(
+                new SourceBatch("batch-1", "payment-service", Arrays.asList(
+                        RawSource.text("payment/truncated.json", truncatedJsonPayload, "json", 128L)
+                ))
+        );
+
+        List<AnalyzedConcept> analyzedConcepts = analyzeNode.analyze("payment-service", sourceBatches);
+
+        assertThat(analyzedConcepts).hasSize(2);
+        assertThat(analyzedConcepts.get(0).getConceptId()).isEqualTo("payment-timeout");
+        assertThat(analyzedConcepts.get(0).getTitle()).isEqualTo("Payment Timeout");
+        assertThat(analyzedConcepts.get(0).getDescription()).isEqualTo("Timeout description");
+        assertThat(analyzedConcepts.get(0).getSnippets()).containsExactly("timeout-a");
+        assertThat(analyzedConcepts.get(1).getConceptId()).isEqualTo("refund-status");
+        assertThat(analyzedConcepts.get(1).getTitle()).isEqualTo("Refund Status");
+        assertThat(analyzedConcepts.get(1).getDescription()).isEqualTo("Refund state machine");
+        assertThat(analyzedConcepts.get(1).getSnippets()).containsExactly("refund-created", "refund-paid");
+    }
 
     /**
      * 验证分析节点会为每个批次生成概念，并保留来源与片段。
@@ -39,5 +160,6 @@ class AnalyzeNodeTests {
         assertThat(analyzedConcepts.get(0).getTitle()).isEqualTo("Payment Service");
         assertThat(analyzedConcepts.get(0).getSourcePaths()).containsExactly("payment/a.md", "payment/b.md");
         assertThat(analyzedConcepts.get(0).getSnippets()).containsExactly("snippet-a", "snippet-b");
+        assertThat(analyzedConcepts.get(0).getSections()).isEmpty();
     }
 }

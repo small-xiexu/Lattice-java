@@ -33,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.flyway.default-schema=lattice_b1_compile_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
-        "lattice.compiler.ingest-max-chars=100",
+        "lattice.compiler.ingest-max-chars=800",
         "lattice.compiler.batch-max-chars=10"
 })
 class CompilePipelineServiceTests {
@@ -55,7 +55,7 @@ class CompilePipelineServiceTests {
      */
     @Test
     void shouldCompileSourcesIntoArticlesAndPersistThem(@TempDir Path tempDir) throws IOException {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.articles CASCADE");
+        resetCompileTables();
 
         Path paymentDir = Files.createDirectories(tempDir.resolve("payment"));
         Path fulfillmentDir = Files.createDirectories(tempDir.resolve("fulfillment"));
@@ -88,5 +88,62 @@ class CompilePipelineServiceTests {
         assertThat(fulfillmentArticle).isPresent();
         assertThat(fulfillmentArticle.orElseThrow().getTitle()).isEqualTo("Fulfillment");
         assertThat(fulfillmentArticle.orElseThrow().getContent()).contains("fulfillment/fc.md");
+    }
+
+    /**
+     * 验证结构化分析结果会把 description 编译进文章摘要骨架。
+     *
+     * @param tempDir 临时目录
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldRenderDescriptionIntoStructuredArticleSkeleton(@TempDir Path tempDir) throws IOException {
+        resetCompileTables();
+
+        Path paymentDir = Files.createDirectories(tempDir.resolve("payment"));
+        Files.writeString(
+                paymentDir.resolve("analyze.json"),
+                "{"
+                        + "\"concepts\":["
+                        + "{\"id\":\"payment-timeout\",\"title\":\"Payment Timeout\",\"description\":\"Handles payment timeout recovery\","
+                        + "\"snippets\":[\"timeout retry\",\"timeout fallback\"],"
+                        + "\"sections\":["
+                        + "{\"heading\":\"Timeout Rules\",\"content\":[\"retry=3\",\"interval=30s\"],\"sources\":[\"payment/analyze.json#timeout-rules\"]},"
+                        + "{\"heading\":\"Fallback\",\"content\":[\"manual-review\"]}"
+                        + "]"
+                        + "}"
+                        + "]"
+                        + "}",
+                StandardCharsets.UTF_8
+        );
+
+        CompileResult compileResult = compilePipelineService.compile(tempDir);
+        Optional<ArticleRecord> paymentTimeoutArticle = articleJdbcRepository.findByConceptId("payment-timeout");
+
+        assertThat(compileResult.getPersistedCount()).isEqualTo(1);
+        assertThat(paymentTimeoutArticle).isPresent();
+        assertThat(paymentTimeoutArticle.orElseThrow().getTitle()).isEqualTo("Payment Timeout");
+        assertThat(paymentTimeoutArticle.orElseThrow().getSourcePaths()).containsExactly("payment/analyze.json");
+        assertThat(paymentTimeoutArticle.orElseThrow().getMetadataJson()).contains("Handles payment timeout recovery");
+        assertThat(paymentTimeoutArticle.orElseThrow().getMetadataJson()).contains("sectionCount");
+        assertThat(paymentTimeoutArticle.orElseThrow().getMetadataJson()).contains("2");
+        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("## Summary");
+        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("Handles payment timeout recovery");
+        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("## Timeout Rules");
+        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("- retry=3");
+        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("- interval=30s");
+        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("> Sources: payment/analyze.json#timeout-rules");
+        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("## Fallback");
+        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("- manual-review");
+        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("> Sources: payment/analyze.json#Fallback");
+        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("## Snippets");
+    }
+
+    /**
+     * 重置编译相关测试表，避免测试之间相互污染。
+     */
+    private void resetCompileTables() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.source_files");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.articles CASCADE");
     }
 }

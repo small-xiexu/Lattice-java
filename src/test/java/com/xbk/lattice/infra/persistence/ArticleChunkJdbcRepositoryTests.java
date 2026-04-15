@@ -62,7 +62,9 @@ class ArticleChunkJdbcRepositoryTests {
                 "Payment",
                 "# Payment",
                 "ACTIVE",
-                OffsetDateTime.now()
+                OffsetDateTime.now(),
+                List.of("payment/a.md"),
+                "{\"description\":\"payment summary\"}"
         ));
 
         articleChunkJdbcRepository.replaceChunks("payment", List.of("chunk-a", "chunk-b"));
