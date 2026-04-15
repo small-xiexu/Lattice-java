@@ -1,5 +1,6 @@
 package com.xbk.lattice.query.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -23,13 +24,27 @@ public class FtsSearchService {
 
     private final JdbcTemplate jdbcTemplate;
 
+    private final FtsConfigResolver ftsConfigResolver;
+
     /**
      * 创建 FTS 检索服务。
      *
      * @param jdbcTemplate JDBC 模板
      */
     public FtsSearchService(JdbcTemplate jdbcTemplate) {
+        this(jdbcTemplate, new FtsConfigResolver());
+    }
+
+    /**
+     * 创建 FTS 检索服务。
+     *
+     * @param jdbcTemplate JDBC 模板
+     * @param ftsConfigResolver FTS 配置解析器
+     */
+    @Autowired
+    public FtsSearchService(JdbcTemplate jdbcTemplate, FtsConfigResolver ftsConfigResolver) {
         this.jdbcTemplate = jdbcTemplate;
+        this.ftsConfigResolver = ftsConfigResolver;
     }
 
     /**
@@ -40,6 +55,11 @@ public class FtsSearchService {
      * @return 命中文章
      */
     public List<QueryArticleHit> search(String question, int limit) {
+        if (jdbcTemplate == null) {
+            return List.of();
+        }
+
+        String tsConfig = ftsConfigResolver.resolveArticleTsConfig();
         String sql = """
                 select concept_id,
                        title,
@@ -47,23 +67,33 @@ public class FtsSearchService {
                        metadata_json::text as metadata_json,
                        source_paths,
                        ts_rank_cd(
-                           to_tsvector('simple',
+                           to_tsvector(cast(? as regconfig),
                                coalesce(title, '') || ' ' ||
                                coalesce(content, '') || ' ' ||
                                coalesce(metadata_json->>'description', '')
                            ),
-                           plainto_tsquery('simple', ?)
+                           plainto_tsquery(cast(? as regconfig), ?)
                        ) as score
                 from articles
-                where to_tsvector('simple',
+                where to_tsvector(cast(? as regconfig),
                           coalesce(title, '') || ' ' ||
                           coalesce(content, '') || ' ' ||
                           coalesce(metadata_json->>'description', '')
-                      ) @@ plainto_tsquery('simple', ?)
+                      ) @@ plainto_tsquery(cast(? as regconfig), ?)
                 order by score desc, compiled_at desc
                 limit ?
                 """;
-        return jdbcTemplate.query(sql, this::mapQueryArticleHit, question, question, limit);
+        return jdbcTemplate.query(
+                sql,
+                this::mapQueryArticleHit,
+                tsConfig,
+                tsConfig,
+                question,
+                tsConfig,
+                tsConfig,
+                question,
+                limit
+        );
     }
 
     /**

@@ -16,6 +16,7 @@ import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileChunkRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
+import com.xbk.lattice.query.service.ArticleVectorIndexService;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -77,6 +78,8 @@ public class IncrementalCompileService {
 
     private final SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository;
 
+    private final ArticleVectorIndexService articleVectorIndexService;
+
     /**
      * 创建增量编译服务。
      *
@@ -108,8 +111,56 @@ public class IncrementalCompileService {
                 articleJdbcRepository,
                 articleChunkJdbcRepository,
                 sourceFileJdbcRepository,
-                null
+                null,
+                new ArticleVectorIndexService()
         );
+    }
+
+    /**
+     * 创建增量编译服务。
+     *
+     * @param compilerProperties 编译配置
+     * @param llmGateway LLM 网关
+     * @param articleReviewerGateway 文章审查网关
+     * @param reviewFixService 审查修复服务
+     * @param synthesisArtifactsService 合成产物服务
+     * @param articleJdbcRepository 文章仓储
+     * @param articleChunkJdbcRepository 文章 chunk 仓储
+     * @param sourceFileJdbcRepository 源文件仓储
+     * @param sourceFileChunkJdbcRepository 源文件 chunk 仓储
+     * @param articleVectorIndexService 文章向量索引服务
+     */
+    public IncrementalCompileService(
+            CompilerProperties compilerProperties,
+            LlmGateway llmGateway,
+            ArticleReviewerGateway articleReviewerGateway,
+            ReviewFixService reviewFixService,
+            SynthesisArtifactsService synthesisArtifactsService,
+            ArticleJdbcRepository articleJdbcRepository,
+            ArticleChunkJdbcRepository articleChunkJdbcRepository,
+            SourceFileJdbcRepository sourceFileJdbcRepository,
+            SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
+            ArticleVectorIndexService articleVectorIndexService
+    ) {
+        this.ingestNode = new IngestNode(compilerProperties);
+        this.groupNode = new GroupNode(compilerProperties);
+        this.batchSplitNode = new BatchSplitNode(compilerProperties);
+        this.analyzeNode = new AnalyzeNode(llmGateway);
+        this.crossGroupMergeNode = new CrossGroupMergeNode();
+        this.compileArticleNode = new CompileArticleNode(
+                llmGateway,
+                sourceFileJdbcRepository,
+                new DocumentSectionSelector(),
+                articleReviewerGateway,
+                reviewFixService
+        );
+        this.llmGateway = llmGateway;
+        this.synthesisArtifactsService = synthesisArtifactsService;
+        this.articleJdbcRepository = articleJdbcRepository;
+        this.articleChunkJdbcRepository = articleChunkJdbcRepository;
+        this.sourceFileJdbcRepository = sourceFileJdbcRepository;
+        this.sourceFileChunkJdbcRepository = sourceFileChunkJdbcRepository;
+        this.articleVectorIndexService = articleVectorIndexService;
     }
 
     /**
@@ -136,24 +187,18 @@ public class IncrementalCompileService {
             SourceFileJdbcRepository sourceFileJdbcRepository,
             SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository
     ) {
-        this.ingestNode = new IngestNode(compilerProperties);
-        this.groupNode = new GroupNode(compilerProperties);
-        this.batchSplitNode = new BatchSplitNode(compilerProperties);
-        this.analyzeNode = new AnalyzeNode(llmGateway);
-        this.crossGroupMergeNode = new CrossGroupMergeNode();
-        this.compileArticleNode = new CompileArticleNode(
+        this(
+                compilerProperties,
                 llmGateway,
-                sourceFileJdbcRepository,
-                new DocumentSectionSelector(),
                 articleReviewerGateway,
-                reviewFixService
+                reviewFixService,
+                synthesisArtifactsService,
+                articleJdbcRepository,
+                articleChunkJdbcRepository,
+                sourceFileJdbcRepository,
+                sourceFileChunkJdbcRepository,
+                new ArticleVectorIndexService()
         );
-        this.llmGateway = llmGateway;
-        this.synthesisArtifactsService = synthesisArtifactsService;
-        this.articleJdbcRepository = articleJdbcRepository;
-        this.articleChunkJdbcRepository = articleChunkJdbcRepository;
-        this.sourceFileJdbcRepository = sourceFileJdbcRepository;
-        this.sourceFileChunkJdbcRepository = sourceFileChunkJdbcRepository;
     }
 
     /**
@@ -192,6 +237,7 @@ public class IncrementalCompileService {
                     updatedArticle.getConceptId(),
                     mergeChunkTexts(updatedArticle.getConceptId(), entry.getValue())
             );
+            articleVectorIndexService.indexArticle(updatedArticle);
             for (MergedConcept mergedConcept : entry.getValue()) {
                 handledConceptIds.add(mergedConcept.getConceptId());
             }
@@ -204,8 +250,10 @@ public class IncrementalCompileService {
                 handledConceptIds
         );
         for (MergedConcept mergedConcept : conceptsToCreate) {
-            articleJdbcRepository.upsert(compileArticleNode.compile(mergedConcept));
+            ArticleRecord createdArticle = compileArticleNode.compile(mergedConcept);
+            articleJdbcRepository.upsert(createdArticle);
             articleChunkJdbcRepository.replaceChunks(mergedConcept.getConceptId(), mergedConcept.getSnippets());
+            articleVectorIndexService.indexArticle(createdArticle);
             handledConceptIds.add(mergedConcept.getConceptId());
             persistedCount++;
         }

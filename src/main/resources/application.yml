@@ -32,3 +32,12 @@ lattice:
     cache:
       key-prefix: ${LATTICE_QUERY_CACHE_KEY_PREFIX:llm:query:cache:}
       ttl-seconds: ${LATTICE_QUERY_CACHE_TTL_SECONDS:3600}
+    search:
+      fts:
+        enabled: ${LATTICE_QUERY_SEARCH_FTS_ENABLED:true}
+        preferred-ts-config: ${LATTICE_QUERY_SEARCH_FTS_CONFIG:jiebacfg}
+        fallback-ts-config: ${LATTICE_QUERY_SEARCH_FTS_FALLBACK:simple}
+      vector:
+        enabled: ${LATTICE_QUERY_SEARCH_VECTOR_ENABLED:false}
+        embedding-model: ${LATTICE_QUERY_SEARCH_VECTOR_MODEL:text-embedding-3-small}
+        expected-dimensions: ${LATTICE_QUERY_SEARCH_VECTOR_DIMENSIONS:1536}

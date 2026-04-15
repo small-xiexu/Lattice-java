@@ -1,5 +1,6 @@
 package com.xbk.lattice.query.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -24,7 +25,36 @@ public class KnowledgeSearchService {
 
     private final ContributionSearchService contributionSearchService;
 
+    private final VectorSearchService vectorSearchService;
+
     private final RrfFusionService rrfFusionService;
+
+    /**
+     * 创建知识检索服务。
+     *
+     * @param ftsSearchService 文章 FTS 检索
+     * @param refKeySearchService referential keywords 检索
+     * @param sourceSearchService 源文件检索
+     * @param contributionSearchService contribution 检索
+     * @param vectorSearchService 向量检索
+     * @param rrfFusionService RRF 融合服务
+     */
+    @Autowired
+    public KnowledgeSearchService(
+            FtsSearchService ftsSearchService,
+            RefKeySearchService refKeySearchService,
+            SourceSearchService sourceSearchService,
+            ContributionSearchService contributionSearchService,
+            VectorSearchService vectorSearchService,
+            RrfFusionService rrfFusionService
+    ) {
+        this.ftsSearchService = ftsSearchService;
+        this.refKeySearchService = refKeySearchService;
+        this.sourceSearchService = sourceSearchService;
+        this.contributionSearchService = contributionSearchService;
+        this.vectorSearchService = vectorSearchService;
+        this.rrfFusionService = rrfFusionService;
+    }
 
     /**
      * 创建知识检索服务。
@@ -42,11 +72,14 @@ public class KnowledgeSearchService {
             ContributionSearchService contributionSearchService,
             RrfFusionService rrfFusionService
     ) {
-        this.ftsSearchService = ftsSearchService;
-        this.refKeySearchService = refKeySearchService;
-        this.sourceSearchService = sourceSearchService;
-        this.contributionSearchService = contributionSearchService;
-        this.rrfFusionService = rrfFusionService;
+        this(
+                ftsSearchService,
+                refKeySearchService,
+                sourceSearchService,
+                contributionSearchService,
+                new VectorSearchService(),
+                rrfFusionService
+        );
     }
 
     /**
@@ -62,8 +95,9 @@ public class KnowledgeSearchService {
         List<QueryArticleHit> refKeyHits = refKeySearchService.search(question, safeLimit);
         List<QueryArticleHit> sourceHits = sourceSearchService.search(question, safeLimit);
         List<QueryArticleHit> contributionHits = contributionSearchService.search(question, safeLimit);
+        List<QueryArticleHit> vectorHits = vectorSearchService.search(question, safeLimit);
         return rrfFusionService.fuse(
-                List.of(ftsHits, refKeyHits, sourceHits, contributionHits),
+                List.of(ftsHits, refKeyHits, sourceHits, contributionHits, vectorHits),
                 safeLimit
         );
     }

@@ -34,6 +34,8 @@ public class QueryFacadeService {
 
     private final ContributionSearchService contributionSearchService;
 
+    private final VectorSearchService vectorSearchService;
+
     private final RrfFusionService rrfFusionService;
 
     private final AnswerGenerationService answerGenerationService;
@@ -51,6 +53,7 @@ public class QueryFacadeService {
      * @param refKeySearchService 引用词检索服务
      * @param sourceSearchService 源文件检索服务
      * @param contributionSearchService Contribution 检索服务
+     * @param vectorSearchService 向量检索服务
      * @param rrfFusionService RRF 融合服务
      * @param answerGenerationService 答案生成服务
      * @param queryCacheStore 查询缓存存储
@@ -63,6 +66,7 @@ public class QueryFacadeService {
             RefKeySearchService refKeySearchService,
             SourceSearchService sourceSearchService,
             ContributionSearchService contributionSearchService,
+            VectorSearchService vectorSearchService,
             RrfFusionService rrfFusionService,
             AnswerGenerationService answerGenerationService,
             QueryCacheStore queryCacheStore,
@@ -73,6 +77,7 @@ public class QueryFacadeService {
         this.refKeySearchService = refKeySearchService;
         this.sourceSearchService = sourceSearchService;
         this.contributionSearchService = contributionSearchService;
+        this.vectorSearchService = vectorSearchService;
         this.rrfFusionService = rrfFusionService;
         this.answerGenerationService = answerGenerationService;
         this.queryCacheStore = queryCacheStore;
@@ -105,6 +110,7 @@ public class QueryFacadeService {
                 refKeySearchService,
                 new SourceSearchService(null),
                 new ContributionSearchService(null),
+                new VectorSearchService(),
                 rrfFusionService,
                 answerGenerationService,
                 queryCacheStore,
@@ -130,8 +136,9 @@ public class QueryFacadeService {
         List<QueryArticleHit> refKeyHits = refKeySearchService.search(question, TOP_K);
         List<QueryArticleHit> sourceHits = sourceSearchService.search(question, TOP_K);
         List<QueryArticleHit> contributionHits = contributionSearchService.search(question, TOP_K);
+        List<QueryArticleHit> vectorHits = vectorSearchService.search(question, TOP_K);
         List<QueryArticleHit> fusedHits = rrfFusionService.fuse(
-                List.of(ftsHits, refKeyHits, sourceHits, contributionHits),
+                List.of(ftsHits, refKeyHits, sourceHits, contributionHits, vectorHits),
                 TOP_K
         );
         if (fusedHits.isEmpty()) {

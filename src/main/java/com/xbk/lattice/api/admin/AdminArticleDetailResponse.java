@@ -1,0 +1,203 @@
+package com.xbk.lattice.api.admin;
+
+import java.util.List;
+
+/**
+ * 管理侧文章详情响应
+ *
+ * 职责：承载管理侧文章详情展示内容
+ *
+ * @author xiexu
+ */
+public class AdminArticleDetailResponse {
+
+    private final String conceptId;
+
+    private final String title;
+
+    private final String content;
+
+    private final String lifecycle;
+
+    private final String compiledAt;
+
+    private final String summary;
+
+    private final String reviewStatus;
+
+    private final String confidence;
+
+    private final List<String> sourcePaths;
+
+    private final List<String> referentialKeywords;
+
+    private final List<String> dependsOn;
+
+    private final List<String> related;
+
+    private final String metadataJson;
+
+    /**
+     * 创建管理侧文章详情响应。
+     *
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param content 正文
+     * @param lifecycle 生命周期
+     * @param compiledAt 编译时间
+     * @param summary 摘要
+     * @param reviewStatus 审查状态
+     * @param confidence 置信度
+     * @param sourcePaths 来源路径
+     * @param referentialKeywords 明确性关键词
+     * @param dependsOn 依赖关系
+     * @param related 相关关系
+     * @param metadataJson 元数据 JSON
+     */
+    public AdminArticleDetailResponse(
+            String conceptId,
+            String title,
+            String content,
+            String lifecycle,
+            String compiledAt,
+            String summary,
+            String reviewStatus,
+            String confidence,
+            List<String> sourcePaths,
+            List<String> referentialKeywords,
+            List<String> dependsOn,
+            List<String> related,
+            String metadataJson
+    ) {
+        this.conceptId = conceptId;
+        this.title = title;
+        this.content = content;
+        this.lifecycle = lifecycle;
+        this.compiledAt = compiledAt;
+        this.summary = summary;
+        this.reviewStatus = reviewStatus;
+        this.confidence = confidence;
+        this.sourcePaths = sourcePaths;
+        this.referentialKeywords = referentialKeywords;
+        this.dependsOn = dependsOn;
+        this.related = related;
+        this.metadataJson = metadataJson;
+    }
+
+    /**
+     * 获取概念标识。
+     *
+     * @return 概念标识
+     */
+    public String getConceptId() {
+        return conceptId;
+    }
+
+    /**
+     * 获取标题。
+     *
+     * @return 标题
+     */
+    public String getTitle() {
+        return title;
+    }
+
+    /**
+     * 获取正文。
+     *
+     * @return 正文
+     */
+    public String getContent() {
+        return content;
+    }
+
+    /**
+     * 获取生命周期。
+     *
+     * @return 生命周期
+     */
+    public String getLifecycle() {
+        return lifecycle;
+    }
+
+    /**
+     * 获取编译时间。
+     *
+     * @return 编译时间
+     */
+    public String getCompiledAt() {
+        return compiledAt;
+    }
+
+    /**
+     * 获取摘要。
+     *
+     * @return 摘要
+     */
+    public String getSummary() {
+        return summary;
+    }
+
+    /**
+     * 获取审查状态。
+     *
+     * @return 审查状态
+     */
+    public String getReviewStatus() {
+        return reviewStatus;
+    }
+
+    /**
+     * 获取置信度。
+     *
+     * @return 置信度
+     */
+    public String getConfidence() {
+        return confidence;
+    }
+
+    /**
+     * 获取来源路径。
+     *
+     * @return 来源路径
+     */
+    public List<String> getSourcePaths() {
+        return sourcePaths;
+    }
+
+    /**
+     * 获取明确性关键词。
+     *
+     * @return 明确性关键词
+     */
+    public List<String> getReferentialKeywords() {
+        return referentialKeywords;
+    }
+
+    /**
+     * 获取依赖关系。
+     *
+     * @return 依赖关系
+     */
+    public List<String> getDependsOn() {
+        return dependsOn;
+    }
+
+    /**
+     * 获取相关关系。
+     *
+     * @return 相关关系
+     */
+    public List<String> getRelated() {
+        return related;
+    }
+
+    /**
+     * 获取元数据 JSON。
+     *
+     * @return 元数据 JSON
+     */
+    public String getMetadataJson() {
+        return metadataJson;
+    }
+}

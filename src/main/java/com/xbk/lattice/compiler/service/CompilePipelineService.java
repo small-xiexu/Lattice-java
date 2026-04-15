@@ -5,12 +5,14 @@ import com.xbk.lattice.compiler.model.AnalyzedConcept;
 import com.xbk.lattice.compiler.model.MergedConcept;
 import com.xbk.lattice.compiler.model.RawSource;
 import com.xbk.lattice.compiler.model.SourceBatch;
-import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
+import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
+import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileChunkRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
+import com.xbk.lattice.query.service.ArticleVectorIndexService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
@@ -65,6 +67,8 @@ public class CompilePipelineService {
 
     private final IncrementalCompileService incrementalCompileService;
 
+    private final ArticleVectorIndexService articleVectorIndexService;
+
     /**
      * 创建最小编译链路服务。
      *
@@ -85,7 +89,8 @@ public class CompilePipelineService {
             ArticleChunkJdbcRepository articleChunkJdbcRepository,
             SourceFileJdbcRepository sourceFileJdbcRepository,
             SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
-            CompilationWalStore compilationWalStore
+            CompilationWalStore compilationWalStore,
+            ArticleVectorIndexService articleVectorIndexService
     ) {
         this.ingestNode = new IngestNode(compilerProperties);
         this.groupNode = new GroupNode(compilerProperties);
@@ -105,6 +110,7 @@ public class CompilePipelineService {
         this.sourceFileChunkJdbcRepository = sourceFileChunkJdbcRepository;
         this.compilationWalStore = compilationWalStore;
         this.synthesisArtifactsService = synthesisArtifactsService;
+        this.articleVectorIndexService = articleVectorIndexService;
         this.incrementalCompileService = new IncrementalCompileService(
                 compilerProperties,
                 llmGateway,
@@ -114,7 +120,49 @@ public class CompilePipelineService {
                 articleJdbcRepository,
                 articleChunkJdbcRepository,
                 sourceFileJdbcRepository,
-                sourceFileChunkJdbcRepository
+                sourceFileChunkJdbcRepository,
+                articleVectorIndexService
+        );
+    }
+
+    /**
+     * 创建最小编译链路服务。
+     *
+     * @param compilerProperties 编译配置
+     * @param llmGateway LLM 网关
+     * @param articleReviewerGateway 文章审查网关
+     * @param reviewFixService 审查修复服务
+     * @param synthesisArtifactsService 合成产物服务
+     * @param articleJdbcRepository 文章仓储
+     * @param articleChunkJdbcRepository 文章 chunk 仓储
+     * @param sourceFileJdbcRepository 源文件仓储
+     * @param sourceFileChunkJdbcRepository 源文件 chunk 仓储
+     * @param compilationWalStore 编译 WAL 存储
+     */
+    public CompilePipelineService(
+            CompilerProperties compilerProperties,
+            LlmGateway llmGateway,
+            ArticleReviewerGateway articleReviewerGateway,
+            ReviewFixService reviewFixService,
+            SynthesisArtifactsService synthesisArtifactsService,
+            ArticleJdbcRepository articleJdbcRepository,
+            ArticleChunkJdbcRepository articleChunkJdbcRepository,
+            SourceFileJdbcRepository sourceFileJdbcRepository,
+            SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
+            CompilationWalStore compilationWalStore
+    ) {
+        this(
+                compilerProperties,
+                llmGateway,
+                articleReviewerGateway,
+                reviewFixService,
+                synthesisArtifactsService,
+                articleJdbcRepository,
+                articleChunkJdbcRepository,
+                sourceFileJdbcRepository,
+                sourceFileChunkJdbcRepository,
+                compilationWalStore,
+                new ArticleVectorIndexService()
         );
     }
 
@@ -144,7 +192,8 @@ public class CompilePipelineService {
                 articleChunkJdbcRepository,
                 sourceFileJdbcRepository,
                 null,
-                compilationWalStore
+                compilationWalStore,
+                new ArticleVectorIndexService()
         );
     }
 
@@ -299,8 +348,10 @@ public class CompilePipelineService {
         int persistedCount = 0;
         List<MergedConcept> pendingConcepts = compilationWalStore.loadPendingConcepts(jobId);
         for (MergedConcept mergedConcept : pendingConcepts) {
-            articleJdbcRepository.upsert(compileArticleNode.compile(mergedConcept));
+            ArticleRecord articleRecord = compileArticleNode.compile(mergedConcept);
+            articleJdbcRepository.upsert(articleRecord);
             articleChunkJdbcRepository.replaceChunks(mergedConcept.getConceptId(), mergedConcept.getSnippets());
+            articleVectorIndexService.indexArticle(articleRecord);
             compilationWalStore.markCommitted(jobId, mergedConcept.getConceptId());
             persistedCount++;
         }
