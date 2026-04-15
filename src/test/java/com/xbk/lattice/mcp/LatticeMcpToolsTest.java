@@ -13,6 +13,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * LatticeMcpTools 单元测试
@@ -22,6 +23,25 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * @author xiexu
  */
 class LatticeMcpToolsTest {
+
+    /**
+     * 验证 B7 首批 MCP 工具面已经补齐 search/get/status/lint/quality/compile。
+     */
+    @Test
+    void shouldExposeB7CoreMcpTools() {
+        assertThatCode(() -> LatticeMcpTools.class.getDeclaredMethod("search", String.class, int.class))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> LatticeMcpTools.class.getDeclaredMethod("get", String.class))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> LatticeMcpTools.class.getDeclaredMethod("status"))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> LatticeMcpTools.class.getDeclaredMethod("lint"))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> LatticeMcpTools.class.getDeclaredMethod("quality"))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> LatticeMcpTools.class.getDeclaredMethod("compile", String.class, boolean.class))
+                .doesNotThrowAnyException();
+    }
 
     /**
      * 验证 lattice_query 正路返回包含 answer、queryId、reviewStatus 与 sourceCount 的 JSON。

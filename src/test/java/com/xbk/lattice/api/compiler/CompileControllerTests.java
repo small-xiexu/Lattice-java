@@ -64,7 +64,7 @@ class CompileControllerTests {
      */
     @Test
     void shouldCompileSourceDirectoryViaHttpApi(@TempDir Path tempDir) throws Exception {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_api_test.source_files");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_api_test.source_files CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_api_test.articles CASCADE");
 
         Path paymentDir = Files.createDirectories(tempDir.resolve("payment"));
@@ -109,7 +109,7 @@ class CompileControllerTests {
      */
     @Test
     void shouldEnhanceExistingArticleViaIncrementalCompileApi(@TempDir Path tempDir) throws Exception {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_api_test.source_files");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_api_test.source_files CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_api_test.synthesis_artifacts");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_api_test.articles CASCADE");
 

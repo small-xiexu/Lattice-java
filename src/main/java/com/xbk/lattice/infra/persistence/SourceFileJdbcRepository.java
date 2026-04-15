@@ -95,6 +95,25 @@ public class SourceFileJdbcRepository {
     }
 
     /**
+     * 查询全部源文件记录。
+     *
+     * @return 源文件记录列表
+     */
+    public List<SourceFileRecord> findAll() {
+        if (jdbcTemplate == null) {
+            return List.of();
+        }
+
+        String sql = """
+                select file_path, content_preview, format, file_size,
+                       content_text, metadata_json::text as metadata_json, is_verbatim, raw_path
+                from source_files
+                order by file_path asc
+                """;
+        return jdbcTemplate.query(sql, this::mapSourceFileRecord);
+    }
+
+    /**
      * 映射单行源文件记录。
      *
      * @param resultSet 结果集

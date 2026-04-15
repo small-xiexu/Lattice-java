@@ -185,7 +185,7 @@ class CompilePipelineServiceTests {
      * 重置编译相关测试表，避免测试之间相互污染。
      */
     private void resetCompileTables() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.source_files");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.source_files CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.synthesis_artifacts");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.articles CASCADE");
     }

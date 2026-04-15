@@ -1,12 +1,15 @@
 package com.xbk.lattice.compiler.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.config.LlmProperties;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
-import org.springframework.ai.anthropic.AnthropicChatModel;
+import org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatProperties;
+import org.springframework.ai.model.anthropic.autoconfigure.AnthropicConnectionProperties;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -45,7 +48,10 @@ public class LlmGateway {
      * 创建 LLM 网关。
      *
      * @param openAiChatModel OpenAI ChatModel
-     * @param anthropicChatModel Anthropic ChatModel
+     * @param restClientBuilder RestClient 构建器
+     * @param objectMapper Jackson 对象映射器
+     * @param anthropicConnectionProperties Anthropic 连接配置
+     * @param anthropicChatProperties Anthropic Chat 配置
      * @param redisKeyValueStore Redis 键值存储
      * @param llmUsageStore 用量存储
      * @param llmProperties LLM 配置
@@ -53,14 +59,22 @@ public class LlmGateway {
     @Autowired
     public LlmGateway(
             OpenAiChatModel openAiChatModel,
-            AnthropicChatModel anthropicChatModel,
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper,
+            AnthropicConnectionProperties anthropicConnectionProperties,
+            AnthropicChatProperties anthropicChatProperties,
             RedisKeyValueStore redisKeyValueStore,
             LlmUsageStore llmUsageStore,
             LlmProperties llmProperties
     ) {
         this(
                 new ChatModelLlmClient(openAiChatModel),
-                new ChatModelLlmClient(anthropicChatModel),
+                new AnthropicMessageApiLlmClient(
+                        restClientBuilder,
+                        objectMapper,
+                        anthropicConnectionProperties,
+                        anthropicChatProperties
+                ),
                 redisKeyValueStore,
                 llmUsageStore,
                 llmProperties

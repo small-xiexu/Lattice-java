@@ -10,8 +10,6 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * 最小答案生成服务
@@ -23,8 +21,6 @@ import java.util.regex.Pattern;
 @Service
 @Profile("jdbc")
 public class AnswerGenerationService {
-
-    private static final Pattern TOKEN_PATTERN = Pattern.compile("[A-Za-z0-9=_-]{2,}");
 
     private static final String SYSTEM_QUERY_ANSWER = """
             你是 Lattice 查询助手。请基于给定证据回答用户问题。
@@ -171,12 +167,7 @@ public class AnswerGenerationService {
      * @return token 列表
      */
     private List<String> extractQueryTokens(String question) {
-        List<String> queryTokens = new ArrayList<String>();
-        Matcher matcher = TOKEN_PATTERN.matcher(question.toLowerCase(Locale.ROOT));
-        while (matcher.find()) {
-            queryTokens.add(matcher.group());
-        }
-        return queryTokens;
+        return new ArrayList<String>(QueryTokenExtractor.extract(question));
     }
 
     /**
