@@ -42,4 +42,12 @@ public interface PendingQueryManager {
      * @param queryId 查询标识
      */
     void discard(String queryId);
+
+    /**
+     * 查询待确认记录，若不存在则抛出异常。
+     *
+     * @param queryId 查询标识
+     * @return 待确认查询记录
+     */
+    PendingQueryRecord findPendingQuery(String queryId);
 }

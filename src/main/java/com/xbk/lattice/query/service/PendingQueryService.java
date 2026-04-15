@@ -142,6 +142,17 @@ public class PendingQueryService implements PendingQueryManager {
     }
 
     /**
+     * 查询待确认记录，若不存在则抛出异常。
+     *
+     * @param queryId 查询标识
+     * @return 待确认查询记录
+     */
+    @Override
+    public PendingQueryRecord findPendingQuery(String queryId) {
+        return getRequiredRecord(queryId);
+    }
+
+    /**
      * 提取概念标识。
      *
      * @param articleResponses 命中文章列表

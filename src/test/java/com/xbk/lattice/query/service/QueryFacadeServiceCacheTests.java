@@ -170,6 +170,17 @@ class QueryFacadeServiceCacheTests {
         public void discard(String queryId) {
             throw new UnsupportedOperationException();
         }
+
+        /**
+         * 不支持按 queryId 查询。
+         *
+         * @param queryId 查询标识
+         * @return 待确认查询记录
+         */
+        @Override
+        public PendingQueryRecord findPendingQuery(String queryId) {
+            throw new UnsupportedOperationException();
+        }
     }
 
     /**
