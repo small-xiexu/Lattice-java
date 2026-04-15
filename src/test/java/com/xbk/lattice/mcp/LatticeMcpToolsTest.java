@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * LatticeMcpTools 单元测试
  *
- * 职责：验证 4 个 MCP 工具的正路与异常路行为
+ * 职责：验证查询与反馈 MCP 工具的正路与异常路行为
  *
  * @author xiexu
  */
@@ -50,34 +50,36 @@ class LatticeMcpToolsTest {
     }
 
     /**
-     * 验证 lattice_query_pending 正路按 queryId 返回问题与答案的 JSON。
+     * 验证 lattice_query_pending 会列出全部 pending 查询。
      */
     @Test
-    void queryPendingShouldReturnCurrentAnswerForGivenQueryId() {
-        PendingQueryRecord record = buildRecord("query-id-001", "payment timeout retry=3", "retry=3", "PASSED");
+    void queryPendingShouldReturnAllPendingQueries() {
+        PendingQueryRecord firstRecord = buildRecord("query-id-001", "payment timeout retry=3", "retry=3", "PASSED");
+        PendingQueryRecord secondRecord = buildRecord("query-id-002", "refund manual review", "# 修订答案", "TIMEOUT_FALLBACK");
         LatticeMcpTools tools = new LatticeMcpTools(
                 null,
-                new FixedFindPendingQueryManager(record)
+                new FixedListPendingQueryManager(List.of(firstRecord, secondRecord))
         );
 
-        String result = tools.queryPending("query-id-001");
+        String result = tools.queryPending();
 
+        assertThat(result).contains("\"count\":2");
         assertThat(result).contains("\"queryId\":\"query-id-001\"");
-        assertThat(result).contains("\"question\":\"payment timeout retry=3\"");
-        assertThat(result).contains("\"answer\":\"retry=3\"");
-        assertThat(result).contains("\"reviewStatus\":\"PASSED\"");
+        assertThat(result).contains("\"queryId\":\"query-id-002\"");
+        assertThat(result).contains("\"reviewStatus\":\"TIMEOUT_FALLBACK\"");
     }
 
     /**
-     * 验证 lattice_query_pending 当 queryId 不存在时抛出异常。
+     * 验证 lattice_query_pending 在没有 pending 数据时返回空列表。
      */
     @Test
-    void queryPendingShouldPropagateExceptionWhenQueryIdNotFound() {
-        LatticeMcpTools tools = new LatticeMcpTools(null, new ThrowingFindPendingQueryManager("nonexistent"));
+    void queryPendingShouldReturnEmptyListWhenNoPendingRecordsExist() {
+        LatticeMcpTools tools = new LatticeMcpTools(null, new FixedListPendingQueryManager(List.of()));
 
-        assertThatThrownBy(() -> tools.queryPending("nonexistent"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("nonexistent");
+        String result = tools.queryPending();
+
+        assertThat(result).contains("\"count\":0");
+        assertThat(result).contains("\"items\":[]");
     }
 
     /**
@@ -107,6 +109,19 @@ class LatticeMcpToolsTest {
 
         assertThat(result).contains("\"queryId\":\"query-id-001\"");
         assertThat(result).contains("\"status\":\"confirmed\"");
+    }
+
+    /**
+     * 验证 lattice_query_discard 返回 discarded 状态 JSON。
+     */
+    @Test
+    void discardShouldReturnDiscardedStatus() {
+        LatticeMcpTools tools = new LatticeMcpTools(null, new UnsupportedPendingQueryManager());
+
+        String result = tools.discard("query-id-001");
+
+        assertThat(result).contains("\"queryId\":\"query-id-001\"");
+        assertThat(result).contains("\"status\":\"discarded\"");
     }
 
     /**
@@ -167,62 +182,31 @@ class LatticeMcpToolsTest {
     }
 
     /**
-     * 固定返回预置记录的 findPendingQuery 替身。
+     * 固定返回预置列表的 pending 查询替身。
      *
      * @author xiexu
      */
-    private static class FixedFindPendingQueryManager extends UnsupportedPendingQueryManager {
+    private static class FixedListPendingQueryManager extends UnsupportedPendingQueryManager {
 
-        private final PendingQueryRecord record;
+        private final List<PendingQueryRecord> records;
 
         /**
-         * 创建固定返回值的 findPendingQuery 替身。
+         * 创建固定返回值的 pending 列表替身。
          *
-         * @param record 预置记录
+         * @param records 预置记录列表
          */
-        private FixedFindPendingQueryManager(PendingQueryRecord record) {
-            this.record = record;
+        private FixedListPendingQueryManager(List<PendingQueryRecord> records) {
+            this.records = records;
         }
 
         /**
-         * 返回预置记录。
+         * 返回预置列表。
          *
-         * @param queryId 查询标识
-         * @return 预置记录
+         * @return 预置记录列表
          */
         @Override
-        public PendingQueryRecord findPendingQuery(String queryId) {
-            return record;
-        }
-    }
-
-    /**
-     * findPendingQuery 抛出异常的替身，模拟 queryId 不存在场景。
-     *
-     * @author xiexu
-     */
-    private static class ThrowingFindPendingQueryManager extends UnsupportedPendingQueryManager {
-
-        private final String missingQueryId;
-
-        /**
-         * 创建抛出异常的 findPendingQuery 替身。
-         *
-         * @param missingQueryId 不存在的 queryId
-         */
-        private ThrowingFindPendingQueryManager(String missingQueryId) {
-            this.missingQueryId = missingQueryId;
-        }
-
-        /**
-         * 抛出异常，模拟 queryId 不存在。
-         *
-         * @param queryId 查询标识
-         * @return 不会返回
-         */
-        @Override
-        public PendingQueryRecord findPendingQuery(String queryId) {
-            throw new IllegalArgumentException("pending query 不存在: " + missingQueryId);
+        public List<PendingQueryRecord> listPendingQueries() {
+            return records;
         }
     }
 
@@ -305,7 +289,7 @@ class LatticeMcpToolsTest {
          */
         @Override
         public void discard(String queryId) {
-            throw new UnsupportedOperationException();
+            // 无操作：lattice_query_discard 只需验证返回值格式
         }
 
         /**
@@ -316,6 +300,16 @@ class LatticeMcpToolsTest {
          */
         @Override
         public PendingQueryRecord findPendingQuery(String queryId) {
+            throw new UnsupportedOperationException();
+        }
+
+        /**
+         * 不支持列出全部 pending。
+         *
+         * @return 待确认查询记录列表
+         */
+        @Override
+        public List<PendingQueryRecord> listPendingQueries() {
             throw new UnsupportedOperationException();
         }
     }

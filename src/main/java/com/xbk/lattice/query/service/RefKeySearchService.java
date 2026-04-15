@@ -9,12 +9,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * 关键引用词检索服务
@@ -26,8 +22,6 @@ import java.util.regex.Pattern;
 @Service
 @Profile("jdbc")
 public class RefKeySearchService {
-
-    private static final Pattern TOKEN_PATTERN = Pattern.compile("[A-Za-z0-9=_-]{2,}");
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -48,7 +42,7 @@ public class RefKeySearchService {
      * @return 命中文章
      */
     public List<QueryArticleHit> search(String question, int limit) {
-        List<String> queryTokens = extractQueryTokens(question);
+        List<String> queryTokens = QueryTokenExtractor.extract(question);
         if (queryTokens.isEmpty()) {
             return List.of();
         }
@@ -78,21 +72,6 @@ public class RefKeySearchService {
             return matchedHits;
         }
         return matchedHits.subList(0, limit);
-    }
-
-    /**
-     * 提取查询 token。
-     *
-     * @param question 查询问题
-     * @return token 列表
-     */
-    private List<String> extractQueryTokens(String question) {
-        Set<String> tokens = new LinkedHashSet<String>();
-        Matcher matcher = TOKEN_PATTERN.matcher(question.toLowerCase(Locale.ROOT));
-        while (matcher.find()) {
-            tokens.add(matcher.group());
-        }
-        return new ArrayList<String>(tokens);
     }
 
     /**

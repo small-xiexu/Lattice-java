@@ -12,7 +12,7 @@ import java.util.Map;
 /**
  * RRF 融合服务
  *
- * 职责：融合 FTS 与引用词检索结果
+ * 职责：融合多路查询结果
  *
  * @author xiexu
  */
@@ -31,14 +31,27 @@ public class RrfFusionService {
      * @return 融合结果
      */
     public List<QueryArticleHit> fuse(List<QueryArticleHit> ftsHits, List<QueryArticleHit> refKeyHits, int limit) {
+        return fuse(List.of(ftsHits, refKeyHits), limit);
+    }
+
+    /**
+     * 融合多路检索结果。
+     *
+     * @param hitGroups 检索结果分组
+     * @param limit 返回数量
+     * @return 融合结果
+     */
+    public List<QueryArticleHit> fuse(List<List<QueryArticleHit>> hitGroups, int limit) {
         Map<String, QueryArticleHit> articleHitMap = new LinkedHashMap<String, QueryArticleHit>();
         Map<String, Double> scoreMap = new LinkedHashMap<String, Double>();
-        mergeHits(articleHitMap, scoreMap, ftsHits);
-        mergeHits(articleHitMap, scoreMap, refKeyHits);
+        for (List<QueryArticleHit> hitGroup : hitGroups) {
+            mergeHits(articleHitMap, scoreMap, hitGroup);
+        }
 
         List<QueryArticleHit> fusedHits = new ArrayList<QueryArticleHit>();
         for (Map.Entry<String, QueryArticleHit> entry : articleHitMap.entrySet()) {
             fusedHits.add(new QueryArticleHit(
+                    entry.getValue().getEvidenceType(),
                     entry.getValue().getConceptId(),
                     entry.getValue().getTitle(),
                     entry.getValue().getContent(),
@@ -69,9 +82,20 @@ public class RrfFusionService {
     ) {
         for (int index = 0; index < hits.size(); index++) {
             QueryArticleHit hit = hits.get(index);
-            articleHitMap.putIfAbsent(hit.getConceptId(), hit);
+            String hitKey = buildHitKey(hit);
+            articleHitMap.putIfAbsent(hitKey, hit);
             double rrfScore = 1.0 / (RRF_K + index + 1);
-            scoreMap.merge(hit.getConceptId(), rrfScore, Double::sum);
+            scoreMap.merge(hitKey, rrfScore, Double::sum);
         }
+    }
+
+    /**
+     * 构建命中的稳定融合键。
+     *
+     * @param queryArticleHit 查询命中
+     * @return 融合键
+     */
+    private String buildHitKey(QueryArticleHit queryArticleHit) {
+        return queryArticleHit.getEvidenceType().name() + ":" + queryArticleHit.getConceptId();
     }
 }

@@ -26,6 +26,24 @@ public class AnalyzeNode {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
+    private final LlmGateway llmGateway;
+
+    /**
+     * 创建分析节点。
+     */
+    public AnalyzeNode() {
+        this(null);
+    }
+
+    /**
+     * 创建分析节点。
+     *
+     * @param llmGateway LLM 网关
+     */
+    public AnalyzeNode(LlmGateway llmGateway) {
+        this.llmGateway = llmGateway;
+    }
+
     /**
      * 分析分组内的所有批次。
      *
@@ -47,6 +65,12 @@ public class AnalyzeNode {
                 continue;
             }
 
+            List<AnalyzedConcept> llmAnalyzedConcepts = analyzeWithLlm(sortedSources, sourcePaths);
+            if (!llmAnalyzedConcepts.isEmpty()) {
+                analyzedConcepts.addAll(llmAnalyzedConcepts);
+                continue;
+            }
+
             analyzedConcepts.add(new AnalyzedConcept(
                     conceptId,
                     title,
@@ -56,6 +80,51 @@ public class AnalyzeNode {
             ));
         }
         return analyzedConcepts;
+    }
+
+    /**
+     * 使用 LLM 分析概念。
+     *
+     * @param sortedSources 已排序源文件
+     * @param sourcePaths 来源路径
+     * @return 分析结果
+     */
+    private List<AnalyzedConcept> analyzeWithLlm(List<RawSource> sortedSources, List<String> sourcePaths) {
+        if (llmGateway == null || sortedSources.isEmpty()) {
+            return new ArrayList<AnalyzedConcept>();
+        }
+        try {
+            String llmResponse = llmGateway.compile(
+                    "analyze",
+                    LatticePrompts.SYSTEM_ANALYZE,
+                    buildAnalyzeUserPrompt(sortedSources)
+            );
+            List<StructuredConceptCandidate> conceptCandidates = parseStructuredConceptCandidates(llmResponse);
+            if (conceptCandidates.isEmpty()) {
+                return new ArrayList<AnalyzedConcept>();
+            }
+            return toAnalyzedConcepts(conceptCandidates, sourcePaths);
+        }
+        catch (RuntimeException ex) {
+            return new ArrayList<AnalyzedConcept>();
+        }
+    }
+
+    /**
+     * 构建分析用户提示词。
+     *
+     * @param sortedSources 已排序源文件
+     * @return 用户提示词
+     */
+    private String buildAnalyzeUserPrompt(List<RawSource> sortedSources) {
+        StringBuilder promptBuilder = new StringBuilder();
+        promptBuilder.append("Analyze these source materials and extract the knowledge structure:\n\n");
+        for (RawSource rawSource : sortedSources) {
+            promptBuilder.append("=== Source: ").append(rawSource.getRelativePath()).append(" ===").append("\n");
+            promptBuilder.append(rawSource.getContent()).append("\n");
+            promptBuilder.append("=== End: ").append(rawSource.getRelativePath()).append(" ===").append("\n\n");
+        }
+        return promptBuilder.toString().trim();
     }
 
     /**

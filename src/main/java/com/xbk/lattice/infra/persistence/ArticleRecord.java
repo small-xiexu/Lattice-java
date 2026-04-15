@@ -27,6 +27,18 @@ public class ArticleRecord {
 
     private final String metadataJson;
 
+    private final String summary;
+
+    private final List<String> referentialKeywords;
+
+    private final List<String> dependsOn;
+
+    private final List<String> related;
+
+    private final String confidence;
+
+    private final String reviewStatus;
+
     /**
      * 创建文章记录。
      *
@@ -47,6 +59,55 @@ public class ArticleRecord {
             List<String> sourcePaths,
             String metadataJson
     ) {
+        this(
+                conceptId,
+                title,
+                content,
+                lifecycle,
+                compiledAt,
+                sourcePaths,
+                metadataJson,
+                "",
+                Collections.<String>emptyList(),
+                Collections.<String>emptyList(),
+                Collections.<String>emptyList(),
+                "medium",
+                "pending"
+        );
+    }
+
+    /**
+     * 创建文章记录。
+     *
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param content 内容
+     * @param lifecycle 生命周期
+     * @param compiledAt 编译时间
+     * @param sourcePaths 来源路径
+     * @param metadataJson 元数据 JSON
+     * @param summary 摘要
+     * @param referentialKeywords 明确性关键词
+     * @param dependsOn 依赖概念
+     * @param related 相关概念
+     * @param confidence 置信度
+     * @param reviewStatus 审查状态
+     */
+    public ArticleRecord(
+            String conceptId,
+            String title,
+            String content,
+            String lifecycle,
+            OffsetDateTime compiledAt,
+            List<String> sourcePaths,
+            String metadataJson,
+            String summary,
+            List<String> referentialKeywords,
+            List<String> dependsOn,
+            List<String> related,
+            String confidence,
+            String reviewStatus
+    ) {
         this.conceptId = conceptId;
         this.title = title;
         this.content = content;
@@ -54,6 +115,12 @@ public class ArticleRecord {
         this.compiledAt = compiledAt;
         this.sourcePaths = sourcePaths;
         this.metadataJson = metadataJson;
+        this.summary = summary;
+        this.referentialKeywords = referentialKeywords;
+        this.dependsOn = dependsOn;
+        this.related = related;
+        this.confidence = confidence;
+        this.reviewStatus = reviewStatus;
     }
 
     /**
@@ -73,7 +140,13 @@ public class ArticleRecord {
                 lifecycle,
                 compiledAt,
                 Collections.<String>emptyList(),
-                "{}"
+                "{}",
+                "",
+                Collections.<String>emptyList(),
+                Collections.<String>emptyList(),
+                Collections.<String>emptyList(),
+                "medium",
+                "pending"
         );
     }
 
@@ -138,5 +211,59 @@ public class ArticleRecord {
      */
     public String getMetadataJson() {
         return metadataJson;
+    }
+
+    /**
+     * 获取摘要。
+     *
+     * @return 摘要
+     */
+    public String getSummary() {
+        return summary;
+    }
+
+    /**
+     * 获取明确性关键词。
+     *
+     * @return 明确性关键词
+     */
+    public List<String> getReferentialKeywords() {
+        return referentialKeywords;
+    }
+
+    /**
+     * 获取依赖概念。
+     *
+     * @return 依赖概念
+     */
+    public List<String> getDependsOn() {
+        return dependsOn;
+    }
+
+    /**
+     * 获取相关概念。
+     *
+     * @return 相关概念
+     */
+    public List<String> getRelated() {
+        return related;
+    }
+
+    /**
+     * 获取置信度。
+     *
+     * @return 置信度
+     */
+    public String getConfidence() {
+        return confidence;
+    }
+
+    /**
+     * 获取审查状态。
+     *
+     * @return 审查状态
+     */
+    public String getReviewStatus() {
+        return reviewStatus;
     }
 }

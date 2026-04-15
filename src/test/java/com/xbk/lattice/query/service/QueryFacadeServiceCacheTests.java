@@ -181,6 +181,16 @@ class QueryFacadeServiceCacheTests {
         public PendingQueryRecord findPendingQuery(String queryId) {
             throw new UnsupportedOperationException();
         }
+
+        /**
+         * 不支持列出全部 pending。
+         *
+         * @return 待确认查询记录列表
+         */
+        @Override
+        public List<PendingQueryRecord> listPendingQueries() {
+            throw new UnsupportedOperationException();
+        }
     }
 
     /**

@@ -37,13 +37,24 @@ public class SourceFileJdbcRepository {
      * @param sourceFileRecord 源文件记录
      */
     public void upsert(SourceFileRecord sourceFileRecord) {
+        if (jdbcTemplate == null) {
+            return;
+        }
+
         String sql = """
-                insert into source_files (file_path, content_preview, format, file_size)
-                values (?, ?, ?, ?)
+                insert into source_files (
+                    file_path, content_preview, format, file_size,
+                    content_text, metadata_json, is_verbatim, raw_path
+                )
+                values (?, ?, ?, ?, ?::text, ?::jsonb, ?, ?)
                 on conflict (file_path) do update
                 set content_preview = excluded.content_preview,
                     format = excluded.format,
                     file_size = excluded.file_size,
+                    content_text = excluded.content_text,
+                    metadata_json = excluded.metadata_json,
+                    is_verbatim = excluded.is_verbatim,
+                    raw_path = excluded.raw_path,
                     indexed_at = CURRENT_TIMESTAMP
                 """;
         jdbcTemplate.update(
@@ -51,7 +62,11 @@ public class SourceFileJdbcRepository {
                 sourceFileRecord.getFilePath(),
                 sourceFileRecord.getContentPreview(),
                 sourceFileRecord.getFormat(),
-                sourceFileRecord.getFileSize()
+                sourceFileRecord.getFileSize(),
+                sourceFileRecord.getContentText(),
+                sourceFileRecord.getMetadataJson(),
+                sourceFileRecord.isVerbatim(),
+                sourceFileRecord.getRawPath()
         );
     }
 
@@ -62,8 +77,13 @@ public class SourceFileJdbcRepository {
      * @return 源文件记录
      */
     public Optional<SourceFileRecord> findByPath(String filePath) {
+        if (jdbcTemplate == null) {
+            return Optional.empty();
+        }
+
         String sql = """
-                select file_path, content_preview, format, file_size
+                select file_path, content_preview, format, file_size,
+                       content_text, metadata_json::text as metadata_json, is_verbatim, raw_path
                 from source_files
                 where file_path = ?
                 """;
@@ -87,7 +107,11 @@ public class SourceFileJdbcRepository {
                 resultSet.getString("file_path"),
                 resultSet.getString("content_preview"),
                 resultSet.getString("format"),
-                resultSet.getLong("file_size")
+                resultSet.getLong("file_size"),
+                resultSet.getString("content_text"),
+                resultSet.getString("metadata_json"),
+                resultSet.getBoolean("is_verbatim"),
+                resultSet.getString("raw_path")
         );
     }
 }

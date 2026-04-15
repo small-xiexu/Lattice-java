@@ -54,19 +54,25 @@ public class LatticeMcpTools {
     }
 
     /**
-     * 查询待确认记录的当前状态，用于在纠错前确认当前答案内容。
+     * 列出当前全部待确认记录，供外部 AI 客户端决定后续 confirm/correct/discard 操作。
      *
-     * @param queryId 待确认查询标识
-     * @return JSON 字符串，包含 queryId / question / answer / reviewStatus
+     * @return JSON 字符串，包含 count / items
      */
-    @McpTool(name = "lattice_query_pending", description = "Retrieve the current state of a pending query by its queryId")
-    public String queryPending(@McpToolParam(description = "The queryId returned by lattice_query") String queryId) {
-        PendingQueryRecord record = pendingQueryManager.findPendingQuery(queryId);
+    @McpTool(name = "lattice_query_pending", description = "List all pending query records that still need confirm, correct, or discard actions")
+    public String queryPending() {
+        java.util.List<PendingQueryRecord> pendingRecords = pendingQueryManager.listPendingQueries();
+        StringBuilder itemsBuilder = new StringBuilder();
+        itemsBuilder.append("[");
+        for (int index = 0; index < pendingRecords.size(); index++) {
+            if (index > 0) {
+                itemsBuilder.append(",");
+            }
+            itemsBuilder.append(toPendingItemJson(pendingRecords.get(index)));
+        }
+        itemsBuilder.append("]");
         return "{"
-                + "\"queryId\":" + jsonString(record.getQueryId()) + ","
-                + "\"question\":" + jsonString(record.getQuestion()) + ","
-                + "\"answer\":" + jsonString(record.getAnswer()) + ","
-                + "\"reviewStatus\":" + jsonString(record.getReviewStatus())
+                + "\"count\":" + pendingRecords.size() + ","
+                + "\"items\":" + itemsBuilder
                 + "}";
     }
 
@@ -102,6 +108,38 @@ public class LatticeMcpTools {
         return "{"
                 + "\"queryId\":" + jsonString(queryId) + ","
                 + "\"status\":\"confirmed\""
+                + "}";
+    }
+
+    /**
+     * 丢弃待确认查询并返回 discarded 状态。
+     *
+     * @param queryId 待确认查询标识
+     * @return JSON 字符串，包含 queryId / status
+     */
+    @McpTool(name = "lattice_query_discard", description = "Discard a pending query without persisting it as a contribution")
+    public String discard(@McpToolParam(description = "The queryId of the pending query to discard") String queryId) {
+        pendingQueryManager.discard(queryId);
+        return "{"
+                + "\"queryId\":" + jsonString(queryId) + ","
+                + "\"status\":\"discarded\""
+                + "}";
+    }
+
+    /**
+     * 转换单条 pending 记录为 JSON 对象字符串。
+     *
+     * @param pendingQueryRecord 待确认记录
+     * @return JSON 对象字符串
+     */
+    private String toPendingItemJson(PendingQueryRecord pendingQueryRecord) {
+        return "{"
+                + "\"queryId\":" + jsonString(pendingQueryRecord.getQueryId()) + ","
+                + "\"question\":" + jsonString(pendingQueryRecord.getQuestion()) + ","
+                + "\"answer\":" + jsonString(pendingQueryRecord.getAnswer()) + ","
+                + "\"reviewStatus\":" + jsonString(pendingQueryRecord.getReviewStatus()) + ","
+                + "\"createdAt\":" + jsonString(pendingQueryRecord.getCreatedAt().toString()) + ","
+                + "\"expiresAt\":" + jsonString(pendingQueryRecord.getExpiresAt().toString())
                 + "}";
     }
 

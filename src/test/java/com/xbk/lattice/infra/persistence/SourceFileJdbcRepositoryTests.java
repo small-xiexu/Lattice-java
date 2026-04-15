@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -57,7 +58,11 @@ class SourceFileJdbcRepositoryTests {
                 "payment/order.md",
                 "order-flow",
                 "md",
-                10L
+                10L,
+                "order-flow\nretry=3",
+                "{\"pageCount\":1}",
+                true,
+                "payment/order.md"
         );
 
         sourceFileJdbcRepository.upsert(sourceFileRecord);
@@ -65,6 +70,33 @@ class SourceFileJdbcRepositoryTests {
 
         assertThat(loaded).isPresent();
         assertThat(loaded.orElseThrow().getContentPreview()).isEqualTo("order-flow");
+        assertThat(loaded.orElseThrow().getContentText()).isEqualTo("order-flow\nretry=3");
+        assertThat(loaded.orElseThrow().getMetadataJson()).contains("pageCount");
+        assertThat(loaded.orElseThrow().isVerbatim()).isTrue();
+        assertThat(loaded.orElseThrow().getRawPath()).isEqualTo("payment/order.md");
         assertThat(loaded.orElseThrow().getFormat()).isEqualTo("md");
+    }
+
+    /**
+     * 验证 source_files 表已扩展为可承载全文、元数据与原始文件路径。
+     */
+    @Test
+    void shouldExtendSourceFilesTableForFullTextStorage() {
+        List<String> columnNames = jdbcTemplate.queryForList(
+                """
+                        select column_name
+                        from information_schema.columns
+                        where table_schema = 'lattice_b1_source_test'
+                          and table_name = 'source_files'
+                        order by ordinal_position
+                        """,
+                String.class
+        );
+
+        assertThat(columnNames)
+                .contains("content_text")
+                .contains("metadata_json")
+                .contains("is_verbatim")
+                .contains("raw_path");
     }
 }

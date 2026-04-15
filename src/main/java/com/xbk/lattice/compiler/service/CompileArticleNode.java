@@ -1,0 +1,351 @@
+package com.xbk.lattice.compiler.service;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xbk.lattice.compiler.model.ConceptSection;
+import com.xbk.lattice.compiler.model.MergedConcept;
+import com.xbk.lattice.infra.persistence.ArticleRecord;
+import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
+import com.xbk.lattice.infra.persistence.SourceFileRecord;
+import com.xbk.lattice.query.service.ReviewResult;
+
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * 文章编译节点
+ *
+ * 职责：把合并概念编译为 Markdown/frontmatter 文章记录
+ *
+ * @author xiexu
+ */
+public class CompileArticleNode {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    private static final Pattern REFERENTIAL_PATTERN = Pattern.compile("[A-Za-z0-9_-]+=[A-Za-z0-9._-]+|\\b\\d{3,5}\\b");
+
+    private final LlmGateway llmGateway;
+
+    private final SourceFileJdbcRepository sourceFileJdbcRepository;
+
+    private final DocumentSectionSelector documentSectionSelector;
+
+    private final ArticleReviewerGateway articleReviewerGateway;
+
+    private final ReviewFixService reviewFixService;
+
+    /**
+     * 创建文章编译节点。
+     *
+     * @param llmGateway LLM 网关
+     * @param sourceFileJdbcRepository 源文件仓储
+     * @param documentSectionSelector 文档章节选择器
+     */
+    public CompileArticleNode(
+            LlmGateway llmGateway,
+            SourceFileJdbcRepository sourceFileJdbcRepository,
+            DocumentSectionSelector documentSectionSelector,
+            ArticleReviewerGateway articleReviewerGateway,
+            ReviewFixService reviewFixService
+    ) {
+        this.llmGateway = llmGateway;
+        this.sourceFileJdbcRepository = sourceFileJdbcRepository;
+        this.documentSectionSelector = documentSectionSelector;
+        this.articleReviewerGateway = articleReviewerGateway;
+        this.reviewFixService = reviewFixService;
+    }
+
+    /**
+     * 编译文章记录。
+     *
+     * @param mergedConcept 合并概念
+     * @return 文章记录
+     */
+    public ArticleRecord compile(MergedConcept mergedConcept) {
+        String summary = buildSummary(mergedConcept);
+        List<String> referentialKeywords = extractReferentialKeywords(mergedConcept);
+        String markdownContent = tryCompileWithLlm(mergedConcept, summary);
+        if (markdownContent == null || markdownContent.isBlank()) {
+            markdownContent = buildFallbackMarkdown(mergedConcept, summary, referentialKeywords);
+        }
+        String reviewStatus = "pending";
+        String sourceContents = buildSourceContents(mergedConcept);
+        if (articleReviewerGateway != null && articleReviewerGateway.isEnabled()) {
+            ReviewResult reviewResult = articleReviewerGateway.review(markdownContent, sourceContents);
+            if (reviewResult.isPass()) {
+                reviewStatus = "passed";
+            }
+            else {
+                String fixedContent = reviewFixService == null
+                        ? null
+                        : reviewFixService.applyFix(markdownContent, reviewResult.getIssues(), sourceContents);
+                if (fixedContent != null && !fixedContent.isBlank()) {
+                    markdownContent = fixedContent;
+                    reviewStatus = "passed";
+                }
+                else {
+                    reviewStatus = "needs_human_review";
+                }
+            }
+            markdownContent = replaceReviewStatus(markdownContent, reviewStatus);
+        }
+        return new ArticleRecord(
+                mergedConcept.getConceptId(),
+                mergedConcept.getTitle(),
+                markdownContent,
+                "ACTIVE",
+                OffsetDateTime.now(),
+                mergedConcept.getSourcePaths(),
+                buildMetadataJson(mergedConcept),
+                summary,
+                referentialKeywords,
+                List.of(),
+                List.of(),
+                "medium",
+                reviewStatus
+        );
+    }
+
+    /**
+     * 尝试使用 LLM 编译文章。
+     *
+     * @param mergedConcept 合并概念
+     * @param summary 摘要
+     * @return Markdown 文章；失败时返回 null
+     */
+    private String tryCompileWithLlm(MergedConcept mergedConcept, String summary) {
+        if (llmGateway == null) {
+            return null;
+        }
+        try {
+            return llmGateway.compile(
+                    "compile-article",
+                    LatticePrompts.SYSTEM_COMPILE_ARTICLE,
+                    buildCompilePrompt(mergedConcept, summary)
+            );
+        }
+        catch (RuntimeException ex) {
+            return null;
+        }
+    }
+
+    /**
+     * 构建文章编译提示词。
+     *
+     * @param mergedConcept 合并概念
+     * @param summary 摘要
+     * @return 提示词
+     */
+    private String buildCompilePrompt(MergedConcept mergedConcept, String summary) {
+        StringBuilder promptBuilder = new StringBuilder();
+        promptBuilder.append("Compile a knowledge article about: \"").append(mergedConcept.getTitle()).append("\"").append("\n\n");
+        promptBuilder.append("Description: ").append(summary).append("\n\n");
+        promptBuilder.append("Concept ID: ").append(mergedConcept.getConceptId()).append("\n\n");
+        promptBuilder.append("Relevant source content:").append("\n");
+        for (String sourcePath : mergedConcept.getSourcePaths()) {
+            Optional<SourceFileRecord> sourceFileRecord = sourceFileJdbcRepository.findByPath(sourcePath);
+            if (sourceFileRecord.isEmpty()) {
+                continue;
+            }
+            String selectedContent = documentSectionSelector.select(
+                    sourceFileRecord.orElseThrow().getContentText(),
+                    buildConceptTerms(mergedConcept),
+                    4000
+            );
+            promptBuilder.append("=== Source: ").append(sourcePath).append(" ===").append("\n");
+            promptBuilder.append(selectedContent).append("\n");
+            promptBuilder.append("=== End ===").append("\n\n");
+        }
+        return promptBuilder.toString().trim();
+    }
+
+    /**
+     * 构建源文件正文。
+     *
+     * @param mergedConcept 合并概念
+     * @return 源文件正文
+     */
+    private String buildSourceContents(MergedConcept mergedConcept) {
+        StringBuilder builder = new StringBuilder();
+        for (String sourcePath : mergedConcept.getSourcePaths()) {
+            Optional<SourceFileRecord> sourceFileRecord = sourceFileJdbcRepository.findByPath(sourcePath);
+            if (sourceFileRecord.isEmpty()) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append("\n\n");
+            }
+            builder.append("=== Source: ").append(sourcePath).append(" ===").append("\n");
+            builder.append(sourceFileRecord.orElseThrow().getContentText()).append("\n");
+            builder.append("=== End ===");
+        }
+        return builder.toString();
+    }
+
+    /**
+     * 构建确定性回退 Markdown。
+     *
+     * @param mergedConcept 合并概念
+     * @param summary 摘要
+     * @param referentialKeywords 明确性关键词
+     * @return Markdown 内容
+     */
+    private String buildFallbackMarkdown(MergedConcept mergedConcept, String summary, List<String> referentialKeywords) {
+        StringBuilder contentBuilder = new StringBuilder();
+        contentBuilder.append("---").append("\n");
+        contentBuilder.append("title: ").append("\"").append(mergedConcept.getTitle()).append("\"").append("\n");
+        contentBuilder.append("summary: ").append("\"").append(escapeYaml(summary)).append("\"").append("\n");
+        contentBuilder.append("referential_keywords: ").append(formatYamlList(referentialKeywords)).append("\n");
+        contentBuilder.append("sources: ").append(formatYamlList(mergedConcept.getSourcePaths())).append("\n");
+        contentBuilder.append("depends_on: []").append("\n");
+        contentBuilder.append("related: []").append("\n");
+        contentBuilder.append("confidence: medium").append("\n");
+        contentBuilder.append("compiled_at: ").append("\"").append(OffsetDateTime.now()).append("\"").append("\n");
+        contentBuilder.append("review_status: pending").append("\n");
+        contentBuilder.append("---").append("\n\n");
+        contentBuilder.append("# ").append(mergedConcept.getTitle()).append("\n\n");
+        if (!summary.isBlank()) {
+            contentBuilder.append(summary).append("\n\n");
+        }
+        appendSections(contentBuilder, mergedConcept.getSections());
+        if (!mergedConcept.getSourcePaths().isEmpty()) {
+            contentBuilder.append("## Sources").append("\n");
+            for (String sourcePath : mergedConcept.getSourcePaths()) {
+                contentBuilder.append("- ").append(sourcePath).append("\n");
+            }
+        }
+        return contentBuilder.toString().trim();
+    }
+
+    /**
+     * 替换 frontmatter 中的审查状态。
+     *
+     * @param markdownContent Markdown 内容
+     * @param reviewStatus 审查状态
+     * @return 更新后的 Markdown
+     */
+    private String replaceReviewStatus(String markdownContent, String reviewStatus) {
+        return markdownContent.replaceFirst("review_status:\\s*\\w+", "review_status: " + reviewStatus);
+    }
+
+    /**
+     * 追加章节内容。
+     *
+     * @param contentBuilder 内容构建器
+     * @param sections 章节列表
+     */
+    private void appendSections(StringBuilder contentBuilder, List<ConceptSection> sections) {
+        for (ConceptSection section : sections) {
+            contentBuilder.append("## ").append(section.getHeading()).append("\n");
+            for (String contentLine : section.getContentLines()) {
+                contentBuilder.append("- ").append(contentLine).append("\n");
+            }
+            if (!section.getSourceRefs().isEmpty()) {
+                contentBuilder.append("> Sources: ").append(String.join(", ", section.getSourceRefs())).append("\n");
+            }
+            contentBuilder.append("\n");
+        }
+    }
+
+    /**
+     * 构建摘要。
+     *
+     * @param mergedConcept 合并概念
+     * @return 摘要
+     */
+    private String buildSummary(MergedConcept mergedConcept) {
+        if (mergedConcept.getDescription() != null && !mergedConcept.getDescription().isBlank()) {
+            return mergedConcept.getDescription().trim();
+        }
+        return mergedConcept.getTitle();
+    }
+
+    /**
+     * 抽取明确性关键词。
+     *
+     * @param mergedConcept 合并概念
+     * @return 明确性关键词
+     */
+    private List<String> extractReferentialKeywords(MergedConcept mergedConcept) {
+        LinkedHashSet<String> keywords = new LinkedHashSet<String>();
+        for (ConceptSection section : mergedConcept.getSections()) {
+            for (String contentLine : section.getContentLines()) {
+                Matcher matcher = REFERENTIAL_PATTERN.matcher(contentLine);
+                while (matcher.find()) {
+                    keywords.add(matcher.group());
+                }
+            }
+        }
+        return new ArrayList<String>(keywords);
+    }
+
+    /**
+     * 构建概念关键词。
+     *
+     * @param mergedConcept 合并概念
+     * @return 概念关键词
+     */
+    private List<String> buildConceptTerms(MergedConcept mergedConcept) {
+        List<String> conceptTerms = new ArrayList<String>();
+        conceptTerms.add(mergedConcept.getTitle());
+        conceptTerms.add(mergedConcept.getConceptId().replace('-', ' '));
+        if (mergedConcept.getDescription() != null && !mergedConcept.getDescription().isBlank()) {
+            conceptTerms.add(mergedConcept.getDescription());
+        }
+        return conceptTerms;
+    }
+
+    /**
+     * 构建 metadata JSON。
+     *
+     * @param mergedConcept 合并概念
+     * @return metadata JSON
+     */
+    private String buildMetadataJson(MergedConcept mergedConcept) {
+        Map<String, Object> metadata = new LinkedHashMap<String, Object>();
+        metadata.put("description", mergedConcept.getDescription());
+        metadata.put("structured", !mergedConcept.getSections().isEmpty());
+        metadata.put("sourceCount", mergedConcept.getSourcePaths().size());
+        metadata.put("snippetCount", mergedConcept.getSnippets().size());
+        metadata.put("sectionCount", mergedConcept.getSections().size());
+        try {
+            return OBJECT_MAPPER.writeValueAsString(metadata);
+        }
+        catch (JsonProcessingException ex) {
+            throw new IllegalStateException("构建文章 metadata 失败", ex);
+        }
+    }
+
+    /**
+     * 格式化 YAML 列表。
+     *
+     * @param items 条目列表
+     * @return YAML 列表文本
+     */
+    private String formatYamlList(List<String> items) {
+        List<String> escapedItems = new ArrayList<String>();
+        for (String item : items) {
+            escapedItems.add("\"" + escapeYaml(item) + "\"");
+        }
+        return "[" + String.join(", ", escapedItems) + "]";
+    }
+
+    /**
+     * 转义 YAML 双引号内容。
+     *
+     * @param value 原始值
+     * @return 转义后内容
+     */
+    private String escapeYaml(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+}

@@ -1,12 +1,39 @@
 # Lattice Java 重构技术方案设计文档
 
-**文档版本**：v1.3
-**编写日期**：2026-04-13  
+**文档版本**：v1.5
+**编写日期**：2026-04-15  
 **适用范围**：星巴克数字商品与履约生态系统知识库编译器重构项目  
 **技术路线**：Option B — Spring AI Alibaba + PostgreSQL + Redis（详见下方选型说明）  
 **机密等级**：内部技术评审
 
 ---
+
+## 文档导航与使用方式
+
+当前 `.codex/` 下三份核心文档的职责边界如下：
+
+1. [Lattice Java 重构技术方案设计文档.md](/Users/sxie/xbk/Lattice-java/.codex/Lattice%20Java%20重构技术方案设计文档.md)
+   - 角色：**总体技术设计基线**
+   - 用途：解释为什么这么设计、技术路线如何取舍、架构边界如何划分
+   - 不负责：作为日常开发推进的唯一执行台账
+2. [实施方案.md](/Users/sxie/xbk/Lattice-java/.codex/实施方案.md)
+   - 角色：**B0-B4 历史实施台账**
+   - 用途：保留最小闭环阶段的拆批、验收与历史上下文
+   - 不负责：继续指导 B5 及后续开发
+3. [B5-B8 对齐原始项目完整改动方案.md](/Users/sxie/xbk/Lattice-java/.codex/B5-B8%20对齐原始项目完整改动方案.md)
+   - 角色：**当前唯一执行入口**
+   - 用途：自 2026-04-15 起，所有 B5 及后续实施、评审、拆清单、推进顺序均以此文档为准
+
+> **唯一执行入口约定**：如果当前要继续做功能实现、拆执行清单、判断先后顺序，默认只看 [B5-B8 对齐原始项目完整改动方案.md](/Users/sxie/xbk/Lattice-java/.codex/B5-B8%20对齐原始项目完整改动方案.md)。本技术方案文档继续作为“设计依据”，不再承担“唯一推进台账”职责。
+
+## 源码校准说明（2026-04-15）
+
+基于对原始 TypeScript 项目关键源码的重新梳理（`reader.ts`、`pipeline.ts`、`query-engine.ts`、`search-engine.ts`、`pending-queries.ts`、`contributions.ts`、`lint-command.ts`、`inspect-command.ts`、`mcp/server.ts` 等），本文档补充以下校准结论；若后文历史设计段落与本节冲突，以本节为准：
+
+1. **Graph 可按需使用，Agent Framework 不作为 v1.0 前置**：当前阶段优先保证知识编译器主链跑通，`Agent Framework` 仅作为后续增强可选项。
+2. **不引入 OSS 作为当前前提**：PDF / Excel / 代码 / 文档统一先抽取为文本，原始文件默认走本地文件系统；对象存储不作为当前方案必要组成。
+3. **查询主链必须包含 source index 与 contribution 层**：原版并非“文章层命中不足时才查源文件”，而是文章层、`referential_keywords`、源文件索引、用户贡献共同组成问答主链；向量检索和中文分词扩展均属于增强项，而非 parity 前提。
+4. **MCP parity 目标以原版核心工具面为准**：至少应覆盖 `lattice_query / confirm / correct / discard / pending / search / get / status / correct / lint / quality / compile` 这 12 个工具。
 
 ## 技术路线选型说明
 
@@ -16,9 +43,9 @@
 
 | | Option A | **Option B（本文档采用）** | Option C |
 |--|---------|--------------------------|---------|
-| **AI 编排框架** | LangChain4j | **Spring AI Alibaba Graph + Agent Framework（按需）** | 自研 DAG 调度器 |
+| **AI 编排框架** | LangChain4j | **Spring AI Alibaba Graph（按需）+ Agent Framework（可选增强）** | 自研 DAG 调度器 |
 | **大模型接入** | OpenAI 兼容接口 | **OpenAI（编译）+ Claude（审查）** | 仅 DeepSeek API |
-| **持久化层** | MySQL + Milvus（向量库分离） | **PostgreSQL + pgvector（合一）** | MongoDB + Elasticsearch |
+| **持久化层** | MySQL + Milvus（向量库分离） | **PostgreSQL（FTS 主路径）+ 可选 pgvector** | MongoDB + Elasticsearch |
 | **缓存层** | Caffeine（本地缓存） | **Redis 7（v1.0 单节点，v2.0 Cluster）** | 无缓存 |
 | **MCP 暴露方式** | 自实现 HTTP Server | **Spring AI MCP Server（`@McpTool` + HTTP/SSE）** | 无 MCP，仅 REST |
 | **适用场景** | 小规模 PoC，快速验证 | **企业级生产，先单应用落地再演进** | 强检索场景，弱 AI 编排 |
@@ -32,19 +59,15 @@
 │  提供基础运行容器、虚拟线程（IO 密集型 LLM 调用并发）、          │
 │  Actuator 健康检查、Micrometer 指标采集                          │
 ├─────────────────────────────────────────────────────────────────┤
-│  Spring AI Alibaba Graph + Agent Framework（按需）              │
+│  Spring AI Alibaba Graph（按需）+ Agent Framework（可选增强）   │
 │  ──────────────────────────────────────────────────────────     │
-│  声明式 DAG 引擎，将原版 pipeline.ts 的手写 for-await 循环      │
-│  替换为可视化节点图。Graph 负责：                                │
-│    · 节点并行执行（对应原版串行编译的性能瓶颈）                  │
-│    · 节点状态持久化与断点恢复                                    │
-│    · 超时熔断（对应原版 Promise.race 120s）                      │
-│    · 条件分支与重试编排                                          │
-│  大模型接入：                                                    │
-│    · CompilerAgent → OpenAI ChatModel（模型名配置化）           │
-│    · ReviewerAgent → Anthropic ChatModel（模型名配置化）        │
-│  v1.0 保持单轮审查 + 单次修复；若后续验证 Agent Framework 中      │
-│  的 LoopAgent 适配度足够，再在 v2.0 演进为多轮审查循环           │
+│  Graph 负责有分支/有状态的编排场景，例如：                       │
+│    · compile → review → fix → store                              │
+│    · match → enhance / create                                    │
+│  主编译管线中的线性节点仍可先使用普通 Service 串联，避免把        │
+│  框架抽象提前变成实施前提。                                       │
+│  Agent Framework 不作为 v1.0 必需依赖；只有在验证其对 Loop /      │
+│  Routing / Multi-Agent 协作确有收益后，再作为增强项引入。        │
 ├─────────────────────────────────────────────────────────────────┤
 │  Spring AI MCP Server（`@McpTool` 注解 + WebMVC/SSE）           │
 │  ──────────────────────────────────────────────────────────     │
@@ -52,14 +75,15 @@
 │  原版使用 stdio 传输（本地进程），Java 版升级为 HTTP/SSE         │
 │  支持 Sa-Token 鉴权、Rate Limit、审批流拦截                     │
 ├─────────────────────────────────────────────────────────────────┤
-│  PostgreSQL 16 + pgvector + 中文检索配置（P0 锁定）             │
+│  PostgreSQL 16 + FTS + 可选 pgvector / 中文检索增强              │
 │  ──────────────────────────────────────────────────────────     │
 │  替代原版 SQLite（search.db + llm-cache.db）。三合一：          │
-│    · pgvector：语义向量检索（原版无此能力）                     │
-│    · FTS + setweight：带字段权重的中文全文检索                  │
+│    · FTS + setweight：主检索路径                                 │
+│    · source index + source chunks：承接原版源文件检索主链        │
+│    · pgvector：后续可选语义增强（非当前前置）                   │
 │      对应原版 FTS5 bm25(articles_fts, 1.0, 1.0, 5.0) 权重配置 │
 │    · JSONB + GIN 索引：元数据快速路径查询                       │
-│  注：RDS 可直接支持 pgvector；中文分词扩展是否可用需在 P0 验证   │
+│  注：中文分词扩展是否可用需在 P0 验证；不可用时不阻塞主链        │
 ├─────────────────────────────────────────────────────────────────┤
 │  Redis 7（v1.0 单节点 / v2.0 Cluster）                          │
 │  ──────────────────────────────────────────────────────────     │
@@ -1099,12 +1123,14 @@ graph LR
         T2a["@McpTool lattice_query_confirm\n确认答案写入贡献\n权限: WRITE\n需 queryId"]
         T2b["@McpTool lattice_query_correct\n纠正答案\n权限: WRITE\n需 queryId"]
         T2c["@McpTool lattice_query_discard\n丢弃查询\n权限: WRITE\n需 queryId"]
-        T3["@McpTool lattice_lint\n质量检查\n权限: READ\n异步任务"]
-        T4["@McpTool lattice_compile\n触发重编译\n权限: ADMIN\n高风险 需审批"]
-        T5["@McpTool lattice_propagate\n级联传播纠错\n权限: WRITE\n需审批"]
-        T6["@McpTool lattice_inspect\n查看文章正文+元数据\n权限: READ"]
-        T7["@McpTool lattice_query_pending\n查看待确认查询\n权限: READ"]
-        T8["@McpTool lattice_quality\n质量报告\n权限: READ"]
+        T3["@McpTool lattice_query_pending\n查看待确认查询\n权限: READ"]
+        T4["@McpTool lattice_search\n快速检索\n权限: READ"]
+        T5["@McpTool lattice_get\n查看文章正文\n权限: READ"]
+        T6["@McpTool lattice_status\n知识库状态\n权限: READ"]
+        T7["@McpTool lattice_correct\n纠正文章\n权限: WRITE"]
+        T8["@McpTool lattice_lint\n质量检查\n权限: READ"]
+        T9["@McpTool lattice_quality\n质量报告\n权限: READ"]
+        T10["@McpTool lattice_compile\n触发重编译\n权限: ADMIN\n高风险 需审批"]
     end
 
     subgraph "MCP Client"
@@ -1112,15 +1138,15 @@ graph LR
         AGENT[自动化 Agent]
     end
 
-    IDE -->|MCP over SSE| T1 & T2a & T2b & T2c & T3 & T6 & T7 & T8
-    AGENT -->|需审批| T4 & T5
+    IDE -->|MCP over SSE| T1 & T2a & T2b & T2c & T3 & T4 & T5 & T6 & T8 & T9
+    AGENT -->|需审批| T7 & T10
 ```
 
 > **工具使用约定**：Agent 调用 `lattice_query` 后**必须**将答案呈现给用户，然后根据用户反馈调用三个后续工具之一。这是用户贡献闭环的入口，不可省略。
 
-> **v1.0 工具面收敛说明**：Java 版 v1.0 有意收敛为 10 个 MCP 工具，优先保留“查询闭环 + 质量 + 编译治理”。原版 `lattice_search`、`lattice_status`、`lattice_correct` 暂不作为 MCP 暴露；`lattice_get` 升级为 `lattice_inspect`，返回文章正文与元数据；`propagate` 从原版 CLI 能力升级为 MCP 可调用能力。
+> **工具面对齐说明**：以原版 MCP 核心工具面作为 parity 目标，至少覆盖 `query / confirm / correct / discard / pending / search / get / status / correct / lint / quality / compile` 12 个工具。`propagate`、`inspect` 等可继续保留为 CLI / 内部管理能力，但不应替代原版已有工具。
 
-**v1.0 收敛后的 10 个工具规格：**
+**v1.0 parity 目标的 12 个核心工具规格：**
 
 | 工具名 | 对应原版 | 危险等级 | 认证级别 | 说明 |
 |-------|---------|---------|---------|------|
@@ -1128,12 +1154,14 @@ graph LR
 | `lattice_query_confirm` | `lattice_query_confirm` | 低 | JWT + queryId | 用户确认 → 写入 contributions 表 |
 | `lattice_query_correct` | `lattice_query_correct` | 中 | JWT + queryId | 用户纠正 → 修订答案 |
 | `lattice_query_discard` | `lattice_query_discard` | 低 | JWT + queryId | 丢弃 pending 记录 |
-| `lattice_lint` | `lattice_lint` | 低 | JWT Token | 6 维质量检查 |
-| `lattice_compile` | `lattice_compile` | **高** | ServiceToken + 审批流 | 触发全量/增量重编译 |
-| `lattice_propagate` | CLI `lattice propagate` | **高** | ServiceToken + 审批流 | 级联纠错传播 |
-| `lattice_inspect` | `lattice_get`（增强版） | 低 | JWT Token | 查看文章正文与元数据 |
 | `lattice_query_pending` | `lattice_query_pending` | 低 | JWT Token | 列出待确认查询 |
+| `lattice_search` | `lattice_search` | 低 | JWT Token | 快速全文检索 |
+| `lattice_get` | `lattice_get` | 低 | JWT Token | 查看文章正文 |
+| `lattice_status` | `lattice_status` | 低 | JWT Token | 查看知识库状态 |
+| `lattice_correct` | `lattice_correct` | 中 | JWT Token | 纠正指定文章 |
+| `lattice_lint` | `lattice_lint` | 低 | JWT Token | 6 维质量检查 |
 | `lattice_quality` | `lattice_quality` | 低 | JWT Token | 质量统计报告 |
+| `lattice_compile` | `lattice_compile` | 高 | ServiceToken + 审批流 | 触发全量/增量重编译 |
 
 ### 6.2 Sa-Token 鉴权整合设计
 
@@ -1203,12 +1231,12 @@ graph TD
 
 | 决策点 | 备选方案 | 选择方案 | 决策理由 |
 |-------|---------|---------|---------|
-| 中文 FTS 分词器 | PGroonga / zhparser / pg_jieba / fallback | **P0 锁定，优先自建 PG + 可插拔分词扩展** | pgvector 可直接落地；中文分词需结合部署环境验证，无法装扩展时退化到 `pg_trgm + 精确匹配` |
+| 中文 FTS 分词器 | PGroonga / zhparser / pg_jieba / fallback | **P0 锁定 fallback，扩展分词作为增强** | v1.0 必须先跑通 `simple FTS + 精确匹配 + source chunks`；中文分词扩展可在部署条件允许时再启用 |
 | Embedding 模型与维度 | `text-embedding-3-small` / `text-embedding-3-large` | **v1.0 锁定 `text-embedding-3-small + vector(1536)`** | 先降低迁移复杂度，避免在 v1.0 阶段引入向量列维度变更 |
 | 向量索引类型 | IVFFlat / HNSW | **HNSW** | 知识库规模 < 50K chunks，HNSW 查询延迟 < 10ms |
 | LLM 缓存粒度 | 按请求 / 按 Prompt 模板 | **SHA256(model+system+user)** | 与原版 `llm-cache.db` 设计完全一致，保证升级期间缓存可迁移 |
 | LLM 分析缓存 TTL | 1天 / 7天 / 永久 | **7 天（604800s）** | 原版文件缓存永久保留；Redis 需要 TTL，7 天覆盖跨天增量编译场景 |
-| Graph 节点并行策略 | CompletableFuture / VirtualThread | **VirtualThread + Spring AI Graph 并行分支** | JDK 21 虚拟线程 IO 密集型场景吞吐提升 5-10x |
+| Graph 节点编排策略 | 全量 Graph / 局部 Graph / 纯 Service | **局部 Graph + 主链 Service** | 仅在 `review/fix`、`match/enhance/create` 等有分支的节点使用 Graph，避免把框架抽象变成 v1.0 前置 |
 | PendingQuery 存储 | 纯 Redis / 纯 PG / 双写 | **Redis（TTL 主）+ PG（审计副）** | Redis 负责 7 天 TTL 状态机，PG 负责持久化审计，各司其职 |
 | 审查模型选择 | 同模型审查 / 跨模型对抗 | **跨模型对抗（OpenAI 编译 + Claude 审查）** | 消除同质化盲区，与原版 deepseek+claude 双后端策略一致 |
 | 审查轮次 | 1轮（原版行为） / 2轮（增强） | **v1.0 单轮，v2.0 可配置双轮** | 原版 `MAX_REVIEW_ROUNDS=2` 声明未用；Java 版预留配置项，验证质量后启用 |
@@ -1217,7 +1245,14 @@ graph TD
 
 ---
 
-**文档审阅状态**：Draft v1.3，待 TRC 评审
+**文档审阅状态**：Draft v1.4，待 TRC 评审
+
+**v1.4 变更说明**：
+- 增加“源码校准说明（2026-04-15）”，明确以原始 TypeScript 项目源码校准方案前提
+- 收敛 AI 编排口径：`Spring AI Alibaba Graph` 可按需使用，`Agent Framework` 降级为可选增强
+- 明确去除 OSS 前提：原始文件默认本地文件系统，PDF / Excel 统一先抽文本再进入编译链
+- 修正 MCP 工具面对齐口径：以原版 12 个核心工具为 parity 目标，不再以 10 个工具收敛替代
+- 收敛检索前提：source index 与 contribution 层属于主查询链；`pgvector` 与中文分词扩展为增强项而非 parity 必需
 
 **v1.3 变更说明**：
 - 修正第二章总体架构图中的 MCP 路由示例：由错误的 `lattice_correct -> PendingQuery` 改为 `lattice_query_pending -> PendingQuery`
@@ -1241,8 +1276,8 @@ graph TD
 - 将中文 FTS、Embedding 模型与维度收敛为 P0 必验项
 
 **下一步行动**：
-1. 完成 `P0-0 技术基线验证`：锁定 Graph / Agent Framework / OpenAI / Anthropic / MCP Server 的精确 artifact 与版本
-2. 确认 PostgreSQL 中文检索方案：优先验证自建 PG + 可插拔分词扩展，若受限则定义 fallback 检索路径
-3. 锁定 v1.0 Embedding 基线：`text-embedding-3-small + vector(1536)`，并同步到迁移脚本与实体设计
+1. 完成 `P0-0 技术基线验证`：锁定 Graph / OpenAI / Anthropic / MCP Server 的精确 artifact 与版本；`Agent Framework` 仅做可选性验证
+2. 确认 PostgreSQL 检索主路径：先落实 `FTS + referential_keywords + source chunks`，中文分词扩展作为增强项验证
+3. 锁定 v1.0 Embedding 基线：`text-embedding-3-small + vector(1536)`，但不将向量召回设为首轮闭环前提
 4. 与安全团队确认 Sa-Token 审批流对接方案；v1.0 无外部审批接口时先提供 Mock 实现
 5. v1.0 按单应用推进，待性能瓶颈和流量数据明确后再进入 v2.0 微服务拆分

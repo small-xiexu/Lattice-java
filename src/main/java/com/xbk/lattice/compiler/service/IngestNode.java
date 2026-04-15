@@ -27,7 +27,18 @@ import java.util.stream.Stream;
 public class IngestNode {
 
     private static final Set<String> SUPPORTED_TEXT_FORMATS = Collections.unmodifiableSet(
-            new HashSet<String>(Arrays.asList("md", "java", "xml", "yml", "yaml", "json", "vue", "js"))
+            new HashSet<String>(Arrays.asList(
+                    "md", "txt", "markdown", "java", "xml", "properties",
+                    "yml", "yaml", "json", "vue", "js", "css", "html", "sh", "py"
+            ))
+    );
+
+    private static final Set<String> SUPPORTED_DOCUMENT_FORMATS = Collections.unmodifiableSet(
+            new HashSet<String>(Arrays.asList("pdf", "xlsx", "xls"))
+    );
+
+    private static final Set<String> SUPPORTED_IMAGE_FORMATS = Collections.unmodifiableSet(
+            new HashSet<String>(Arrays.asList("png", "jpg", "jpeg", "gif", "svg", "drawio"))
     );
 
     private static final Set<String> SKIPPED_DIRECTORIES = Collections.unmodifiableSet(
@@ -36,6 +47,10 @@ public class IngestNode {
 
     private final CompilerProperties compilerProperties;
 
+    private final PdfTextExtractor pdfTextExtractor;
+
+    private final ExcelTextExtractor excelTextExtractor;
+
     /**
      * 创建文件采集节点。
      *
@@ -43,6 +58,8 @@ public class IngestNode {
      */
     public IngestNode(CompilerProperties compilerProperties) {
         this.compilerProperties = compilerProperties;
+        this.pdfTextExtractor = new PdfTextExtractor();
+        this.excelTextExtractor = new ExcelTextExtractor();
     }
 
     /**
@@ -58,7 +75,12 @@ public class IngestNode {
             pathStream.filter(Files::isRegularFile)
                     .filter(path -> shouldInclude(sourceDir, path))
                     .sorted()
-                    .forEach(path -> rawSources.add(readTextSource(sourceDir, path)));
+                    .forEach(path -> {
+                        RawSource rawSource = readSource(sourceDir, path);
+                        if (rawSource != null) {
+                            rawSources.add(rawSource);
+                        }
+                    });
         }
         return rawSources;
     }
@@ -82,7 +104,33 @@ public class IngestNode {
         if ("class".equals(format) || "jar".equals(format)) {
             return false;
         }
-        return SUPPORTED_TEXT_FORMATS.contains(format);
+        return SUPPORTED_TEXT_FORMATS.contains(format)
+                || SUPPORTED_DOCUMENT_FORMATS.contains(format)
+                || SUPPORTED_IMAGE_FORMATS.contains(format);
+    }
+
+    /**
+     * 读取单个源文件。
+     *
+     * @param sourceDir 源目录
+     * @param path 文件路径
+     * @return 原始源文件；不支持或无可提取正文时返回 null
+     */
+    private RawSource readSource(Path sourceDir, Path path) {
+        String format = extractFormat(path.getFileName().toString());
+        if (SUPPORTED_TEXT_FORMATS.contains(format)) {
+            return readTextSource(sourceDir, path);
+        }
+        if ("pdf".equals(format)) {
+            return readPdfSource(sourceDir, path);
+        }
+        if ("xlsx".equals(format) || "xls".equals(format)) {
+            return readExcelSource(sourceDir, path);
+        }
+        if (SUPPORTED_IMAGE_FORMATS.contains(format)) {
+            return readImagePlaceholder(sourceDir, path, format);
+        }
+        return null;
     }
 
     /**
@@ -99,11 +147,97 @@ public class IngestNode {
             String relativePath = normalizePath(sourceDir.relativize(path));
             String format = extractFormat(path.getFileName().toString());
             long fileSize = Files.size(path);
-            return RawSource.text(relativePath, trimmedContent, format, fileSize);
+            return RawSource.extracted(relativePath, trimmedContent, format, fileSize, "{}", false, relativePath);
         }
         catch (IOException ex) {
             log.error("Failed to read source file path: {}", path, ex);
             throw new IllegalStateException("读取源文件失败: " + path, ex);
+        }
+    }
+
+    /**
+     * 读取 PDF 源文件。
+     *
+     * @param sourceDir 源目录
+     * @param path PDF 路径
+     * @return 原始源文件；无可提取正文时返回 null
+     */
+    private RawSource readPdfSource(Path sourceDir, Path path) {
+        try {
+            SourceExtractionResult extractionResult = pdfTextExtractor.extract(path);
+            if (extractionResult == null) {
+                log.warn("PDF has no extractable text path: {}", path);
+                return null;
+            }
+            String relativePath = normalizePath(sourceDir.relativize(path));
+            long fileSize = Files.size(path);
+            return RawSource.extracted(
+                    relativePath,
+                    trimContent(extractionResult.getContent()),
+                    "pdf",
+                    fileSize,
+                    extractionResult.getMetadataJson(),
+                    extractionResult.isVerbatim(),
+                    relativePath
+            );
+        }
+        catch (IOException ex) {
+            log.warn("Failed to extract PDF path: {}", path, ex);
+            return null;
+        }
+    }
+
+    /**
+     * 读取 Excel 源文件。
+     *
+     * @param sourceDir 源目录
+     * @param path Excel 路径
+     * @return 原始源文件；无可提取正文时返回 null
+     */
+    private RawSource readExcelSource(Path sourceDir, Path path) {
+        try {
+            SourceExtractionResult extractionResult = excelTextExtractor.extract(path);
+            if (extractionResult == null) {
+                log.warn("Excel has no extractable text path: {}", path);
+                return null;
+            }
+            String relativePath = normalizePath(sourceDir.relativize(path));
+            long fileSize = Files.size(path);
+            String format = extractFormat(path.getFileName().toString());
+            return RawSource.extracted(
+                    relativePath,
+                    trimContent(extractionResult.getContent()),
+                    format,
+                    fileSize,
+                    extractionResult.getMetadataJson(),
+                    extractionResult.isVerbatim(),
+                    relativePath
+            );
+        }
+        catch (IOException ex) {
+            log.warn("Failed to extract Excel path: {}", path, ex);
+            return null;
+        }
+    }
+
+    /**
+     * 读取图片占位源文件。
+     *
+     * @param sourceDir 源目录
+     * @param path 图片路径
+     * @param format 图片格式
+     * @return 原始源文件
+     */
+    private RawSource readImagePlaceholder(Path sourceDir, Path path, String format) {
+        try {
+            String relativePath = normalizePath(sourceDir.relativize(path));
+            long fileSize = Files.size(path);
+            String content = "[Image file: " + relativePath + "]";
+            return RawSource.extracted(relativePath, content, format, fileSize, "{}", false, relativePath);
+        }
+        catch (IOException ex) {
+            log.warn("Failed to read image placeholder path: {}", path, ex);
+            return null;
         }
     }
 

@@ -58,6 +58,9 @@ public class ReviewResultParser {
         try {
             JsonNode rootNode = OBJECT_MAPPER.readTree(rawResult);
             JsonNode passNode = rootNode.get("pass");
+            if (passNode == null) {
+                passNode = rootNode.get("passed");
+            }
             if (passNode == null || !passNode.isBoolean()) {
                 return null;
             }
@@ -68,7 +71,7 @@ public class ReviewResultParser {
             if (issuesNode != null && issuesNode.isArray()) {
                 for (JsonNode issueNode : issuesNode) {
                     String severity = readText(issueNode, "severity", "HIGH");
-                    String category = readText(issueNode, "category", "GENERAL");
+                    String category = readText(issueNode, "category", readText(issueNode, "type", "GENERAL"));
                     String description = readText(issueNode, "description", "");
                     issues.add(new ReviewIssue(severity, category, description));
                 }

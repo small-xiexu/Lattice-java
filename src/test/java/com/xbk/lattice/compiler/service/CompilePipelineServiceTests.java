@@ -82,11 +82,16 @@ class CompilePipelineServiceTests {
         assertThat(articleChunkCount).isEqualTo(3);
         assertThat(paymentArticle).isPresent();
         assertThat(paymentArticle.orElseThrow().getTitle()).isEqualTo("Payment");
+        assertThat(paymentArticle.orElseThrow().getContent()).contains("---");
+        assertThat(paymentArticle.orElseThrow().getContent()).contains("title: \"Payment\"");
+        assertThat(paymentArticle.orElseThrow().getContent()).contains("review_status: pending");
         assertThat(paymentArticle.orElseThrow().getContent()).contains("payment/order.md");
         assertThat(paymentArticle.orElseThrow().getContent()).contains("payment/refund.md");
+        assertThat(paymentArticle.orElseThrow().getSummary()).isNotBlank();
 
         assertThat(fulfillmentArticle).isPresent();
         assertThat(fulfillmentArticle.orElseThrow().getTitle()).isEqualTo("Fulfillment");
+        assertThat(fulfillmentArticle.orElseThrow().getContent()).contains("title: \"Fulfillment\"");
         assertThat(fulfillmentArticle.orElseThrow().getContent()).contains("fulfillment/fc.md");
     }
 
@@ -127,8 +132,9 @@ class CompilePipelineServiceTests {
         assertThat(paymentTimeoutArticle.orElseThrow().getMetadataJson()).contains("Handles payment timeout recovery");
         assertThat(paymentTimeoutArticle.orElseThrow().getMetadataJson()).contains("sectionCount");
         assertThat(paymentTimeoutArticle.orElseThrow().getMetadataJson()).contains("2");
-        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("## Summary");
-        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("Handles payment timeout recovery");
+        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("summary: \"Handles payment timeout recovery\"");
+        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("referential_keywords:");
+        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("review_status: pending");
         assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("## Timeout Rules");
         assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("- retry=3");
         assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("- interval=30s");
@@ -136,7 +142,43 @@ class CompilePipelineServiceTests {
         assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("## Fallback");
         assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("- manual-review");
         assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("> Sources: payment/analyze.json#Fallback");
-        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("## Snippets");
+        assertThat(paymentTimeoutArticle.orElseThrow().getSummary()).isEqualTo("Handles payment timeout recovery");
+        assertThat(paymentTimeoutArticle.orElseThrow().getReferentialKeywords()).contains("retry=3", "interval=30s");
+        assertThat(paymentTimeoutArticle.orElseThrow().getConfidence()).isEqualTo("medium");
+        assertThat(paymentTimeoutArticle.orElseThrow().getReviewStatus()).isEqualTo("pending");
+    }
+
+    /**
+     * 验证编译完成后会生成四类合成产物。
+     *
+     * @param tempDir 临时目录
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldGenerateSynthesisArtifactsAfterCompile(@TempDir Path tempDir) throws IOException {
+        resetCompileTables();
+
+        Path paymentDir = Files.createDirectories(tempDir.resolve("payment"));
+        Files.writeString(
+                paymentDir.resolve("analyze.json"),
+                "{"
+                        + "\"concepts\":["
+                        + "{\"id\":\"payment-timeout\",\"title\":\"Payment Timeout\",\"description\":\"Handles payment timeout recovery\","
+                        + "\"snippets\":[\"timeout-a\"],"
+                        + "\"sections\":[{\"heading\":\"Timeout Rules\",\"content\":[\"retry=3\"],\"sources\":[\"payment/analyze.json#timeout-rules\"]}]}"
+                        + "]"
+                        + "}",
+                StandardCharsets.UTF_8
+        );
+
+        compilePipelineService.compile(tempDir);
+
+        Integer synthesisCount = jdbcTemplate.queryForObject(
+                "select count(*) from lattice_b1_compile_test.synthesis_artifacts",
+                Integer.class
+        );
+
+        assertThat(synthesisCount).isEqualTo(4);
     }
 
     /**
@@ -144,6 +186,7 @@ class CompilePipelineServiceTests {
      */
     private void resetCompileTables() {
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.source_files");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.synthesis_artifacts");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.articles CASCADE");
     }
 }

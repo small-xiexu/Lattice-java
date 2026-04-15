@@ -5,10 +5,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.api.query.QueryArticleResponse;
 import com.xbk.lattice.api.query.QueryResponse;
 import com.xbk.lattice.api.query.QuerySourceResponse;
+import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
+import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.ContributionJdbcRepository;
 import com.xbk.lattice.infra.persistence.ContributionRecord;
 import com.xbk.lattice.infra.persistence.PendingQueryJdbcRepository;
 import com.xbk.lattice.infra.persistence.PendingQueryRecord;
+import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
+import com.xbk.lattice.infra.persistence.SourceFileChunkRecord;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -39,18 +43,33 @@ public class PendingQueryService implements PendingQueryManager {
 
     private final ContributionJdbcRepository contributionJdbcRepository;
 
+    private final ArticleJdbcRepository articleJdbcRepository;
+
+    private final SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository;
+
+    private final AnswerGenerationService answerGenerationService;
+
     /**
      * 创建 PendingQuery 服务。
      *
      * @param pendingQueryJdbcRepository PendingQuery 仓储
      * @param contributionJdbcRepository Contribution 仓储
+     * @param articleJdbcRepository 文章仓储
+     * @param sourceFileChunkJdbcRepository 源文件 chunk 仓储
+     * @param answerGenerationService 答案生成服务
      */
     public PendingQueryService(
             PendingQueryJdbcRepository pendingQueryJdbcRepository,
-            ContributionJdbcRepository contributionJdbcRepository
+            ContributionJdbcRepository contributionJdbcRepository,
+            ArticleJdbcRepository articleJdbcRepository,
+            SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
+            AnswerGenerationService answerGenerationService
     ) {
         this.pendingQueryJdbcRepository = pendingQueryJdbcRepository;
         this.contributionJdbcRepository = contributionJdbcRepository;
+        this.articleJdbcRepository = articleJdbcRepository;
+        this.sourceFileChunkJdbcRepository = sourceFileChunkJdbcRepository;
+        this.answerGenerationService = answerGenerationService;
     }
 
     /**
@@ -89,10 +108,17 @@ public class PendingQueryService implements PendingQueryManager {
     public PendingQueryRecord correct(String queryId, String correction) {
         PendingQueryRecord pendingQueryRecord = getRequiredRecord(queryId);
         OffsetDateTime now = OffsetDateTime.now();
-        String revisedAnswer = pendingQueryRecord.getAnswer() + "\n\n用户纠正：" + correction.trim();
+        List<QueryArticleHit> revisedEvidenceHits = buildRevisionEvidenceHits(pendingQueryRecord, correction);
+        String revisedAnswer = answerGenerationService.revise(
+                pendingQueryRecord.getQuestion(),
+                pendingQueryRecord.getAnswer(),
+                correction,
+                revisedEvidenceHits
+        );
         String correctionsJson = appendCorrectionHistory(
                 pendingQueryRecord.getCorrectionsJson(),
                 correction,
+                pendingQueryRecord.getAnswer(),
                 revisedAnswer,
                 now
         );
@@ -153,6 +179,16 @@ public class PendingQueryService implements PendingQueryManager {
     }
 
     /**
+     * 列出当前全部待确认记录。
+     *
+     * @return 待确认记录列表
+     */
+    @Override
+    public List<PendingQueryRecord> listPendingQueries() {
+        return pendingQueryJdbcRepository.findAllActive();
+    }
+
+    /**
      * 提取概念标识。
      *
      * @param articleResponses 命中文章列表
@@ -203,12 +239,15 @@ public class PendingQueryService implements PendingQueryManager {
     private String appendCorrectionHistory(
             String correctionsJson,
             String correction,
+            String previousAnswer,
             String revisedAnswer,
             OffsetDateTime correctedAt
     ) {
         List<Map<String, Object>> correctionHistory = readCorrectionHistory(correctionsJson);
         Map<String, Object> correctionEntry = new LinkedHashMap<String, Object>();
+        correctionEntry.put("version", correctionHistory.size() + 1);
         correctionEntry.put("correction", correction);
+        correctionEntry.put("previousAnswer", previousAnswer);
         correctionEntry.put("revisedAnswer", revisedAnswer);
         correctionEntry.put("correctedAt", correctedAt.toString());
         correctionHistory.add(correctionEntry);
@@ -236,5 +275,153 @@ public class PendingQueryService implements PendingQueryManager {
         catch (JsonProcessingException ex) {
             throw new IllegalStateException("反序列化纠错历史失败", ex);
         }
+    }
+
+    /**
+     * 为纠错重生成构造多路证据。
+     *
+     * @param pendingQueryRecord 待确认记录
+     * @param correction 最新纠正内容
+     * @return 证据列表
+     */
+    private List<QueryArticleHit> buildRevisionEvidenceHits(PendingQueryRecord pendingQueryRecord, String correction) {
+        List<QueryArticleHit> evidenceHits = new ArrayList<QueryArticleHit>();
+        evidenceHits.addAll(buildCorrectionEvidenceHits(pendingQueryRecord.getCorrectionsJson()));
+        evidenceHits.add(buildLatestCorrectionHit(correction, pendingQueryRecord.getCorrectionsJson()));
+        evidenceHits.addAll(loadArticleEvidenceHits(pendingQueryRecord.getSelectedConceptIds()));
+        evidenceHits.addAll(loadSourceEvidenceHits(pendingQueryRecord.getSourceFilePaths()));
+        return evidenceHits;
+    }
+
+    /**
+     * 读取历史纠错证据。
+     *
+     * @param correctionsJson 纠错历史 JSON
+     * @return 历史纠错命中
+     */
+    private List<QueryArticleHit> buildCorrectionEvidenceHits(String correctionsJson) {
+        List<QueryArticleHit> correctionHits = new ArrayList<QueryArticleHit>();
+        List<Map<String, Object>> correctionHistory = readCorrectionHistory(correctionsJson);
+        for (int index = 0; index < correctionHistory.size(); index++) {
+            Object correctionValue = correctionHistory.get(index).get("correction");
+            if (!(correctionValue instanceof String)) {
+                continue;
+            }
+            String correctionText = (String) correctionValue;
+            if (correctionText.isBlank()) {
+                continue;
+            }
+            correctionHits.add(new QueryArticleHit(
+                    QueryEvidenceType.CONTRIBUTION,
+                    "history-correction-" + (index + 1),
+                    "历史纠正",
+                    correctionText,
+                    "{\"type\":\"history-correction\",\"version\":" + (index + 1) + "}",
+                    List.of("[用户反馈]"),
+                    100.0D - index
+            ));
+        }
+        return correctionHits;
+    }
+
+    /**
+     * 构造最新纠正证据。
+     *
+     * @param correction 最新纠正内容
+     * @param correctionsJson 已有纠错历史
+     * @return 纠正命中
+     */
+    private QueryArticleHit buildLatestCorrectionHit(String correction, String correctionsJson) {
+        int version = readCorrectionHistory(correctionsJson).size() + 1;
+        return new QueryArticleHit(
+                QueryEvidenceType.CONTRIBUTION,
+                "latest-correction-" + version,
+                "用户纠正",
+                correction.trim(),
+                "{\"type\":\"latest-correction\",\"version\":" + version + "}",
+                List.of("[用户反馈]"),
+                200.0D
+        );
+    }
+
+    /**
+     * 加载文章层证据。
+     *
+     * @param conceptIds 概念标识列表
+     * @return 文章命中列表
+     */
+    private List<QueryArticleHit> loadArticleEvidenceHits(List<String> conceptIds) {
+        List<QueryArticleHit> articleHits = new ArrayList<QueryArticleHit>();
+        for (String conceptId : conceptIds) {
+            articleJdbcRepository.findByConceptId(conceptId)
+                    .ifPresent(articleRecord -> articleHits.add(toArticleHit(articleRecord)));
+        }
+        return articleHits;
+    }
+
+    /**
+     * 加载源文件层证据。
+     *
+     * @param sourceFilePaths 来源文件路径
+     * @return 源文件命中列表
+     */
+    private List<QueryArticleHit> loadSourceEvidenceHits(List<String> sourceFilePaths) {
+        if (sourceFileChunkJdbcRepository == null) {
+            return List.of();
+        }
+
+        List<String> normalizedPaths = new ArrayList<String>();
+        for (String sourceFilePath : sourceFilePaths) {
+            if (sourceFilePath == null || sourceFilePath.isBlank() || sourceFilePath.startsWith("[")) {
+                continue;
+            }
+            normalizedPaths.add(sourceFilePath);
+        }
+
+        List<QueryArticleHit> sourceHits = new ArrayList<QueryArticleHit>();
+        for (SourceFileChunkRecord sourceFileChunkRecord : sourceFileChunkJdbcRepository.findByFilePaths(normalizedPaths)) {
+            sourceHits.add(new QueryArticleHit(
+                    QueryEvidenceType.SOURCE,
+                    sourceFileChunkRecord.getFilePath() + "#" + sourceFileChunkRecord.getChunkIndex(),
+                    sourceFileChunkRecord.getFilePath(),
+                    sourceFileChunkRecord.getChunkText(),
+                    buildSourceMetadata(sourceFileChunkRecord),
+                    List.of(sourceFileChunkRecord.getFilePath()),
+                    10.0D
+            ));
+        }
+        return sourceHits;
+    }
+
+    /**
+     * 转换文章记录为查询命中。
+     *
+     * @param articleRecord 文章记录
+     * @return 查询命中
+     */
+    private QueryArticleHit toArticleHit(ArticleRecord articleRecord) {
+        return new QueryArticleHit(
+                QueryEvidenceType.ARTICLE,
+                articleRecord.getConceptId(),
+                articleRecord.getTitle(),
+                articleRecord.getContent(),
+                articleRecord.getMetadataJson(),
+                articleRecord.getSourcePaths(),
+                10.0D
+        );
+    }
+
+    /**
+     * 构建源文件 metadata JSON。
+     *
+     * @param sourceFileChunkRecord 源文件 chunk 记录
+     * @return metadata JSON
+     */
+    private String buildSourceMetadata(SourceFileChunkRecord sourceFileChunkRecord) {
+        return "{\"filePath\":\""
+                + sourceFileChunkRecord.getFilePath()
+                + "\",\"chunkIndex\":"
+                + sourceFileChunkRecord.getChunkIndex()
+                + "}";
     }
 }

@@ -17,6 +17,13 @@ management:
         include: health,info
 
 lattice:
+  llm:
+    compile-model: ${LATTICE_LLM_COMPILE_MODEL:openai}
+    reviewer-model: ${LATTICE_LLM_REVIEWER_MODEL:anthropic}
+    budget-usd: ${LATTICE_LLM_BUDGET_USD:10.0}
+    cache-ttl-seconds: ${LATTICE_LLM_CACHE_TTL_SECONDS:86400}
+    cache-key-prefix: ${LATTICE_LLM_CACHE_KEY_PREFIX:llm:cache:}
+    review-enabled: ${LATTICE_LLM_REVIEW_ENABLED:false}
   compiler:
     wal:
       key-prefix: ${LATTICE_COMPILER_WAL_KEY_PREFIX:lattice:wal:}

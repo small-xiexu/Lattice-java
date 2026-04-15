@@ -50,4 +50,11 @@ public interface PendingQueryManager {
      * @return 待确认查询记录
      */
     PendingQueryRecord findPendingQuery(String queryId);
+
+    /**
+     * 列出当前全部待确认记录。
+     *
+     * @return 待确认查询记录列表
+     */
+    java.util.List<PendingQueryRecord> listPendingQueries();
 }

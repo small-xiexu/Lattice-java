@@ -1,9 +1,11 @@
 package com.xbk.lattice.compiler.service;
 
+import com.xbk.lattice.compiler.config.LlmProperties;
 import com.xbk.lattice.compiler.model.AnalyzedConcept;
 import com.xbk.lattice.compiler.model.ConceptSection;
 import com.xbk.lattice.compiler.model.RawSource;
 import com.xbk.lattice.compiler.model.SourceBatch;
+import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -161,5 +163,144 @@ class AnalyzeNodeTests {
         assertThat(analyzedConcepts.get(0).getSourcePaths()).containsExactly("payment/a.md", "payment/b.md");
         assertThat(analyzedConcepts.get(0).getSnippets()).containsExactly("snippet-a", "snippet-b");
         assertThat(analyzedConcepts.get(0).getSections()).isEmpty();
+    }
+
+    /**
+     * 验证分析节点在缺少结构化 JSON 时会调用 LLM，并解析代码块中的概念结果。
+     */
+    @Test
+    void shouldUseLlmGatewayWhenStructuredPayloadIsAbsent() {
+        LlmGateway llmGateway = new LlmGateway(
+                new StaticLlmClient("""
+                        ```json
+                        {
+                          "concepts":[
+                            {
+                              "id":"payment-timeout",
+                              "title":"支付超时",
+                              "description":"处理支付超时后的恢复策略",
+                              "sources":[{"path":"payment/order.md","location":"Page 1"}],
+                              "relationships":[]
+                            }
+                          ],
+                          "controversies":[],
+                          "gaps":[]
+                        }
+                        ```
+                        """),
+                new StaticLlmClient("{}"),
+                new NoopRedisKeyValueStore(),
+                new NoopLlmUsageStore(),
+                createLlmProperties()
+        );
+        AnalyzeNode analyzeNode = new AnalyzeNode(llmGateway);
+        List<SourceBatch> sourceBatches = Arrays.asList(
+                new SourceBatch("batch-1", "payment-service", Arrays.asList(
+                        RawSource.text("payment/order.md", "timeout retry rule", "md", 18L)
+                ))
+        );
+
+        List<AnalyzedConcept> analyzedConcepts = analyzeNode.analyze("payment-service", sourceBatches);
+
+        assertThat(analyzedConcepts).hasSize(1);
+        assertThat(analyzedConcepts.get(0).getConceptId()).isEqualTo("payment-timeout");
+        assertThat(analyzedConcepts.get(0).getTitle()).isEqualTo("支付超时");
+        assertThat(analyzedConcepts.get(0).getDescription()).isEqualTo("处理支付超时后的恢复策略");
+        assertThat(analyzedConcepts.get(0).getSourcePaths()).containsExactly("payment/order.md");
+    }
+
+    /**
+     * 验证 LLM 返回无法解析时，分析节点会回退为最小概念。
+     */
+    @Test
+    void shouldFallbackToMinimalConceptWhenLlmResultIsUnparseable() {
+        LlmGateway llmGateway = new LlmGateway(
+                new StaticLlmClient("not-json-response"),
+                new StaticLlmClient("{}"),
+                new NoopRedisKeyValueStore(),
+                new NoopLlmUsageStore(),
+                createLlmProperties()
+        );
+        AnalyzeNode analyzeNode = new AnalyzeNode(llmGateway);
+        List<SourceBatch> sourceBatches = Arrays.asList(
+                new SourceBatch("batch-1", "payment-service", Arrays.asList(
+                        RawSource.text("payment/a.md", "snippet-a", "md", 9L),
+                        RawSource.text("payment/b.md", "snippet-b", "md", 9L)
+                ))
+        );
+
+        List<AnalyzedConcept> analyzedConcepts = analyzeNode.analyze("payment-service", sourceBatches);
+
+        assertThat(analyzedConcepts).hasSize(1);
+        assertThat(analyzedConcepts.get(0).getConceptId()).isEqualTo("payment-service");
+        assertThat(analyzedConcepts.get(0).getSnippets()).containsExactly("snippet-a", "snippet-b");
+    }
+
+    /**
+     * 创建测试用 LLM 配置。
+     *
+     * @return LLM 配置
+     */
+    private LlmProperties createLlmProperties() {
+        LlmProperties llmProperties = new LlmProperties();
+        llmProperties.setCompileModel("openai");
+        llmProperties.setReviewerModel("anthropic");
+        llmProperties.setBudgetUsd(10.0D);
+        llmProperties.setCacheTtlSeconds(3600L);
+        llmProperties.setCacheKeyPrefix("llm:test:");
+        return llmProperties;
+    }
+
+    /**
+     * 固定返回结果的 LLM 客户端。
+     *
+     * @author xiexu
+     */
+    private static class StaticLlmClient implements LlmClient {
+
+        private final String content;
+
+        private StaticLlmClient(String content) {
+            this.content = content;
+        }
+
+        @Override
+        public LlmCallResult call(String systemPrompt, String userPrompt) {
+            return new LlmCallResult(content, 100, 50);
+        }
+    }
+
+    /**
+     * 空操作 Redis 存储。
+     *
+     * @author xiexu
+     */
+    private static class NoopRedisKeyValueStore implements RedisKeyValueStore {
+
+        @Override
+        public String get(String key) {
+            return null;
+        }
+
+        @Override
+        public void set(String key, String value, java.time.Duration ttl) {
+        }
+
+        @Override
+        public Long getExpire(String key) {
+            return null;
+        }
+    }
+
+    /**
+     * 空操作 usage 存储。
+     *
+     * @author xiexu
+     */
+    private static class NoopLlmUsageStore implements LlmUsageStore {
+
+        @Override
+        public void save(LlmUsageRecord llmUsageRecord) {
+        }
     }
 }

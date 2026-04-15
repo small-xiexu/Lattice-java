@@ -42,20 +42,41 @@ public class ArticleJdbcRepository {
      */
     public void upsert(ArticleRecord articleRecord) {
         String sql = """
-                insert into articles (concept_id, title, content, lifecycle, compiled_at, source_paths, metadata_json)
-                values (?, ?, ?, ?, ?, ?, ?)
+                insert into articles (
+                    concept_id, title, content, lifecycle, compiled_at, source_paths, metadata_json,
+                    summary, referential_keywords, depends_on, related, confidence, review_status
+                )
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on conflict (concept_id) do update
                 set title = excluded.title,
                     content = excluded.content,
                     lifecycle = excluded.lifecycle,
                     compiled_at = excluded.compiled_at,
                     source_paths = excluded.source_paths,
-                    metadata_json = excluded.metadata_json
+                    metadata_json = excluded.metadata_json,
+                    summary = excluded.summary,
+                    referential_keywords = excluded.referential_keywords,
+                    depends_on = excluded.depends_on,
+                    related = excluded.related,
+                    confidence = excluded.confidence,
+                    review_status = excluded.review_status
                 """;
         jdbcTemplate.update(connection -> {
             Array sourcePathsArray = connection.createArrayOf(
                     "text",
                     articleRecord.getSourcePaths().toArray(new String[0])
+            );
+            Array referentialKeywordsArray = connection.createArrayOf(
+                    "text",
+                    articleRecord.getReferentialKeywords().toArray(new String[0])
+            );
+            Array dependsOnArray = connection.createArrayOf(
+                    "text",
+                    articleRecord.getDependsOn().toArray(new String[0])
+            );
+            Array relatedArray = connection.createArrayOf(
+                    "text",
+                    articleRecord.getRelated().toArray(new String[0])
             );
             PGobject metadataJsonObject = new PGobject();
             metadataJsonObject.setType("jsonb");
@@ -69,6 +90,12 @@ public class ArticleJdbcRepository {
             preparedStatement.setObject(5, articleRecord.getCompiledAt());
             preparedStatement.setArray(6, sourcePathsArray);
             preparedStatement.setObject(7, metadataJsonObject);
+            preparedStatement.setString(8, articleRecord.getSummary());
+            preparedStatement.setArray(9, referentialKeywordsArray);
+            preparedStatement.setArray(10, dependsOnArray);
+            preparedStatement.setArray(11, relatedArray);
+            preparedStatement.setString(12, articleRecord.getConfidence());
+            preparedStatement.setString(13, articleRecord.getReviewStatus());
             return preparedStatement;
         });
     }
@@ -81,7 +108,8 @@ public class ArticleJdbcRepository {
      */
     public Optional<ArticleRecord> findByConceptId(String conceptId) {
         String sql = """
-                select concept_id, title, content, lifecycle, compiled_at, source_paths, metadata_json
+                select concept_id, title, content, lifecycle, compiled_at, source_paths, metadata_json,
+                       summary, referential_keywords, depends_on, related, confidence, review_status
                 from articles
                 where concept_id = ?
                 """;
@@ -90,6 +118,21 @@ public class ArticleJdbcRepository {
             return Optional.empty();
         }
         return Optional.of(articleRecords.get(0));
+    }
+
+    /**
+     * 查询全部文章。
+     *
+     * @return 文章记录列表
+     */
+    public List<ArticleRecord> findAll() {
+        String sql = """
+                select concept_id, title, content, lifecycle, compiled_at, source_paths, metadata_json,
+                       summary, referential_keywords, depends_on, related, confidence, review_status
+                from articles
+                order by compiled_at desc, concept_id asc
+                """;
+        return jdbcTemplate.query(sql, this::mapArticleRecord);
     }
 
     /**
@@ -110,7 +153,13 @@ public class ArticleJdbcRepository {
                 resultSet.getString("lifecycle"),
                 compiledAt,
                 sourcePaths,
-                resultSet.getString("metadata_json")
+                resultSet.getString("metadata_json"),
+                resultSet.getString("summary"),
+                readTextArray(resultSet, "referential_keywords"),
+                readTextArray(resultSet, "depends_on"),
+                readTextArray(resultSet, "related"),
+                resultSet.getString("confidence"),
+                resultSet.getString("review_status")
         );
     }
 
@@ -122,7 +171,19 @@ public class ArticleJdbcRepository {
      * @throws SQLException SQL 异常
      */
     private List<String> readSourcePaths(ResultSet resultSet) throws SQLException {
-        Array array = resultSet.getArray("source_paths");
+        return readTextArray(resultSet, "source_paths");
+    }
+
+    /**
+     * 读取文本数组字段。
+     *
+     * @param resultSet 结果集
+     * @param columnName 列名
+     * @return 文本数组
+     * @throws SQLException SQL 异常
+     */
+    private List<String> readTextArray(ResultSet resultSet, String columnName) throws SQLException {
+        Array array = resultSet.getArray(columnName);
         if (array == null) {
             return List.of();
         }

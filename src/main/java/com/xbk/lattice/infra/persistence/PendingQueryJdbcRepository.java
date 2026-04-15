@@ -41,6 +41,10 @@ public class PendingQueryJdbcRepository {
      * @param pendingQueryRecord 待确认查询记录
      */
     public void upsert(PendingQueryRecord pendingQueryRecord) {
+        if (jdbcTemplate == null) {
+            return;
+        }
+
         String sql = """
                 insert into pending_queries (
                     query_id, question, answer, selected_concept_ids, source_file_paths,
@@ -89,6 +93,10 @@ public class PendingQueryJdbcRepository {
      * @return 待确认记录
      */
     public Optional<PendingQueryRecord> findByQueryId(String queryId) {
+        if (jdbcTemplate == null) {
+            return Optional.empty();
+        }
+
         String sql = """
                 select query_id, question, answer, selected_concept_ids, source_file_paths,
                        corrections::text as corrections, review_status, created_at, expires_at
@@ -103,11 +111,34 @@ public class PendingQueryJdbcRepository {
     }
 
     /**
+     * 查询全部未过期的待确认记录。
+     *
+     * @return 待确认记录列表
+     */
+    public List<PendingQueryRecord> findAllActive() {
+        if (jdbcTemplate == null) {
+            return List.of();
+        }
+
+        String sql = """
+                select query_id, question, answer, selected_concept_ids, source_file_paths,
+                       corrections::text as corrections, review_status, created_at, expires_at
+                from pending_queries
+                where expires_at >= CURRENT_TIMESTAMP
+                order by created_at desc, query_id desc
+                """;
+        return jdbcTemplate.query(sql, this::mapPendingQueryRecord);
+    }
+
+    /**
      * 删除待确认记录。
      *
      * @param queryId 查询标识
      */
     public void deleteByQueryId(String queryId) {
+        if (jdbcTemplate == null) {
+            return;
+        }
         jdbcTemplate.update("delete from pending_queries where query_id = ?", queryId);
     }
 

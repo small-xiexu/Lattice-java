@@ -49,7 +49,9 @@ public class CompileController {
         Path sourceDir = Path.of(compileRequest.getSourceDir());
         validateSourceDir(sourceDir);
         log.info("Compile request received sourceDir: {}", sourceDir);
-        CompileResult compileResult = compilePipelineService.compile(sourceDir);
+        CompileResult compileResult = compileRequest.isIncremental()
+                ? compilePipelineService.incrementalCompile(sourceDir)
+                : compilePipelineService.compile(sourceDir);
         return new CompileResponse(compileResult.getPersistedCount(), compileResult.getJobId());
     }
 

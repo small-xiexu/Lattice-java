@@ -17,6 +17,14 @@ public class SourceFileRecord {
 
     private final long fileSize;
 
+    private final String contentText;
+
+    private final String metadataJson;
+
+    private final boolean verbatim;
+
+    private final String rawPath;
+
     /**
      * 创建源文件记录。
      *
@@ -26,10 +34,39 @@ public class SourceFileRecord {
      * @param fileSize 文件大小
      */
     public SourceFileRecord(String filePath, String contentPreview, String format, long fileSize) {
+        this(filePath, contentPreview, format, fileSize, contentPreview, "{}", false, filePath);
+    }
+
+    /**
+     * 创建源文件记录。
+     *
+     * @param filePath 文件路径
+     * @param contentPreview 内容预览
+     * @param format 文件格式
+     * @param fileSize 文件大小
+     * @param contentText 全量正文
+     * @param metadataJson 元数据 JSON
+     * @param verbatim 是否按原文保留
+     * @param rawPath 原始文件路径
+     */
+    public SourceFileRecord(
+            String filePath,
+            String contentPreview,
+            String format,
+            long fileSize,
+            String contentText,
+            String metadataJson,
+            boolean verbatim,
+            String rawPath
+    ) {
         this.filePath = filePath;
         this.contentPreview = contentPreview;
         this.format = format;
         this.fileSize = fileSize;
+        this.contentText = contentText;
+        this.metadataJson = metadataJson;
+        this.verbatim = verbatim;
+        this.rawPath = rawPath;
     }
 
     /**
@@ -66,5 +103,41 @@ public class SourceFileRecord {
      */
     public long getFileSize() {
         return fileSize;
+    }
+
+    /**
+     * 获取全量正文。
+     *
+     * @return 全量正文
+     */
+    public String getContentText() {
+        return contentText;
+    }
+
+    /**
+     * 获取元数据 JSON。
+     *
+     * @return 元数据 JSON
+     */
+    public String getMetadataJson() {
+        return metadataJson;
+    }
+
+    /**
+     * 是否按原文保留。
+     *
+     * @return 是否按原文保留
+     */
+    public boolean isVerbatim() {
+        return verbatim;
+    }
+
+    /**
+     * 获取原始文件路径。
+     *
+     * @return 原始文件路径
+     */
+    public String getRawPath() {
+        return rawPath;
     }
 }

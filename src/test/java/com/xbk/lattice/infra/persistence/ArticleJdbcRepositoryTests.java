@@ -58,11 +58,30 @@ class ArticleJdbcRepositoryTests {
         ArticleRecord articleRecord = new ArticleRecord(
                 "concept-ingest-node",
                 "Ingest Node",
-                "# Ingest Node",
+                """
+                        ---
+                        title: "Ingest Node"
+                        summary: "ingest summary"
+                        referential_keywords: ["retry=3"]
+                        sources: ["docs/ingest.md"]
+                        depends_on: ["compile-pipeline"]
+                        related: ["source-index"]
+                        confidence: medium
+                        review_status: pending
+                        ---
+
+                        # Ingest Node
+                        """,
                 "ACTIVE",
                 OffsetDateTime.now(),
                 Arrays.asList("docs/ingest.md"),
-                "{\"description\":\"ingest summary\",\"structured\":true}"
+                "{\"description\":\"ingest summary\",\"structured\":true}",
+                "ingest summary",
+                Arrays.asList("retry=3"),
+                Arrays.asList("compile-pipeline"),
+                Arrays.asList("source-index"),
+                "medium",
+                "pending"
         );
 
         articleJdbcRepository.upsert(articleRecord);
@@ -70,9 +89,40 @@ class ArticleJdbcRepositoryTests {
 
         assertThat(loaded).isPresent();
         assertThat(loaded.orElseThrow().getTitle()).isEqualTo("Ingest Node");
-        assertThat(loaded.orElseThrow().getContent()).isEqualTo("# Ingest Node");
+        assertThat(loaded.orElseThrow().getContent()).contains("title: \"Ingest Node\"");
         assertThat(loaded.orElseThrow().getSourcePaths()).containsExactly("docs/ingest.md");
         assertThat(loaded.orElseThrow().getMetadataJson()).contains("ingest summary");
         assertThat(loaded.orElseThrow().getMetadataJson()).contains("structured");
+        assertThat(loaded.orElseThrow().getSummary()).isEqualTo("ingest summary");
+        assertThat(loaded.orElseThrow().getReferentialKeywords()).containsExactly("retry=3");
+        assertThat(loaded.orElseThrow().getDependsOn()).containsExactly("compile-pipeline");
+        assertThat(loaded.orElseThrow().getRelated()).containsExactly("source-index");
+        assertThat(loaded.orElseThrow().getConfidence()).isEqualTo("medium");
+        assertThat(loaded.orElseThrow().getReviewStatus()).isEqualTo("pending");
+    }
+
+    /**
+     * 验证 articles 表已扩展为 Markdown/frontmatter 结构化列。
+     */
+    @Test
+    void shouldExtendArticlesTableForMarkdownKnowledgeBase() {
+        java.util.List<String> columnNames = jdbcTemplate.queryForList(
+                """
+                        select column_name
+                        from information_schema.columns
+                        where table_schema = 'lattice_b1_test'
+                          and table_name = 'articles'
+                        order by ordinal_position
+                        """,
+                String.class
+        );
+
+        assertThat(columnNames)
+                .contains("summary")
+                .contains("referential_keywords")
+                .contains("depends_on")
+                .contains("related")
+                .contains("confidence")
+                .contains("review_status");
     }
 }

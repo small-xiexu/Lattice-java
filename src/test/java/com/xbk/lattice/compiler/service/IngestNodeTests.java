@@ -2,10 +2,19 @@ package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.config.CompilerProperties;
 import com.xbk.lattice.compiler.model.RawSource;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -68,5 +77,140 @@ class IngestNodeTests {
 
         assertThat(rawSources).hasSize(1);
         assertThat(rawSources.get(0).getRelativePath()).isEqualTo("src/App.java");
+    }
+
+    /**
+     * 验证新增文本格式和图片占位文件会被采集。
+     *
+     * @param tempDir 临时目录
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldReadExtendedTextFormatsAndCreateImagePlaceholder(@TempDir Path tempDir) throws IOException {
+        Path docsDir = Files.createDirectories(tempDir.resolve("docs"));
+        Path assetsDir = Files.createDirectories(tempDir.resolve("assets"));
+        Files.writeString(docsDir.resolve("notes.txt"), "plain-text", StandardCharsets.UTF_8);
+        Files.writeString(docsDir.resolve("application.properties"), "timeout=30", StandardCharsets.UTF_8);
+        Files.writeString(docsDir.resolve("style.css"), ".box { color: red; }", StandardCharsets.UTF_8);
+        Files.writeString(docsDir.resolve("page.html"), "<html><body>hello</body></html>", StandardCharsets.UTF_8);
+        Files.writeString(docsDir.resolve("run.sh"), "echo hello", StandardCharsets.UTF_8);
+        Files.writeString(docsDir.resolve("worker.py"), "print('hello')", StandardCharsets.UTF_8);
+        Files.write(assetsDir.resolve("diagram.png"), new byte[]{1, 2, 3, 4});
+
+        CompilerProperties properties = new CompilerProperties();
+        properties.setIngestMaxChars(100);
+
+        IngestNode ingestNode = new IngestNode(properties);
+        List<RawSource> rawSources = ingestNode.ingest(tempDir);
+
+        assertThat(rawSources).hasSize(7);
+        assertThat(rawSources)
+                .extracting(RawSource::getRelativePath)
+                .containsExactly(
+                        "assets/diagram.png",
+                        "docs/application.properties",
+                        "docs/notes.txt",
+                        "docs/page.html",
+                        "docs/run.sh",
+                        "docs/style.css",
+                        "docs/worker.py"
+                );
+        RawSource imageSource = rawSources.get(0);
+        assertThat(imageSource.getFormat()).isEqualTo("png");
+        assertThat(imageSource.getContent()).isEqualTo("[Image file: assets/diagram.png]");
+    }
+
+    /**
+     * 验证 PDF 与 Excel 文件会被抽取为规范化文本。
+     *
+     * @param tempDir 临时目录
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldExtractPdfAndExcelIntoNormalizedText(@TempDir Path tempDir) throws IOException {
+        Path docsDir = Files.createDirectories(tempDir.resolve("docs"));
+        Path pdfPath = docsDir.resolve("timeout.pdf");
+        Path excelPath = docsDir.resolve("codes.xlsx");
+        writeSimplePdf(pdfPath, "Payment timeout retry = 3");
+        writeSimpleWorkbook(excelPath);
+
+        CompilerProperties properties = new CompilerProperties();
+        properties.setIngestMaxChars(4000);
+
+        IngestNode ingestNode = new IngestNode(properties);
+        List<RawSource> rawSources = ingestNode.ingest(tempDir);
+
+        assertThat(rawSources).hasSize(2);
+        RawSource pdfSource = rawSources.stream()
+                .filter(rawSource -> "pdf".equals(rawSource.getFormat()))
+                .findFirst()
+                .orElseThrow();
+        RawSource excelSource = rawSources.stream()
+                .filter(rawSource -> "xlsx".equals(rawSource.getFormat()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(pdfSource.getRelativePath()).isEqualTo("docs/timeout.pdf");
+        assertThat(pdfSource.getFormat()).isEqualTo("pdf");
+        assertThat(pdfSource.getMetadataJson()).contains("pageCount");
+        assertThat(pdfSource.getContent()).contains("Payment timeout retry = 3");
+        assertThat(excelSource.getRelativePath()).isEqualTo("docs/codes.xlsx");
+        assertThat(excelSource.getFormat()).isEqualTo("xlsx");
+        assertThat(excelSource.getMetadataJson()).contains("sheetCount");
+        assertThat(excelSource.getContent()).contains("=== Sheet: Codes ===");
+        assertThat(excelSource.getContent()).contains("businessSubTypeCode,meaning");
+        assertThat(excelSource.getContent()).contains("1210,refund");
+        assertThat(excelSource.getContent()).contains("=== Sheet: Settings ===");
+    }
+
+    /**
+     * 写入简单 PDF 测试文件。
+     *
+     * @param pdfPath PDF 路径
+     * @param text 文本内容
+     * @throws IOException IO 异常
+     */
+    private void writeSimplePdf(Path pdfPath, String text) throws IOException {
+        try (PDDocument document = new PDDocument()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
+                contentStream.beginText();
+                contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+                contentStream.newLineAtOffset(72, 720);
+                contentStream.showText(text);
+                contentStream.endText();
+            }
+            document.save(pdfPath.toFile());
+        }
+    }
+
+    /**
+     * 写入简单 Excel 测试文件。
+     *
+     * @param excelPath Excel 路径
+     * @throws IOException IO 异常
+     */
+    private void writeSimpleWorkbook(Path excelPath) throws IOException {
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            Sheet codesSheet = workbook.createSheet("Codes");
+            Row codeHeader = codesSheet.createRow(0);
+            codeHeader.createCell(0).setCellValue("businessSubTypeCode");
+            codeHeader.createCell(1).setCellValue("meaning");
+            Row codeRow = codesSheet.createRow(1);
+            codeRow.createCell(0).setCellValue("1210");
+            codeRow.createCell(1).setCellValue("refund");
+
+            Sheet settingsSheet = workbook.createSheet("Settings");
+            Row settingsHeader = settingsSheet.createRow(0);
+            settingsHeader.createCell(0).setCellValue("key");
+            settingsHeader.createCell(1).setCellValue("value");
+            Row settingsRow = settingsSheet.createRow(1);
+            settingsRow.createCell(0).setCellValue("retry");
+            settingsRow.createCell(1).setCellValue("3");
+
+            try (OutputStream outputStream = Files.newOutputStream(excelPath)) {
+                workbook.write(outputStream);
+            }
+        }
     }
 }

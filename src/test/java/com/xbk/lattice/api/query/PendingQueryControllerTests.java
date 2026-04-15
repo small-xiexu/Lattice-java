@@ -25,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * PendingQueryController 测试
  *
- * 职责：验证 B3 的纠错、确认与丢弃闭环
+ * 职责：验证 B6 的纠错重生成、确认与丢弃闭环
  *
  * @author xiexu
  */
@@ -70,11 +70,21 @@ class PendingQueryControllerTests {
 
         mockMvc.perform(post("/api/v1/query/" + queryId + "/correct")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"correction\":\"请补充 interval=30s\"}"))
+                        .content("{\"correction\":\"manual-review 仅在 retry=5 时触发\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.queryId").value(queryId))
                 .andExpect(jsonPath("$.status").value("PENDING"))
-                .andExpect(jsonPath("$.answer").value(org.hamcrest.Matchers.containsString("请补充 interval=30s")));
+                .andExpect(jsonPath("$.answer").value(org.hamcrest.Matchers.containsString("manual-review 仅在 retry=5 时触发")))
+                .andExpect(jsonPath("$.answer").value(org.hamcrest.Matchers.containsString("#")))
+                .andExpect(jsonPath("$.answer").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("用户纠正："))));
+
+        String correctionsJson = jdbcTemplate.queryForObject(
+                "select corrections::text from lattice_b3_query_feedback_test.pending_queries where query_id = ?",
+                String.class,
+                queryId
+        );
+        assertThat(correctionsJson).contains("\"version\": 1");
+        assertThat(correctionsJson).contains("manual-review 仅在 retry=5 时触发");
 
         Integer pendingCountAfterCorrect = jdbcTemplate.queryForObject(
                 "select count(*) from lattice_b3_query_feedback_test.pending_queries",
@@ -96,6 +106,13 @@ class PendingQueryControllerTests {
         );
         assertThat(pendingCountAfterConfirm).isZero();
         assertThat(contributionCount).isEqualTo(1);
+
+        mockMvc.perform(post("/api/v1/query")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\":\"manual-review 在什么情况下触发\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.answer").value(org.hamcrest.Matchers.containsString("manual-review 仅在 retry=5 时触发")))
+                .andExpect(jsonPath("$.sources[*].sourcePaths[*]").value(org.hamcrest.Matchers.hasItem("[用户反馈]")));
     }
 
     /**
@@ -178,7 +195,7 @@ class PendingQueryControllerTests {
     private void resetTables() {
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b3_query_feedback_test.contributions");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b3_query_feedback_test.pending_queries");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b3_query_feedback_test.source_files");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b3_query_feedback_test.source_files CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b3_query_feedback_test.articles CASCADE");
     }
 }
