@@ -1,5 +1,8 @@
 package com.xbk.lattice.api.query;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * 查询文章响应
  *
@@ -19,7 +22,11 @@ public class QueryArticleResponse {
      * @param conceptId 概念标识
      * @param title 标题
      */
-    public QueryArticleResponse(String conceptId, String title) {
+    @JsonCreator
+    public QueryArticleResponse(
+            @JsonProperty("conceptId") String conceptId,
+            @JsonProperty("title") String title
+    ) {
         this.conceptId = conceptId;
         this.title = title;
     }

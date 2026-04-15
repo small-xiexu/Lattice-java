@@ -11,13 +11,26 @@ public class CompileResponse {
 
     private final int persistedCount;
 
+    private final String jobId;
+
     /**
      * 创建编译响应。
      *
      * @param persistedCount 落盘数量
      */
     public CompileResponse(int persistedCount) {
+        this(persistedCount, null);
+    }
+
+    /**
+     * 创建编译响应。
+     *
+     * @param persistedCount 落盘数量
+     * @param jobId 作业标识
+     */
+    public CompileResponse(int persistedCount, String jobId) {
         this.persistedCount = persistedCount;
+        this.jobId = jobId;
     }
 
     /**
@@ -27,5 +40,14 @@ public class CompileResponse {
      */
     public int getPersistedCount() {
         return persistedCount;
+    }
+
+    /**
+     * 获取作业标识。
+     *
+     * @return 作业标识
+     */
+    public String getJobId() {
+        return jobId;
     }
 }

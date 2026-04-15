@@ -1,5 +1,8 @@
 package com.xbk.lattice.compiler.model;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -36,7 +39,12 @@ public class ConceptSection {
      * @param contentLines 小节内容行
      * @param sourceRefs 小节来源引用
      */
-    public ConceptSection(String heading, List<String> contentLines, List<String> sourceRefs) {
+    @JsonCreator
+    public ConceptSection(
+            @JsonProperty("heading") String heading,
+            @JsonProperty("contentLines") List<String> contentLines,
+            @JsonProperty("sourceRefs") List<String> sourceRefs
+    ) {
         this.heading = heading;
         this.contentLines = contentLines;
         this.sourceRefs = sourceRefs;

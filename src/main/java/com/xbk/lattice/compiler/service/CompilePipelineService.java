@@ -23,6 +23,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 最小编译链路服务
@@ -54,6 +55,8 @@ public class CompilePipelineService {
 
     private final SourceFileJdbcRepository sourceFileJdbcRepository;
 
+    private final CompilationWalStore compilationWalStore;
+
     /**
      * 创建最小编译链路服务。
      *
@@ -61,12 +64,14 @@ public class CompilePipelineService {
      * @param articleJdbcRepository 文章仓储
      * @param articleChunkJdbcRepository 文章 chunk 仓储
      * @param sourceFileJdbcRepository 源文件仓储
+     * @param compilationWalStore 编译 WAL 存储
      */
     public CompilePipelineService(
             CompilerProperties compilerProperties,
             ArticleJdbcRepository articleJdbcRepository,
             ArticleChunkJdbcRepository articleChunkJdbcRepository,
-            SourceFileJdbcRepository sourceFileJdbcRepository
+            SourceFileJdbcRepository sourceFileJdbcRepository,
+            CompilationWalStore compilationWalStore
     ) {
         this.ingestNode = new IngestNode(compilerProperties);
         this.groupNode = new GroupNode(compilerProperties);
@@ -76,6 +81,7 @@ public class CompilePipelineService {
         this.articleJdbcRepository = articleJdbcRepository;
         this.articleChunkJdbcRepository = articleChunkJdbcRepository;
         this.sourceFileJdbcRepository = sourceFileJdbcRepository;
+        this.compilationWalStore = compilationWalStore;
     }
 
     /**
@@ -86,6 +92,7 @@ public class CompilePipelineService {
      * @throws IOException IO 异常
      */
     public CompileResult compile(Path sourceDir) throws IOException {
+        String jobId = UUID.randomUUID().toString();
         log.info("Compile started sourceDir: {}", sourceDir);
         List<RawSource> rawSources = ingestNode.ingest(sourceDir);
         persistSourceFiles(rawSources);
@@ -98,14 +105,22 @@ public class CompilePipelineService {
         }
 
         List<MergedConcept> mergedConcepts = crossGroupMergeNode.merge(analyzedConcepts);
-        for (MergedConcept mergedConcept : mergedConcepts) {
-            articleJdbcRepository.upsert(toArticleRecord(mergedConcept));
-            articleChunkJdbcRepository.replaceChunks(mergedConcept.getConceptId(), mergedConcept.getSnippets());
-        }
-
-        CompileResult compileResult = new CompileResult(mergedConcepts.size());
-        log.info("Compile completed sourceDir: {}, persistedCount: {}", sourceDir, compileResult.getPersistedCount());
+        compilationWalStore.stage(jobId, mergedConcepts);
+        int persistedCount = commitPendingConcepts(jobId);
+        CompileResult compileResult = new CompileResult(persistedCount, jobId);
+        log.info("Compile completed sourceDir: {}, jobId: {}, persistedCount: {}", sourceDir, jobId, compileResult.getPersistedCount());
         return compileResult;
+    }
+
+    /**
+     * 基于 jobId 重试未完成提交的概念。
+     *
+     * @param jobId 作业标识
+     * @return 编译结果
+     */
+    public CompileResult retry(String jobId) {
+        int persistedCount = commitPendingConcepts(jobId);
+        return new CompileResult(persistedCount, jobId);
     }
 
     /**
@@ -207,5 +222,23 @@ public class CompilePipelineService {
                     rawSource.getFileSize()
             ));
         }
+    }
+
+    /**
+     * 提交 WAL 中尚未完成的概念。
+     *
+     * @param jobId 作业标识
+     * @return 成功提交数量
+     */
+    private int commitPendingConcepts(String jobId) {
+        int persistedCount = 0;
+        List<MergedConcept> pendingConcepts = compilationWalStore.loadPendingConcepts(jobId);
+        for (MergedConcept mergedConcept : pendingConcepts) {
+            articleJdbcRepository.upsert(toArticleRecord(mergedConcept));
+            articleChunkJdbcRepository.replaceChunks(mergedConcept.getConceptId(), mergedConcept.getSnippets());
+            compilationWalStore.markCommitted(jobId, mergedConcept.getConceptId());
+            persistedCount++;
+        }
+        return persistedCount;
     }
 }

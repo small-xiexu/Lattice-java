@@ -50,7 +50,19 @@ public class CompileController {
         validateSourceDir(sourceDir);
         log.info("Compile request received sourceDir: {}", sourceDir);
         CompileResult compileResult = compilePipelineService.compile(sourceDir);
-        return new CompileResponse(compileResult.getPersistedCount());
+        return new CompileResponse(compileResult.getPersistedCount(), compileResult.getJobId());
+    }
+
+    /**
+     * 基于 jobId 重试未完成的编译提交。
+     *
+     * @param compileRetryRequest 编译重试请求
+     * @return 编译响应
+     */
+    @PostMapping("/retry")
+    public CompileResponse retry(@RequestBody CompileRetryRequest compileRetryRequest) {
+        CompileResult compileResult = compilePipelineService.retry(compileRetryRequest.getJobId());
+        return new CompileResponse(compileResult.getPersistedCount(), compileResult.getJobId());
     }
 
     /**

@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 查询门面服务
@@ -30,6 +31,12 @@ public class QueryFacadeService {
 
     private final AnswerGenerationService answerGenerationService;
 
+    private final QueryCacheStore queryCacheStore;
+
+    private final ReviewerAgent reviewerAgent;
+
+    private final PendingQueryManager pendingQueryManager;
+
     /**
      * 创建查询门面服务。
      *
@@ -37,17 +44,26 @@ public class QueryFacadeService {
      * @param refKeySearchService 引用词检索服务
      * @param rrfFusionService RRF 融合服务
      * @param answerGenerationService 答案生成服务
+     * @param queryCacheStore 查询缓存存储
+     * @param reviewerAgent ReviewerAgent
+     * @param pendingQueryManager PendingQuery 管理器
      */
     public QueryFacadeService(
             FtsSearchService ftsSearchService,
             RefKeySearchService refKeySearchService,
             RrfFusionService rrfFusionService,
-            AnswerGenerationService answerGenerationService
+            AnswerGenerationService answerGenerationService,
+            QueryCacheStore queryCacheStore,
+            ReviewerAgent reviewerAgent,
+            PendingQueryManager pendingQueryManager
     ) {
         this.ftsSearchService = ftsSearchService;
         this.refKeySearchService = refKeySearchService;
         this.rrfFusionService = rrfFusionService;
         this.answerGenerationService = answerGenerationService;
+        this.queryCacheStore = queryCacheStore;
+        this.reviewerAgent = reviewerAgent;
+        this.pendingQueryManager = pendingQueryManager;
     }
 
     /**
@@ -57,6 +73,12 @@ public class QueryFacadeService {
      * @return 查询响应
      */
     public QueryResponse query(String question) {
+        String cacheKey = normalizeQuestion(question);
+        Optional<QueryResponse> cachedResponse = queryCacheStore.get(cacheKey);
+        if (cachedResponse.isPresent()) {
+            return attachPendingQuery(question, cachedResponse.get());
+        }
+
         List<QueryArticleHit> ftsHits = ftsSearchService.search(question, TOP_K);
         List<QueryArticleHit> refKeyHits = refKeySearchService.search(question, TOP_K);
         List<QueryArticleHit> fusedHits = rrfFusionService.fuse(ftsHits, refKeyHits, TOP_K);
@@ -66,11 +88,44 @@ public class QueryFacadeService {
 
         QueryArticleHit topHit = fusedHits.get(0);
         String answer = answerGenerationService.generate(question, topHit);
-        return new QueryResponse(
+        ReviewResult reviewResult = reviewerAgent.review(question, answer, topHit.getSourcePaths());
+        QueryResponse cachedPayload = new QueryResponse(
                 answer,
                 toSourceResponses(fusedHits),
-                toArticleResponses(fusedHits)
+                toArticleResponses(fusedHits),
+                null,
+                reviewResult.getStatus().name()
         );
+        queryCacheStore.put(cacheKey, cachedPayload);
+        return attachPendingQuery(question, cachedPayload);
+    }
+
+    /**
+     * 为查询结果附加新的 pending query。
+     *
+     * @param question 问题
+     * @param baseResponse 基础查询响应
+     * @return 带 queryId 的查询响应
+     */
+    private QueryResponse attachPendingQuery(String question, QueryResponse baseResponse) {
+        String queryId = pendingQueryManager.createPendingQuery(question, baseResponse).getQueryId();
+        return new QueryResponse(
+                baseResponse.getAnswer(),
+                baseResponse.getSources(),
+                baseResponse.getArticles(),
+                queryId,
+                baseResponse.getReviewStatus()
+        );
+    }
+
+    /**
+     * 规范化查询问题，避免无意义空白导致缓存穿透。
+     *
+     * @param question 查询问题
+     * @return 规范化后的缓存键
+     */
+    private String normalizeQuestion(String question) {
+        return question.trim();
     }
 
     /**

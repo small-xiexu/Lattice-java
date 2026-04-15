@@ -1,5 +1,8 @@
 package com.xbk.lattice.api.query;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
 
 /**
@@ -24,7 +27,12 @@ public class QuerySourceResponse {
      * @param title 标题
      * @param sourcePaths 来源路径
      */
-    public QuerySourceResponse(String conceptId, String title, List<String> sourcePaths) {
+    @JsonCreator
+    public QuerySourceResponse(
+            @JsonProperty("conceptId") String conceptId,
+            @JsonProperty("title") String title,
+            @JsonProperty("sourcePaths") List<String> sourcePaths
+    ) {
         this.conceptId = conceptId;
         this.title = title;
         this.sourcePaths = sourcePaths;
