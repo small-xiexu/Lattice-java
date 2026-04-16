@@ -13,7 +13,6 @@ import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
-import com.xbk.lattice.infra.persistence.SourceFileChunkRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
@@ -45,10 +44,6 @@ import java.util.regex.Pattern;
 public class IncrementalCompileService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
-    private static final int SOURCE_CHUNK_SIZE = 500;
-
-    private static final int SOURCE_CHUNK_OVERLAP = 100;
 
     private static final Pattern FRONTMATTER_PATTERN = Pattern.compile("\\A---\\R(.*?)\\R---\\R?(.*)\\z", Pattern.DOTALL);
 
@@ -155,7 +150,8 @@ public class IncrementalCompileService {
                 sourceFileJdbcRepository,
                 new DocumentSectionSelector(),
                 articleReviewerGateway,
-                reviewFixService
+                reviewFixService,
+                new SchemaAwarePrompts(compilerProperties)
         );
         this.llmGateway = llmGateway;
         this.synthesisArtifactsService = synthesisArtifactsService;
@@ -217,7 +213,7 @@ public class IncrementalCompileService {
         List<RawSource> rawSources = ingestNode.ingest(sourceDir);
         persistSourceFiles(rawSources);
         persistSourceFileChunks(rawSources);
-        List<MergedConcept> mergedConcepts = analyzeMergedConcepts(rawSources);
+        List<MergedConcept> mergedConcepts = analyzeMergedConcepts(rawSources, sourceDir);
         List<ArticleRecord> existingArticles = articleJdbcRepository.findAll();
         IncrementalPlan incrementalPlan = planIncrementalChanges(mergedConcepts, existingArticles);
 
@@ -253,7 +249,7 @@ public class IncrementalCompileService {
                 handledConceptIds
         );
         for (MergedConcept mergedConcept : conceptsToCreate) {
-            ArticleRecord createdArticle = compileArticleNode.compile(mergedConcept);
+            ArticleRecord createdArticle = compileArticleNode.compile(mergedConcept, sourceDir);
             articleJdbcRepository.upsert(createdArticle);
             articleChunkJdbcRepository.replaceChunks(mergedConcept.getConceptId(), mergedConcept.getSnippets());
             articleVectorIndexService.indexArticle(createdArticle);
@@ -272,12 +268,12 @@ public class IncrementalCompileService {
      * @param rawSources 原始源文件
      * @return 合并概念
      */
-    private List<MergedConcept> analyzeMergedConcepts(List<RawSource> rawSources) {
+    private List<MergedConcept> analyzeMergedConcepts(List<RawSource> rawSources, Path sourceDir) {
         Map<String, List<RawSource>> groupedSources = groupNode.group(rawSources);
         List<AnalyzedConcept> analyzedConcepts = new ArrayList<AnalyzedConcept>();
         for (Map.Entry<String, List<RawSource>> entry : groupedSources.entrySet()) {
             List<SourceBatch> sourceBatches = batchSplitNode.split(entry.getKey(), entry.getValue());
-            analyzedConcepts.addAll(analyzeNode.analyze(entry.getKey(), sourceBatches));
+            analyzedConcepts.addAll(analyzeNode.analyze(entry.getKey(), sourceBatches, sourceDir));
         }
         return crossGroupMergeNode.merge(analyzedConcepts);
     }
@@ -313,9 +309,10 @@ public class IncrementalCompileService {
         }
 
         for (RawSource rawSource : rawSources) {
-            sourceFileChunkJdbcRepository.replaceChunks(
+            sourceFileChunkJdbcRepository.replaceChunksFromContent(
                     rawSource.getRelativePath(),
-                    buildChunkRecords(rawSource)
+                    rawSource.getContent(),
+                    rawSource.isVerbatim()
             );
         }
     }
@@ -332,41 +329,6 @@ public class IncrementalCompileService {
             return content;
         }
         return content.substring(0, maxPreviewChars);
-    }
-
-    /**
-     * 为单个源文件构造 chunk 列表。
-     *
-     * @param rawSource 原始源文件
-     * @return chunk 记录列表
-     */
-    private List<SourceFileChunkRecord> buildChunkRecords(RawSource rawSource) {
-        List<SourceFileChunkRecord> chunkRecords = new ArrayList<SourceFileChunkRecord>();
-        String content = rawSource.getContent();
-        if (content == null || content.isBlank()) {
-            return chunkRecords;
-        }
-
-        int startIndex = 0;
-        int chunkIndex = 0;
-        while (startIndex < content.length()) {
-            int endIndex = Math.min(content.length(), startIndex + SOURCE_CHUNK_SIZE);
-            String chunkText = content.substring(startIndex, endIndex).trim();
-            if (!chunkText.isEmpty()) {
-                chunkRecords.add(new SourceFileChunkRecord(
-                        rawSource.getRelativePath(),
-                        chunkIndex,
-                        chunkText,
-                        rawSource.isVerbatim()
-                ));
-                chunkIndex++;
-            }
-            if (endIndex >= content.length()) {
-                break;
-            }
-            startIndex = Math.max(endIndex - SOURCE_CHUNK_OVERLAP, startIndex + 1);
-        }
-        return chunkRecords;
     }
 
     /**

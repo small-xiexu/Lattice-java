@@ -1,9 +1,12 @@
 package com.xbk.lattice.infra.persistence;
 
+import com.xbk.lattice.infra.chunking.SemanticChunker;
+import com.xbk.lattice.infra.chunking.TextChunk;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -17,7 +20,13 @@ import java.util.List;
 @Profile("jdbc")
 public class ArticleChunkJdbcRepository {
 
+    private static final int DEFAULT_MAX_CHARS = 3600;
+
+    private static final float DEFAULT_OVERLAP_RATIO = 0.15f;
+
     private final JdbcTemplate jdbcTemplate;
+
+    private final SemanticChunker semanticChunker;
 
     /**
      * 创建 ArticleChunk JDBC 仓储。
@@ -26,6 +35,7 @@ public class ArticleChunkJdbcRepository {
      */
     public ArticleChunkJdbcRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+        this.semanticChunker = new SemanticChunker();
     }
 
     /**
@@ -48,6 +58,21 @@ public class ArticleChunkJdbcRepository {
         for (int index = 0; index < chunkTexts.size(); index++) {
             jdbcTemplate.update(insertSql, conceptId, chunkTexts.get(index), index);
         }
+    }
+
+    /**
+     * 按文章正文替换语义分块。
+     *
+     * @param conceptId 概念标识
+     * @param content 文章正文
+     */
+    public void replaceChunksFromContent(String conceptId, String content) {
+        List<TextChunk> textChunks = semanticChunker.chunk(content, DEFAULT_MAX_CHARS, DEFAULT_OVERLAP_RATIO);
+        List<String> chunkTexts = new ArrayList<String>();
+        for (TextChunk textChunk : textChunks) {
+            chunkTexts.add(textChunk.text());
+        }
+        replaceChunks(conceptId, chunkTexts);
     }
 
     /**

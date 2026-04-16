@@ -1,5 +1,7 @@
 package com.xbk.lattice.infra.persistence;
 
+import com.xbk.lattice.infra.chunking.SemanticChunker;
+import com.xbk.lattice.infra.chunking.TextChunk;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -20,7 +22,13 @@ import java.util.List;
 @Profile("jdbc")
 public class SourceFileChunkJdbcRepository {
 
+    private static final int DEFAULT_MAX_CHARS = 3600;
+
+    private static final float DEFAULT_OVERLAP_RATIO = 0.15f;
+
     private final JdbcTemplate jdbcTemplate;
+
+    private final SemanticChunker semanticChunker;
 
     /**
      * 创建 SourceFileChunk JDBC 仓储。
@@ -29,6 +37,7 @@ public class SourceFileChunkJdbcRepository {
      */
     public SourceFileChunkJdbcRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+        this.semanticChunker = new SemanticChunker();
     }
 
     /**
@@ -56,6 +65,27 @@ public class SourceFileChunkJdbcRepository {
                     sourceFileChunkRecord.isVerbatim()
             );
         }
+    }
+
+    /**
+     * 按原始正文替换语义分块。
+     *
+     * @param filePath 文件路径
+     * @param content 原始正文
+     * @param verbatim 是否按原文保留
+     */
+    public void replaceChunksFromContent(String filePath, String content, boolean verbatim) {
+        List<TextChunk> textChunks = semanticChunker.chunk(content, DEFAULT_MAX_CHARS, DEFAULT_OVERLAP_RATIO);
+        List<SourceFileChunkRecord> records = new ArrayList<SourceFileChunkRecord>();
+        for (TextChunk textChunk : textChunks) {
+            records.add(new SourceFileChunkRecord(
+                    filePath,
+                    textChunk.chunkIndex(),
+                    textChunk.text(),
+                    verbatim
+            ));
+        }
+        replaceChunks(filePath, records);
     }
 
     /**

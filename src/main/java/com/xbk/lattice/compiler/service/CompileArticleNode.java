@@ -9,6 +9,7 @@ import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import com.xbk.lattice.query.service.ReviewResult;
 
+import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -43,6 +44,8 @@ public class CompileArticleNode {
 
     private final ReviewFixService reviewFixService;
 
+    private final SchemaAwarePrompts schemaAwarePrompts;
+
     /**
      * 创建文章编译节点。
      *
@@ -57,11 +60,40 @@ public class CompileArticleNode {
             ArticleReviewerGateway articleReviewerGateway,
             ReviewFixService reviewFixService
     ) {
+        this(
+                llmGateway,
+                sourceFileJdbcRepository,
+                documentSectionSelector,
+                articleReviewerGateway,
+                reviewFixService,
+                null
+        );
+    }
+
+    /**
+     * 创建文章编译节点。
+     *
+     * @param llmGateway LLM 网关
+     * @param sourceFileJdbcRepository 源文件仓储
+     * @param documentSectionSelector 文档章节选择器
+     * @param articleReviewerGateway 文章审查网关
+     * @param reviewFixService 审查修复服务
+     * @param schemaAwarePrompts SCHEMA 感知 Prompt 服务
+     */
+    public CompileArticleNode(
+            LlmGateway llmGateway,
+            SourceFileJdbcRepository sourceFileJdbcRepository,
+            DocumentSectionSelector documentSectionSelector,
+            ArticleReviewerGateway articleReviewerGateway,
+            ReviewFixService reviewFixService,
+            SchemaAwarePrompts schemaAwarePrompts
+    ) {
         this.llmGateway = llmGateway;
         this.sourceFileJdbcRepository = sourceFileJdbcRepository;
         this.documentSectionSelector = documentSectionSelector;
         this.articleReviewerGateway = articleReviewerGateway;
         this.reviewFixService = reviewFixService;
+        this.schemaAwarePrompts = schemaAwarePrompts;
     }
 
     /**
@@ -71,9 +103,20 @@ public class CompileArticleNode {
      * @return 文章记录
      */
     public ArticleRecord compile(MergedConcept mergedConcept) {
+        return compile(mergedConcept, null);
+    }
+
+    /**
+     * 编译文章记录。
+     *
+     * @param mergedConcept 合并概念
+     * @param sourceDir 输入目录
+     * @return 文章记录
+     */
+    public ArticleRecord compile(MergedConcept mergedConcept, Path sourceDir) {
         String summary = buildSummary(mergedConcept);
         List<String> referentialKeywords = extractReferentialKeywords(mergedConcept);
-        String markdownContent = tryCompileWithLlm(mergedConcept, summary);
+        String markdownContent = tryCompileWithLlm(mergedConcept, summary, sourceDir);
         if (markdownContent == null || markdownContent.isBlank()) {
             markdownContent = buildFallbackMarkdown(mergedConcept, summary, referentialKeywords);
         }
@@ -122,14 +165,17 @@ public class CompileArticleNode {
      * @param summary 摘要
      * @return Markdown 文章；失败时返回 null
      */
-    private String tryCompileWithLlm(MergedConcept mergedConcept, String summary) {
+    private String tryCompileWithLlm(MergedConcept mergedConcept, String summary, Path sourceDir) {
         if (llmGateway == null) {
             return null;
         }
         try {
+            String systemPrompt = schemaAwarePrompts == null
+                    ? LatticePrompts.SYSTEM_COMPILE_ARTICLE
+                    : schemaAwarePrompts.getCompileArticlePrompt(sourceDir);
             return llmGateway.compile(
                     "compile-article",
-                    LatticePrompts.SYSTEM_COMPILE_ARTICLE,
+                    systemPrompt,
                     buildCompilePrompt(mergedConcept, summary)
             );
         }

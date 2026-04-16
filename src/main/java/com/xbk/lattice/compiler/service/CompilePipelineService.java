@@ -9,7 +9,6 @@ import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
-import com.xbk.lattice.infra.persistence.SourceFileChunkRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
@@ -36,10 +35,6 @@ import java.util.UUID;
 @Slf4j
 @Profile("jdbc")
 public class CompilePipelineService {
-
-    private static final int SOURCE_CHUNK_SIZE = 500;
-
-    private static final int SOURCE_CHUNK_OVERLAP = 100;
 
     private final IngestNode ingestNode;
 
@@ -105,7 +100,8 @@ public class CompilePipelineService {
                 sourceFileJdbcRepository,
                 new DocumentSectionSelector(),
                 articleReviewerGateway,
-                reviewFixService
+                reviewFixService,
+                new SchemaAwarePrompts(compilerProperties)
         );
         this.articleJdbcRepository = articleJdbcRepository;
         this.articleChunkJdbcRepository = articleChunkJdbcRepository;
@@ -218,12 +214,12 @@ public class CompilePipelineService {
         List<AnalyzedConcept> analyzedConcepts = new ArrayList<AnalyzedConcept>();
         for (Map.Entry<String, List<RawSource>> entry : groupedSources.entrySet()) {
             List<SourceBatch> sourceBatches = batchSplitNode.split(entry.getKey(), entry.getValue());
-            analyzedConcepts.addAll(analyzeNode.analyze(entry.getKey(), sourceBatches));
+            analyzedConcepts.addAll(analyzeNode.analyze(entry.getKey(), sourceBatches, sourceDir));
         }
 
         List<MergedConcept> mergedConcepts = crossGroupMergeNode.merge(analyzedConcepts);
         compilationWalStore.stage(jobId, mergedConcepts);
-        int persistedCount = commitPendingConcepts(jobId);
+        int persistedCount = commitPendingConcepts(jobId, sourceDir);
         if (synthesisArtifactsService != null && !mergedConcepts.isEmpty()) {
             synthesisArtifactsService.generateAll(mergedConcepts);
         }
@@ -239,7 +235,7 @@ public class CompilePipelineService {
      * @return 编译结果
      */
     public CompileResult retry(String jobId) {
-        int persistedCount = commitPendingConcepts(jobId);
+        int persistedCount = commitPendingConcepts(jobId, null);
         return new CompileResult(persistedCount, jobId);
     }
 
@@ -285,9 +281,10 @@ public class CompilePipelineService {
         }
 
         for (RawSource rawSource : rawSources) {
-            sourceFileChunkJdbcRepository.replaceChunks(
+            sourceFileChunkJdbcRepository.replaceChunksFromContent(
                     rawSource.getRelativePath(),
-                    buildChunkRecords(rawSource)
+                    rawSource.getContent(),
+                    rawSource.isVerbatim()
             );
         }
     }
@@ -307,51 +304,16 @@ public class CompilePipelineService {
     }
 
     /**
-     * 为单个源文件构造 chunk 记录。
-     *
-     * @param rawSource 原始源文件
-     * @return chunk 记录列表
-     */
-    private List<SourceFileChunkRecord> buildChunkRecords(RawSource rawSource) {
-        List<SourceFileChunkRecord> chunkRecords = new ArrayList<SourceFileChunkRecord>();
-        String content = rawSource.getContent();
-        if (content == null || content.isBlank()) {
-            return chunkRecords;
-        }
-
-        int startIndex = 0;
-        int chunkIndex = 0;
-        while (startIndex < content.length()) {
-            int endIndex = Math.min(content.length(), startIndex + SOURCE_CHUNK_SIZE);
-            String chunkText = content.substring(startIndex, endIndex).trim();
-            if (!chunkText.isEmpty()) {
-                chunkRecords.add(new SourceFileChunkRecord(
-                        rawSource.getRelativePath(),
-                        chunkIndex,
-                        chunkText,
-                        rawSource.isVerbatim()
-                ));
-                chunkIndex++;
-            }
-            if (endIndex >= content.length()) {
-                break;
-            }
-            startIndex = Math.max(endIndex - SOURCE_CHUNK_OVERLAP, startIndex + 1);
-        }
-        return chunkRecords;
-    }
-
-    /**
      * 提交 WAL 中尚未完成的概念。
      *
      * @param jobId 作业标识
      * @return 成功提交数量
      */
-    private int commitPendingConcepts(String jobId) {
+    private int commitPendingConcepts(String jobId, Path sourceDir) {
         int persistedCount = 0;
         List<MergedConcept> pendingConcepts = compilationWalStore.loadPendingConcepts(jobId);
         for (MergedConcept mergedConcept : pendingConcepts) {
-            ArticleRecord articleRecord = compileArticleNode.compile(mergedConcept);
+            ArticleRecord articleRecord = compileArticleNode.compile(mergedConcept, sourceDir);
             articleJdbcRepository.upsert(articleRecord);
             articleChunkJdbcRepository.replaceChunks(mergedConcept.getConceptId(), mergedConcept.getSnippets());
             articleVectorIndexService.indexArticle(articleRecord);

@@ -8,6 +8,7 @@ import com.xbk.lattice.compiler.model.ConceptSection;
 import com.xbk.lattice.compiler.model.RawSource;
 import com.xbk.lattice.compiler.model.SourceBatch;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -28,11 +29,13 @@ public class AnalyzeNode {
 
     private final LlmGateway llmGateway;
 
+    private final SchemaAwarePrompts schemaAwarePrompts;
+
     /**
      * 创建分析节点。
      */
     public AnalyzeNode() {
-        this(null);
+        this(null, null);
     }
 
     /**
@@ -41,7 +44,18 @@ public class AnalyzeNode {
      * @param llmGateway LLM 网关
      */
     public AnalyzeNode(LlmGateway llmGateway) {
+        this(llmGateway, null);
+    }
+
+    /**
+     * 创建分析节点。
+     *
+     * @param llmGateway LLM 网关
+     * @param schemaAwarePrompts SCHEMA 感知 Prompt 服务
+     */
+    public AnalyzeNode(LlmGateway llmGateway, SchemaAwarePrompts schemaAwarePrompts) {
         this.llmGateway = llmGateway;
+        this.schemaAwarePrompts = schemaAwarePrompts;
     }
 
     /**
@@ -52,6 +66,18 @@ public class AnalyzeNode {
      * @return 分析后的概念列表
      */
     public List<AnalyzedConcept> analyze(String groupKey, List<SourceBatch> sourceBatches) {
+        return analyze(groupKey, sourceBatches, null);
+    }
+
+    /**
+     * 分析分组内的所有批次。
+     *
+     * @param groupKey 分组键
+     * @param sourceBatches 批次列表
+     * @param sourceDir 输入目录
+     * @return 分析后的概念列表
+     */
+    public List<AnalyzedConcept> analyze(String groupKey, List<SourceBatch> sourceBatches, Path sourceDir) {
         List<AnalyzedConcept> analyzedConcepts = new ArrayList<AnalyzedConcept>();
         String conceptId = normalizeGroupKey(groupKey);
         String title = toTitle(conceptId, groupKey);
@@ -65,7 +91,7 @@ public class AnalyzeNode {
                 continue;
             }
 
-            List<AnalyzedConcept> llmAnalyzedConcepts = analyzeWithLlm(sortedSources, sourcePaths);
+            List<AnalyzedConcept> llmAnalyzedConcepts = analyzeWithLlm(sortedSources, sourcePaths, sourceDir);
             if (!llmAnalyzedConcepts.isEmpty()) {
                 analyzedConcepts.addAll(llmAnalyzedConcepts);
                 continue;
@@ -89,14 +115,17 @@ public class AnalyzeNode {
      * @param sourcePaths 来源路径
      * @return 分析结果
      */
-    private List<AnalyzedConcept> analyzeWithLlm(List<RawSource> sortedSources, List<String> sourcePaths) {
+    private List<AnalyzedConcept> analyzeWithLlm(List<RawSource> sortedSources, List<String> sourcePaths, Path sourceDir) {
         if (llmGateway == null || sortedSources.isEmpty()) {
             return new ArrayList<AnalyzedConcept>();
         }
         try {
+            String systemPrompt = schemaAwarePrompts == null
+                    ? LatticePrompts.SYSTEM_ANALYZE
+                    : schemaAwarePrompts.getAnalyzePrompt(sourceDir);
             String llmResponse = llmGateway.compile(
                     "analyze",
-                    LatticePrompts.SYSTEM_ANALYZE,
+                    systemPrompt,
                     buildAnalyzeUserPrompt(sortedSources)
             );
             List<StructuredConceptCandidate> conceptCandidates = parseStructuredConceptCandidates(llmResponse);
