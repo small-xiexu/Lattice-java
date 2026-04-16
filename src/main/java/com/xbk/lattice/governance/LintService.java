@@ -62,10 +62,22 @@ public class LintService {
 
         for (ArticleRecord articleRecord : articleRecords) {
             if (titleCounts.get(articleRecord.getTitle()) != null && titleCounts.get(articleRecord.getTitle()) > 1) {
-                issues.add(new LintIssue("consistency", articleRecord.getConceptId(), "标题重复，可能存在概念重叠"));
+                issues.add(new LintIssue(
+                        "consistency",
+                        articleRecord.getConceptId(),
+                        "标题重复，可能存在概念重叠",
+                        true,
+                        "与重复标题的文章合并，或为其中一篇修改标题"
+                ));
             }
             if (articleRecord.getSummary() == null || articleRecord.getSummary().trim().isEmpty()) {
-                issues.add(new LintIssue("gaps", articleRecord.getConceptId(), "缺少 summary"));
+                issues.add(new LintIssue(
+                        "gaps",
+                        articleRecord.getConceptId(),
+                        "缺少 summary",
+                        true,
+                        "根据文章正文首段生成 2-3 句摘要，写入 YAML frontmatter"
+                ));
             }
             if (!"active".equalsIgnoreCase(articleRecord.getLifecycle())) {
                 issues.add(new LintIssue("freshness", articleRecord.getConceptId(), "生命周期不是 active"));
@@ -74,7 +86,13 @@ public class LintService {
                 issues.add(new LintIssue("grounding", articleRecord.getConceptId(), "缺少 source_paths"));
             }
             if (articleRecord.getReferentialKeywords() == null || articleRecord.getReferentialKeywords().isEmpty()) {
-                issues.add(new LintIssue("referential", articleRecord.getConceptId(), "缺少 referential_keywords"));
+                issues.add(new LintIssue(
+                        "referential",
+                        articleRecord.getConceptId(),
+                        "缺少 referential_keywords",
+                        true,
+                        "从文章正文提取业务码、端口、枚举值等明确性知识，写入 YAML frontmatter"
+                ));
             }
             if ("needs_human_review".equalsIgnoreCase(articleRecord.getReviewStatus())) {
                 issues.add(new LintIssue("consistency", articleRecord.getConceptId(), "文章仍处于 needs_human_review"));

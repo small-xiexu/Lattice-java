@@ -15,6 +15,10 @@ public class LintIssue {
 
     private final String message;
 
+    private final boolean fixable;
+
+    private final String fixSuggestion;
+
     /**
      * 创建 Lint 问题。
      *
@@ -23,9 +27,24 @@ public class LintIssue {
      * @param message 问题描述
      */
     public LintIssue(String dimension, String targetId, String message) {
+        this(dimension, targetId, message, false, null);
+    }
+
+    /**
+     * 创建 Lint 问题。
+     *
+     * @param dimension 维度
+     * @param targetId 目标标识
+     * @param message 问题描述
+     * @param fixable 是否可自动修复
+     * @param fixSuggestion 自动修复建议
+     */
+    public LintIssue(String dimension, String targetId, String message, boolean fixable, String fixSuggestion) {
         this.dimension = dimension;
         this.targetId = targetId;
         this.message = message;
+        this.fixable = fixable;
+        this.fixSuggestion = fixSuggestion;
     }
 
     /**
@@ -53,5 +72,23 @@ public class LintIssue {
      */
     public String getMessage() {
         return message;
+    }
+
+    /**
+     * 是否可自动修复。
+     *
+     * @return 是否可自动修复
+     */
+    public boolean isFixable() {
+        return fixable;
+    }
+
+    /**
+     * 获取自动修复建议。
+     *
+     * @return 自动修复建议
+     */
+    public String getFixSuggestion() {
+        return fixSuggestion;
     }
 }

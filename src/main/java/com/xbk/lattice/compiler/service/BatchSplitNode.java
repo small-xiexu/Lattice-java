@@ -21,13 +21,26 @@ public class BatchSplitNode {
 
     private final CompilerProperties compilerProperties;
 
+    private final FileRankingService fileRankingService;
+
     /**
      * 创建分批切割节点。
      *
      * @param compilerProperties 编译配置
      */
     public BatchSplitNode(CompilerProperties compilerProperties) {
+        this(compilerProperties, null);
+    }
+
+    /**
+     * 创建分批切割节点。
+     *
+     * @param compilerProperties 编译配置
+     * @param fileRankingService 文件优先级排序服务
+     */
+    public BatchSplitNode(CompilerProperties compilerProperties, FileRankingService fileRankingService) {
         this.compilerProperties = compilerProperties;
+        this.fileRankingService = fileRankingService;
     }
 
     /**
@@ -42,8 +55,11 @@ public class BatchSplitNode {
         List<RawSource> currentSources = new ArrayList<RawSource>();
         int currentChars = 0;
         int batchIndex = 0;
+        List<RawSource> rankedSources = fileRankingService == null
+                ? rawSources
+                : fileRankingService.rank(rawSources);
 
-        for (RawSource rawSource : rawSources) {
+        for (RawSource rawSource : rankedSources) {
             int sourceChars = rawSource.getContent().length();
             if (!currentSources.isEmpty() && currentChars + sourceChars > compilerProperties.getBatchMaxChars()) {
                 batches.add(createBatch(groupKey, batchIndex, currentSources));

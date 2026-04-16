@@ -1,5 +1,6 @@
 package com.xbk.lattice.infra.persistence;
 
+import org.postgresql.util.PGobject;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -10,6 +11,7 @@ import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 文章快照 JDBC 仓储
@@ -31,6 +33,62 @@ public class ArticleSnapshotJdbcRepository {
      */
     public ArticleSnapshotJdbcRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+    }
+
+    /**
+     * 保存一条文章快照。
+     *
+     * @param articleSnapshotRecord 文章快照
+     */
+    public void save(ArticleSnapshotRecord articleSnapshotRecord) {
+        String sql = """
+                insert into article_snapshots (
+                    concept_id, title, content, lifecycle, compiled_at,
+                    source_paths, metadata_json, summary, referential_keywords,
+                    depends_on, related, confidence, review_status,
+                    snapshot_reason, captured_at
+                )
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        jdbcTemplate.update(connection -> {
+            Array sourcePathsArray = connection.createArrayOf(
+                    "text",
+                    articleSnapshotRecord.getSourcePaths().toArray(new String[0])
+            );
+            Array referentialKeywordsArray = connection.createArrayOf(
+                    "text",
+                    articleSnapshotRecord.getReferentialKeywords().toArray(new String[0])
+            );
+            Array dependsOnArray = connection.createArrayOf(
+                    "text",
+                    articleSnapshotRecord.getDependsOn().toArray(new String[0])
+            );
+            Array relatedArray = connection.createArrayOf(
+                    "text",
+                    articleSnapshotRecord.getRelated().toArray(new String[0])
+            );
+            PGobject metadataJsonObject = new PGobject();
+            metadataJsonObject.setType("jsonb");
+            metadataJsonObject.setValue(articleSnapshotRecord.getMetadataJson());
+
+            java.sql.PreparedStatement preparedStatement = connection.prepareStatement(sql);
+            preparedStatement.setString(1, articleSnapshotRecord.getConceptId());
+            preparedStatement.setString(2, articleSnapshotRecord.getTitle());
+            preparedStatement.setString(3, articleSnapshotRecord.getContent());
+            preparedStatement.setString(4, articleSnapshotRecord.getLifecycle());
+            preparedStatement.setObject(5, articleSnapshotRecord.getCompiledAt());
+            preparedStatement.setArray(6, sourcePathsArray);
+            preparedStatement.setObject(7, metadataJsonObject);
+            preparedStatement.setString(8, articleSnapshotRecord.getSummary());
+            preparedStatement.setArray(9, referentialKeywordsArray);
+            preparedStatement.setArray(10, dependsOnArray);
+            preparedStatement.setArray(11, relatedArray);
+            preparedStatement.setString(12, articleSnapshotRecord.getConfidence());
+            preparedStatement.setString(13, articleSnapshotRecord.getReviewStatus());
+            preparedStatement.setString(14, articleSnapshotRecord.getSnapshotReason());
+            preparedStatement.setObject(15, articleSnapshotRecord.getCapturedAt());
+            return preparedStatement;
+        });
     }
 
     /**
@@ -69,6 +127,27 @@ public class ArticleSnapshotJdbcRepository {
                 limit ?
                 """;
         return jdbcTemplate.query(sql, this::mapArticleSnapshotRecord, conceptId, Math.max(limit, 0));
+    }
+
+    /**
+     * 按快照标识查询单条快照。
+     *
+     * @param snapshotId 快照标识
+     * @return 快照记录
+     */
+    public Optional<ArticleSnapshotRecord> findBySnapshotId(long snapshotId) {
+        String sql = """
+                select snapshot_id, concept_id, title, content, lifecycle, compiled_at, source_paths, metadata_json,
+                       summary, referential_keywords, depends_on, related, confidence, review_status,
+                       snapshot_reason, captured_at
+                from article_snapshots
+                where snapshot_id = ?
+                """;
+        List<ArticleSnapshotRecord> records = jdbcTemplate.query(sql, this::mapArticleSnapshotRecord, snapshotId);
+        if (records.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(records.get(0));
     }
 
     /**

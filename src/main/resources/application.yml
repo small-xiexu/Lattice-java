@@ -24,7 +24,14 @@ lattice:
     cache-ttl-seconds: ${LATTICE_LLM_CACHE_TTL_SECONDS:86400}
     cache-key-prefix: ${LATTICE_LLM_CACHE_KEY_PREFIX:llm:cache:}
     review-enabled: ${LATTICE_LLM_REVIEW_ENABLED:false}
+    max-input-chars: ${LATTICE_LLM_MAX_INPUT_CHARS:64000}
   compiler:
+    file-ranking:
+      rules:
+        - pattern: ${LATTICE_COMPILER_FILE_RANKING_RULE1_PATTERN:overview.*}
+          score: ${LATTICE_COMPILER_FILE_RANKING_RULE1_SCORE:100}
+        - pattern: ${LATTICE_COMPILER_FILE_RANKING_RULE2_PATTERN:readme.*}
+          score: ${LATTICE_COMPILER_FILE_RANKING_RULE2_SCORE:95}
     wal:
       key-prefix: ${LATTICE_COMPILER_WAL_KEY_PREFIX:lattice:wal:}
       ttl-seconds: ${LATTICE_COMPILER_WAL_TTL_SECONDS:86400}

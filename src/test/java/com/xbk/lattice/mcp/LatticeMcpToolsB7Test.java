@@ -4,6 +4,8 @@ import com.xbk.lattice.compiler.config.CompilerProperties;
 import com.xbk.lattice.compiler.service.CompilePipelineService;
 import com.xbk.lattice.compiler.service.CompileResult;
 import com.xbk.lattice.compiler.service.CompilationWalStore;
+import com.xbk.lattice.governance.ArticleCorrectionResult;
+import com.xbk.lattice.governance.ArticleCorrectionService;
 import com.xbk.lattice.governance.LintIssue;
 import com.xbk.lattice.governance.LintReport;
 import com.xbk.lattice.governance.LintService;
@@ -475,10 +477,10 @@ class LatticeMcpToolsB7Test {
     }
 
     /**
-     * 验证 lattice_correct 会返回传播影响范围 JSON。
+     * 验证 lattice_correct 会返回纠错预览 JSON。
      */
     @Test
-    void correctKnowledgeShouldReturnPropagationJson() {
+    void correctKnowledgeShouldReturnCorrectionPreviewJson() {
         LatticeMcpTools tools = new LatticeMcpTools(
                 null,
                 new UnsupportedPendingQueryManager(),
@@ -490,6 +492,12 @@ class LatticeMcpToolsB7Test {
                 null,
                 null,
                 null,
+                new FixedArticleCorrectionService(new ArticleCorrectionResult(
+                        "payment-config",
+                        "# Payment Config\n\n已修正重试策略。",
+                        List.of("payment-timeout", "refund-manual-review"),
+                        true
+                )),
                 new FixedPropagationService(new PropagationReport(
                         "payment-config",
                         "更新重试策略",
@@ -502,9 +510,10 @@ class LatticeMcpToolsB7Test {
 
         String result = tools.correctKnowledge("payment-config", "更新重试策略");
 
-        assertThat(result).contains("\"rootConceptId\":\"payment-config\"");
-        assertThat(result).contains("\"impactedCount\":2");
-        assertThat(result).contains("\"conceptId\":\"payment-timeout\"");
+        assertThat(result).contains("\"conceptId\":\"payment-config\"");
+        assertThat(result).contains("\"downstreamCount\":2");
+        assertThat(result).contains("\"evidenceSupported\":true");
+        assertThat(result).contains("\"downstreamIds\":[\"payment-timeout\",\"refund-manual-review\"]");
     }
 
     /**
@@ -755,6 +764,21 @@ class LatticeMcpToolsB7Test {
         }
     }
 
+    private static class FixedArticleCorrectionService extends ArticleCorrectionService {
+
+        private final ArticleCorrectionResult result;
+
+        private FixedArticleCorrectionService(ArticleCorrectionResult result) {
+            super(null, null, null, null, null);
+            this.result = result;
+        }
+
+        @Override
+        public ArticleCorrectionResult correct(String conceptId, String correctionSummary) {
+            return result;
+        }
+    }
+
     private static class FixedPropagationService extends PropagationService {
 
         private final PropagationReport report;
@@ -767,6 +791,11 @@ class LatticeMcpToolsB7Test {
         @Override
         public PropagationReport propagate(String rootConceptId, String correctionSummary) {
             return report;
+        }
+
+        @Override
+        public void markDownstream(String rootConceptId, String correctionSummary, List<String> downstreamIds) {
+            // 无操作：本测试只验证 lattice_correct 的返回结构
         }
     }
 

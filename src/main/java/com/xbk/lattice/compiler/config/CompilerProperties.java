@@ -23,6 +23,8 @@ public class CompilerProperties {
 
     private List<GroupingRule> groupingRules = new ArrayList<GroupingRule>();
 
+    private FileRanking fileRanking = new FileRanking();
+
     /**
      * 获取单文件最大采集字符数。
      *
@@ -96,6 +98,24 @@ public class CompilerProperties {
     }
 
     /**
+     * 获取文件优先级排序配置。
+     *
+     * @return 文件优先级排序配置
+     */
+    public FileRanking getFileRanking() {
+        return fileRanking;
+    }
+
+    /**
+     * 设置文件优先级排序配置。
+     *
+     * @param fileRanking 文件优先级排序配置
+     */
+    public void setFileRanking(FileRanking fileRanking) {
+        this.fileRanking = fileRanking;
+    }
+
+    /**
      * 分组规则
      *
      * 职责：描述路径模式与 groupKey 的映射
@@ -142,6 +162,56 @@ public class CompilerProperties {
          */
         public void setGroupKey(String groupKey) {
             this.groupKey = groupKey;
+        }
+    }
+
+    /**
+     * 文件优先级排序配置。
+     *
+     * 职责：承载 pattern -> score 的排序覆盖规则
+     *
+     * @author xiexu
+     */
+    public static class FileRanking {
+
+        private List<FileRankingRule> rules = new ArrayList<FileRankingRule>();
+
+        public List<FileRankingRule> getRules() {
+            return rules;
+        }
+
+        public void setRules(List<FileRankingRule> rules) {
+            this.rules = rules;
+        }
+    }
+
+    /**
+     * 单条文件优先级规则。
+     *
+     * 职责：描述 glob 模式与对应优先级分值
+     *
+     * @author xiexu
+     */
+    public static class FileRankingRule {
+
+        private String pattern;
+
+        private int score;
+
+        public String getPattern() {
+            return pattern;
+        }
+
+        public void setPattern(String pattern) {
+            this.pattern = pattern;
+        }
+
+        public int getScore() {
+            return score;
+        }
+
+        public void setScore(int score) {
+            this.score = score;
         }
     }
 }

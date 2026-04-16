@@ -3,6 +3,7 @@ package com.xbk.lattice.compiler.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.config.LlmProperties;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatProperties;
 import org.springframework.ai.model.anthropic.autoconfigure.AnthropicConnectionProperties;
 import org.springframework.ai.openai.OpenAiChatModel;
@@ -28,6 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @Service
 @Profile("jdbc")
+@Slf4j
 public class LlmGateway {
 
     private static final AtomicInteger CALL_SEQUENCE = new AtomicInteger(0);
@@ -195,7 +197,8 @@ public class LlmGateway {
             return cachedValue;
         }
         ensureBudgetAvailable();
-        LlmCallResult llmCallResult = llmClient.call(systemPrompt, userPrompt);
+        String truncatedUserPrompt = truncateUserPromptIfNecessary(systemPrompt, userPrompt, purpose);
+        LlmCallResult llmCallResult = llmClient.call(systemPrompt, truncatedUserPrompt);
         double estimatedCost = estimateCostUsd(modelName, llmCallResult);
         if (spentUsd + estimatedCost > llmProperties.getBudgetUsd()) {
             throw new BudgetExceededException("LLM budget exceeded");
@@ -216,6 +219,43 @@ public class LlmGateway {
                 Duration.ofSeconds(llmProperties.getCacheTtlSeconds())
         );
         return llmCallResult.getContent();
+    }
+
+    /**
+     * 在输入超限时截断用户提示词，避免单次调用超过窗口。
+     *
+     * @param systemPrompt 系统提示词
+     * @param userPrompt 用户提示词
+     * @param purpose 调用用途
+     * @return 实际发送给模型的用户提示词
+     */
+    private String truncateUserPromptIfNecessary(String systemPrompt, String userPrompt, String purpose) {
+        int totalInputLength = systemPrompt.length() + userPrompt.length();
+        int maxInputChars = llmProperties.getMaxInputChars();
+        if (maxInputChars <= 0 || totalInputLength <= maxInputChars) {
+            return userPrompt;
+        }
+
+        int budget = maxInputChars - systemPrompt.length() - 200;
+        if (budget <= 0) {
+            log.warn(
+                    "System prompt length {} exceeds maxInputChars {}, skipping truncation for purpose {}",
+                    systemPrompt.length(),
+                    maxInputChars,
+                    purpose
+            );
+            return userPrompt;
+        }
+
+        String truncatedUserPrompt = userPrompt.substring(0, budget)
+                + "\n\n[... 内容已截断，超出单次调用字符限制 ...]";
+        log.warn(
+                "LLM input truncated: original={} chars, limit={} chars, purpose={}",
+                totalInputLength,
+                maxInputChars,
+                purpose
+        );
+        return truncatedUserPrompt;
     }
 
     /**

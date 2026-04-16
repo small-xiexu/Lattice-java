@@ -3,6 +3,8 @@ package com.xbk.lattice.compiler.service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 文档章节选择器
@@ -12,6 +14,10 @@ import java.util.Locale;
  * @author xiexu
  */
 public class DocumentSectionSelector {
+
+    private static final Pattern MARKDOWN_HEADING_PATTERN = Pattern.compile("^(#{1,6})\\s+(.+?)\\s*$");
+
+    private static final Pattern LEGACY_HEADING_PATTERN = Pattern.compile("^===\\s+(.+?)\\s*$");
 
     /**
      * 选择与概念相关的内容片段。
@@ -64,5 +70,110 @@ public class DocumentSectionSelector {
             }
         }
         return false;
+    }
+
+    /**
+     * 解析文档目录。
+     *
+     * @param content 文档正文
+     * @return 章节目录
+     */
+    public List<DocumentHeading> toc(String content) {
+        List<DocumentHeading> headings = new ArrayList<DocumentHeading>();
+        if (content == null || content.isBlank()) {
+            return headings;
+        }
+        String[] lines = content.split("\\R", -1);
+        for (int index = 0; index < lines.length; index++) {
+            DocumentHeading heading = parseHeading(lines[index], index + 1);
+            if (heading != null) {
+                headings.add(heading);
+            }
+        }
+        return headings;
+    }
+
+    /**
+     * 按标题读取章节。
+     *
+     * @param content 文档正文
+     * @param heading 标题
+     * @return 章节读取结果
+     */
+    public DocumentSection readSection(String content, String heading) {
+        List<DocumentHeading> headings = toc(content);
+        if (headings.isEmpty()) {
+            return new DocumentSection(normalizeHeading(heading), "", 0);
+        }
+        DocumentHeading target = null;
+        for (DocumentHeading item : headings) {
+            if (item.heading().equalsIgnoreCase(normalizeHeading(heading))) {
+                target = item;
+                break;
+            }
+        }
+        if (target == null) {
+            return new DocumentSection(normalizeHeading(heading), "", 0);
+        }
+        String[] lines = content.split("\\R", -1);
+        int startIndex = Math.max(target.line() - 1, 0);
+        int endIndex = lines.length;
+        for (DocumentHeading item : headings) {
+            if (item.line() > target.line()) {
+                endIndex = item.line() - 1;
+                break;
+            }
+        }
+        StringBuilder builder = new StringBuilder();
+        for (int index = startIndex; index < endIndex; index++) {
+            if (builder.length() > 0) {
+                builder.append("\n");
+            }
+            builder.append(lines[index]);
+        }
+        return new DocumentSection(target.heading(), builder.toString(), target.line());
+    }
+
+    private DocumentHeading parseHeading(String line, int lineNumber) {
+        Matcher markdownMatcher = MARKDOWN_HEADING_PATTERN.matcher(line);
+        if (markdownMatcher.matches()) {
+            return new DocumentHeading(
+                    normalizeHeading(markdownMatcher.group(2)),
+                    markdownMatcher.group(1).length(),
+                    lineNumber
+            );
+        }
+        Matcher legacyMatcher = LEGACY_HEADING_PATTERN.matcher(line);
+        if (legacyMatcher.matches()) {
+            return new DocumentHeading(normalizeHeading(legacyMatcher.group(1)), 1, lineNumber);
+        }
+        return null;
+    }
+
+    private String normalizeHeading(String heading) {
+        if (heading == null) {
+            return "";
+        }
+        return heading.trim();
+    }
+
+    /**
+     * 文档标题项。
+     *
+     * @param heading 标题
+     * @param level 标题层级
+     * @param line 行号
+     */
+    public record DocumentHeading(String heading, int level, int line) {
+    }
+
+    /**
+     * 文档章节读取结果。
+     *
+     * @param heading 标题
+     * @param content 章节内容
+     * @param line 标题起始行号
+     */
+    public record DocumentSection(String heading, String content, int line) {
     }
 }

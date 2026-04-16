@@ -1,5 +1,7 @@
 package com.xbk.lattice.governance;
 
+import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -25,13 +27,30 @@ public class PropagationService {
 
     private final DependencyGraphService dependencyGraphService;
 
+    private final ArticleJdbcRepository articleJdbcRepository;
+
     /**
      * 创建传播服务。
      *
      * @param dependencyGraphService 依赖图服务
+     * @param articleJdbcRepository 文章仓储
+     */
+    @Autowired
+    public PropagationService(
+            DependencyGraphService dependencyGraphService,
+            ArticleJdbcRepository articleJdbcRepository
+    ) {
+        this.dependencyGraphService = dependencyGraphService;
+        this.articleJdbcRepository = articleJdbcRepository;
+    }
+
+    /**
+     * 创建仅分析影响范围的传播服务。
+     *
+     * @param dependencyGraphService 依赖图服务
      */
     public PropagationService(DependencyGraphService dependencyGraphService) {
-        this.dependencyGraphService = dependencyGraphService;
+        this(dependencyGraphService, null);
     }
 
     /**
@@ -41,7 +60,7 @@ public class PropagationService {
      * @param correctionSummary 纠错摘要
      * @return 传播报告
      */
-    public PropagationReport propagate(String rootConceptId, String correctionSummary) {
+    public PropagationReport analyzeImpact(String rootConceptId, String correctionSummary) {
         if (dependencyGraphService == null) {
             return new PropagationReport(rootConceptId, correctionSummary, List.of());
         }
@@ -71,6 +90,37 @@ public class PropagationService {
             }
         }
         return new PropagationReport(rootConceptId, correctionSummary, items);
+    }
+
+    /**
+     * 兼容旧调用的传播分析入口。
+     *
+     * @param rootConceptId 根概念标识
+     * @param correctionSummary 纠错摘要
+     * @return 传播报告
+     */
+    public PropagationReport propagate(String rootConceptId, String correctionSummary) {
+        return analyzeImpact(rootConceptId, correctionSummary);
+    }
+
+    /**
+     * 为下游文章追加上游纠错标记。
+     *
+     * @param rootConceptId 根概念标识
+     * @param correctionSummary 纠错摘要
+     * @param downstreamIds 下游概念标识
+     */
+    public void markDownstream(String rootConceptId, String correctionSummary, List<String> downstreamIds) {
+        if (articleJdbcRepository == null || downstreamIds == null || downstreamIds.isEmpty()) {
+            return;
+        }
+        Set<String> uniqueDownstreamIds = new LinkedHashSet<String>(downstreamIds);
+        for (String downstreamId : uniqueDownstreamIds) {
+            if (downstreamId == null || downstreamId.isBlank()) {
+                continue;
+            }
+            articleJdbcRepository.appendUpstreamCorrection(downstreamId, rootConceptId, correctionSummary);
+        }
     }
 
     private Map<String, List<DependencyGraphEdge>> buildAdjacency(List<DependencyGraphEdge> edges) {

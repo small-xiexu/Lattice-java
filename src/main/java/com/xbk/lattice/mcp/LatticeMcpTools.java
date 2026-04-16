@@ -3,7 +3,12 @@ package com.xbk.lattice.mcp;
 import com.xbk.lattice.api.query.QueryResponse;
 import com.xbk.lattice.compiler.service.CompilePipelineService;
 import com.xbk.lattice.compiler.service.CompileResult;
+import com.xbk.lattice.compiler.service.DocumentSectionSelector;
+import com.xbk.lattice.governance.ArticleCorrectionResult;
+import com.xbk.lattice.governance.ArticleCorrectionService;
 import com.xbk.lattice.governance.LintIssue;
+import com.xbk.lattice.governance.LintFixResult;
+import com.xbk.lattice.governance.LintFixService;
 import com.xbk.lattice.governance.LintReport;
 import com.xbk.lattice.governance.LintService;
 import com.xbk.lattice.governance.InspectService;
@@ -23,10 +28,14 @@ import com.xbk.lattice.governance.LinkEnhancementService;
 import com.xbk.lattice.governance.OmissionReport;
 import com.xbk.lattice.governance.OmissionTrackingService;
 import com.xbk.lattice.governance.PropagationItem;
+import com.xbk.lattice.governance.PropagationExecutionResult;
 import com.xbk.lattice.governance.PropagationReport;
 import com.xbk.lattice.governance.PropagationService;
+import com.xbk.lattice.governance.PropagateExecutionService;
 import com.xbk.lattice.governance.QualityMetricsReport;
 import com.xbk.lattice.governance.QualityMetricsService;
+import com.xbk.lattice.governance.QualityMetricsTrend;
+import com.xbk.lattice.governance.RollbackResult;
 import com.xbk.lattice.governance.HistoryReport;
 import com.xbk.lattice.governance.HistoryService;
 import com.xbk.lattice.governance.SnapshotReport;
@@ -35,6 +44,8 @@ import com.xbk.lattice.governance.StatusService;
 import com.xbk.lattice.governance.StatusSnapshot;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotRecord;
 import com.xbk.lattice.infra.persistence.PendingQueryRecord;
+import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
+import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import com.xbk.lattice.query.service.KnowledgeLookupResult;
 import com.xbk.lattice.query.service.KnowledgeLookupService;
 import com.xbk.lattice.query.service.KnowledgeSearchService;
@@ -49,6 +60,9 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -62,6 +76,8 @@ import java.util.List;
 @Profile("jdbc")
 public class LatticeMcpTools {
 
+    private static final DateTimeFormatter JSON_DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
+
     private final QueryFacadeService queryFacadeService;
 
     private final PendingQueryManager pendingQueryManager;
@@ -73,6 +89,8 @@ public class LatticeMcpTools {
     private final StatusService statusService;
 
     private final LintService lintService;
+
+    private LintFixService lintFixService;
 
     private final QualityMetricsService qualityMetricsService;
 
@@ -86,7 +104,15 @@ public class LatticeMcpTools {
 
     private final InspectionAnswerImportService inspectionAnswerImportService;
 
+    private final ArticleCorrectionService articleCorrectionService;
+
     private final PropagationService propagationService;
+
+    private PropagateExecutionService propagateExecutionService;
+
+    private SourceFileJdbcRepository sourceFileJdbcRepository;
+
+    private DocumentSectionSelector documentSectionSelector;
 
     private final SnapshotService snapshotService;
 
@@ -114,6 +140,7 @@ public class LatticeMcpTools {
             CompilePipelineService compilePipelineService,
             InspectService inspectService,
             InspectionAnswerImportService inspectionAnswerImportService,
+            ArticleCorrectionService articleCorrectionService,
             PropagationService propagationService,
             SnapshotService snapshotService,
             HistoryService historyService,
@@ -134,6 +161,7 @@ public class LatticeMcpTools {
         this.compilePipelineService = compilePipelineService;
         this.inspectService = inspectService;
         this.inspectionAnswerImportService = inspectionAnswerImportService;
+        this.articleCorrectionService = articleCorrectionService;
         this.propagationService = propagationService;
         this.snapshotService = snapshotService;
         this.historyService = historyService;
@@ -142,7 +170,91 @@ public class LatticeMcpTools {
     }
 
     /**
+     * 注入传播执行服务。
+     *
+     * @param propagateExecutionService 传播执行服务
+     */
+    @Autowired(required = false)
+    void setPropagateExecutionService(PropagateExecutionService propagateExecutionService) {
+        this.propagateExecutionService = propagateExecutionService;
+    }
+
+    /**
+     * 注入源文件仓储。
+     *
+     * @param sourceFileJdbcRepository 源文件仓储
+     */
+    @Autowired(required = false)
+    void setSourceFileJdbcRepository(SourceFileJdbcRepository sourceFileJdbcRepository) {
+        this.sourceFileJdbcRepository = sourceFileJdbcRepository;
+    }
+
+    /**
+     * 注入文档章节选择器。
+     *
+     * @param documentSectionSelector 文档章节选择器
+     */
+    @Autowired(required = false)
+    void setDocumentSectionSelector(DocumentSectionSelector documentSectionSelector) {
+        this.documentSectionSelector = documentSectionSelector;
+    }
+
+    /**
+     * 注入 lint 自动修复服务。
+     *
+     * @param lintFixService lint 自动修复服务
+     */
+    @Autowired(required = false)
+    void setLintFixService(LintFixService lintFixService) {
+        this.lintFixService = lintFixService;
+    }
+
+    /**
      * 创建兼容旧全量构造器的 MCP 工具集。
+     */
+    public LatticeMcpTools(
+            QueryFacadeService queryFacadeService,
+            PendingQueryManager pendingQueryManager,
+            KnowledgeSearchService knowledgeSearchService,
+            KnowledgeLookupService knowledgeLookupService,
+            StatusService statusService,
+            LintService lintService,
+            QualityMetricsService qualityMetricsService,
+            CompilePipelineService compilePipelineService,
+            InspectService inspectService,
+            InspectionAnswerImportService inspectionAnswerImportService,
+            PropagationService propagationService,
+            SnapshotService snapshotService,
+            HistoryService historyService,
+            CoverageTrackingService coverageTrackingService,
+            OmissionTrackingService omissionTrackingService,
+            LifecycleService lifecycleService,
+            LinkEnhancementService linkEnhancementService
+    ) {
+        this(
+                queryFacadeService,
+                pendingQueryManager,
+                knowledgeSearchService,
+                knowledgeLookupService,
+                statusService,
+                lintService,
+                qualityMetricsService,
+                compilePipelineService,
+                inspectService,
+                inspectionAnswerImportService,
+                null,
+                propagationService,
+                snapshotService,
+                historyService,
+                coverageTrackingService,
+                omissionTrackingService,
+                lifecycleService,
+                linkEnhancementService
+        );
+    }
+
+    /**
+     * 创建兼容旧全量构造器的 MCP 工具集（不含 lifecycle/link-enhance）。
      */
     public LatticeMcpTools(
             QueryFacadeService queryFacadeService,
@@ -172,6 +284,7 @@ public class LatticeMcpTools {
                 compilePipelineService,
                 inspectService,
                 inspectionAnswerImportService,
+                null,
                 propagationService,
                 snapshotService,
                 historyService,
@@ -214,6 +327,7 @@ public class LatticeMcpTools {
                 compilePipelineService,
                 inspectService,
                 inspectionAnswerImportService,
+                null,
                 propagationService,
                 snapshotService,
                 historyService,
@@ -231,7 +345,7 @@ public class LatticeMcpTools {
      * @param pendingQueryManager PendingQuery 管理器
      */
     public LatticeMcpTools(QueryFacadeService queryFacadeService, PendingQueryManager pendingQueryManager) {
-        this(queryFacadeService, pendingQueryManager, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+        this(queryFacadeService, pendingQueryManager, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -256,6 +370,7 @@ public class LatticeMcpTools {
                 lintService,
                 qualityMetricsService,
                 compilePipelineService,
+                null,
                 null,
                 null,
                 null,
@@ -300,12 +415,52 @@ public class LatticeMcpTools {
                 null,
                 null,
                 null,
+                null,
                 null
         );
     }
 
     /**
      * 创建兼容 snapshot/history 测试的 MCP 工具集。
+     */
+    public LatticeMcpTools(
+            QueryFacadeService queryFacadeService,
+            PendingQueryManager pendingQueryManager,
+            KnowledgeSearchService knowledgeSearchService,
+            KnowledgeLookupService knowledgeLookupService,
+            StatusService statusService,
+            LintService lintService,
+            QualityMetricsService qualityMetricsService,
+            CompilePipelineService compilePipelineService,
+            InspectService inspectService,
+            InspectionAnswerImportService inspectionAnswerImportService,
+            ArticleCorrectionService articleCorrectionService,
+            PropagationService propagationService
+    ) {
+        this(
+                queryFacadeService,
+                pendingQueryManager,
+                knowledgeSearchService,
+                knowledgeLookupService,
+                statusService,
+                lintService,
+                qualityMetricsService,
+                compilePipelineService,
+                inspectService,
+                inspectionAnswerImportService,
+                articleCorrectionService,
+                propagationService,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+    }
+
+    /**
+     * 创建兼容 correct 测试的 MCP 工具集。
      */
     public LatticeMcpTools(
             QueryFacadeService queryFacadeService,
@@ -333,6 +488,7 @@ public class LatticeMcpTools {
                 compilePipelineService,
                 inspectService,
                 inspectionAnswerImportService,
+                null,
                 propagationService,
                 snapshotService,
                 historyService,
@@ -370,6 +526,7 @@ public class LatticeMcpTools {
                 compilePipelineService,
                 inspectService,
                 inspectionAnswerImportService,
+                null,
                 propagationService,
                 null,
                 null,
@@ -561,6 +718,35 @@ public class LatticeMcpTools {
     }
 
     /**
+     * 自动修复可修复的 lint 问题。
+     *
+     * @param targetIds 逗号分隔的概念标识，空串表示修全部
+     * @return JSON 字符串，包含修复结果
+     */
+    @McpTool(name = "lattice_lint_fix", description = "Auto-fix lint issues that are marked as fixable using LLM")
+    public String lintFix(
+            @McpToolParam(description = "Comma-separated conceptIds to fix, or empty for all fixable issues") String targetIds
+    ) {
+        LintReport lintReport = requireLintService().lint();
+        List<String> ids = null;
+        if (targetIds != null && !targetIds.isBlank()) {
+            ids = new ArrayList<String>();
+            for (String value : targetIds.split(",")) {
+                String trimmed = value.trim();
+                if (!trimmed.isEmpty()) {
+                    ids.add(trimmed);
+                }
+            }
+        }
+        LintFixResult result = requireLintFixService().fix(lintReport, ids);
+        return "{"
+                + "\"fixed\":" + result.getFixed() + ","
+                + "\"skipped\":" + result.getSkipped() + ","
+                + "\"errors\":" + jsonStringList(result.getErrors())
+                + "}";
+    }
+
+    /**
      * 返回当前知识库质量指标。
      *
      * @return JSON 字符串，包含文章审查与反馈沉淀汇总
@@ -568,13 +754,22 @@ public class LatticeMcpTools {
     @McpTool(name = "lattice_quality", description = "Return quality metrics for articles, review states, contributions, and source coverage")
     public String quality() {
         QualityMetricsReport qualityMetricsReport = requireQualityMetricsService().measure();
+        QualityMetricsTrend qualityMetricsTrend = requireQualityMetricsService().trend(7);
         return "{"
                 + "\"totalArticles\":" + qualityMetricsReport.getTotalArticles() + ","
                 + "\"passedArticles\":" + qualityMetricsReport.getPassedArticles() + ","
                 + "\"pendingReviewArticles\":" + qualityMetricsReport.getPendingReviewArticles() + ","
                 + "\"needsHumanReviewArticles\":" + qualityMetricsReport.getNeedsHumanReviewArticles() + ","
                 + "\"contributionCount\":" + qualityMetricsReport.getContributionCount() + ","
-                + "\"sourceFileCount\":" + qualityMetricsReport.getSourceFileCount()
+                + "\"sourceFileCount\":" + qualityMetricsReport.getSourceFileCount() + ","
+                + "\"trend\":{"
+                + "\"days\":" + qualityMetricsTrend.getDays() + ","
+                + "\"latestMeasuredAt\":" + jsonString(formatOffsetDateTime(qualityMetricsTrend.getLatestMeasuredAt())) + ","
+                + "\"reviewPassRateDelta\":" + qualityMetricsTrend.getReviewPassRateDelta() + ","
+                + "\"groundingRateDelta\":" + qualityMetricsTrend.getGroundingRateDelta() + ","
+                + "\"referentialRateDelta\":" + qualityMetricsTrend.getReferentialRateDelta() + ","
+                + "\"totalArticlesDelta\":" + qualityMetricsTrend.getTotalArticlesDelta()
+                + "}"
                 + "}";
     }
 
@@ -771,33 +966,49 @@ public class LatticeMcpTools {
     }
 
     /**
-     * 基于依赖图评估纠错的 downstream 影响范围。
+     * 执行单篇知识文章纠错，并返回修正预览与下游传播提示。
      *
      * @param conceptId 被纠错的概念标识
      * @param correctionSummary 纠错摘要
-     * @return JSON 字符串，包含 impactedCount / impactedConceptIds / items
+     * @return JSON 字符串，包含修正预览、下游数量与证据支持情况
      */
-    @McpTool(name = "lattice_correct", description = "Preview downstream propagation impact for a corrected concept based on the dependency graph")
+    @McpTool(name = "lattice_correct", description = "Correct a knowledge article using LLM rewrite with source file cross-validation")
     public String correctKnowledge(
             @McpToolParam(description = "The conceptId that has been corrected") String conceptId,
             @McpToolParam(description = "A short summary of the correction") String correctionSummary
     ) {
-        PropagationReport propagationReport = requirePropagationService().propagate(conceptId, correctionSummary);
-        StringBuilder itemsBuilder = new StringBuilder();
-        itemsBuilder.append("[");
-        for (int index = 0; index < propagationReport.getItems().size(); index++) {
-            if (index > 0) {
-                itemsBuilder.append(",");
-            }
-            itemsBuilder.append(toPropagationItemJson(propagationReport.getItems().get(index)));
-        }
-        itemsBuilder.append("]");
+        ArticleCorrectionResult result = requireArticleCorrectionService().correct(conceptId, correctionSummary);
+        requirePropagationService().markDownstream(
+                conceptId,
+                correctionSummary,
+                result.getDownstreamIds()
+        );
         return "{"
-                + "\"rootConceptId\":" + jsonString(propagationReport.getRootConceptId()) + ","
-                + "\"correctionSummary\":" + jsonString(propagationReport.getCorrectionSummary()) + ","
-                + "\"impactedCount\":" + propagationReport.getImpactedCount() + ","
-                + "\"impactedConceptIds\":" + jsonStringList(propagationReport.getImpactedConceptIds()) + ","
-                + "\"items\":" + itemsBuilder
+                + "\"conceptId\":" + jsonString(result.getConceptId()) + ","
+                + "\"revisedContentPreview\":" + jsonString(preview(result.getRevisedContent(), 500)) + ","
+                + "\"downstreamCount\":" + result.getDownstreamIds().size() + ","
+                + "\"downstreamIds\":" + jsonStringList(result.getDownstreamIds()) + ","
+                + "\"evidenceSupported\":" + result.isValidationSupported() + ","
+                + "\"nextStep\":" + jsonString("如需将纠正传播到下游文章，请调用 lattice_propagate")
+                + "}";
+    }
+
+    /**
+     * 执行指定根概念的下游传播。
+     *
+     * @param rootConceptId 根概念标识
+     * @return JSON 字符串，包含处理统计
+     */
+    @McpTool(name = "lattice_propagate", description = "Execute downstream propagation: rewrite all articles that depend on a corrected concept")
+    public String propagate(
+            @McpToolParam(description = "The corrected root conceptId to propagate from") String rootConceptId
+    ) {
+        PropagationExecutionResult result = requirePropagateExecutionService().executePropagation(rootConceptId);
+        return "{"
+                + "\"rootConceptId\":" + jsonString(rootConceptId) + ","
+                + "\"processed\":" + result.getProcessed() + ","
+                + "\"updated\":" + result.getUpdated() + ","
+                + "\"skipped\":" + result.getSkipped()
                 + "}";
     }
 
@@ -851,6 +1062,81 @@ public class LatticeMcpTools {
                 + "\"conceptId\":" + jsonString(historyReport.getConceptId()) + ","
                 + "\"count\":" + historyReport.getTotalEntries() + ","
                 + "\"items\":" + itemsBuilder
+                + "}";
+    }
+
+    /**
+     * 将文章恢复到指定快照版本。
+     *
+     * @param conceptId 概念标识
+     * @param snapshotId 快照标识
+     * @return JSON 字符串，包含恢复结果
+     */
+    @McpTool(name = "lattice_rollback", description = "Restore an article to a previous snapshot version")
+    public String rollback(
+            @McpToolParam(description = "The conceptId to restore") String conceptId,
+            @McpToolParam(description = "The snapshotId to restore from") long snapshotId
+    ) {
+        RollbackResult result = requireSnapshotService().rollback(conceptId, snapshotId);
+        return "{"
+                + "\"conceptId\":" + jsonString(result.getConceptId()) + ","
+                + "\"restoredSnapshotId\":" + result.getRestoredSnapshotId() + ","
+                + "\"restoredAt\":" + jsonString(formatOffsetDateTime(result.getRestoredAt()))
+                + "}";
+    }
+
+    /**
+     * 返回源文件目录。
+     *
+     * @param path 源文件路径
+     * @return JSON 字符串，包含章节标题、层级与行号
+     */
+    @McpTool(name = "lattice_doc_toc", description = "Return heading hierarchy and line numbers for a source document")
+    public String docToc(@McpToolParam(description = "The source file path to inspect") String path) {
+        SourceFileRecord sourceFileRecord = requireSourceFileJdbcRepository().findByPath(path)
+                .orElseThrow(() -> new IllegalArgumentException("source file not found: " + path));
+        List<DocumentSectionSelector.DocumentHeading> headings = requireDocumentSectionSelector().toc(sourceFileRecord.getContentText());
+        StringBuilder itemsBuilder = new StringBuilder();
+        itemsBuilder.append("[");
+        for (int index = 0; index < headings.size(); index++) {
+            if (index > 0) {
+                itemsBuilder.append(",");
+            }
+            DocumentSectionSelector.DocumentHeading heading = headings.get(index);
+            itemsBuilder.append("{")
+                    .append("\"heading\":").append(jsonString(heading.heading())).append(",")
+                    .append("\"level\":").append(heading.level()).append(",")
+                    .append("\"line\":").append(heading.line())
+                    .append("}");
+        }
+        itemsBuilder.append("]");
+        return "{"
+                + "\"path\":" + jsonString(path) + ","
+                + "\"items\":" + itemsBuilder
+                + "}";
+    }
+
+    /**
+     * 读取源文件指定章节。
+     *
+     * @param path 源文件路径
+     * @param heading 章节标题
+     * @return JSON 字符串，包含章节标题、行号与正文
+     */
+    @McpTool(name = "lattice_doc_read", description = "Read a specific heading section from a source document")
+    public String docRead(
+            @McpToolParam(description = "The source file path to inspect") String path,
+            @McpToolParam(description = "The heading title to read") String heading
+    ) {
+        SourceFileRecord sourceFileRecord = requireSourceFileJdbcRepository().findByPath(path)
+                .orElseThrow(() -> new IllegalArgumentException("source file not found: " + path));
+        DocumentSectionSelector.DocumentSection section = requireDocumentSectionSelector()
+                .readSection(sourceFileRecord.getContentText(), heading);
+        return "{"
+                + "\"path\":" + jsonString(path) + ","
+                + "\"heading\":" + jsonString(section.heading()) + ","
+                + "\"line\":" + section.line() + ","
+                + "\"content\":" + jsonString(section.content())
                 + "}";
     }
 
@@ -921,7 +1207,9 @@ public class LatticeMcpTools {
         return "{"
                 + "\"dimension\":" + jsonString(lintIssue.getDimension()) + ","
                 + "\"targetId\":" + jsonString(lintIssue.getTargetId()) + ","
-                + "\"message\":" + jsonString(lintIssue.getMessage())
+                + "\"message\":" + jsonString(lintIssue.getMessage()) + ","
+                + "\"fixable\":" + lintIssue.isFixable() + ","
+                + "\"fixSuggestion\":" + jsonString(lintIssue.getFixSuggestion())
                 + "}";
     }
 
@@ -1059,6 +1347,57 @@ public class LatticeMcpTools {
     }
 
     /**
+     * 生成字符串预览。
+     *
+     * @param value 原始字符串
+     * @param limit 最大长度
+     * @return 预览文本
+     */
+    private String preview(String value, int limit) {
+        if (value == null || value.length() <= limit) {
+            return value;
+        }
+        return value.substring(0, limit);
+    }
+
+    /**
+     * 把 OffsetDateTime 格式化为稳定 JSON 输出。
+     *
+     * @param value 时间值
+     * @return 格式化后的时间字符串
+     */
+    private String formatOffsetDateTime(OffsetDateTime value) {
+        if (value == null) {
+            return null;
+        }
+        return value.format(JSON_DATE_TIME_FORMATTER);
+    }
+
+    /**
+     * 获取源文件仓储。
+     *
+     * @return 源文件仓储
+     */
+    private SourceFileJdbcRepository requireSourceFileJdbcRepository() {
+        if (sourceFileJdbcRepository == null) {
+            throw new UnsupportedOperationException("sourceFileJdbcRepository not configured");
+        }
+        return sourceFileJdbcRepository;
+    }
+
+    /**
+     * 获取文档章节选择器。
+     *
+     * @return 文档章节选择器
+     */
+    private DocumentSectionSelector requireDocumentSectionSelector() {
+        if (documentSectionSelector == null) {
+            throw new UnsupportedOperationException("documentSectionSelector not configured");
+        }
+        return documentSectionSelector;
+    }
+
+    /**
      * 获取知识检索服务。
      *
      * @return 知识检索服务
@@ -1104,6 +1443,18 @@ public class LatticeMcpTools {
             throw new UnsupportedOperationException("lintService not configured");
         }
         return lintService;
+    }
+
+    /**
+     * 获取 lint 自动修复服务。
+     *
+     * @return lint 自动修复服务
+     */
+    private LintFixService requireLintFixService() {
+        if (lintFixService == null) {
+            throw new UnsupportedOperationException("lintFixService not configured");
+        }
+        return lintFixService;
     }
 
     /**
@@ -1200,6 +1551,30 @@ public class LatticeMcpTools {
             throw new UnsupportedOperationException("inspectionAnswerImportService not configured");
         }
         return inspectionAnswerImportService;
+    }
+
+    /**
+     * 获取文章纠错服务。
+     *
+     * @return 文章纠错服务
+     */
+    private ArticleCorrectionService requireArticleCorrectionService() {
+        if (articleCorrectionService == null) {
+            throw new UnsupportedOperationException("articleCorrectionService not configured");
+        }
+        return articleCorrectionService;
+    }
+
+    /**
+     * 获取传播执行服务。
+     *
+     * @return 传播执行服务
+     */
+    private PropagateExecutionService requirePropagateExecutionService() {
+        if (propagateExecutionService == null) {
+            throw new UnsupportedOperationException("propagateExecutionService not configured");
+        }
+        return propagateExecutionService;
     }
 
     /**

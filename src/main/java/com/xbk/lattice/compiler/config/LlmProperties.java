@@ -24,6 +24,8 @@ public class LlmProperties {
 
     private boolean reviewEnabled = false;
 
+    private int maxInputChars = 64000;
+
     /**
      * 获取编译模型标识。
      *
@@ -130,5 +132,23 @@ public class LlmProperties {
      */
     public void setReviewEnabled(boolean reviewEnabled) {
         this.reviewEnabled = reviewEnabled;
+    }
+
+    /**
+     * 获取单次调用的最大输入字符数。
+     *
+     * @return 最大输入字符数
+     */
+    public int getMaxInputChars() {
+        return maxInputChars;
+    }
+
+    /**
+     * 设置单次调用的最大输入字符数。
+     *
+     * @param maxInputChars 最大输入字符数
+     */
+    public void setMaxInputChars(int maxInputChars) {
+        this.maxInputChars = maxInputChars;
     }
 }

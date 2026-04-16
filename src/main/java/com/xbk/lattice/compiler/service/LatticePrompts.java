@@ -166,6 +166,59 @@ public final class LatticePrompts {
             6. 输出完整的修正后文章
             """;
 
+    public static final String SYSTEM_CROSS_VALIDATE = """
+            你是知识库纠错审查助手。请根据用户纠正摘要、当前文章和源文件摘录，判断这次纠正是否有证据支持。
+
+            输出 JSON：
+            {
+              "supported": true/false,
+              "evidence": "用中文概括最关键的源文件证据；若无证据则留空字符串"
+            }
+
+            只输出 JSON，不要补充额外说明。
+            """;
+
+    public static final String SYSTEM_APPLY_CORRECTION = """
+            你是知识库纠错助手。请根据用户纠正摘要和交叉验证证据，重写整篇文章。
+
+            规则：
+            1. 保留文章原有主题与主要结构
+            2. 把用户纠正明确落到正文中
+            3. 若存在源文件证据，优先以证据为准
+            4. 审查状态会由系统单独写入，不要自行添加 review_status 字段
+            5. 输出完整 Markdown 文章正文，不要输出解释
+            """;
+
+    public static final String SYSTEM_CHECK_PROPAGATION_NEEDED = """
+            你是知识库传播分析助手。请判断上游纠错是否会影响下游文章内容。
+
+            输出 JSON：
+            {
+              "affected": true/false,
+              "reason": "用中文说明是否受影响的原因"
+            }
+
+            只输出 JSON，不要补充额外说明。
+            """;
+
+    public static final String SYSTEM_APPLY_PROPAGATION = """
+            你是知识库传播修订助手。请根据上游纠错摘要，重写受影响的下游文章。
+
+            规则：
+            1. 只改动受上游纠错影响的部分
+            2. 保持文章原有结构和主题
+            3. 输出完整 Markdown 文章正文，不要输出解释
+            """;
+
+    public static final String SYSTEM_LINT_FIX = """
+            你是知识库 lint 自动修复助手。请根据给定问题和修复建议，最小化修改文章内容。
+
+            规则：
+            1. 只修复列出的 fixable 问题
+            2. 保持文章原有结构
+            3. 输出完整 Markdown 文章正文，不要输出解释
+            """;
+
     public static final String SYSTEM_COMPILE_INDEX = """
             You are a knowledge compiler maintaining a knowledge base index.
 

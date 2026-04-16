@@ -144,7 +144,10 @@ public class IncrementalCompileService {
     ) {
         this.ingestNode = new IngestNode(compilerProperties);
         this.groupNode = new GroupNode(compilerProperties);
-        this.batchSplitNode = new BatchSplitNode(compilerProperties);
+        this.batchSplitNode = new BatchSplitNode(
+                compilerProperties,
+                new FileRankingService(compilerProperties)
+        );
         this.analyzeNode = new AnalyzeNode(llmGateway);
         this.crossGroupMergeNode = new CrossGroupMergeNode();
         this.compileArticleNode = new CompileArticleNode(

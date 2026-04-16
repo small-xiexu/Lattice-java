@@ -121,6 +121,75 @@ public class ArticleJdbcRepository {
     }
 
     /**
+     * 追加一条上游纠错标记。
+     *
+     * @param conceptId 下游概念标识
+     * @param fromConceptId 上游概念标识
+     * @param correctionSummary 纠错摘要
+     */
+    public void appendUpstreamCorrection(String conceptId, String fromConceptId, String correctionSummary) {
+        String sql = """
+                update articles
+                set metadata_json = jsonb_set(
+                    coalesce(metadata_json::jsonb, '{}'::jsonb),
+                    '{upstream_corrections}',
+                    coalesce(metadata_json::jsonb->'upstream_corrections', '[]'::jsonb)
+                        || jsonb_build_array(jsonb_build_object(
+                            'from', ?,
+                            'summary', ?,
+                            'marked_at', to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+                        ))
+                )
+                where concept_id = ?
+                """;
+        jdbcTemplate.update(sql, fromConceptId, correctionSummary, conceptId);
+    }
+
+    /**
+     * 查询带有指定上游纠错标记的下游文章。
+     *
+     * @param fromConceptId 上游概念标识
+     * @return 下游文章列表
+     */
+    public List<ArticleRecord> findWithUpstreamCorrections(String fromConceptId) {
+        String sql = """
+                select concept_id, title, content, lifecycle, compiled_at, source_paths, metadata_json,
+                       summary, referential_keywords, depends_on, related, confidence, review_status
+                from articles
+                where exists (
+                    select 1
+                    from jsonb_array_elements(coalesce(metadata_json::jsonb->'upstream_corrections', '[]'::jsonb)) as elem
+                    where elem->>'from' = ?
+                )
+                order by concept_id asc
+                """;
+        return jdbcTemplate.query(sql, this::mapArticleRecord, fromConceptId);
+    }
+
+    /**
+     * 清理指定下游文章中来自特定上游的纠错标记。
+     *
+     * @param downstreamConceptId 下游概念标识
+     * @param fromConceptId 上游概念标识
+     */
+    public void clearUpstreamCorrection(String downstreamConceptId, String fromConceptId) {
+        String sql = """
+                update articles
+                set metadata_json = jsonb_set(
+                    coalesce(metadata_json::jsonb, '{}'::jsonb),
+                    '{upstream_corrections}',
+                    (
+                        select coalesce(jsonb_agg(elem), '[]'::jsonb)
+                        from jsonb_array_elements(coalesce(metadata_json::jsonb->'upstream_corrections', '[]'::jsonb)) as elem
+                        where elem->>'from' <> ?
+                    )
+                )
+                where concept_id = ?
+                """;
+        jdbcTemplate.update(sql, fromConceptId, downstreamConceptId);
+    }
+
+    /**
      * 查询全部文章。
      *
      * @return 文章记录列表
