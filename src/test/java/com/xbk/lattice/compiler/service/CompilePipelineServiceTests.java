@@ -1,6 +1,7 @@
 package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
+import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -12,6 +13,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,6 +49,9 @@ class CompilePipelineServiceTests {
     @Autowired
     private ArticleJdbcRepository articleJdbcRepository;
 
+    @Autowired
+    private ArticleChunkJdbcRepository articleChunkJdbcRepository;
+
     /**
      * 验证源目录可按 groupKey 编译成 article 并落表。
      *
@@ -70,16 +75,17 @@ class CompilePipelineServiceTests {
                 "select count(*) from lattice_b1_compile_test.source_files",
                 Integer.class
         );
-        Integer articleChunkCount = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_b1_compile_test.article_chunks",
-                Integer.class
-        );
-
         Optional<ArticleRecord> paymentArticle = articleJdbcRepository.findByConceptId("payment");
         Optional<ArticleRecord> fulfillmentArticle = articleJdbcRepository.findByConceptId("fulfillment");
+        List<String> paymentChunks = articleChunkJdbcRepository.findChunkTexts("payment");
+        List<String> fulfillmentChunks = articleChunkJdbcRepository.findChunkTexts("fulfillment");
 
         assertThat(sourceFileCount).isEqualTo(3);
-        assertThat(articleChunkCount).isEqualTo(3);
+        assertThat(paymentChunks).isNotEmpty();
+        assertThat(fulfillmentChunks).isNotEmpty();
+        assertThat(String.join("\n", paymentChunks)).contains("# Payment");
+        assertThat(String.join("\n", paymentChunks)).contains("payment/order.md");
+        assertThat(String.join("\n", fulfillmentChunks)).contains("# Fulfillment");
         assertThat(paymentArticle).isPresent();
         assertThat(paymentArticle.orElseThrow().getTitle()).isEqualTo("Payment");
         assertThat(paymentArticle.orElseThrow().getContent()).contains("---");

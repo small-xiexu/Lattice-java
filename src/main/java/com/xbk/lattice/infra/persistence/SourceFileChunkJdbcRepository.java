@@ -89,6 +89,44 @@ public class SourceFileChunkJdbcRepository {
     }
 
     /**
+     * 按当前源文件正文全量重建全部 source file chunks。
+     *
+     * @param sourceFileRecords 源文件记录列表
+     * @return 重建的源文件数量
+     */
+    public int rebuildAll(List<SourceFileRecord> sourceFileRecords) {
+        if (jdbcTemplate == null) {
+            return 0;
+        }
+
+        jdbcTemplate.execute("TRUNCATE TABLE source_file_chunks RESTART IDENTITY");
+        int rebuiltCount = 0;
+        for (SourceFileRecord sourceFileRecord : sourceFileRecords) {
+            replaceChunksFromContent(
+                    sourceFileRecord.getFilePath(),
+                    sourceFileRecord.getContentText(),
+                    sourceFileRecord.isVerbatim()
+            );
+            rebuiltCount++;
+        }
+        return rebuiltCount;
+    }
+
+    /**
+     * 统计全部 source file chunk 数量。
+     *
+     * @return chunk 数量
+     */
+    public int countAll() {
+        if (jdbcTemplate == null) {
+            return 0;
+        }
+
+        Integer count = jdbcTemplate.queryForObject("select count(*) from source_file_chunks", Integer.class);
+        return count == null ? 0 : count;
+    }
+
+    /**
      * 查询全部源文件分块。
      *
      * @return 分块记录列表

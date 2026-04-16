@@ -232,10 +232,7 @@ public class IncrementalCompileService {
             }
             ArticleRecord updatedArticle = enhanceExistingArticle(existingArticle.orElseThrow(), entry.getValue());
             articleJdbcRepository.upsert(updatedArticle);
-            articleChunkJdbcRepository.replaceChunks(
-                    updatedArticle.getConceptId(),
-                    mergeChunkTexts(updatedArticle.getConceptId(), entry.getValue())
-            );
+            articleChunkJdbcRepository.replaceChunksFromContent(updatedArticle.getConceptId(), updatedArticle.getContent());
             articleVectorIndexService.indexArticle(updatedArticle);
             for (MergedConcept mergedConcept : entry.getValue()) {
                 handledConceptIds.add(mergedConcept.getConceptId());
@@ -251,7 +248,7 @@ public class IncrementalCompileService {
         for (MergedConcept mergedConcept : conceptsToCreate) {
             ArticleRecord createdArticle = compileArticleNode.compile(mergedConcept, sourceDir);
             articleJdbcRepository.upsert(createdArticle);
-            articleChunkJdbcRepository.replaceChunks(mergedConcept.getConceptId(), mergedConcept.getSnippets());
+            articleChunkJdbcRepository.replaceChunksFromContent(createdArticle.getConceptId(), createdArticle.getContent());
             articleVectorIndexService.indexArticle(createdArticle);
             handledConceptIds.add(mergedConcept.getConceptId());
             persistedCount++;
@@ -836,25 +833,6 @@ public class IncrementalCompileService {
             }
         }
         return new ArrayList<String>(keywords);
-    }
-
-    /**
-     * 合并文章 chunk。
-     *
-     * @param conceptId 概念标识
-     * @param mergedConcepts 增量概念
-     * @return 合并后的 chunk
-     */
-    private List<String> mergeChunkTexts(String conceptId, List<MergedConcept> mergedConcepts) {
-        LinkedHashSet<String> chunkTexts = new LinkedHashSet<String>(articleChunkJdbcRepository.findChunkTexts(conceptId));
-        for (MergedConcept mergedConcept : mergedConcepts) {
-            for (String snippet : mergedConcept.getSnippets()) {
-                if (snippet != null && !snippet.isBlank()) {
-                    chunkTexts.add(snippet.trim());
-                }
-            }
-        }
-        return new ArrayList<String>(chunkTexts);
     }
 
     /**

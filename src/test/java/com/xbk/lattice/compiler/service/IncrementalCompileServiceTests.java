@@ -95,7 +95,8 @@ class IncrementalCompileServiceTests {
         assertThat(updatedArticle.getContent()).contains("payment/update.json");
         assertThat(updatedArticle.getContent()).contains("## 增量更新");
         assertThat(updatedArticle.getContent()).contains("manual-review");
-        assertThat(articleChunkJdbcRepository.findChunkTexts("payment-timeout")).containsExactly("retry=3", "manual-review");
+        assertThat(String.join("\n", articleChunkJdbcRepository.findChunkTexts("payment-timeout"))).contains("## 增量更新");
+        assertThat(String.join("\n", articleChunkJdbcRepository.findChunkTexts("payment-timeout"))).contains("manual-review");
         assertThat(synthesisArtifactsService.getLastConcepts()).hasSize(1);
     }
 
@@ -143,7 +144,8 @@ class IncrementalCompileServiceTests {
         assertThat(createdArticle.getSourcePaths()).containsExactly("refund/new.json");
         assertThat(createdArticle.getContent()).contains("# Refund Status");
         assertThat(createdArticle.getContent()).contains("refund/new.json");
-        assertThat(articleChunkJdbcRepository.findChunkTexts("refund-status")).containsExactly("refund-created");
+        assertThat(String.join("\n", articleChunkJdbcRepository.findChunkTexts("refund-status"))).contains("# Refund Status");
+        assertThat(String.join("\n", articleChunkJdbcRepository.findChunkTexts("refund-status"))).contains("refund-created");
         assertThat(synthesisArtifactsService.getLastConcepts()).hasSize(1);
     }
 

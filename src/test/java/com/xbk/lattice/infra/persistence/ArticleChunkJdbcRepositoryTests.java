@@ -57,6 +57,7 @@ class ArticleChunkJdbcRepositoryTests {
      */
     @Test
     void shouldReplaceAndLoadChunksByConceptId() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_chunk_test.articles CASCADE");
         articleJdbcRepository.upsert(new ArticleRecord(
                 "payment",
                 "Payment",
@@ -71,5 +72,38 @@ class ArticleChunkJdbcRepositoryTests {
         List<String> chunks = articleChunkJdbcRepository.findChunkTexts("payment");
 
         assertThat(chunks).containsExactly("chunk-a", "chunk-b");
+    }
+
+    /**
+     * 验证可基于文章正文执行完整重建。
+     */
+    @Test
+    void shouldRebuildAllChunksFromArticleContent() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_chunk_test.articles CASCADE");
+        articleJdbcRepository.upsert(new ArticleRecord(
+                "payment",
+                "Payment",
+                """
+                        # Payment
+
+                        ## Timeout Rules
+                        - retry=3
+                        - interval=30s
+                        """,
+                "ACTIVE",
+                OffsetDateTime.now(),
+                List.of("payment/a.md"),
+                "{\"description\":\"payment summary\"}"
+        ));
+        articleChunkJdbcRepository.replaceChunks("payment", List.of("legacy-chunk"));
+
+        int rebuiltCount = articleChunkJdbcRepository.rebuildAll(articleJdbcRepository.findAll());
+        List<String> chunks = articleChunkJdbcRepository.findChunkTexts("payment");
+
+        assertThat(rebuiltCount).isEqualTo(1);
+        assertThat(chunks).hasSize(1);
+        assertThat(chunks.get(0)).contains("# Payment");
+        assertThat(chunks.get(0)).contains("## Timeout Rules");
+        assertThat(chunks.get(0)).doesNotContain("legacy-chunk");
     }
 }

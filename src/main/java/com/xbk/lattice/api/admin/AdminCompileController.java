@@ -1,5 +1,7 @@
 package com.xbk.lattice.api.admin;
 
+import com.xbk.lattice.compiler.service.ChunkRebuildResult;
+import com.xbk.lattice.compiler.service.ChunkRebuildService;
 import com.xbk.lattice.compiler.service.CompileJobService;
 import com.xbk.lattice.infra.persistence.CompileJobRecord;
 import org.springframework.context.annotation.Profile;
@@ -33,18 +35,23 @@ public class AdminCompileController {
 
     private final AdminUploadWorkspaceService adminUploadWorkspaceService;
 
+    private final ChunkRebuildService chunkRebuildService;
+
     /**
      * 创建管理侧编译控制器。
      *
      * @param compileJobService 编译作业服务
      * @param adminUploadWorkspaceService 上传暂存服务
+     * @param chunkRebuildService chunk 全量重建服务
      */
     public AdminCompileController(
             CompileJobService compileJobService,
-            AdminUploadWorkspaceService adminUploadWorkspaceService
+            AdminUploadWorkspaceService adminUploadWorkspaceService,
+            ChunkRebuildService chunkRebuildService
     ) {
         this.compileJobService = compileJobService;
         this.adminUploadWorkspaceService = adminUploadWorkspaceService;
+        this.chunkRebuildService = chunkRebuildService;
     }
 
     /**
@@ -126,6 +133,16 @@ public class AdminCompileController {
     @PostMapping("/api/v1/admin/jobs/{jobId}/retry")
     public AdminCompileJobResponse retry(@PathVariable String jobId) {
         return toResponse(compileJobService.retry(jobId));
+    }
+
+    /**
+     * 触发 article/source chunks 的后台全量重建。
+     *
+     * @return 重建结果
+     */
+    @PostMapping("/api/v1/admin/compile/rebuild-chunks")
+    public ChunkRebuildResult rebuildChunks() {
+        return chunkRebuildService.rebuildAll();
     }
 
     /**

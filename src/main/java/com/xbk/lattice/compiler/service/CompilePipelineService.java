@@ -315,7 +315,7 @@ public class CompilePipelineService {
         for (MergedConcept mergedConcept : pendingConcepts) {
             ArticleRecord articleRecord = compileArticleNode.compile(mergedConcept, sourceDir);
             articleJdbcRepository.upsert(articleRecord);
-            articleChunkJdbcRepository.replaceChunks(mergedConcept.getConceptId(), mergedConcept.getSnippets());
+            articleChunkJdbcRepository.replaceChunksFromContent(articleRecord.getConceptId(), articleRecord.getContent());
             articleVectorIndexService.indexArticle(articleRecord);
             compilationWalStore.markCommitted(jobId, mergedConcept.getConceptId());
             persistedCount++;

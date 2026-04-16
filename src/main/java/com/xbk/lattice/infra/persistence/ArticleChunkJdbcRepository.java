@@ -76,6 +76,40 @@ public class ArticleChunkJdbcRepository {
     }
 
     /**
+     * 按当前文章正文全量重建全部 article chunks。
+     *
+     * @param articleRecords 文章记录列表
+     * @return 重建的文章数量
+     */
+    public int rebuildAll(List<ArticleRecord> articleRecords) {
+        if (jdbcTemplate == null) {
+            return 0;
+        }
+
+        jdbcTemplate.execute("TRUNCATE TABLE article_chunks RESTART IDENTITY");
+        int rebuiltCount = 0;
+        for (ArticleRecord articleRecord : articleRecords) {
+            replaceChunksFromContent(articleRecord.getConceptId(), articleRecord.getContent());
+            rebuiltCount++;
+        }
+        return rebuiltCount;
+    }
+
+    /**
+     * 统计全部 article chunk 数量。
+     *
+     * @return chunk 数量
+     */
+    public int countAll() {
+        if (jdbcTemplate == null) {
+            return 0;
+        }
+
+        Integer count = jdbcTemplate.queryForObject("select count(*) from article_chunks", Integer.class);
+        return count == null ? 0 : count;
+    }
+
+    /**
      * 按 conceptId 查询 chunk 文本。
      *
      * @param conceptId 概念标识
