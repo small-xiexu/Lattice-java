@@ -39,25 +39,53 @@ public class ReviewFixService {
      * @return 修复后的文章；失败时返回 null
      */
     public String applyFix(String articleContent, List<ReviewIssue> reviewIssues, String sourceContents) {
+        return applyFix(articleContent, reviewIssues, sourceContents, null, null, "fixer");
+    }
+
+    /**
+     * 应用审查修复。
+     *
+     * @param articleContent 原始文章
+     * @param reviewIssues 审查问题
+     * @param sourceContents 源文件正文
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @return 修复后的文章；失败时返回 null
+     */
+    public String applyFix(
+            String articleContent,
+            List<ReviewIssue> reviewIssues,
+            String sourceContents,
+            String scopeId,
+            String scene,
+            String agentRole
+    ) {
         String issueList = buildIssueList(reviewIssues);
         String truncatedSources = sourceContents.length() > 10000
                 ? sourceContents.substring(0, 10000)
                 : sourceContents;
         try {
-            return llmGateway.compile(
-                    "review-fix",
-                    LatticePrompts.SYSTEM_REVIEW_FIX,
-                    """
-                            审查员发现的问题:
-                            %s
+            String userPrompt = """
+                    审查员发现的问题:
+                    %s
 
-                            原始文章:
-                            %s
+                    原始文章:
+                    %s
 
-                            源文件参考:
-                            %s
-                            """.formatted(issueList, articleContent, truncatedSources)
-            );
+                    源文件参考:
+                    %s
+                    """.formatted(issueList, articleContent, truncatedSources);
+            return scopeId == null || scopeId.isBlank()
+                    ? llmGateway.compile("review-fix", LatticePrompts.SYSTEM_REVIEW_FIX, userPrompt)
+                    : llmGateway.compileWithScope(
+                            scopeId,
+                            scene,
+                            agentRole,
+                            "review-fix",
+                            LatticePrompts.SYSTEM_REVIEW_FIX,
+                            userPrompt
+                    );
         }
         catch (RuntimeException ex) {
             return null;

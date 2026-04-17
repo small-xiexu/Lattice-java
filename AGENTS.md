@@ -9,6 +9,9 @@
 - 项目级 `maven-settings.xml`：仅在排查全局镜像、网络或仓库污染问题时临时创建；问题确认后应删除
 - 当前状态补充：由于全局 `alimaven` 握手不稳定，`.codex/maven-settings.xml` 已临时恢复用于开发验证；如全局镜像恢复正常，可再删除
 - 临时缓存目录：`.m2/`、`.m2-central/` 仅用于一次性验证，不是项目必需目录，可直接删除
+- PostgreSQL 默认依赖：使用现有 Docker 容器 `vector_db`（`0.0.0.0:5432->5432`），默认数据库为 `ai-rag-knowledge`
+- Redis 默认依赖：使用现有 Docker 容器 `redis`（`0.0.0.0:6379->6379`）
+- 日常开发、测试、回归默认直接复用上述现有容器；除非用户明确要求，不要自行 `docker compose up` 新的 PostgreSQL / Redis 实例，避免端口冲突和环境漂移
 
 ## 当前基线结论
 

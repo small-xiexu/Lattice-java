@@ -1,6 +1,6 @@
 package com.xbk.lattice.api.admin;
 
-import com.xbk.lattice.compiler.service.CompilePipelineService;
+import com.xbk.lattice.compiler.service.CompileApplicationFacade;
 import com.xbk.lattice.infra.persistence.ContributionJdbcRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -50,7 +50,7 @@ class AdminManagementControllerTests {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private CompilePipelineService compilePipelineService;
+    private CompileApplicationFacade compileApplicationFacade;
 
     @Autowired
     private ContributionJdbcRepository contributionJdbcRepository;
@@ -164,7 +164,7 @@ class AdminManagementControllerTests {
                         + "}",
                 StandardCharsets.UTF_8
         );
-        compilePipelineService.compile(tempDir);
+        compileApplicationFacade.compile(tempDir, false, null);
     }
 
     /**

@@ -32,9 +32,9 @@ class SemanticChunkerTests {
         List<TextChunk> chunks = semanticChunker.chunk(content, 45, 0.15f);
 
         assertThat(chunks).hasSizeGreaterThan(1);
-        assertThat(chunks.get(0).text()).contains("# Payment Timeout");
-        assertThat(chunks.stream().anyMatch(chunk -> chunk.text().contains("## Timeout Rules"))).isTrue();
-        assertThat(chunks.stream().anyMatch(chunk -> chunk.text().contains("## Fallback"))).isTrue();
+        assertThat(chunks.get(0).getText()).contains("# Payment Timeout");
+        assertThat(chunks.stream().anyMatch(chunk -> chunk.getText().contains("## Timeout Rules"))).isTrue();
+        assertThat(chunks.stream().anyMatch(chunk -> chunk.getText().contains("## Fallback"))).isTrue();
     }
 
     /**
@@ -58,10 +58,10 @@ class SemanticChunkerTests {
         List<TextChunk> chunks = semanticChunker.chunk(content, 40, 0.15f);
 
         long codeFenceChunkCount = chunks.stream()
-                .filter(chunk -> chunk.text().contains("```java") || chunk.text().contains("System.out.println"))
+                .filter(chunk -> chunk.getText().contains("```java") || chunk.getText().contains("System.out.println"))
                 .count();
         assertThat(codeFenceChunkCount).isEqualTo(1);
-        assertThat(chunks.stream().filter(chunk -> chunk.text().contains("```java")).findFirst().orElseThrow().text())
+        assertThat(chunks.stream().filter(chunk -> chunk.getText().contains("```java")).findFirst().orElseThrow().getText())
                 .contains("```java")
                 .contains("System.out.println(\"hello\")")
                 .contains("```");

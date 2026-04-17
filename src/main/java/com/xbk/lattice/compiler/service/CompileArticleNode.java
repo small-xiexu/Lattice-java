@@ -34,6 +34,10 @@ public class CompileArticleNode {
 
     private static final Pattern REFERENTIAL_PATTERN = Pattern.compile("[A-Za-z0-9_-]+=[A-Za-z0-9._-]+|\\b\\d{3,5}\\b");
 
+    private static final String COMPILE_SCENE = "compile";
+
+    private static final String WRITER_ROLE = "writer";
+
     private final LlmGateway llmGateway;
 
     private final SourceFileJdbcRepository sourceFileJdbcRepository;
@@ -107,21 +111,63 @@ public class CompileArticleNode {
     }
 
     /**
+     * 编译文章草稿。
+     *
+     * @param mergedConcept 合并概念
+     * @param sourceDir 输入目录
+     * @return 草稿文章记录
+     */
+    public ArticleRecord compileDraft(MergedConcept mergedConcept, Path sourceDir) {
+        return compileDraft(mergedConcept, sourceDir, null, COMPILE_SCENE);
+    }
+
+    /**
+     * 编译文章草稿。
+     *
+     * @param mergedConcept 合并概念
+     * @param sourceDir 输入目录
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @return 草稿文章记录
+     */
+    public ArticleRecord compileDraft(MergedConcept mergedConcept, Path sourceDir, String scopeId, String scene) {
+        String summary = buildSummary(mergedConcept);
+        List<String> referentialKeywords = extractReferentialKeywords(mergedConcept);
+        String markdownContent = tryCompileWithLlm(mergedConcept, summary, sourceDir, scopeId, scene);
+        if (markdownContent == null || markdownContent.isBlank()) {
+            markdownContent = buildFallbackMarkdown(mergedConcept, summary, referentialKeywords);
+        }
+        return new ArticleRecord(
+                mergedConcept.getConceptId(),
+                mergedConcept.getTitle(),
+                markdownContent,
+                "ACTIVE",
+                OffsetDateTime.now(),
+                mergedConcept.getSourcePaths(),
+                buildMetadataJson(mergedConcept),
+                summary,
+                referentialKeywords,
+                List.of(),
+                List.of(),
+                "medium",
+                "pending"
+        );
+    }
+
+    /**
      * 编译文章记录。
      *
      * @param mergedConcept 合并概念
      * @param sourceDir 输入目录
      * @return 文章记录
+     * @deprecated 图流程已通过独立审查节点处理，此方法仅保留用于过渡期测试兼容
      */
+    @Deprecated
     public ArticleRecord compile(MergedConcept mergedConcept, Path sourceDir) {
-        String summary = buildSummary(mergedConcept);
-        List<String> referentialKeywords = extractReferentialKeywords(mergedConcept);
-        String markdownContent = tryCompileWithLlm(mergedConcept, summary, sourceDir);
-        if (markdownContent == null || markdownContent.isBlank()) {
-            markdownContent = buildFallbackMarkdown(mergedConcept, summary, referentialKeywords);
-        }
+        ArticleRecord draftArticle = compileDraft(mergedConcept, sourceDir);
+        String markdownContent = draftArticle.getContent();
         String reviewStatus = "pending";
-        String sourceContents = buildSourceContents(mergedConcept);
+        String sourceContents = buildSourceContents(draftArticle.getSourcePaths());
         if (articleReviewerGateway != null && articleReviewerGateway.isEnabled()) {
             ReviewResult reviewResult = articleReviewerGateway.review(markdownContent, sourceContents);
             if (reviewResult.isPass()) {
@@ -139,21 +185,59 @@ public class CompileArticleNode {
                     reviewStatus = "needs_human_review";
                 }
             }
-            markdownContent = replaceReviewStatus(markdownContent, reviewStatus);
         }
+        return replaceReviewStatus(draftArticle, reviewStatus, markdownContent);
+    }
+
+    /**
+     * 基于来源路径构建源文件正文。
+     *
+     * @param sourcePaths 来源路径列表
+     * @return 源文件正文
+     */
+    public String buildSourceContents(List<String> sourcePaths) {
+        StringBuilder builder = new StringBuilder();
+        for (String sourcePath : sourcePaths) {
+            Optional<SourceFileRecord> sourceFileRecord = sourceFileJdbcRepository.findByPath(sourcePath);
+            if (sourceFileRecord.isEmpty()) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append("\n\n");
+            }
+            builder.append("=== Source: ").append(sourcePath).append(" ===").append("\n");
+            builder.append(sourceFileRecord.orElseThrow().getContentText()).append("\n");
+            builder.append("=== End ===");
+        }
+        return builder.toString();
+    }
+
+    /**
+     * 基于新状态替换文章 frontmatter 并返回更新后的文章记录。
+     *
+     * @param articleRecord 原始文章
+     * @param reviewStatus 审查状态
+     * @param markdownContent Markdown 内容
+     * @return 更新后的文章记录
+     */
+    public ArticleRecord replaceReviewStatus(
+            ArticleRecord articleRecord,
+            String reviewStatus,
+            String markdownContent
+    ) {
         return new ArticleRecord(
-                mergedConcept.getConceptId(),
-                mergedConcept.getTitle(),
-                markdownContent,
-                "ACTIVE",
+                articleRecord.getConceptId(),
+                articleRecord.getTitle(),
+                replaceReviewStatus(markdownContent, reviewStatus),
+                articleRecord.getLifecycle(),
                 OffsetDateTime.now(),
-                mergedConcept.getSourcePaths(),
-                buildMetadataJson(mergedConcept),
-                summary,
-                referentialKeywords,
-                List.of(),
-                List.of(),
-                "medium",
+                articleRecord.getSourcePaths(),
+                articleRecord.getMetadataJson(),
+                articleRecord.getSummary(),
+                articleRecord.getReferentialKeywords(),
+                articleRecord.getDependsOn(),
+                articleRecord.getRelated(),
+                articleRecord.getConfidence(),
                 reviewStatus
         );
     }
@@ -165,7 +249,13 @@ public class CompileArticleNode {
      * @param summary 摘要
      * @return Markdown 文章；失败时返回 null
      */
-    private String tryCompileWithLlm(MergedConcept mergedConcept, String summary, Path sourceDir) {
+    private String tryCompileWithLlm(
+            MergedConcept mergedConcept,
+            String summary,
+            Path sourceDir,
+            String scopeId,
+            String scene
+    ) {
         if (llmGateway == null) {
             return null;
         }
@@ -173,11 +263,17 @@ public class CompileArticleNode {
             String systemPrompt = schemaAwarePrompts == null
                     ? LatticePrompts.SYSTEM_COMPILE_ARTICLE
                     : schemaAwarePrompts.getCompileArticlePrompt(sourceDir);
-            return llmGateway.compile(
-                    "compile-article",
-                    systemPrompt,
-                    buildCompilePrompt(mergedConcept, summary)
-            );
+            String userPrompt = buildCompilePrompt(mergedConcept, summary);
+            return scopeId == null || scopeId.isBlank()
+                    ? llmGateway.compile("compile-article", systemPrompt, userPrompt)
+                    : llmGateway.compileWithScope(
+                            scopeId,
+                            scene,
+                            WRITER_ROLE,
+                            "compile-article",
+                            systemPrompt,
+                            userPrompt
+                    );
         }
         catch (RuntimeException ex) {
             return null;
@@ -221,20 +317,7 @@ public class CompileArticleNode {
      * @return 源文件正文
      */
     private String buildSourceContents(MergedConcept mergedConcept) {
-        StringBuilder builder = new StringBuilder();
-        for (String sourcePath : mergedConcept.getSourcePaths()) {
-            Optional<SourceFileRecord> sourceFileRecord = sourceFileJdbcRepository.findByPath(sourcePath);
-            if (sourceFileRecord.isEmpty()) {
-                continue;
-            }
-            if (builder.length() > 0) {
-                builder.append("\n\n");
-            }
-            builder.append("=== Source: ").append(sourcePath).append(" ===").append("\n");
-            builder.append(sourceFileRecord.orElseThrow().getContentText()).append("\n");
-            builder.append("=== End ===");
-        }
-        return builder.toString();
+        return buildSourceContents(mergedConcept.getSourcePaths());
     }
 
     /**
@@ -279,7 +362,7 @@ public class CompileArticleNode {
      * @param reviewStatus 审查状态
      * @return 更新后的 Markdown
      */
-    private String replaceReviewStatus(String markdownContent, String reviewStatus) {
+    public String replaceReviewStatus(String markdownContent, String reviewStatus) {
         return markdownContent.replaceFirst("review_status:\\s*\\w+", "review_status: " + reviewStatus);
     }
 

@@ -1,6 +1,6 @@
 package com.xbk.lattice.api.query;
 
-import com.xbk.lattice.compiler.service.CompilePipelineService;
+import com.xbk.lattice.compiler.service.CompileApplicationFacade;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,7 +50,7 @@ class QueryControllerTests {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private CompilePipelineService compilePipelineService;
+    private CompileApplicationFacade compileApplicationFacade;
 
     /**
      * 验证查询接口可返回最小答案、来源和命中文章信息。
@@ -78,7 +78,7 @@ class QueryControllerTests {
                         + "}",
                 StandardCharsets.UTF_8
         );
-        compilePipelineService.compile(tempDir);
+        compileApplicationFacade.compile(tempDir, false, null);
 
         mockMvc.perform(post("/api/v1/query")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -127,7 +127,7 @@ class QueryControllerTests {
                         """,
                 StandardCharsets.UTF_8
         );
-        compilePipelineService.compile(tempDir);
+        compileApplicationFacade.compile(tempDir, false, null);
 
         mockMvc.perform(post("/api/v1/query")
                         .contentType(MediaType.APPLICATION_JSON)

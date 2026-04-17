@@ -5,6 +5,7 @@ import org.eclipse.jgit.api.Status;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
 import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.ObjectReader;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
@@ -151,8 +152,8 @@ public class VaultGitService {
             RevCommit newCommit = revWalk.parseCommit(ObjectId.fromString(newCommitId));
             CanonicalTreeParser oldTree = new CanonicalTreeParser();
             CanonicalTreeParser newTree = new CanonicalTreeParser();
-            try (var oldReader = repository.newObjectReader();
-                 var newReader = repository.newObjectReader()) {
+            try (ObjectReader oldReader = repository.newObjectReader();
+                 ObjectReader newReader = repository.newObjectReader()) {
                 oldTree.reset(oldReader, oldCommit.getTree());
                 newTree.reset(newReader, newCommit.getTree());
             }
@@ -160,10 +161,10 @@ public class VaultGitService {
             List<DiffEntry> diffEntries = diffFormatter.scan(oldTree, newTree);
             List<VaultDiffSummary> summaries = new ArrayList<VaultDiffSummary>();
             for (DiffEntry diffEntry : diffEntries) {
-                String filePath = switch (diffEntry.getChangeType()) {
-                    case DELETE -> diffEntry.getOldPath();
-                    default -> diffEntry.getNewPath();
-                };
+                String filePath = diffEntry.getNewPath();
+                if (DiffEntry.ChangeType.DELETE == diffEntry.getChangeType()) {
+                    filePath = diffEntry.getOldPath();
+                }
                 summaries.add(new VaultDiffSummary(filePath, diffEntry.getChangeType().name()));
             }
             return summaries;

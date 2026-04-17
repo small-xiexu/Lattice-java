@@ -80,8 +80,8 @@ public class SourceFileChunkJdbcRepository {
         for (TextChunk textChunk : textChunks) {
             records.add(new SourceFileChunkRecord(
                     filePath,
-                    textChunk.chunkIndex(),
-                    textChunk.text(),
+                    textChunk.getChunkIndex(),
+                    textChunk.getText(),
                     verbatim
             ));
         }

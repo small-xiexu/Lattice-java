@@ -130,6 +130,17 @@ public class CompileJobService {
     }
 
     /**
+     * 同步重试指定失败作业。
+     *
+     * @param jobId 作业标识
+     * @return 更新后的作业
+     */
+    public CompileJobRecord retryNow(String jobId) {
+        retry(jobId);
+        return executeJob(jobId);
+    }
+
+    /**
      * 执行指定作业。
      *
      * @param jobId 作业标识

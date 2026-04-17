@@ -3,6 +3,7 @@ package com.xbk.lattice.compiler.service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -28,7 +29,7 @@ public class DocumentSectionSelector {
      * @return 选出的内容片段
      */
     public String select(String content, List<String> conceptTerms, int maxChars) {
-        if (content == null || content.isBlank()) {
+        if (isBlank(content)) {
             return "";
         }
         if (content.length() <= maxChars) {
@@ -62,7 +63,7 @@ public class DocumentSectionSelector {
      */
     private boolean matchesAny(String lowercaseSection, List<String> conceptTerms) {
         for (String conceptTerm : conceptTerms) {
-            if (conceptTerm == null || conceptTerm.isBlank()) {
+            if (isBlank(conceptTerm)) {
                 continue;
             }
             if (lowercaseSection.contains(conceptTerm.toLowerCase(Locale.ROOT))) {
@@ -80,7 +81,7 @@ public class DocumentSectionSelector {
      */
     public List<DocumentHeading> toc(String content) {
         List<DocumentHeading> headings = new ArrayList<DocumentHeading>();
-        if (content == null || content.isBlank()) {
+        if (isBlank(content)) {
             return headings;
         }
         String[] lines = content.split("\\R", -1);
@@ -107,7 +108,7 @@ public class DocumentSectionSelector {
         }
         DocumentHeading target = null;
         for (DocumentHeading item : headings) {
-            if (item.heading().equalsIgnoreCase(normalizeHeading(heading))) {
+            if (item.getHeading().equalsIgnoreCase(normalizeHeading(heading))) {
                 target = item;
                 break;
             }
@@ -116,11 +117,11 @@ public class DocumentSectionSelector {
             return new DocumentSection(normalizeHeading(heading), "", 0);
         }
         String[] lines = content.split("\\R", -1);
-        int startIndex = Math.max(target.line() - 1, 0);
+        int startIndex = Math.max(target.getLine() - 1, 0);
         int endIndex = lines.length;
         for (DocumentHeading item : headings) {
-            if (item.line() > target.line()) {
-                endIndex = item.line() - 1;
+            if (item.getLine() > target.getLine()) {
+                endIndex = item.getLine() - 1;
                 break;
             }
         }
@@ -131,7 +132,7 @@ public class DocumentSectionSelector {
             }
             builder.append(lines[index]);
         }
-        return new DocumentSection(target.heading(), builder.toString(), target.line());
+        return new DocumentSection(target.getHeading(), builder.toString(), target.getLine());
     }
 
     private DocumentHeading parseHeading(String line, int lineNumber) {
@@ -157,23 +158,207 @@ public class DocumentSectionSelector {
         return heading.trim();
     }
 
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
     /**
      * 文档标题项。
      *
-     * @param heading 标题
-     * @param level 标题层级
-     * @param line 行号
+     * 职责：承载标题文本、层级与行号
+     *
+     * @author xiexu
      */
-    public record DocumentHeading(String heading, int level, int line) {
+    public static final class DocumentHeading {
+
+        private final String heading;
+
+        private final int level;
+
+        private final int line;
+
+        /**
+         * 创建文档标题项。
+         *
+         * @param heading 标题
+         * @param level 标题层级
+         * @param line 行号
+         */
+        public DocumentHeading(String heading, int level, int line) {
+            this.heading = heading;
+            this.level = level;
+            this.line = line;
+        }
+
+        /**
+         * 返回标题文本。
+         *
+         * @return 标题文本
+         */
+        public String getHeading() {
+            return heading;
+        }
+
+        /**
+         * 返回标题层级。
+         *
+         * @return 标题层级
+         */
+        public int getLevel() {
+            return level;
+        }
+
+        /**
+         * 返回标题所在行号。
+         *
+         * @return 行号
+         */
+        public int getLine() {
+            return line;
+        }
+
+        /**
+         * 比较标题项是否相等。
+         *
+         * @param other 另一对象
+         * @return 是否相等
+         */
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof DocumentHeading)) {
+                return false;
+            }
+            DocumentHeading that = (DocumentHeading) other;
+            return level == that.level
+                    && line == that.line
+                    && Objects.equals(heading, that.heading);
+        }
+
+        /**
+         * 返回哈希值。
+         *
+         * @return 哈希值
+         */
+        @Override
+        public int hashCode() {
+            return Objects.hash(heading, level, line);
+        }
+
+        /**
+         * 返回标题项描述。
+         *
+         * @return 标题项描述
+         */
+        @Override
+        public String toString() {
+            return "DocumentHeading{"
+                    + "heading='" + heading + '\''
+                    + ", level=" + level
+                    + ", line=" + line
+                    + '}';
+        }
     }
 
     /**
      * 文档章节读取结果。
      *
-     * @param heading 标题
-     * @param content 章节内容
-     * @param line 标题起始行号
+     * 职责：承载章节标题、正文与起始行号
+     *
+     * @author xiexu
      */
-    public record DocumentSection(String heading, String content, int line) {
+    public static final class DocumentSection {
+
+        private final String heading;
+
+        private final String content;
+
+        private final int line;
+
+        /**
+         * 创建文档章节读取结果。
+         *
+         * @param heading 标题
+         * @param content 章节内容
+         * @param line 标题起始行号
+         */
+        public DocumentSection(String heading, String content, int line) {
+            this.heading = heading;
+            this.content = content;
+            this.line = line;
+        }
+
+        /**
+         * 返回章节标题。
+         *
+         * @return 章节标题
+         */
+        public String getHeading() {
+            return heading;
+        }
+
+        /**
+         * 返回章节正文。
+         *
+         * @return 章节正文
+         */
+        public String getContent() {
+            return content;
+        }
+
+        /**
+         * 返回标题起始行号。
+         *
+         * @return 起始行号
+         */
+        public int getLine() {
+            return line;
+        }
+
+        /**
+         * 比较章节结果是否相等。
+         *
+         * @param other 另一对象
+         * @return 是否相等
+         */
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof DocumentSection)) {
+                return false;
+            }
+            DocumentSection that = (DocumentSection) other;
+            return line == that.line
+                    && Objects.equals(heading, that.heading)
+                    && Objects.equals(content, that.content);
+        }
+
+        /**
+         * 返回哈希值。
+         *
+         * @return 哈希值
+         */
+        @Override
+        public int hashCode() {
+            return Objects.hash(heading, content, line);
+        }
+
+        /**
+         * 返回章节结果描述。
+         *
+         * @return 章节结果描述
+         */
+        @Override
+        public String toString() {
+            return "DocumentSection{"
+                    + "heading='" + heading + '\''
+                    + ", content='" + content + '\''
+                    + ", line=" + line
+                    + '}';
+        }
     }
 }

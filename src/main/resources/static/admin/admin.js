@@ -1,6 +1,9 @@
 (function () {
     const state = {
-        selectedConceptId: null
+        selectedConceptId: null,
+        llmConnections: [],
+        llmModels: [],
+        llmBindings: []
     };
 
     document.addEventListener("DOMContentLoaded", function () {
@@ -17,6 +20,13 @@
         document.getElementById("submit-compile-job").addEventListener("click", submitCompileJob);
         document.getElementById("submit-upload-job").addEventListener("click", uploadAndCompile);
         document.getElementById("rebuild-chunks").addEventListener("click", rebuildChunks);
+        document.getElementById("refresh-llm").addEventListener("click", loadLlmConfig);
+        document.getElementById("save-llm-connection").addEventListener("click", saveLlmConnection);
+        document.getElementById("reset-llm-connection").addEventListener("click", resetLlmConnectionForm);
+        document.getElementById("save-llm-model").addEventListener("click", saveLlmModel);
+        document.getElementById("reset-llm-model").addEventListener("click", resetLlmModelForm);
+        document.getElementById("save-llm-binding").addEventListener("click", saveLlmBinding);
+        document.getElementById("reset-llm-binding").addEventListener("click", resetLlmBindingForm);
         document.getElementById("admin-vault-export").addEventListener("click", exportVaultFromAdmin);
         document.getElementById("admin-vault-sync").addEventListener("click", syncVaultFromAdmin);
         document.getElementById("admin-repo-diff").addEventListener("click", loadRepoDiffFromAdmin);
@@ -68,6 +78,7 @@
             loadArticles(),
             loadPendingQueries(),
             loadJobs(),
+            loadLlmConfig(),
             refreshGovernance()
         ]);
         setStatus("知识库工作台已刷新");
@@ -307,6 +318,193 @@
         }
         catch (error) {
             showError("加载作业列表失败", error);
+        }
+    }
+
+    async function loadLlmConfig() {
+        try {
+            const responses = await Promise.all([
+                fetchJson("/api/v1/admin/llm/connections"),
+                fetchJson("/api/v1/admin/llm/models"),
+                fetchJson("/api/v1/admin/llm/bindings")
+            ]);
+            state.llmConnections = responses[0].items || [];
+            state.llmModels = responses[1].items || [];
+            state.llmBindings = responses[2].items || [];
+            renderLlmConnectionOptions();
+            renderLlmModelOptions();
+            renderLlmConnectionList(state.llmConnections);
+            renderLlmModelList(state.llmModels);
+            renderLlmBindingList(state.llmBindings);
+        }
+        catch (error) {
+            showError("加载 LLM 配置失败", error);
+        }
+    }
+
+    async function saveLlmConnection() {
+        const id = document.getElementById("llm-connection-id").value.trim();
+        const payload = {
+            connectionCode: document.getElementById("llm-connection-code").value.trim(),
+            providerType: document.getElementById("llm-provider-type").value,
+            baseUrl: document.getElementById("llm-base-url").value.trim(),
+            apiKey: document.getElementById("llm-api-key").value.trim(),
+            remarks: document.getElementById("llm-connection-remarks").value.trim(),
+            operator: document.getElementById("llm-connection-operator").value.trim() || "admin",
+            enabled: document.getElementById("llm-connection-enabled").checked
+        };
+        if (!payload.connectionCode || !payload.baseUrl) {
+            setStatus("请填写连接编码和 Base URL");
+            return;
+        }
+        if (!id && !payload.apiKey) {
+            setStatus("新增连接时必须填写 API Key");
+            return;
+        }
+        try {
+            const result = await fetchJson(id
+                    ? "/api/v1/admin/llm/connections/" + encodeURIComponent(id)
+                    : "/api/v1/admin/llm/connections", {
+                method: id ? "PUT" : "POST",
+                body: JSON.stringify(payload)
+            });
+            renderGlobalResult(result);
+            setStatus(id ? "连接配置已更新" : "连接配置已创建");
+            resetLlmConnectionForm();
+            await loadLlmConfig();
+        }
+        catch (error) {
+            renderGlobalResultError("保存连接配置失败", error);
+            showError("保存连接配置失败", error);
+        }
+    }
+
+    async function saveLlmModel() {
+        const id = document.getElementById("llm-model-id").value.trim();
+        const payload = {
+            modelCode: document.getElementById("llm-model-code").value.trim(),
+            connectionId: parseOptionalInteger(document.getElementById("llm-model-connection-id").value),
+            modelName: document.getElementById("llm-model-name").value.trim(),
+            temperature: parseOptionalDecimal(document.getElementById("llm-model-temperature").value),
+            maxTokens: parseOptionalInteger(document.getElementById("llm-model-max-tokens").value),
+            timeoutSeconds: parseOptionalInteger(document.getElementById("llm-model-timeout-seconds").value),
+            inputPricePer1kTokens: parseOptionalDecimal(document.getElementById("llm-model-input-price").value),
+            outputPricePer1kTokens: parseOptionalDecimal(document.getElementById("llm-model-output-price").value),
+            extraOptionsJson: document.getElementById("llm-model-extra-options").value.trim() || "{}",
+            remarks: document.getElementById("llm-model-remarks").value.trim(),
+            operator: document.getElementById("llm-model-operator").value.trim() || "admin",
+            enabled: document.getElementById("llm-model-enabled").checked
+        };
+        if (!payload.modelCode || !payload.modelName || !payload.connectionId) {
+            setStatus("请填写模型编码、模型名称并选择连接");
+            return;
+        }
+        try {
+            const result = await fetchJson(id
+                    ? "/api/v1/admin/llm/models/" + encodeURIComponent(id)
+                    : "/api/v1/admin/llm/models", {
+                method: id ? "PUT" : "POST",
+                body: JSON.stringify(payload)
+            });
+            renderGlobalResult(result);
+            setStatus(id ? "模型配置已更新" : "模型配置已创建");
+            resetLlmModelForm();
+            await loadLlmConfig();
+        }
+        catch (error) {
+            renderGlobalResultError("保存模型配置失败", error);
+            showError("保存模型配置失败", error);
+        }
+    }
+
+    async function saveLlmBinding() {
+        const id = document.getElementById("llm-binding-id").value.trim();
+        const payload = {
+            scene: document.getElementById("llm-binding-scene").value,
+            agentRole: document.getElementById("llm-binding-agent-role").value,
+            primaryModelProfileId: parseOptionalInteger(document.getElementById("llm-binding-primary-model-id").value),
+            fallbackModelProfileId: parseOptionalInteger(document.getElementById("llm-binding-fallback-model-id").value),
+            routeLabel: document.getElementById("llm-binding-route-label").value.trim(),
+            remarks: document.getElementById("llm-binding-remarks").value.trim(),
+            operator: document.getElementById("llm-binding-operator").value.trim() || "admin",
+            enabled: document.getElementById("llm-binding-enabled").checked
+        };
+        if (!payload.primaryModelProfileId || !payload.routeLabel) {
+            setStatus("请为绑定选择主模型并填写路由标签");
+            return;
+        }
+        try {
+            const result = await fetchJson(id
+                    ? "/api/v1/admin/llm/bindings/" + encodeURIComponent(id)
+                    : "/api/v1/admin/llm/bindings", {
+                method: id ? "PUT" : "POST",
+                body: JSON.stringify(payload)
+            });
+            renderGlobalResult(result);
+            setStatus(id ? "Agent 绑定已更新" : "Agent 绑定已创建");
+            resetLlmBindingForm();
+            await loadLlmConfig();
+        }
+        catch (error) {
+            renderGlobalResultError("保存 Agent 绑定失败", error);
+            showError("保存 Agent 绑定失败", error);
+        }
+    }
+
+    async function deleteLlmConnection(id) {
+        if (!window.confirm("将删除连接配置 " + id + "，确认继续吗？")) {
+            return;
+        }
+        try {
+            const result = await fetchJson("/api/v1/admin/llm/connections/" + encodeURIComponent(id), {
+                method: "DELETE"
+            });
+            renderGlobalResult(result);
+            setStatus("连接配置已删除");
+            resetLlmConnectionForm();
+            await loadLlmConfig();
+        }
+        catch (error) {
+            renderGlobalResultError("删除连接配置失败", error);
+            showError("删除连接配置失败", error);
+        }
+    }
+
+    async function deleteLlmModel(id) {
+        if (!window.confirm("将删除模型配置 " + id + "，确认继续吗？")) {
+            return;
+        }
+        try {
+            const result = await fetchJson("/api/v1/admin/llm/models/" + encodeURIComponent(id), {
+                method: "DELETE"
+            });
+            renderGlobalResult(result);
+            setStatus("模型配置已删除");
+            resetLlmModelForm();
+            await loadLlmConfig();
+        }
+        catch (error) {
+            renderGlobalResultError("删除模型配置失败", error);
+            showError("删除模型配置失败", error);
+        }
+    }
+
+    async function deleteLlmBinding(id) {
+        if (!window.confirm("将删除 Agent 绑定 " + id + "，确认继续吗？")) {
+            return;
+        }
+        try {
+            const result = await fetchJson("/api/v1/admin/llm/bindings/" + encodeURIComponent(id), {
+                method: "DELETE"
+            });
+            renderGlobalResult(result);
+            setStatus("Agent 绑定已删除");
+            resetLlmBindingForm();
+            await loadLlmConfig();
+        }
+        catch (error) {
+            renderGlobalResultError("删除 Agent 绑定失败", error);
+            showError("删除 Agent 绑定失败", error);
         }
     }
 
@@ -966,6 +1164,258 @@
         });
     }
 
+    function renderLlmConnectionOptions() {
+        const select = document.getElementById("llm-model-connection-id");
+        if (!select) {
+            return;
+        }
+        if (!state.llmConnections || state.llmConnections.length === 0) {
+            select.innerHTML = "<option value=''>暂无连接，请先创建</option>";
+            return;
+        }
+        select.innerHTML = state.llmConnections.map(function (item) {
+            return "<option value='" + escapeHtml(String(item.id)) + "'>"
+                    + escapeHtml(item.connectionCode + " (" + item.providerType + ")")
+                    + "</option>";
+        }).join("");
+    }
+
+    function renderLlmModelOptions() {
+        const primarySelect = document.getElementById("llm-binding-primary-model-id");
+        const fallbackSelect = document.getElementById("llm-binding-fallback-model-id");
+        if (!primarySelect || !fallbackSelect) {
+            return;
+        }
+        if (!state.llmModels || state.llmModels.length === 0) {
+            primarySelect.innerHTML = "<option value=''>暂无模型，请先创建</option>";
+            fallbackSelect.innerHTML = "<option value=''>不配置</option>";
+            return;
+        }
+        const options = state.llmModels.map(function (item) {
+            return "<option value='" + escapeHtml(String(item.id)) + "'>"
+                    + escapeHtml(item.modelCode + " -> " + item.modelName)
+                    + "</option>";
+        }).join("");
+        primarySelect.innerHTML = options;
+        fallbackSelect.innerHTML = "<option value=''>不配置</option>" + options;
+    }
+
+    function renderLlmConnectionList(items) {
+        const container = document.getElementById("llm-connection-list");
+        if (!container) {
+            return;
+        }
+        if (!items || items.length === 0) {
+            container.innerHTML = "<div class='job-card'><p class='item-summary'>还没有连接配置，可以先新增一个 Provider 连接。</p></div>";
+            return;
+        }
+        container.innerHTML = "<table class='simple-table'>"
+                + "<thead><tr><th>编码</th><th>Provider</th><th>Base URL</th><th>API Key</th><th>状态</th><th>操作</th></tr></thead>"
+                + "<tbody>"
+                + items.map(function (item) {
+                    return "<tr>"
+                            + "<td>" + escapeHtml(item.connectionCode) + "</td>"
+                            + "<td>" + escapeHtml(item.providerType) + "</td>"
+                            + "<td>" + escapeHtml(item.baseUrl) + "</td>"
+                            + "<td>" + escapeHtml(item.apiKeyMask || "未设置") + "</td>"
+                            + "<td>" + renderBadge(item.enabled ? "ACTIVE" : "ARCHIVED") + "</td>"
+                            + "<td class='card-actions'>"
+                            + "<button class='ghost-btn' data-edit-llm-connection='" + escapeHtml(String(item.id)) + "' type='button'>编辑</button>"
+                            + "<button class='warn-btn' data-delete-llm-connection='" + escapeHtml(String(item.id)) + "' type='button'>删除</button>"
+                            + "</td>"
+                            + "</tr>";
+                }).join("")
+                + "</tbody></table>";
+        container.querySelectorAll("[data-edit-llm-connection]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                editLlmConnection(button.dataset.editLlmConnection);
+            });
+        });
+        container.querySelectorAll("[data-delete-llm-connection]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                deleteLlmConnection(button.dataset.deleteLlmConnection);
+            });
+        });
+    }
+
+    function renderLlmModelList(items) {
+        const container = document.getElementById("llm-model-list");
+        if (!container) {
+            return;
+        }
+        if (!items || items.length === 0) {
+            container.innerHTML = "<div class='job-card'><p class='item-summary'>还没有模型配置，可以先为连接添加一个模型。</p></div>";
+            return;
+        }
+        container.innerHTML = "<table class='simple-table'>"
+                + "<thead><tr><th>模型编码</th><th>模型名称</th><th>连接</th><th>价格</th><th>状态</th><th>操作</th></tr></thead>"
+                + "<tbody>"
+                + items.map(function (item) {
+                    return "<tr>"
+                            + "<td>" + escapeHtml(item.modelCode) + "</td>"
+                            + "<td>" + escapeHtml(item.modelName) + "</td>"
+                            + "<td>" + escapeHtml(String(item.connectionId)) + "</td>"
+                            + "<td>in " + escapeHtml(String(item.inputPricePer1kTokens || "-"))
+                            + " / out " + escapeHtml(String(item.outputPricePer1kTokens || "-")) + "</td>"
+                            + "<td>" + renderBadge(item.enabled ? "ACTIVE" : "ARCHIVED") + "</td>"
+                            + "<td class='card-actions'>"
+                            + "<button class='ghost-btn' data-edit-llm-model='" + escapeHtml(String(item.id)) + "' type='button'>编辑</button>"
+                            + "<button class='warn-btn' data-delete-llm-model='" + escapeHtml(String(item.id)) + "' type='button'>删除</button>"
+                            + "</td>"
+                            + "</tr>";
+                }).join("")
+                + "</tbody></table>";
+        container.querySelectorAll("[data-edit-llm-model]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                editLlmModel(button.dataset.editLlmModel);
+            });
+        });
+        container.querySelectorAll("[data-delete-llm-model]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                deleteLlmModel(button.dataset.deleteLlmModel);
+            });
+        });
+    }
+
+    function renderLlmBindingList(items) {
+        const container = document.getElementById("llm-binding-list");
+        if (!container) {
+            return;
+        }
+        if (!items || items.length === 0) {
+            container.innerHTML = "<div class='job-card'><p class='item-summary'>还没有 Agent 绑定，compile 侧会继续走本地 fallback 配置。</p></div>";
+            return;
+        }
+        container.innerHTML = "<table class='simple-table'>"
+                + "<thead><tr><th>场景</th><th>角色</th><th>主模型</th><th>备用</th><th>路由标签</th><th>状态</th><th>操作</th></tr></thead>"
+                + "<tbody>"
+                + items.map(function (item) {
+                    return "<tr>"
+                            + "<td>" + escapeHtml(item.scene) + "</td>"
+                            + "<td>" + escapeHtml(item.agentRole) + "</td>"
+                            + "<td>" + escapeHtml(String(item.primaryModelProfileId)) + "</td>"
+                            + "<td>" + escapeHtml(String(item.fallbackModelProfileId || "-")) + "</td>"
+                            + "<td>" + escapeHtml(item.routeLabel) + "</td>"
+                            + "<td>" + renderBadge(item.enabled ? "ACTIVE" : "ARCHIVED") + "</td>"
+                            + "<td class='card-actions'>"
+                            + "<button class='ghost-btn' data-edit-llm-binding='" + escapeHtml(String(item.id)) + "' type='button'>编辑</button>"
+                            + "<button class='warn-btn' data-delete-llm-binding='" + escapeHtml(String(item.id)) + "' type='button'>删除</button>"
+                            + "</td>"
+                            + "</tr>";
+                }).join("")
+                + "</tbody></table>";
+        container.querySelectorAll("[data-edit-llm-binding]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                editLlmBinding(button.dataset.editLlmBinding);
+            });
+        });
+        container.querySelectorAll("[data-delete-llm-binding]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                deleteLlmBinding(button.dataset.deleteLlmBinding);
+            });
+        });
+    }
+
+    function editLlmConnection(id) {
+        const item = state.llmConnections.find(function (entry) {
+            return String(entry.id) === String(id);
+        });
+        if (!item) {
+            return;
+        }
+        document.getElementById("llm-connection-id").value = item.id;
+        document.getElementById("llm-connection-code").value = item.connectionCode || "";
+        document.getElementById("llm-provider-type").value = item.providerType || "openai";
+        document.getElementById("llm-base-url").value = item.baseUrl || "";
+        document.getElementById("llm-api-key").value = "";
+        document.getElementById("llm-connection-remarks").value = item.remarks || "";
+        document.getElementById("llm-connection-operator").value = item.updatedBy || "admin";
+        document.getElementById("llm-connection-enabled").checked = !!item.enabled;
+        activateTab("llm");
+    }
+
+    function editLlmModel(id) {
+        const item = state.llmModels.find(function (entry) {
+            return String(entry.id) === String(id);
+        });
+        if (!item) {
+            return;
+        }
+        document.getElementById("llm-model-id").value = item.id;
+        document.getElementById("llm-model-code").value = item.modelCode || "";
+        document.getElementById("llm-model-connection-id").value = String(item.connectionId || "");
+        document.getElementById("llm-model-name").value = item.modelName || "";
+        document.getElementById("llm-model-temperature").value = item.temperature || "";
+        document.getElementById("llm-model-max-tokens").value = item.maxTokens || "";
+        document.getElementById("llm-model-timeout-seconds").value = item.timeoutSeconds || "";
+        document.getElementById("llm-model-input-price").value = item.inputPricePer1kTokens || "";
+        document.getElementById("llm-model-output-price").value = item.outputPricePer1kTokens || "";
+        document.getElementById("llm-model-extra-options").value = item.extraOptionsJson || "{}";
+        document.getElementById("llm-model-remarks").value = item.remarks || "";
+        document.getElementById("llm-model-operator").value = item.updatedBy || "admin";
+        document.getElementById("llm-model-enabled").checked = !!item.enabled;
+        activateTab("llm");
+    }
+
+    function editLlmBinding(id) {
+        const item = state.llmBindings.find(function (entry) {
+            return String(entry.id) === String(id);
+        });
+        if (!item) {
+            return;
+        }
+        document.getElementById("llm-binding-id").value = item.id;
+        document.getElementById("llm-binding-scene").value = item.scene || "compile";
+        document.getElementById("llm-binding-agent-role").value = item.agentRole || "writer";
+        document.getElementById("llm-binding-primary-model-id").value = String(item.primaryModelProfileId || "");
+        document.getElementById("llm-binding-fallback-model-id").value = item.fallbackModelProfileId
+                ? String(item.fallbackModelProfileId)
+                : "";
+        document.getElementById("llm-binding-route-label").value = item.routeLabel || "";
+        document.getElementById("llm-binding-remarks").value = item.remarks || "";
+        document.getElementById("llm-binding-operator").value = item.updatedBy || "admin";
+        document.getElementById("llm-binding-enabled").checked = !!item.enabled;
+        activateTab("llm");
+    }
+
+    function resetLlmConnectionForm() {
+        document.getElementById("llm-connection-id").value = "";
+        document.getElementById("llm-connection-code").value = "";
+        document.getElementById("llm-provider-type").value = "openai";
+        document.getElementById("llm-base-url").value = "";
+        document.getElementById("llm-api-key").value = "";
+        document.getElementById("llm-connection-remarks").value = "";
+        document.getElementById("llm-connection-operator").value = "admin";
+        document.getElementById("llm-connection-enabled").checked = true;
+    }
+
+    function resetLlmModelForm() {
+        document.getElementById("llm-model-id").value = "";
+        document.getElementById("llm-model-code").value = "";
+        document.getElementById("llm-model-name").value = "";
+        document.getElementById("llm-model-temperature").value = "";
+        document.getElementById("llm-model-max-tokens").value = "";
+        document.getElementById("llm-model-timeout-seconds").value = "";
+        document.getElementById("llm-model-input-price").value = "";
+        document.getElementById("llm-model-output-price").value = "";
+        document.getElementById("llm-model-extra-options").value = "{}";
+        document.getElementById("llm-model-remarks").value = "";
+        document.getElementById("llm-model-operator").value = "admin";
+        document.getElementById("llm-model-enabled").checked = true;
+        renderLlmConnectionOptions();
+    }
+
+    function resetLlmBindingForm() {
+        document.getElementById("llm-binding-id").value = "";
+        document.getElementById("llm-binding-scene").value = "compile";
+        document.getElementById("llm-binding-agent-role").value = "writer";
+        document.getElementById("llm-binding-route-label").value = "";
+        document.getElementById("llm-binding-remarks").value = "";
+        document.getElementById("llm-binding-operator").value = "admin";
+        document.getElementById("llm-binding-enabled").checked = true;
+        renderLlmModelOptions();
+    }
+
     function activateTab(tabName) {
         document.querySelectorAll(".tab-btn").forEach(function (button) {
             if (!button.dataset.tab) {
@@ -1150,6 +1600,24 @@
         setStatus(prefix + "：" + message);
     }
 
+    function parseOptionalInteger(value) {
+        const text = String(value || "").trim();
+        if (!text) {
+            return null;
+        }
+        const parsed = Number(text);
+        return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+    }
+
+    function parseOptionalDecimal(value) {
+        const text = String(value || "").trim();
+        if (!text) {
+            return null;
+        }
+        const parsed = Number(text);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+
     function formatNumber(value, digits) {
         return Number(value).toFixed(digits);
     }
@@ -1181,9 +1649,6 @@
     function formatOrchestrationMode(value) {
         if (!value) {
             return "-";
-        }
-        if (value === "service") {
-            return "标准流程";
         }
         if (value === "state_graph") {
             return "图式流程";

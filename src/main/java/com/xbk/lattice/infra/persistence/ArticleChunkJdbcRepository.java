@@ -70,7 +70,7 @@ public class ArticleChunkJdbcRepository {
         List<TextChunk> textChunks = semanticChunker.chunk(content, DEFAULT_MAX_CHARS, DEFAULT_OVERLAP_RATIO);
         List<String> chunkTexts = new ArrayList<String>();
         for (TextChunk textChunk : textChunks) {
-            chunkTexts.add(textChunk.text());
+            chunkTexts.add(textChunk.getText());
         }
         replaceChunks(conceptId, chunkTexts);
     }

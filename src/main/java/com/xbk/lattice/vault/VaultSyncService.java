@@ -320,10 +320,15 @@ public class VaultSyncService {
         if (relativePath == null) {
             return false;
         }
-        return switch (relativePath) {
-            case "index.md", "timeline.md", "tradeoffs.md", "gaps.md" -> true;
-            default -> false;
-        };
+        switch (relativePath) {
+            case "index.md":
+            case "timeline.md":
+            case "tradeoffs.md":
+            case "gaps.md":
+                return true;
+            default:
+                return false;
+        }
     }
 
     private String extractTitle(String content, String fallbackTitle) {

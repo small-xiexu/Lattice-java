@@ -137,10 +137,17 @@ public class VaultSnapshotService {
         List<SynthesisArtifactRecord> artifactRecords = new ArrayList<SynthesisArtifactRecord>();
         for (RepoSnapshotItemRecord itemRecord : itemRecords) {
             switch (itemRecord.getEntityType()) {
-                case "article" -> articleRecords.add(readArticle(itemRecord.getPayloadJson()));
-                case "contribution" -> contributionRecords.add(readContribution(itemRecord.getPayloadJson()));
-                case "artifact" -> artifactRecords.add(readArtifact(itemRecord.getPayloadJson()));
-                default -> throw new IllegalArgumentException("未知 repo snapshot entityType: " + itemRecord.getEntityType());
+                case "article":
+                    articleRecords.add(readArticle(itemRecord.getPayloadJson()));
+                    break;
+                case "contribution":
+                    contributionRecords.add(readContribution(itemRecord.getPayloadJson()));
+                    break;
+                case "artifact":
+                    artifactRecords.add(readArtifact(itemRecord.getPayloadJson()));
+                    break;
+                default:
+                    throw new IllegalArgumentException("未知 repo snapshot entityType: " + itemRecord.getEntityType());
             }
         }
 

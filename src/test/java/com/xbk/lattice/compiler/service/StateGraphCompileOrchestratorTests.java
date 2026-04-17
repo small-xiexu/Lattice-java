@@ -2,6 +2,8 @@ package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
+import com.xbk.lattice.infra.persistence.CompileJobStepJdbcRepository;
+import com.xbk.lattice.infra.persistence.CompileJobStepRecord;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,6 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -42,6 +45,9 @@ class StateGraphCompileOrchestratorTests {
 
     @Autowired
     private ArticleJdbcRepository articleJdbcRepository;
+
+    @Autowired
+    private CompileJobStepJdbcRepository compileJobStepJdbcRepository;
 
     /**
      * 验证 StateGraph 模式可完成 full compile 与 incremental compile。
@@ -91,6 +97,8 @@ class StateGraphCompileOrchestratorTests {
         assertThat(articleRecord.getSourcePaths()).contains("payment/base.json", "payment/update.json");
         assertThat(articleRecord.getContent()).contains("manual-review");
         assertThat(articleRecord.getContent()).contains("payment/update.json");
+        assertStepLogs(baselineResult.getJobId());
+        assertStepLogs(incrementalResult.getJobId());
     }
 
     /**
@@ -100,5 +108,38 @@ class StateGraphCompileOrchestratorTests {
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_state_graph_test.source_files CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_state_graph_test.synthesis_artifacts");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_state_graph_test.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_state_graph_test.compile_job_steps");
+    }
+
+    /**
+     * 断言步骤日志包含稳定关联令牌与角色路由元信息。
+     *
+     * @param jobId 作业标识
+     */
+    private void assertStepLogs(String jobId) {
+        List<CompileJobStepRecord> stepRecords = compileJobStepJdbcRepository.findByJobId(jobId);
+
+        assertThat(stepRecords).isNotEmpty();
+        assertThat(stepRecords)
+                .extracting(CompileJobStepRecord::getStepExecutionId)
+                .allMatch(value -> value != null && !value.isBlank())
+                .doesNotHaveDuplicates();
+        assertThat(stepRecords)
+                .extracting(CompileJobStepRecord::getSequenceNo)
+                .allMatch(value -> value.intValue() > 0);
+
+        CompileJobStepRecord compileArticlesStep = stepRecords.stream()
+                .filter(stepRecord -> "compile_new_articles".equals(stepRecord.getStepName()))
+                .findFirst()
+                .orElseThrow();
+        CompileJobStepRecord reviewArticlesStep = stepRecords.stream()
+                .filter(stepRecord -> "review_articles".equals(stepRecord.getStepName()))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(compileArticlesStep.getAgentRole()).isEqualTo("WriterAgent");
+        assertThat(compileArticlesStep.getModelRoute()).isNotBlank();
+        assertThat(reviewArticlesStep.getAgentRole()).isEqualTo("ReviewerAgent");
+        assertThat(reviewArticlesStep.getModelRoute()).isEqualTo("rule-based");
     }
 }

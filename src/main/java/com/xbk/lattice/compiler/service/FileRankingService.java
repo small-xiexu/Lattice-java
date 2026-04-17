@@ -40,12 +40,12 @@ public class FileRankingService {
             rankedSources.add(new RankedSource(source, resolveScore(source)));
         }
         rankedSources.sort(Comparator
-                .comparingInt(RankedSource::score).reversed()
-                .thenComparing(rankedSource -> rankedSource.source().getRelativePath(), String.CASE_INSENSITIVE_ORDER)
-                .thenComparing(rankedSource -> rankedSource.source().getRelativePath()));
+                .comparingInt(RankedSource::getScore).reversed()
+                .thenComparing(rankedSource -> rankedSource.getSource().getRelativePath(), String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(rankedSource -> rankedSource.getSource().getRelativePath()));
         List<RawSource> orderedSources = new ArrayList<RawSource>();
         for (RankedSource rankedSource : rankedSources) {
-            orderedSources.add(rankedSource.source());
+            orderedSources.add(rankedSource.getSource());
         }
         return orderedSources;
     }
@@ -92,7 +92,7 @@ public class FileRankingService {
     }
 
     private boolean matches(String pattern, String fileName) {
-        if (pattern == null || pattern.isBlank()) {
+        if (isBlank(pattern)) {
             return false;
         }
         String regex = pattern.toLowerCase(Locale.ROOT)
@@ -102,7 +102,7 @@ public class FileRankingService {
     }
 
     private String extractFileName(String relativePath) {
-        if (relativePath == null || relativePath.isBlank()) {
+        if (isBlank(relativePath)) {
             return "";
         }
         int slashIndex = relativePath.lastIndexOf('/');
@@ -112,6 +112,27 @@ public class FileRankingService {
         return relativePath.substring(slashIndex + 1);
     }
 
-    private record RankedSource(RawSource source, int score) {
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private static final class RankedSource {
+
+        private final RawSource source;
+
+        private final int score;
+
+        private RankedSource(RawSource source, int score) {
+            this.source = source;
+            this.score = score;
+        }
+
+        private RawSource getSource() {
+            return source;
+        }
+
+        private int getScore() {
+            return score;
+        }
     }
 }

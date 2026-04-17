@@ -2,7 +2,7 @@ package com.xbk.lattice.api.query;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xbk.lattice.compiler.service.CompilePipelineService;
+import com.xbk.lattice.compiler.service.CompileApplicationFacade;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,7 +53,7 @@ class PendingQueryControllerTests {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private CompilePipelineService compilePipelineService;
+    private CompileApplicationFacade compileApplicationFacade;
 
     /**
      * 验证纠错后答案仍保持 pending，确认后会写入 contributions。
@@ -186,7 +186,7 @@ class PendingQueryControllerTests {
                         + "}",
                 StandardCharsets.UTF_8
         );
-        compilePipelineService.compile(tempDir);
+        compileApplicationFacade.compile(tempDir, false, null);
     }
 
     /**

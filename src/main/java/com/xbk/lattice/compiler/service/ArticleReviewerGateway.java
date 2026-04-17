@@ -23,6 +23,8 @@ public class ArticleReviewerGateway {
 
     private final LlmProperties llmProperties;
 
+    private final RuleBasedArticleReviewer ruleBasedArticleReviewer;
+
     /**
      * 创建文章审查网关。
      *
@@ -33,11 +35,13 @@ public class ArticleReviewerGateway {
     public ArticleReviewerGateway(
             LlmGateway llmGateway,
             ReviewResultParser reviewResultParser,
-            LlmProperties llmProperties
+            LlmProperties llmProperties,
+            RuleBasedArticleReviewer ruleBasedArticleReviewer
     ) {
         this.llmGateway = llmGateway;
         this.reviewResultParser = reviewResultParser;
         this.llmProperties = llmProperties;
+        this.ruleBasedArticleReviewer = ruleBasedArticleReviewer;
     }
 
     /**
@@ -46,7 +50,7 @@ public class ArticleReviewerGateway {
      * @return 是否启用真实审查
      */
     public boolean isEnabled() {
-        return llmProperties.isReviewEnabled();
+        return true;
     }
 
     /**
@@ -57,8 +61,28 @@ public class ArticleReviewerGateway {
      * @return 审查结果
      */
     public ReviewResult review(String articleContent, String sourceContents) {
-        if (!isEnabled()) {
-            return ReviewResult.passed();
+        return review(articleContent, sourceContents, null, null, "reviewer");
+    }
+
+    /**
+     * 执行文章审查。
+     *
+     * @param articleContent 文章内容
+     * @param sourceContents 源文件正文
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @return 审查结果
+     */
+    public ReviewResult review(
+            String articleContent,
+            String sourceContents,
+            String scopeId,
+            String scene,
+            String agentRole
+    ) {
+        if (!llmProperties.isReviewEnabled()) {
+            return ruleBasedArticleReviewer.review(articleContent, sourceContents);
         }
         String truncatedSources = sourceContents.length() > 12000
                 ? sourceContents.substring(0, 12000)
@@ -72,7 +96,16 @@ public class ArticleReviewerGateway {
                 %s
                 === END SOURCES ===
                 """.formatted(articleContent, truncatedSources);
-        String rawResult = llmGateway.review("review", LatticePrompts.SYSTEM_REVIEW, prompt);
+        String rawResult = scopeId == null || scopeId.isBlank()
+                ? llmGateway.review("review", LatticePrompts.SYSTEM_REVIEW, prompt)
+                : llmGateway.reviewWithScope(
+                        scopeId,
+                        scene,
+                        agentRole,
+                        "review",
+                        LatticePrompts.SYSTEM_REVIEW,
+                        prompt
+                );
         return reviewResultParser.parse(rawResult);
     }
 }

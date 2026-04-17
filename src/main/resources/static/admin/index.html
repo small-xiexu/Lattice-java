@@ -105,6 +105,7 @@
                     <button class="tab-btn active" data-tab="articles" type="button">知识文章</button>
                     <button class="tab-btn" data-tab="pending" type="button">待处理反馈</button>
                     <button class="tab-btn" data-tab="compile" type="button">编译导入</button>
+                    <button class="tab-btn" data-tab="llm" type="button">LLM 配置</button>
                     <button class="tab-btn" data-tab="governance" type="button">治理修复</button>
                 </div>
             </div>
@@ -186,8 +187,7 @@
                             <label>
                                 <span>处理流程</span>
                                 <select id="compile-mode">
-                                    <option value="service">标准流程</option>
-                                    <option value="state_graph">图式流程</option>
+                                    <option value="state_graph">图式流程（默认）</option>
                                 </select>
                             </label>
                             <label class="checkbox-row">
@@ -214,8 +214,7 @@
                             <label>
                                 <span>处理流程</span>
                                 <select id="upload-compile-mode">
-                                    <option value="service">标准流程</option>
-                                    <option value="state_graph">图式流程</option>
+                                    <option value="state_graph">图式流程（默认）</option>
                                 </select>
                             </label>
                             <label class="checkbox-row">
@@ -275,6 +274,174 @@
                     <button id="refresh-jobs" class="ghost-btn" type="button">刷新</button>
                 </div>
                 <div id="job-list" class="job-list"></div>
+            </div>
+
+            <div id="tab-llm" class="tab-panel">
+                <div class="panel-title-row">
+                    <div>
+                        <h3>模型池与 Agent 绑定</h3>
+                        <p>在后台管理 Provider 连接、模型参数和 compile 侧 Agent 绑定。修改只影响新任务，运行中的任务继续使用启动时快照。</p>
+                    </div>
+                    <button id="refresh-llm" class="ghost-btn" type="button">刷新配置</button>
+                </div>
+
+                <div class="compile-layout">
+                    <div class="sub-panel">
+                        <h3>连接配置</h3>
+                        <div class="form-grid">
+                            <input id="llm-connection-id" type="hidden">
+                            <label>
+                                <span>连接编码</span>
+                                <input id="llm-connection-code" type="text" placeholder="openai-main">
+                            </label>
+                            <label>
+                                <span>Provider 类型</span>
+                                <select id="llm-provider-type">
+                                    <option value="openai">openai</option>
+                                    <option value="anthropic">anthropic</option>
+                                    <option value="openai_compatible">openai_compatible</option>
+                                </select>
+                            </label>
+                            <label>
+                                <span>Base URL</span>
+                                <input id="llm-base-url" type="text" placeholder="https://api.openai.com">
+                            </label>
+                            <label>
+                                <span>API Key（更新时留空表示不改）</span>
+                                <input id="llm-api-key" type="text" placeholder="sk-...">
+                            </label>
+                            <label>
+                                <span>备注</span>
+                                <input id="llm-connection-remarks" type="text" placeholder="主生产连接">
+                            </label>
+                            <label>
+                                <span>操作人</span>
+                                <input id="llm-connection-operator" type="text" value="admin">
+                            </label>
+                            <label class="checkbox-row">
+                                <input id="llm-connection-enabled" type="checkbox" checked>
+                                <span>启用该连接</span>
+                            </label>
+                        </div>
+                        <div class="button-row wrap">
+                            <button id="save-llm-connection" class="primary-btn" type="button">保存连接</button>
+                            <button id="reset-llm-connection" class="ghost-btn" type="button">清空表单</button>
+                        </div>
+                        <div id="llm-connection-list" class="top-gap"></div>
+                    </div>
+
+                    <div class="sub-panel">
+                        <h3>模型配置</h3>
+                        <div class="form-grid">
+                            <input id="llm-model-id" type="hidden">
+                            <label>
+                                <span>模型编码</span>
+                                <input id="llm-model-code" type="text" placeholder="gpt54-compile">
+                            </label>
+                            <label>
+                                <span>关联连接</span>
+                                <select id="llm-model-connection-id"></select>
+                            </label>
+                            <label>
+                                <span>模型名称</span>
+                                <input id="llm-model-name" type="text" placeholder="gpt-5.4">
+                            </label>
+                            <label>
+                                <span>Temperature</span>
+                                <input id="llm-model-temperature" type="text" placeholder="0.2">
+                            </label>
+                            <label>
+                                <span>Max Tokens</span>
+                                <input id="llm-model-max-tokens" type="text" placeholder="4096">
+                            </label>
+                            <label>
+                                <span>Timeout Seconds</span>
+                                <input id="llm-model-timeout-seconds" type="text" placeholder="300">
+                            </label>
+                            <label>
+                                <span>输入单价（美元 / 1k token）</span>
+                                <input id="llm-model-input-price" type="text" placeholder="0.002500">
+                            </label>
+                            <label>
+                                <span>输出单价（美元 / 1k token）</span>
+                                <input id="llm-model-output-price" type="text" placeholder="0.010000">
+                            </label>
+                            <label>
+                                <span>扩展参数 JSON</span>
+                                <textarea id="llm-model-extra-options" placeholder="{&quot;top_p&quot;:0.9}"></textarea>
+                            </label>
+                            <label>
+                                <span>备注</span>
+                                <input id="llm-model-remarks" type="text" placeholder="compile 主模型">
+                            </label>
+                            <label>
+                                <span>操作人</span>
+                                <input id="llm-model-operator" type="text" value="admin">
+                            </label>
+                            <label class="checkbox-row">
+                                <input id="llm-model-enabled" type="checkbox" checked>
+                                <span>启用该模型</span>
+                            </label>
+                        </div>
+                        <div class="button-row wrap">
+                            <button id="save-llm-model" class="primary-btn" type="button">保存模型</button>
+                            <button id="reset-llm-model" class="ghost-btn" type="button">清空表单</button>
+                        </div>
+                        <div id="llm-model-list" class="top-gap"></div>
+                    </div>
+
+                    <div class="sub-panel">
+                        <h3>Agent 绑定</h3>
+                        <div class="form-grid">
+                            <input id="llm-binding-id" type="hidden">
+                            <label>
+                                <span>场景</span>
+                                <select id="llm-binding-scene">
+                                    <option value="compile">compile</option>
+                                </select>
+                            </label>
+                            <label>
+                                <span>Agent 角色</span>
+                                <select id="llm-binding-agent-role">
+                                    <option value="writer">writer</option>
+                                    <option value="reviewer">reviewer</option>
+                                    <option value="fixer">fixer</option>
+                                </select>
+                            </label>
+                            <label>
+                                <span>主模型</span>
+                                <select id="llm-binding-primary-model-id"></select>
+                            </label>
+                            <label>
+                                <span>备用模型（V1 预留）</span>
+                                <select id="llm-binding-fallback-model-id">
+                                    <option value="">不配置</option>
+                                </select>
+                            </label>
+                            <label>
+                                <span>路由标签</span>
+                                <input id="llm-binding-route-label" type="text" placeholder="compile.writer.gpt54">
+                            </label>
+                            <label>
+                                <span>备注</span>
+                                <input id="llm-binding-remarks" type="text" placeholder="新任务生效">
+                            </label>
+                            <label>
+                                <span>操作人</span>
+                                <input id="llm-binding-operator" type="text" value="admin">
+                            </label>
+                            <label class="checkbox-row">
+                                <input id="llm-binding-enabled" type="checkbox" checked>
+                                <span>启用该绑定</span>
+                            </label>
+                        </div>
+                        <div class="button-row wrap">
+                            <button id="save-llm-binding" class="primary-btn" type="button">保存绑定</button>
+                            <button id="reset-llm-binding" class="ghost-btn" type="button">清空表单</button>
+                        </div>
+                        <div id="llm-binding-list" class="top-gap"></div>
+                    </div>
+                </div>
             </div>
 
             <div id="tab-governance" class="tab-panel">

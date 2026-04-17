@@ -35,9 +35,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 增量编译服务
+ * 增量编译节点能力服务
  *
- * 职责：对新增源文件执行匹配、增强、新建与合成产物刷新
+ * 职责：提供增量规划、增强与同包测试所需的过渡增量编译能力
  *
  * @author xiexu
  */
@@ -219,7 +219,7 @@ public class IncrementalCompileService {
      * @return 编译结果
      * @throws IOException IO 异常
      */
-    public CompileResult incrementalCompile(Path sourceDir) throws IOException {
+    CompileResult incrementalCompile(Path sourceDir) throws IOException {
         String jobId = UUID.randomUUID().toString();
         log.info("Incremental compile started sourceDir: {}", sourceDir);
         List<RawSource> rawSources = ingestNode.ingest(sourceDir);
@@ -270,6 +270,65 @@ public class IncrementalCompileService {
         captureRepoSnapshot(sourceDir, persistedCount);
         log.info("Incremental compile completed sourceDir: {}, jobId: {}, persistedCount: {}", sourceDir, jobId, persistedCount);
         return new CompileResult(persistedCount, jobId);
+    }
+
+    /**
+     * 生成增量规划结果。
+     *
+     * @param mergedConcepts 合并概念
+     * @return 增量规划结果
+     */
+    public IncrementalCompilePlanResult planGraphChanges(List<MergedConcept> mergedConcepts) {
+        List<ArticleRecord> existingArticles = articleJdbcRepository.findAll();
+        IncrementalPlan incrementalPlan = planIncrementalChanges(mergedConcepts, existingArticles);
+        Map<String, List<MergedConcept>> enhancementConcepts = resolveEnhancementConcepts(
+                incrementalPlan.getEnhancements(),
+                mergedConcepts,
+                existingArticles
+        );
+
+        java.util.LinkedHashSet<String> handledConceptIds = new java.util.LinkedHashSet<String>();
+        for (List<MergedConcept> concepts : enhancementConcepts.values()) {
+            for (MergedConcept concept : concepts) {
+                handledConceptIds.add(concept.getConceptId());
+            }
+        }
+        List<MergedConcept> conceptsToCreate = resolveConceptsToCreate(
+                incrementalPlan.getNewArticles(),
+                mergedConcepts,
+                handledConceptIds
+        );
+
+        IncrementalCompilePlanResult result = new IncrementalCompilePlanResult();
+        result.setEnhancementConcepts(enhancementConcepts);
+        result.setConceptsToCreate(conceptsToCreate);
+        result.setNothingToDo(enhancementConcepts.isEmpty() && conceptsToCreate.isEmpty());
+        return result;
+    }
+
+    /**
+     * 批量增强已有文章，返回增强后的草稿集合。
+     *
+     * @param enhancementConcepts 按目标文章分组的增量概念
+     * @return 增强后的草稿集合
+     */
+    public List<ArticleRecord> enhanceExistingArticles(Map<String, List<MergedConcept>> enhancementConcepts) {
+        List<ArticleRecord> draftArticles = new ArrayList<ArticleRecord>();
+        for (Map.Entry<String, List<MergedConcept>> entry : enhancementConcepts.entrySet()) {
+            Optional<ArticleRecord> existingArticle = articleJdbcRepository.findByConceptId(entry.getKey());
+            if (existingArticle.isEmpty() || entry.getValue().isEmpty()) {
+                continue;
+            }
+            draftArticles.add(enhanceExistingArticle(existingArticle.orElseThrow(), entry.getValue()));
+        }
+        return draftArticles;
+    }
+
+    /**
+     * 刷新合成产物。
+     */
+    public void refreshGraphSynthesisArtifacts() {
+        refreshSynthesisArtifacts();
     }
 
     private void captureRepoSnapshot(Path sourceDir, int persistedCount) {

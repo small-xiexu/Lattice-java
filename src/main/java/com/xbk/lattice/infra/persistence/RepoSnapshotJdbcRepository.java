@@ -59,8 +59,9 @@ public class RepoSnapshotJdbcRepository {
             return preparedStatement;
         }, keyHolder);
         Number key;
-        if (keyHolder.getKeys() != null && keyHolder.getKeys().get("id") instanceof Number currentKey) {
-            key = currentKey;
+        Object generatedId = keyHolder.getKeys() == null ? null : keyHolder.getKeys().get("id");
+        if (generatedId instanceof Number) {
+            key = (Number) generatedId;
         }
         else {
             key = keyHolder.getKey();

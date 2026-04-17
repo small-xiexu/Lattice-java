@@ -19,6 +19,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -40,6 +41,8 @@ public class VaultExportService {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private static final DateTimeFormatter FILE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH-mm-ss");
+
+    private static final List<String> MANIFEST_SECTION_KEYS = Arrays.asList("articles", "artifacts", "contributions");
 
     private final ArticleJdbcRepository articleJdbcRepository;
 
@@ -222,15 +225,17 @@ public class VaultExportService {
 
     @SuppressWarnings("unchecked")
     private String readPreviousHash(Map<String, Object> manifest, String relativePath) {
-        for (String key : List.of("articles", "artifacts", "contributions")) {
+        for (String key : MANIFEST_SECTION_KEYS) {
             Object section = manifest.get(key);
-            if (!(section instanceof Map<?, ?> sectionMap)) {
+            if (!(section instanceof Map<?, ?>)) {
                 continue;
             }
+            Map<?, ?> sectionMap = (Map<?, ?>) section;
             for (Object value : sectionMap.values()) {
-                if (!(value instanceof Map<?, ?> entryMap)) {
+                if (!(value instanceof Map<?, ?>)) {
                     continue;
                 }
+                Map<?, ?> entryMap = (Map<?, ?>) value;
                 Object path = entryMap.get("path");
                 if (path != null && relativePath.equals(String.valueOf(path))) {
                     Object contentHash = entryMap.get("contentHash");
@@ -249,13 +254,19 @@ public class VaultExportService {
     }
 
     private String artifactFileName(String artifactType) {
-        return switch (artifactType.toLowerCase(Locale.ROOT)) {
-            case "index" -> "index.md";
-            case "timeline" -> "timeline.md";
-            case "tradeoffs" -> "tradeoffs.md";
-            case "gaps" -> "gaps.md";
-            default -> artifactType + ".md";
-        };
+        String normalizedArtifactType = artifactType.toLowerCase(Locale.ROOT);
+        switch (normalizedArtifactType) {
+            case "index":
+                return "index.md";
+            case "timeline":
+                return "timeline.md";
+            case "tradeoffs":
+                return "tradeoffs.md";
+            case "gaps":
+                return "gaps.md";
+            default:
+                return artifactType + ".md";
+        }
     }
 
     private String contributionFileName(ContributionRecord contributionRecord) {

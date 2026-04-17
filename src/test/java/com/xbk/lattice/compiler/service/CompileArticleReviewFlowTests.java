@@ -232,7 +232,7 @@ class CompileArticleReviewFlowTests {
         private final boolean enabled;
 
         private StubArticleReviewerGateway(ReviewResult reviewResult, boolean enabled) {
-            super(null, null, new LlmProperties());
+            super(null, null, new LlmProperties(), new RuleBasedArticleReviewer());
             this.reviewResult = reviewResult;
             this.enabled = enabled;
         }

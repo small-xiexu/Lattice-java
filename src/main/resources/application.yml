@@ -36,18 +36,35 @@ lattice:
   llm:
     compile-model: ${LATTICE_LLM_COMPILE_MODEL:openai}
     reviewer-model: ${LATTICE_LLM_REVIEWER_MODEL:anthropic}
+    config-source: ${LATTICE_LLM_CONFIG_SOURCE:hybrid}
+    bootstrap-enabled: ${LATTICE_LLM_BOOTSTRAP_ENABLED:true}
+    secret-encryption-key: ${LATTICE_LLM_SECRET_ENCRYPTION_KEY:lattice-phase8-bootstrap-key-change-me}
     budget-usd: ${LATTICE_LLM_BUDGET_USD:10.0}
     cache-ttl-seconds: ${LATTICE_LLM_CACHE_TTL_SECONDS:86400}
     cache-key-prefix: ${LATTICE_LLM_CACHE_KEY_PREFIX:llm:cache:}
     review-enabled: ${LATTICE_LLM_REVIEW_ENABLED:false}
     max-input-chars: ${LATTICE_LLM_MAX_INPUT_CHARS:64000}
+    admin:
+      encrypt-secrets: ${LATTICE_LLM_ADMIN_ENCRYPT_SECRETS:true}
+      mask-secrets: ${LATTICE_LLM_ADMIN_MASK_SECRETS:true}
+    pricing:
+      compile-input-price-per-1k-tokens: ${LATTICE_LLM_COMPILE_INPUT_PRICE_PER_1K:0.002500}
+      compile-output-price-per-1k-tokens: ${LATTICE_LLM_COMPILE_OUTPUT_PRICE_PER_1K:0.010000}
+      reviewer-input-price-per-1k-tokens: ${LATTICE_LLM_REVIEWER_INPUT_PRICE_PER_1K:0.003000}
+      reviewer-output-price-per-1k-tokens: ${LATTICE_LLM_REVIEWER_OUTPUT_PRICE_PER_1K:0.015000}
   compiler:
+    orchestration:
+      default-mode: ${LATTICE_COMPILER_ORCHESTRATION_DEFAULT_MODE:state_graph}
     file-ranking:
       rules:
         - pattern: ${LATTICE_COMPILER_FILE_RANKING_RULE1_PATTERN:overview.*}
           score: ${LATTICE_COMPILER_FILE_RANKING_RULE1_SCORE:100}
         - pattern: ${LATTICE_COMPILER_FILE_RANKING_RULE2_PATTERN:readme.*}
           score: ${LATTICE_COMPILER_FILE_RANKING_RULE2_SCORE:95}
+    review:
+      auto-fix-enabled: ${LATTICE_COMPILER_REVIEW_AUTO_FIX_ENABLED:true}
+      max-fix-rounds: ${LATTICE_COMPILER_REVIEW_MAX_FIX_ROUNDS:1}
+      allow-persist-needs-human-review: ${LATTICE_COMPILER_REVIEW_ALLOW_PERSIST_NEEDS_HUMAN_REVIEW:true}
     wal:
       key-prefix: ${LATTICE_COMPILER_WAL_KEY_PREFIX:lattice:wal:}
       ttl-seconds: ${LATTICE_COMPILER_WAL_TTL_SECONDS:86400}
@@ -55,6 +72,9 @@ lattice:
     cache:
       key-prefix: ${LATTICE_QUERY_CACHE_KEY_PREFIX:llm:query:cache:}
       ttl-seconds: ${LATTICE_QUERY_CACHE_TTL_SECONDS:3600}
+    review:
+      rewrite-enabled: ${LATTICE_QUERY_REVIEW_REWRITE_ENABLED:true}
+      max-rewrite-rounds: ${LATTICE_QUERY_REVIEW_MAX_REWRITE_ROUNDS:1}
     search:
       fts:
         enabled: ${LATTICE_QUERY_SEARCH_FTS_ENABLED:true}

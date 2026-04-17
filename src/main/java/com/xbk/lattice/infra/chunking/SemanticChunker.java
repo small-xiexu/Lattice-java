@@ -35,21 +35,21 @@ public class SemanticChunker {
         int overlapChars = Math.max(0, Math.round(maxChars * overlapRatio));
         while (unitIndex < units.size()) {
             int startIndex = unitIndex;
-            int chunkStartOffset = units.get(startIndex).charOffset();
+            int chunkStartOffset = units.get(startIndex).getCharOffset();
             StringBuilder builder = new StringBuilder();
 
             while (unitIndex < units.size()) {
                 TextUnit unit = units.get(unitIndex);
-                if (builder.length() > 0 && builder.length() + unit.text().length() > maxChars) {
+                if (builder.length() > 0 && builder.length() + unit.getText().length() > maxChars) {
                     break;
                 }
-                builder.append(unit.text());
+                builder.append(unit.getText());
                 unitIndex++;
             }
 
             if (builder.length() == 0) {
                 TextUnit unit = units.get(unitIndex);
-                builder.append(unit.text());
+                builder.append(unit.getText());
                 unitIndex++;
             }
 
@@ -65,7 +65,7 @@ public class SemanticChunker {
 
     private List<TextUnit> parseUnits(String content) {
         List<TextUnit> units = new ArrayList<TextUnit>();
-        if (content == null || content.isBlank()) {
+        if (isBlank(content)) {
             return units;
         }
         String[] lines = content.split("\\R", -1);
@@ -123,7 +123,7 @@ public class SemanticChunker {
         int accumulated = 0;
         int rewindIndex = nextIndex;
         for (int index = nextIndex - 1; index >= startIndex; index--) {
-            accumulated += units.get(index).text().length();
+            accumulated += units.get(index).getText().length();
             rewindIndex = index;
             if (accumulated >= overlapChars) {
                 break;
@@ -137,7 +137,7 @@ public class SemanticChunker {
 
     private void flushUnit(List<TextUnit> units, StringBuilder builder, int startOffset) {
         String text = builder.toString();
-        if (!text.isBlank()) {
+        if (!isBlank(text)) {
             units.add(new TextUnit(text, startOffset));
         }
         builder.setLength(0);
@@ -154,6 +154,27 @@ public class SemanticChunker {
                 || ORDERED_LIST_PATTERN.matcher(trimmed).matches();
     }
 
-    private record TextUnit(String text, int charOffset) {
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private static final class TextUnit {
+
+        private final String text;
+
+        private final int charOffset;
+
+        private TextUnit(String text, int charOffset) {
+            this.text = text;
+            this.charOffset = charOffset;
+        }
+
+        private String getText() {
+            return text;
+        }
+
+        private int getCharOffset() {
+            return charOffset;
+        }
     }
 }

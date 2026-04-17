@@ -2,10 +2,12 @@ package com.xbk.lattice.compiler.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.math.BigDecimal;
+
 /**
  * LLM 调用配置
  *
- * 职责：承载编译/审查模型、预算与缓存参数
+ * 职责：承载编译/审查模型、后台配置中心回退参数与缓存预算配置
  *
  * @author xiexu
  */
@@ -16,6 +18,12 @@ public class LlmProperties {
 
     private String reviewerModel = "anthropic";
 
+    private String configSource = "hybrid";
+
+    private boolean bootstrapEnabled = true;
+
+    private String secretEncryptionKey = "lattice-phase8-bootstrap-key-change-me";
+
     private double budgetUsd = 10.0D;
 
     private long cacheTtlSeconds = 86400L;
@@ -25,6 +33,10 @@ public class LlmProperties {
     private boolean reviewEnabled = false;
 
     private int maxInputChars = 64000;
+
+    private final Admin admin = new Admin();
+
+    private final Pricing pricing = new Pricing();
 
     /**
      * 获取编译模型标识。
@@ -60,6 +72,60 @@ public class LlmProperties {
      */
     public void setReviewerModel(String reviewerModel) {
         this.reviewerModel = reviewerModel;
+    }
+
+    /**
+     * 获取配置源模式。
+     *
+     * @return 配置源模式
+     */
+    public String getConfigSource() {
+        return configSource;
+    }
+
+    /**
+     * 设置配置源模式。
+     *
+     * @param configSource 配置源模式
+     */
+    public void setConfigSource(String configSource) {
+        this.configSource = configSource;
+    }
+
+    /**
+     * 返回是否允许使用本地 bootstrap 配置兜底。
+     *
+     * @return 是否允许 bootstrap 回退
+     */
+    public boolean isBootstrapEnabled() {
+        return bootstrapEnabled;
+    }
+
+    /**
+     * 设置是否允许使用本地 bootstrap 配置兜底。
+     *
+     * @param bootstrapEnabled 是否允许 bootstrap 回退
+     */
+    public void setBootstrapEnabled(boolean bootstrapEnabled) {
+        this.bootstrapEnabled = bootstrapEnabled;
+    }
+
+    /**
+     * 获取密钥加密种子。
+     *
+     * @return 密钥加密种子
+     */
+    public String getSecretEncryptionKey() {
+        return secretEncryptionKey;
+    }
+
+    /**
+     * 设置密钥加密种子。
+     *
+     * @param secretEncryptionKey 密钥加密种子
+     */
+    public void setSecretEncryptionKey(String secretEncryptionKey) {
+        this.secretEncryptionKey = secretEncryptionKey;
     }
 
     /**
@@ -150,5 +216,163 @@ public class LlmProperties {
      */
     public void setMaxInputChars(int maxInputChars) {
         this.maxInputChars = maxInputChars;
+    }
+
+    /**
+     * 获取 Admin 配置。
+     *
+     * @return Admin 配置
+     */
+    public Admin getAdmin() {
+        return admin;
+    }
+
+    /**
+     * 获取价格配置。
+     *
+     * @return 价格配置
+     */
+    public Pricing getPricing() {
+        return pricing;
+    }
+
+    /**
+     * Admin 配置。
+     *
+     * 职责：承载密钥加密与脱敏相关开关
+     *
+     * @author xiexu
+     */
+    public static class Admin {
+
+        private boolean encryptSecrets = true;
+
+        private boolean maskSecrets = true;
+
+        /**
+         * 返回是否启用密钥加密。
+         *
+         * @return 是否启用密钥加密
+         */
+        public boolean isEncryptSecrets() {
+            return encryptSecrets;
+        }
+
+        /**
+         * 设置是否启用密钥加密。
+         *
+         * @param encryptSecrets 是否启用密钥加密
+         */
+        public void setEncryptSecrets(boolean encryptSecrets) {
+            this.encryptSecrets = encryptSecrets;
+        }
+
+        /**
+         * 返回是否启用默认脱敏。
+         *
+         * @return 是否启用默认脱敏
+         */
+        public boolean isMaskSecrets() {
+            return maskSecrets;
+        }
+
+        /**
+         * 设置是否启用默认脱敏。
+         *
+         * @param maskSecrets 是否启用默认脱敏
+         */
+        public void setMaskSecrets(boolean maskSecrets) {
+            this.maskSecrets = maskSecrets;
+        }
+    }
+
+    /**
+     * 定价配置。
+     *
+     * 职责：为 bootstrap fallback 提供不依赖 provider 名称硬编码的估算费率
+     *
+     * @author xiexu
+     */
+    public static class Pricing {
+
+        private BigDecimal compileInputPricePer1kTokens = new BigDecimal("0.002500");
+
+        private BigDecimal compileOutputPricePer1kTokens = new BigDecimal("0.010000");
+
+        private BigDecimal reviewerInputPricePer1kTokens = new BigDecimal("0.003000");
+
+        private BigDecimal reviewerOutputPricePer1kTokens = new BigDecimal("0.015000");
+
+        /**
+         * 获取编译输入单价。
+         *
+         * @return 编译输入单价
+         */
+        public BigDecimal getCompileInputPricePer1kTokens() {
+            return compileInputPricePer1kTokens;
+        }
+
+        /**
+         * 设置编译输入单价。
+         *
+         * @param compileInputPricePer1kTokens 编译输入单价
+         */
+        public void setCompileInputPricePer1kTokens(BigDecimal compileInputPricePer1kTokens) {
+            this.compileInputPricePer1kTokens = compileInputPricePer1kTokens;
+        }
+
+        /**
+         * 获取编译输出单价。
+         *
+         * @return 编译输出单价
+         */
+        public BigDecimal getCompileOutputPricePer1kTokens() {
+            return compileOutputPricePer1kTokens;
+        }
+
+        /**
+         * 设置编译输出单价。
+         *
+         * @param compileOutputPricePer1kTokens 编译输出单价
+         */
+        public void setCompileOutputPricePer1kTokens(BigDecimal compileOutputPricePer1kTokens) {
+            this.compileOutputPricePer1kTokens = compileOutputPricePer1kTokens;
+        }
+
+        /**
+         * 获取审查输入单价。
+         *
+         * @return 审查输入单价
+         */
+        public BigDecimal getReviewerInputPricePer1kTokens() {
+            return reviewerInputPricePer1kTokens;
+        }
+
+        /**
+         * 设置审查输入单价。
+         *
+         * @param reviewerInputPricePer1kTokens 审查输入单价
+         */
+        public void setReviewerInputPricePer1kTokens(BigDecimal reviewerInputPricePer1kTokens) {
+            this.reviewerInputPricePer1kTokens = reviewerInputPricePer1kTokens;
+        }
+
+        /**
+         * 获取审查输出单价。
+         *
+         * @return 审查输出单价
+         */
+        public BigDecimal getReviewerOutputPricePer1kTokens() {
+            return reviewerOutputPricePer1kTokens;
+        }
+
+        /**
+         * 设置审查输出单价。
+         *
+         * @param reviewerOutputPricePer1kTokens 审查输出单价
+         */
+        public void setReviewerOutputPricePer1kTokens(BigDecimal reviewerOutputPricePer1kTokens) {
+            this.reviewerOutputPricePer1kTokens = reviewerOutputPricePer1kTokens;
+        }
     }
 }

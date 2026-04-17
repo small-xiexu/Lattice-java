@@ -1,9 +1,7 @@
 package com.xbk.lattice.mcp;
 
-import com.xbk.lattice.compiler.config.CompilerProperties;
-import com.xbk.lattice.compiler.service.CompilePipelineService;
+import com.xbk.lattice.compiler.service.CompileApplicationFacade;
 import com.xbk.lattice.compiler.service.CompileResult;
-import com.xbk.lattice.compiler.service.CompilationWalStore;
 import com.xbk.lattice.governance.ArticleCorrectionResult;
 import com.xbk.lattice.governance.ArticleCorrectionService;
 import com.xbk.lattice.governance.LintIssue;
@@ -592,7 +590,7 @@ class LatticeMcpToolsB7Test {
                 null,
                 null,
                 null,
-                new FixedCompilePipelineService(new CompileResult(2, "job-001"))
+                new FixedCompileApplicationFacade(new CompileResult(2, "job-001"))
         );
 
         String result = tools.compile("/tmp/kb", true);
@@ -703,33 +701,17 @@ class LatticeMcpToolsB7Test {
         }
     }
 
-    private static class FixedCompilePipelineService extends CompilePipelineService {
+    private static class FixedCompileApplicationFacade extends CompileApplicationFacade {
 
         private final CompileResult compileResult;
 
-        private FixedCompilePipelineService(CompileResult compileResult) {
-            super(
-                    new CompilerProperties(),
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    new NoOpCompilationWalStore()
-            );
+        private FixedCompileApplicationFacade(CompileResult compileResult) {
+            super(null);
             this.compileResult = compileResult;
         }
 
         @Override
-        public CompileResult compile(Path sourceDir) {
-            return compileResult;
-        }
-
-        @Override
-        public CompileResult incrementalCompile(Path sourceDir) {
+        public CompileResult compile(Path sourceDir, boolean incremental, String orchestrationMode) {
             return compileResult;
         }
     }
@@ -915,24 +897,6 @@ class LatticeMcpToolsB7Test {
         @Override
         public OmissionReport track() {
             return report;
-        }
-    }
-
-    private static class NoOpCompilationWalStore implements CompilationWalStore {
-
-        @Override
-        public void stage(String jobId, List<com.xbk.lattice.compiler.model.MergedConcept> mergedConcepts) {
-            // no-op
-        }
-
-        @Override
-        public List<com.xbk.lattice.compiler.model.MergedConcept> loadPendingConcepts(String jobId) {
-            return List.of();
-        }
-
-        @Override
-        public void markCommitted(String jobId, String conceptId) {
-            // no-op
         }
     }
 

@@ -250,7 +250,7 @@ CREATE TABLE IF NOT EXISTS compile_jobs (
     job_id VARCHAR(64) PRIMARY KEY,
     source_dir VARCHAR(1024) NOT NULL,
     incremental BOOLEAN NOT NULL DEFAULT FALSE,
-    orchestration_mode VARCHAR(32) NOT NULL DEFAULT 'service',
+    orchestration_mode VARCHAR(32) NOT NULL DEFAULT 'state_graph',
     status VARCHAR(32) NOT NULL,
     persisted_count INTEGER NOT NULL DEFAULT 0,
     error_message TEXT,
@@ -275,6 +275,208 @@ COMMENT ON COLUMN compile_jobs.finished_at IS '任务结束时间';
 
 CREATE INDEX IF NOT EXISTS idx_compile_jobs_status_requested_at
     ON compile_jobs (status, requested_at DESC, job_id DESC);
+
+CREATE TABLE IF NOT EXISTS compile_job_steps (
+    id BIGSERIAL PRIMARY KEY,
+    job_id VARCHAR(64) NOT NULL,
+    step_name VARCHAR(64) NOT NULL,
+    step_execution_id VARCHAR(64) NOT NULL,
+    sequence_no INTEGER NOT NULL,
+    agent_role VARCHAR(32),
+    model_route VARCHAR(128),
+    status VARCHAR(32) NOT NULL,
+    summary TEXT,
+    input_summary TEXT,
+    output_summary TEXT,
+    error_message TEXT,
+    started_at TIMESTAMPTZ NOT NULL,
+    finished_at TIMESTAMPTZ
+);
+
+COMMENT ON TABLE compile_job_steps IS '编译步骤执行日志表';
+COMMENT ON COLUMN compile_job_steps.id IS '步骤日志主键 ID';
+COMMENT ON COLUMN compile_job_steps.job_id IS '所属编译任务标识';
+COMMENT ON COLUMN compile_job_steps.step_name IS 'Graph 节点名称';
+COMMENT ON COLUMN compile_job_steps.step_execution_id IS '单次步骤执行唯一标识';
+COMMENT ON COLUMN compile_job_steps.sequence_no IS '本次作业内步骤写入顺序';
+COMMENT ON COLUMN compile_job_steps.agent_role IS '步骤命中的 Agent 角色';
+COMMENT ON COLUMN compile_job_steps.model_route IS '步骤命中的模型路由';
+COMMENT ON COLUMN compile_job_steps.status IS '步骤状态';
+COMMENT ON COLUMN compile_job_steps.summary IS '步骤摘要';
+COMMENT ON COLUMN compile_job_steps.input_summary IS '输入摘要';
+COMMENT ON COLUMN compile_job_steps.output_summary IS '输出摘要';
+COMMENT ON COLUMN compile_job_steps.error_message IS '错误信息';
+COMMENT ON COLUMN compile_job_steps.started_at IS '步骤开始时间';
+COMMENT ON COLUMN compile_job_steps.finished_at IS '步骤结束时间';
+
+CREATE INDEX IF NOT EXISTS idx_compile_job_steps_job_id_sequence_no
+    ON compile_job_steps (job_id, sequence_no);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_compile_job_steps_step_execution_id
+    ON compile_job_steps (step_execution_id);
+
+CREATE INDEX IF NOT EXISTS idx_compile_job_steps_job_id_step_execution_id
+    ON compile_job_steps (job_id, step_execution_id);
+
+CREATE TABLE IF NOT EXISTS llm_provider_connections (
+    id BIGSERIAL PRIMARY KEY,
+    connection_code VARCHAR(64) NOT NULL,
+    provider_type VARCHAR(32) NOT NULL,
+    base_url VARCHAR(512) NOT NULL,
+    api_key_ciphertext TEXT NOT NULL,
+    api_key_mask VARCHAR(128) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    remarks VARCHAR(512),
+    created_by VARCHAR(64) NOT NULL DEFAULT 'system',
+    updated_by VARCHAR(64) NOT NULL DEFAULT 'system',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE llm_provider_connections IS 'LLM Provider 连接配置表';
+COMMENT ON COLUMN llm_provider_connections.connection_code IS '连接编码';
+COMMENT ON COLUMN llm_provider_connections.provider_type IS 'Provider 类型';
+COMMENT ON COLUMN llm_provider_connections.base_url IS 'Provider 基础地址';
+COMMENT ON COLUMN llm_provider_connections.api_key_ciphertext IS '加密后的 API Key';
+COMMENT ON COLUMN llm_provider_connections.api_key_mask IS '脱敏展示值';
+COMMENT ON COLUMN llm_provider_connections.enabled IS '是否启用';
+COMMENT ON COLUMN llm_provider_connections.remarks IS '备注';
+COMMENT ON COLUMN llm_provider_connections.created_by IS '创建人';
+COMMENT ON COLUMN llm_provider_connections.updated_by IS '更新人';
+COMMENT ON COLUMN llm_provider_connections.created_at IS '创建时间';
+COMMENT ON COLUMN llm_provider_connections.updated_at IS '更新时间';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_llm_provider_connections_connection_code
+    ON llm_provider_connections (connection_code);
+
+CREATE INDEX IF NOT EXISTS idx_llm_provider_connections_enabled
+    ON llm_provider_connections (enabled, id DESC);
+
+CREATE TABLE IF NOT EXISTS llm_model_profiles (
+    id BIGSERIAL PRIMARY KEY,
+    model_code VARCHAR(64) NOT NULL,
+    connection_id BIGINT NOT NULL REFERENCES llm_provider_connections (id),
+    model_name VARCHAR(128) NOT NULL,
+    temperature NUMERIC(4, 2),
+    max_tokens INTEGER,
+    timeout_seconds INTEGER,
+    input_price_per_1k_tokens NUMERIC(12, 6),
+    output_price_per_1k_tokens NUMERIC(12, 6),
+    extra_options_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    remarks VARCHAR(512),
+    created_by VARCHAR(64) NOT NULL DEFAULT 'system',
+    updated_by VARCHAR(64) NOT NULL DEFAULT 'system',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE llm_model_profiles IS 'LLM 模型配置表';
+COMMENT ON COLUMN llm_model_profiles.model_code IS '模型配置编码';
+COMMENT ON COLUMN llm_model_profiles.connection_id IS '关联连接配置 ID';
+COMMENT ON COLUMN llm_model_profiles.model_name IS '实际模型名称';
+COMMENT ON COLUMN llm_model_profiles.temperature IS '温度参数';
+COMMENT ON COLUMN llm_model_profiles.max_tokens IS '最大输出 token';
+COMMENT ON COLUMN llm_model_profiles.timeout_seconds IS '超时秒数';
+COMMENT ON COLUMN llm_model_profiles.input_price_per_1k_tokens IS '输入单价（美元/1k token）';
+COMMENT ON COLUMN llm_model_profiles.output_price_per_1k_tokens IS '输出单价（美元/1k token）';
+COMMENT ON COLUMN llm_model_profiles.extra_options_json IS 'Provider 扩展参数';
+COMMENT ON COLUMN llm_model_profiles.enabled IS '是否启用';
+COMMENT ON COLUMN llm_model_profiles.remarks IS '备注';
+COMMENT ON COLUMN llm_model_profiles.created_by IS '创建人';
+COMMENT ON COLUMN llm_model_profiles.updated_by IS '更新人';
+COMMENT ON COLUMN llm_model_profiles.created_at IS '创建时间';
+COMMENT ON COLUMN llm_model_profiles.updated_at IS '更新时间';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_llm_model_profiles_model_code
+    ON llm_model_profiles (model_code);
+
+CREATE INDEX IF NOT EXISTS idx_llm_model_profiles_connection_enabled
+    ON llm_model_profiles (connection_id, enabled, id DESC);
+
+CREATE TABLE IF NOT EXISTS agent_model_bindings (
+    id BIGSERIAL PRIMARY KEY,
+    scene VARCHAR(32) NOT NULL,
+    agent_role VARCHAR(32) NOT NULL,
+    primary_model_profile_id BIGINT NOT NULL REFERENCES llm_model_profiles (id),
+    fallback_model_profile_id BIGINT REFERENCES llm_model_profiles (id),
+    route_label VARCHAR(128) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    remarks VARCHAR(512),
+    created_by VARCHAR(64) NOT NULL DEFAULT 'system',
+    updated_by VARCHAR(64) NOT NULL DEFAULT 'system',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE agent_model_bindings IS 'Agent 角色与模型绑定表';
+COMMENT ON COLUMN agent_model_bindings.scene IS '场景';
+COMMENT ON COLUMN agent_model_bindings.agent_role IS 'Agent 角色';
+COMMENT ON COLUMN agent_model_bindings.primary_model_profile_id IS '主模型配置 ID';
+COMMENT ON COLUMN agent_model_bindings.fallback_model_profile_id IS '备用模型配置 ID（V1 仅预留）';
+COMMENT ON COLUMN agent_model_bindings.route_label IS '稳定路由标签';
+COMMENT ON COLUMN agent_model_bindings.enabled IS '是否启用';
+COMMENT ON COLUMN agent_model_bindings.remarks IS '备注';
+COMMENT ON COLUMN agent_model_bindings.created_by IS '创建人';
+COMMENT ON COLUMN agent_model_bindings.updated_by IS '更新人';
+COMMENT ON COLUMN agent_model_bindings.created_at IS '创建时间';
+COMMENT ON COLUMN agent_model_bindings.updated_at IS '更新时间';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_agent_model_bindings_scene_role
+    ON agent_model_bindings (scene, agent_role);
+
+CREATE INDEX IF NOT EXISTS idx_agent_model_bindings_scene_enabled
+    ON agent_model_bindings (scene, enabled, id DESC);
+
+CREATE TABLE IF NOT EXISTS execution_llm_snapshots (
+    id BIGSERIAL PRIMARY KEY,
+    scope_type VARCHAR(32) NOT NULL,
+    scope_id VARCHAR(64) NOT NULL,
+    scene VARCHAR(32) NOT NULL,
+    agent_role VARCHAR(32) NOT NULL,
+    binding_id BIGINT NOT NULL REFERENCES agent_model_bindings (id),
+    model_profile_id BIGINT NOT NULL REFERENCES llm_model_profiles (id),
+    connection_id BIGINT NOT NULL REFERENCES llm_provider_connections (id),
+    route_label VARCHAR(128) NOT NULL,
+    provider_type VARCHAR(32) NOT NULL,
+    base_url VARCHAR(512) NOT NULL,
+    model_name VARCHAR(128) NOT NULL,
+    temperature NUMERIC(4, 2),
+    max_tokens INTEGER,
+    timeout_seconds INTEGER,
+    extra_options_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    input_price_per_1k_tokens NUMERIC(12, 6),
+    output_price_per_1k_tokens NUMERIC(12, 6),
+    snapshot_version INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE execution_llm_snapshots IS '运行时 LLM 快照表';
+COMMENT ON COLUMN execution_llm_snapshots.scope_type IS '作用域类型';
+COMMENT ON COLUMN execution_llm_snapshots.scope_id IS '作用域标识';
+COMMENT ON COLUMN execution_llm_snapshots.scene IS '运行场景';
+COMMENT ON COLUMN execution_llm_snapshots.agent_role IS 'Agent 角色';
+COMMENT ON COLUMN execution_llm_snapshots.binding_id IS '命中的绑定 ID';
+COMMENT ON COLUMN execution_llm_snapshots.model_profile_id IS '命中的模型配置 ID';
+COMMENT ON COLUMN execution_llm_snapshots.connection_id IS '命中的连接配置 ID';
+COMMENT ON COLUMN execution_llm_snapshots.route_label IS '任务内稳定路由标签';
+COMMENT ON COLUMN execution_llm_snapshots.provider_type IS 'Provider 类型';
+COMMENT ON COLUMN execution_llm_snapshots.base_url IS '快照时命中的基础地址';
+COMMENT ON COLUMN execution_llm_snapshots.model_name IS '快照时命中的模型名称';
+COMMENT ON COLUMN execution_llm_snapshots.temperature IS '快照时命中的温度参数';
+COMMENT ON COLUMN execution_llm_snapshots.max_tokens IS '快照时命中的最大输出 token';
+COMMENT ON COLUMN execution_llm_snapshots.timeout_seconds IS '快照时命中的超时秒数';
+COMMENT ON COLUMN execution_llm_snapshots.extra_options_json IS '快照时命中的扩展参数';
+COMMENT ON COLUMN execution_llm_snapshots.input_price_per_1k_tokens IS '快照输入单价';
+COMMENT ON COLUMN execution_llm_snapshots.output_price_per_1k_tokens IS '快照输出单价';
+COMMENT ON COLUMN execution_llm_snapshots.snapshot_version IS '快照版本';
+COMMENT ON COLUMN execution_llm_snapshots.created_at IS '创建时间';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_execution_llm_snapshots_scope_scene_role
+    ON execution_llm_snapshots (scope_type, scope_id, scene, agent_role);
+
+CREATE INDEX IF NOT EXISTS idx_execution_llm_snapshots_scope_scene
+    ON execution_llm_snapshots (scope_type, scope_id, scene, id DESC);
 
 DO $$
 DECLARE vector_type_name TEXT;

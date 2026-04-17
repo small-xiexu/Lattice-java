@@ -1,7 +1,7 @@
 package com.xbk.lattice.mcp;
 
 import com.xbk.lattice.api.query.QueryResponse;
-import com.xbk.lattice.compiler.service.CompilePipelineService;
+import com.xbk.lattice.compiler.service.CompileApplicationFacade;
 import com.xbk.lattice.compiler.service.CompileResult;
 import com.xbk.lattice.compiler.service.DocumentSectionSelector;
 import com.xbk.lattice.governance.ArticleCorrectionResult;
@@ -98,7 +98,7 @@ public class LatticeMcpTools {
 
     private final OmissionTrackingService omissionTrackingService;
 
-    private final CompilePipelineService compilePipelineService;
+    private final CompileApplicationFacade compileApplicationFacade;
 
     private final InspectService inspectService;
 
@@ -137,7 +137,7 @@ public class LatticeMcpTools {
             StatusService statusService,
             LintService lintService,
             QualityMetricsService qualityMetricsService,
-            CompilePipelineService compilePipelineService,
+            CompileApplicationFacade compileApplicationFacade,
             InspectService inspectService,
             InspectionAnswerImportService inspectionAnswerImportService,
             ArticleCorrectionService articleCorrectionService,
@@ -158,7 +158,7 @@ public class LatticeMcpTools {
         this.qualityMetricsService = qualityMetricsService;
         this.coverageTrackingService = coverageTrackingService;
         this.omissionTrackingService = omissionTrackingService;
-        this.compilePipelineService = compilePipelineService;
+        this.compileApplicationFacade = compileApplicationFacade;
         this.inspectService = inspectService;
         this.inspectionAnswerImportService = inspectionAnswerImportService;
         this.articleCorrectionService = articleCorrectionService;
@@ -220,7 +220,7 @@ public class LatticeMcpTools {
             StatusService statusService,
             LintService lintService,
             QualityMetricsService qualityMetricsService,
-            CompilePipelineService compilePipelineService,
+            CompileApplicationFacade compileApplicationFacade,
             InspectService inspectService,
             InspectionAnswerImportService inspectionAnswerImportService,
             PropagationService propagationService,
@@ -239,7 +239,7 @@ public class LatticeMcpTools {
                 statusService,
                 lintService,
                 qualityMetricsService,
-                compilePipelineService,
+                compileApplicationFacade,
                 inspectService,
                 inspectionAnswerImportService,
                 null,
@@ -264,7 +264,7 @@ public class LatticeMcpTools {
             StatusService statusService,
             LintService lintService,
             QualityMetricsService qualityMetricsService,
-            CompilePipelineService compilePipelineService,
+            CompileApplicationFacade compileApplicationFacade,
             InspectService inspectService,
             InspectionAnswerImportService inspectionAnswerImportService,
             PropagationService propagationService,
@@ -281,7 +281,7 @@ public class LatticeMcpTools {
                 statusService,
                 lintService,
                 qualityMetricsService,
-                compilePipelineService,
+                compileApplicationFacade,
                 inspectService,
                 inspectionAnswerImportService,
                 null,
@@ -306,7 +306,7 @@ public class LatticeMcpTools {
             StatusService statusService,
             LintService lintService,
             QualityMetricsService qualityMetricsService,
-            CompilePipelineService compilePipelineService,
+            CompileApplicationFacade compileApplicationFacade,
             InspectService inspectService,
             InspectionAnswerImportService inspectionAnswerImportService,
             PropagationService propagationService,
@@ -324,7 +324,7 @@ public class LatticeMcpTools {
                 statusService,
                 lintService,
                 qualityMetricsService,
-                compilePipelineService,
+                compileApplicationFacade,
                 inspectService,
                 inspectionAnswerImportService,
                 null,
@@ -359,7 +359,7 @@ public class LatticeMcpTools {
             StatusService statusService,
             LintService lintService,
             QualityMetricsService qualityMetricsService,
-            CompilePipelineService compilePipelineService
+            CompileApplicationFacade compileApplicationFacade
     ) {
         this(
                 queryFacadeService,
@@ -369,7 +369,7 @@ public class LatticeMcpTools {
                 statusService,
                 lintService,
                 qualityMetricsService,
-                compilePipelineService,
+                compileApplicationFacade,
                 null,
                 null,
                 null,
@@ -394,7 +394,7 @@ public class LatticeMcpTools {
             StatusService statusService,
             LintService lintService,
             QualityMetricsService qualityMetricsService,
-            CompilePipelineService compilePipelineService,
+            CompileApplicationFacade compileApplicationFacade,
             InspectService inspectService,
             InspectionAnswerImportService inspectionAnswerImportService
     ) {
@@ -406,7 +406,7 @@ public class LatticeMcpTools {
                 statusService,
                 lintService,
                 qualityMetricsService,
-                compilePipelineService,
+                compileApplicationFacade,
                 inspectService,
                 inspectionAnswerImportService,
                 null,
@@ -431,7 +431,7 @@ public class LatticeMcpTools {
             StatusService statusService,
             LintService lintService,
             QualityMetricsService qualityMetricsService,
-            CompilePipelineService compilePipelineService,
+            CompileApplicationFacade compileApplicationFacade,
             InspectService inspectService,
             InspectionAnswerImportService inspectionAnswerImportService,
             ArticleCorrectionService articleCorrectionService,
@@ -445,7 +445,7 @@ public class LatticeMcpTools {
                 statusService,
                 lintService,
                 qualityMetricsService,
-                compilePipelineService,
+                compileApplicationFacade,
                 inspectService,
                 inspectionAnswerImportService,
                 articleCorrectionService,
@@ -470,7 +470,7 @@ public class LatticeMcpTools {
             StatusService statusService,
             LintService lintService,
             QualityMetricsService qualityMetricsService,
-            CompilePipelineService compilePipelineService,
+            CompileApplicationFacade compileApplicationFacade,
             InspectService inspectService,
             InspectionAnswerImportService inspectionAnswerImportService,
             PropagationService propagationService,
@@ -485,7 +485,7 @@ public class LatticeMcpTools {
                 statusService,
                 lintService,
                 qualityMetricsService,
-                compilePipelineService,
+                compileApplicationFacade,
                 inspectService,
                 inspectionAnswerImportService,
                 null,
@@ -510,7 +510,7 @@ public class LatticeMcpTools {
             StatusService statusService,
             LintService lintService,
             QualityMetricsService qualityMetricsService,
-            CompilePipelineService compilePipelineService,
+            CompileApplicationFacade compileApplicationFacade,
             InspectService inspectService,
             InspectionAnswerImportService inspectionAnswerImportService,
             PropagationService propagationService
@@ -523,7 +523,7 @@ public class LatticeMcpTools {
                 statusService,
                 lintService,
                 qualityMetricsService,
-                compilePipelineService,
+                compileApplicationFacade,
                 inspectService,
                 inspectionAnswerImportService,
                 null,
@@ -1104,9 +1104,9 @@ public class LatticeMcpTools {
             }
             DocumentSectionSelector.DocumentHeading heading = headings.get(index);
             itemsBuilder.append("{")
-                    .append("\"heading\":").append(jsonString(heading.heading())).append(",")
-                    .append("\"level\":").append(heading.level()).append(",")
-                    .append("\"line\":").append(heading.line())
+                    .append("\"heading\":").append(jsonString(heading.getHeading())).append(",")
+                    .append("\"level\":").append(heading.getLevel()).append(",")
+                    .append("\"line\":").append(heading.getLine())
                     .append("}");
         }
         itemsBuilder.append("]");
@@ -1134,9 +1134,9 @@ public class LatticeMcpTools {
                 .readSection(sourceFileRecord.getContentText(), heading);
         return "{"
                 + "\"path\":" + jsonString(path) + ","
-                + "\"heading\":" + jsonString(section.heading()) + ","
-                + "\"line\":" + section.line() + ","
-                + "\"content\":" + jsonString(section.content())
+                + "\"heading\":" + jsonString(section.getHeading()) + ","
+                + "\"line\":" + section.getLine() + ","
+                + "\"content\":" + jsonString(section.getContent())
                 + "}";
     }
 
@@ -1153,9 +1153,8 @@ public class LatticeMcpTools {
             @McpToolParam(description = "The source directory to compile") String sourceDir,
             @McpToolParam(description = "Whether to run incremental compile") boolean incremental
     ) throws IOException {
-        CompileResult compileResult = incremental
-                ? requireCompilePipelineService().incrementalCompile(Path.of(sourceDir))
-                : requireCompilePipelineService().compile(Path.of(sourceDir));
+        Path compileSourceDir = Path.of(sourceDir);
+        CompileResult compileResult = requireCompileApplicationFacade().compile(compileSourceDir, incremental, null);
         return "{"
                 + "\"persistedCount\":" + compileResult.getPersistedCount() + ","
                 + "\"jobId\":" + jsonString(compileResult.getJobId()) + ","
@@ -1518,15 +1517,15 @@ public class LatticeMcpTools {
     }
 
     /**
-     * 获取编译链路服务。
+     * 获取统一编译应用门面。
      *
-     * @return 编译链路服务
+     * @return 编译应用门面
      */
-    private CompilePipelineService requireCompilePipelineService() {
-        if (compilePipelineService == null) {
-            throw new UnsupportedOperationException("compilePipelineService not configured");
+    private CompileApplicationFacade requireCompileApplicationFacade() {
+        if (compileApplicationFacade == null) {
+            throw new UnsupportedOperationException("compileApplicationFacade not configured");
         }
-        return compilePipelineService;
+        return compileApplicationFacade;
     }
 
     /**

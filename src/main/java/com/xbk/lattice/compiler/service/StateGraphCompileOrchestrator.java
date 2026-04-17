@@ -1,22 +1,24 @@
 package com.xbk.lattice.compiler.service;
 
 import com.alibaba.cloud.ai.graph.CompiledGraph;
+import com.alibaba.cloud.ai.graph.CompileConfig;
 import com.alibaba.cloud.ai.graph.OverAllState;
-import com.alibaba.cloud.ai.graph.StateGraph;
-import com.alibaba.cloud.ai.graph.action.AsyncNodeAction;
-import com.alibaba.cloud.ai.graph.exception.GraphStateException;
+import com.xbk.lattice.compiler.graph.CompileGraphDefinitionFactory;
+import com.xbk.lattice.compiler.graph.CompileGraphLifecycleListener;
+import com.xbk.lattice.compiler.graph.CompileGraphState;
+import com.xbk.lattice.compiler.graph.CompileGraphStateMapper;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * StateGraph 编排器
  *
- * 职责：基于 Spring AI Alibaba StateGraph 执行可切换的 full / incremental compile
+ * 职责：基于 Spring AI Alibaba StateGraph 执行多节点 full / incremental 编译图
  *
  * @author xiexu
  */
@@ -24,15 +26,27 @@ import java.util.Optional;
 @Profile("jdbc")
 public class StateGraphCompileOrchestrator implements CompileOrchestrator {
 
-    private final CompilePipelineService compilePipelineService;
+    private final CompileGraphDefinitionFactory compileGraphDefinitionFactory;
+
+    private final CompileGraphStateMapper compileGraphStateMapper;
+
+    private final CompileGraphLifecycleListener compileGraphLifecycleListener;
 
     /**
      * 创建 StateGraph 编排器。
      *
-     * @param compilePipelineService 编译链路服务
+     * @param compileGraphDefinitionFactory 编译图定义工厂
+     * @param compileGraphStateMapper 编译图状态映射器
+     * @param compileGraphLifecycleListener 编译图生命周期监听器
      */
-    public StateGraphCompileOrchestrator(CompilePipelineService compilePipelineService) {
-        this.compilePipelineService = compilePipelineService;
+    public StateGraphCompileOrchestrator(
+            CompileGraphDefinitionFactory compileGraphDefinitionFactory,
+            CompileGraphStateMapper compileGraphStateMapper,
+            CompileGraphLifecycleListener compileGraphLifecycleListener
+    ) {
+        this.compileGraphDefinitionFactory = compileGraphDefinitionFactory;
+        this.compileGraphStateMapper = compileGraphStateMapper;
+        this.compileGraphLifecycleListener = compileGraphLifecycleListener;
     }
 
     /**
@@ -56,49 +70,26 @@ public class StateGraphCompileOrchestrator implements CompileOrchestrator {
     @Override
     public CompileResult execute(Path sourceDir, boolean incremental) throws IOException {
         try {
-            StateGraph stateGraph = new StateGraph();
-            stateGraph.addNode("compile", AsyncNodeAction.node_async(state -> {
-                CompileResult compileResult = executeByState(state);
-                return Map.of(
-                        "jobId", compileResult.getJobId(),
-                        "persistedCount", compileResult.getPersistedCount(),
-                        "orchestrationMode", getMode()
-                );
-            }));
-            stateGraph.addEdge(StateGraph.START, "compile");
-            stateGraph.addEdge("compile", StateGraph.END);
+            CompiledGraph compiledGraph = compileGraphDefinitionFactory.build().compile(
+                    CompileConfig.builder()
+                            .withLifecycleListener(compileGraphLifecycleListener)
+                            .build()
+            );
+            CompileGraphState initialState = new CompileGraphState();
+            initialState.setJobId(UUID.randomUUID().toString());
+            initialState.setSourceDir(sourceDir.toString());
+            initialState.setCompileMode(incremental ? "incremental" : "full");
 
-            CompiledGraph compiledGraph = stateGraph.compile();
-            Optional<OverAllState> result = compiledGraph.invoke(Map.of(
-                    "sourceDir", sourceDir.toString(),
-                    "incremental", incremental
-            ));
+            Optional<OverAllState> result = compiledGraph.invoke(compileGraphStateMapper.toMap(initialState));
             OverAllState overAllState = result.orElseThrow(() -> new IllegalStateException("state graph compile returned empty state"));
-            String jobId = overAllState.value("jobId", String.class)
-                    .orElseThrow(() -> new IllegalStateException("state graph compile missing jobId"));
-            int persistedCount = overAllState.value("persistedCount", Integer.class).orElse(0);
-            return new CompileResult(persistedCount, jobId);
+            CompileGraphState finalState = compileGraphStateMapper.fromMap(overAllState.data());
+            return new CompileResult(finalState.getPersistedCount(), finalState.getJobId());
         }
-        catch (GraphStateException ex) {
-            throw new IllegalStateException("state graph compile failed", ex);
+        catch (RuntimeException ex) {
+            throw ex;
         }
-    }
-
-    /**
-     * 基于状态对象执行 full / incremental compile。
-     *
-     * @param state 图状态
-     * @return 编译结果
-     * @throws IOException IO 异常
-     */
-    private CompileResult executeByState(OverAllState state) throws IOException {
-        String sourceDirValue = state.value("sourceDir", String.class)
-                .orElseThrow(() -> new IllegalArgumentException("state graph compile missing sourceDir"));
-        boolean incremental = state.value("incremental", Boolean.class).orElse(Boolean.FALSE);
-        Path resolvedSourceDir = Path.of(sourceDirValue);
-        if (incremental) {
-            return compilePipelineService.incrementalCompile(resolvedSourceDir);
+        catch (Exception ex) {
+            throw new IOException("state graph compile failed", ex);
         }
-        return compilePipelineService.compile(resolvedSourceDir);
     }
 }

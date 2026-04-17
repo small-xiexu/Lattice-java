@@ -4,7 +4,7 @@ import com.xbk.lattice.cli.CliExitCodes;
 import com.xbk.lattice.cli.remote.LatticeHttpClient;
 import com.xbk.lattice.api.compiler.CompileRequest;
 import com.xbk.lattice.api.compiler.CompileResponse;
-import com.xbk.lattice.compiler.service.CompilePipelineService;
+import com.xbk.lattice.compiler.service.CompileApplicationFacade;
 import com.xbk.lattice.compiler.service.CompileResult;
 import org.springframework.context.ConfigurableApplicationContext;
 import picocli.CommandLine;
@@ -30,10 +30,8 @@ public class CompileCommand extends AbstractCliCommand {
     @Override
     protected Integer runInStandaloneMode() throws Exception {
         try (ConfigurableApplicationContext context = com.xbk.lattice.cli.CliRuntimeSupport.createContext()) {
-            CompilePipelineService compilePipelineService = context.getBean(CompilePipelineService.class);
-            CompileResult compileResult = incremental
-                    ? compilePipelineService.incrementalCompile(sourceDir)
-                    : compilePipelineService.compile(sourceDir);
+            CompileApplicationFacade compileApplicationFacade = context.getBean(CompileApplicationFacade.class);
+            CompileResult compileResult = compileApplicationFacade.compile(sourceDir, incremental, null);
             printJson(compileResult);
             return CliExitCodes.SUCCESS;
         }

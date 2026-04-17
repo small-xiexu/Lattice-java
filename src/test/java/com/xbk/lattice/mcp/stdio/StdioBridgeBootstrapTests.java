@@ -1,8 +1,10 @@
 package com.xbk.lattice.mcp.stdio;
 
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.server.McpServerFeatures;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -30,18 +32,24 @@ class StdioBridgeBootstrapTests {
                 .description("Query tool")
                 .inputSchema(new McpSchema.JsonSchema(
                         "object",
-                        Map.of(),
-                        List.of(),
+                        Collections.<String, Object>emptyMap(),
+                        Collections.<String>emptyList(),
                         false,
-                        Map.of(),
-                        Map.of()
+                        Collections.<String, Object>emptyMap(),
+                        Collections.<String, Object>emptyMap()
                 ))
                 .build();
 
-        var specifications = bootstrap.createProxyToolSpecifications(List.of(tool), bridgeClient);
+        List<McpServerFeatures.SyncToolSpecification> specifications = bootstrap.createProxyToolSpecifications(
+                Collections.singletonList(tool),
+                bridgeClient
+        );
         McpSchema.CallToolResult result = specifications.get(0)
                 .callHandler()
-                .apply(null, new McpSchema.CallToolRequest("lattice_query", Map.of("question", "retry?")));
+                .apply(null, new McpSchema.CallToolRequest(
+                        "lattice_query",
+                        Collections.<String, Object>singletonMap("question", "retry?")
+                ));
 
         assertThat(specifications).hasSize(1);
         assertThat(bridgeClient.getLastRequest()).isNotNull();

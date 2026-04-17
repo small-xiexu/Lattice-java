@@ -90,7 +90,7 @@ class CompilePipelineServiceTests {
         assertThat(paymentArticle.orElseThrow().getTitle()).isEqualTo("Payment");
         assertThat(paymentArticle.orElseThrow().getContent()).contains("---");
         assertThat(paymentArticle.orElseThrow().getContent()).contains("title: \"Payment\"");
-        assertThat(paymentArticle.orElseThrow().getContent()).contains("review_status: pending");
+        assertThat(paymentArticle.orElseThrow().getContent()).contains("review_status: passed");
         assertThat(paymentArticle.orElseThrow().getContent()).contains("payment/order.md");
         assertThat(paymentArticle.orElseThrow().getContent()).contains("payment/refund.md");
         assertThat(paymentArticle.orElseThrow().getSummary()).isNotBlank();
@@ -140,7 +140,7 @@ class CompilePipelineServiceTests {
         assertThat(paymentTimeoutArticle.orElseThrow().getMetadataJson()).contains("2");
         assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("summary: \"Handles payment timeout recovery\"");
         assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("referential_keywords:");
-        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("review_status: pending");
+        assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("review_status: passed");
         assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("## Timeout Rules");
         assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("- retry=3");
         assertThat(paymentTimeoutArticle.orElseThrow().getContent()).contains("- interval=30s");
@@ -151,7 +151,7 @@ class CompilePipelineServiceTests {
         assertThat(paymentTimeoutArticle.orElseThrow().getSummary()).isEqualTo("Handles payment timeout recovery");
         assertThat(paymentTimeoutArticle.orElseThrow().getReferentialKeywords()).contains("retry=3", "interval=30s");
         assertThat(paymentTimeoutArticle.orElseThrow().getConfidence()).isEqualTo("medium");
-        assertThat(paymentTimeoutArticle.orElseThrow().getReviewStatus()).isEqualTo("pending");
+        assertThat(paymentTimeoutArticle.orElseThrow().getReviewStatus()).isEqualTo("passed");
     }
 
     /**

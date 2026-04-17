@@ -1,6 +1,6 @@
 package com.xbk.lattice.api.admin;
 
-import com.xbk.lattice.compiler.service.CompilePipelineService;
+import com.xbk.lattice.compiler.service.CompileApplicationFacade;
 import com.xbk.lattice.governance.ArticleCorrectionResult;
 import com.xbk.lattice.governance.ArticleCorrectionService;
 import com.xbk.lattice.governance.LintFixResult;
@@ -60,7 +60,7 @@ class AdminGovernanceApiIntegrationTests {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private CompilePipelineService compilePipelineService;
+    private CompileApplicationFacade compileApplicationFacade;
 
     @Autowired
     private ContributionJdbcRepository contributionJdbcRepository;
@@ -207,7 +207,7 @@ class AdminGovernanceApiIntegrationTests {
         mockMvc.perform(get("/api/v1/admin/snapshot/repo").param("limit", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.count").value(1))
-                .andExpect(jsonPath("$.items[0].triggerEvent").value("compile.full"));
+                .andExpect(jsonPath("$.items[0].triggerEvent").value("compile.full.graph"));
     }
 
     /**
@@ -315,7 +315,7 @@ class AdminGovernanceApiIntegrationTests {
                         + "}",
                 StandardCharsets.UTF_8
         );
-        compilePipelineService.compile(tempDir);
+        compileApplicationFacade.compile(tempDir, false, null);
     }
 
     /**

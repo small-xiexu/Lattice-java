@@ -2,7 +2,7 @@ package com.xbk.lattice.api.compiler;
 
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
-import com.xbk.lattice.compiler.service.CompilePipelineService;
+import com.xbk.lattice.compiler.service.CompileApplicationFacade;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,7 +54,7 @@ class CompileControllerTests {
     private ArticleJdbcRepository articleJdbcRepository;
 
     @Autowired
-    private CompilePipelineService compilePipelineService;
+    private CompileApplicationFacade compileApplicationFacade;
 
     /**
      * 验证编译接口可触发最小编译链路。
@@ -126,7 +126,7 @@ class CompileControllerTests {
                         + "}",
                 StandardCharsets.UTF_8
         );
-        compilePipelineService.compile(baselineRoot);
+        compileApplicationFacade.compile(baselineRoot, false, null);
 
         Path incrementalRoot = Files.createDirectories(tempDir.resolve("incremental"));
         Path incrementalPaymentDir = Files.createDirectories(incrementalRoot.resolve("payment"));

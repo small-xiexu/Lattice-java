@@ -1,6 +1,6 @@
 package com.xbk.lattice.api.admin;
 
-import com.xbk.lattice.compiler.service.CompilePipelineService;
+import com.xbk.lattice.compiler.service.CompileApplicationFacade;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,7 +48,7 @@ class AdminOverviewControllerTests {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private CompilePipelineService compilePipelineService;
+    private CompileApplicationFacade compileApplicationFacade;
 
     /**
      * 验证管理侧总览接口会返回状态、质量和 pending 列表。
@@ -100,7 +100,7 @@ class AdminOverviewControllerTests {
                         + "}",
                 StandardCharsets.UTF_8
         );
-        compilePipelineService.compile(tempDir);
+        compileApplicationFacade.compile(tempDir, false, null);
     }
 
     /**

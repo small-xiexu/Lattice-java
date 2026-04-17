@@ -27,6 +27,19 @@ public class LocalReviewerGateway implements ReviewerGateway {
                     {"pass":false,"issues":[{"severity":"HIGH","category":"EMPTY_PROMPT","description":"审查输入为空"}]}
                     """;
         }
+        String normalizedPrompt = reviewPrompt.trim();
+        if (!normalizedPrompt.contains("sources=") || normalizedPrompt.endsWith("sources=")) {
+            return """
+                    {"pass":false,"issues":[{"severity":"HIGH","category":"EMPTY_SOURCES","description":"答案缺少来源路径，无法验证"}]}
+                    """;
+        }
+        if (normalizedPrompt.contains("answer=未找到相关知识")
+                || normalizedPrompt.contains("answer=TODO")
+                || normalizedPrompt.contains("answer=TBD")) {
+            return """
+                    {"pass":false,"issues":[{"severity":"HIGH","category":"WEAK_ANSWER","description":"答案为空洞、占位或未提供可验证结论"}]}
+                    """;
+        }
         return """
                 {"pass":true,"issues":[]}
                 """;

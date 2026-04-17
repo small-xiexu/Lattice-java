@@ -66,7 +66,8 @@ public class AnthropicMessageApiLlmClient implements LlmClient {
                 chatProperties.getOptions().getMaxTokens(),
                 chatProperties.getOptions().getTemperature(),
                 chatProperties.getOptions().getTopP(),
-                chatProperties.getOptions().getTopK()
+                chatProperties.getOptions().getTopK(),
+                Integer.valueOf(300)
         );
     }
 
@@ -98,10 +99,56 @@ public class AnthropicMessageApiLlmClient implements LlmClient {
             Double topP,
             Integer topK
     ) {
+        this(
+                restClientBuilder,
+                objectMapper,
+                baseUrl,
+                apiKey,
+                version,
+                betaVersion,
+                model,
+                maxTokens,
+                temperature,
+                topP,
+                topK,
+                Integer.valueOf(300)
+        );
+    }
+
+    /**
+     * 创建 Anthropic Messages API 客户端。
+     *
+     * @param restClientBuilder RestClient 构建器
+     * @param objectMapper Jackson 对象映射器
+     * @param baseUrl Anthropic 基础地址
+     * @param apiKey Anthropic API Key
+     * @param version Anthropic 版本头
+     * @param betaVersion Anthropic Beta 头
+     * @param model 模型名称
+     * @param maxTokens 最大输出 token
+     * @param temperature 温度
+     * @param topP topP 参数
+     * @param topK topK 参数
+     * @param timeoutSeconds 超时秒数
+     */
+    public AnthropicMessageApiLlmClient(
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper,
+            String baseUrl,
+            String apiKey,
+            String version,
+            String betaVersion,
+            String model,
+            Integer maxTokens,
+            Double temperature,
+            Double topP,
+            Integer topK,
+            Integer timeoutSeconds
+    ) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setProxy(Proxy.NO_PROXY);
-        requestFactory.setConnectTimeout(Duration.ofSeconds(30));
-        requestFactory.setReadTimeout(Duration.ofMinutes(5));
+        requestFactory.setConnectTimeout(Duration.ofSeconds(resolveTimeout(timeoutSeconds)));
+        requestFactory.setReadTimeout(Duration.ofSeconds(resolveTimeout(timeoutSeconds)));
         RestClient.Builder clientBuilder = restClientBuilder.clone()
                 .requestFactory(requestFactory)
                 .baseUrl(baseUrl)
@@ -202,6 +249,13 @@ public class AnthropicMessageApiLlmClient implements LlmClient {
         catch (JsonProcessingException exception) {
             throw new IllegalStateException("Failed to serialize Anthropic request", exception);
         }
+    }
+
+    private int resolveTimeout(Integer timeoutSeconds) {
+        if (timeoutSeconds == null || timeoutSeconds.intValue() <= 0) {
+            return 300;
+        }
+        return timeoutSeconds.intValue();
     }
 
     /**

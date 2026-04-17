@@ -42,3 +42,6 @@ build/
 ### Local Spike Artifacts ###
 .m2/
 .m2-central/
+
+### Local AI Runtime Config ###
+.claude/

@@ -127,11 +127,11 @@ class AdminCompileJobControllerTests {
         mockMvc.perform(multipart("/api/v1/admin/compile/upload")
                         .file(sourceFile)
                         .param("async", "false")
-                        .param("orchestrationMode", "service"))
+                        .param("orchestrationMode", "state_graph"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SUCCEEDED"))
                 .andExpect(jsonPath("$.persistedCount").value(1))
-                .andExpect(jsonPath("$.orchestrationMode").value("service"));
+                .andExpect(jsonPath("$.orchestrationMode").value("state_graph"));
 
         assertThat(articleJdbcRepository.findByConceptId("payment-timeout")).isPresent();
     }
@@ -152,7 +152,7 @@ class AdminCompileJobControllerTests {
                         .content("{"
                                 + "\"sourceDir\":\"" + escapeJson(missingDir.toString()) + "\","
                                 + "\"async\":true,"
-                                + "\"orchestrationMode\":\"service\""
+                                + "\"orchestrationMode\":\"state_graph\""
                                 + "}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("QUEUED"))
