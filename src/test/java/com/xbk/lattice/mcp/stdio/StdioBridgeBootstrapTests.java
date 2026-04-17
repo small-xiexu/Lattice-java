@@ -1,0 +1,51 @@
+package com.xbk.lattice.mcp.stdio;
+
+import io.modelcontextprotocol.spec.McpSchema;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * StdioBridgeBootstrap 测试
+ *
+ * 职责：验证 Bridge 模式会基于远端工具清单生成本地代理工具定义
+ *
+ * @author xiexu
+ */
+class StdioBridgeBootstrapTests {
+
+    /**
+     * 验证代理工具会转发到远端客户端。
+     */
+    @Test
+    void shouldCreateProxyToolSpecifications() {
+        StdioBridgeBootstrap.RecordingBridgeClient bridgeClient = new StdioBridgeBootstrap.RecordingBridgeClient();
+        StdioBridgeBootstrap bootstrap = new StdioBridgeBootstrap(ignored -> bridgeClient);
+        McpSchema.Tool tool = McpSchema.Tool.builder()
+                .name("lattice_query")
+                .title("Query")
+                .description("Query tool")
+                .inputSchema(new McpSchema.JsonSchema(
+                        "object",
+                        Map.of(),
+                        List.of(),
+                        false,
+                        Map.of(),
+                        Map.of()
+                ))
+                .build();
+
+        var specifications = bootstrap.createProxyToolSpecifications(List.of(tool), bridgeClient);
+        McpSchema.CallToolResult result = specifications.get(0)
+                .callHandler()
+                .apply(null, new McpSchema.CallToolRequest("lattice_query", Map.of("question", "retry?")));
+
+        assertThat(specifications).hasSize(1);
+        assertThat(bridgeClient.getLastRequest()).isNotNull();
+        assertThat(bridgeClient.getLastRequest().name()).isEqualTo("lattice_query");
+        assertThat(result.isError()).isFalse();
+    }
+}

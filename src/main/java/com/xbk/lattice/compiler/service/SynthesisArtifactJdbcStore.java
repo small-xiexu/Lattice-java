@@ -4,6 +4,8 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
+
 /**
  * 合成产物 JDBC 存储
  *
@@ -42,5 +44,33 @@ public class SynthesisArtifactJdbcStore implements SynthesisArtifactStore {
                 synthesisArtifactRecord.getContent(),
                 synthesisArtifactRecord.getCompiledAt()
         );
+    }
+
+    /**
+     * 查询全部合成产物。
+     *
+     * @return 合成产物列表
+     */
+    public List<SynthesisArtifactRecord> findAll() {
+        return jdbcTemplate.query(
+                """
+                        select artifact_type, title, content, compiled_at
+                        from synthesis_artifacts
+                        order by artifact_type asc
+                        """,
+                (resultSet, rowNum) -> new SynthesisArtifactRecord(
+                        resultSet.getString("artifact_type"),
+                        resultSet.getString("title"),
+                        resultSet.getString("content"),
+                        resultSet.getObject("compiled_at", java.time.OffsetDateTime.class)
+                )
+        );
+    }
+
+    /**
+     * 清空全部合成产物。
+     */
+    public void deleteAll() {
+        jdbcTemplate.execute("TRUNCATE TABLE synthesis_artifacts");
     }
 }

@@ -6,8 +6,10 @@ import com.xbk.lattice.compiler.service.LlmClient;
 import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.compiler.service.LlmUsageRecord;
 import com.xbk.lattice.compiler.service.LlmUsageStore;
+import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
+import com.xbk.lattice.infra.persistence.RepoSnapshotRecord;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotRecord;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
@@ -43,11 +45,13 @@ class LintFixServiceTests {
                 article("payment-timeout", "# Payment Timeout")
         ));
         FakeArticleSnapshotJdbcRepository articleSnapshotJdbcRepository = new FakeArticleSnapshotJdbcRepository();
+        RecordingRepoSnapshotService repoSnapshotService = new RecordingRepoSnapshotService();
         LintFixService lintFixService = new LintFixService(
                 articleJdbcRepository,
                 articleSnapshotJdbcRepository,
                 newLlmGateway(new FixedLlmClient("# Payment Timeout\n\nsummary: updated"))
         );
+        lintFixService.setRepoSnapshotService(repoSnapshotService);
 
         LintFixResult result = lintFixService.fix(new LintReport(
                 List.of("gaps", "grounding"),
@@ -65,6 +69,8 @@ class LintFixServiceTests {
         assertThat(articleJdbcRepository.getLastUpserted().getReviewStatus()).isEqualTo("needs_review");
         assertThat(articleSnapshotJdbcRepository.getSavedRecords()).hasSize(1);
         assertThat(articleSnapshotJdbcRepository.getSavedRecords().get(0).getSnapshotReason()).isEqualTo("lint_fix");
+        assertThat(repoSnapshotService.getSnapshotCount()).isEqualTo(1);
+        assertThat(repoSnapshotService.getLastTriggerEvent()).isEqualTo("governance.lint_fix");
     }
 
     private ArticleRecord article(String conceptId, String content) {
@@ -167,6 +173,39 @@ class LintFixServiceTests {
 
         private List<ArticleSnapshotRecord> getSavedRecords() {
             return savedRecords;
+        }
+    }
+
+    /**
+     * 整库快照服务替身。
+     *
+     * 职责：记录 lint 自动修复是否触发 repo snapshot
+     *
+     * @author xiexu
+     */
+    private static class RecordingRepoSnapshotService extends RepoSnapshotService {
+
+        private int snapshotCount;
+
+        private String lastTriggerEvent;
+
+        private RecordingRepoSnapshotService() {
+            super(null, null, null, null);
+        }
+
+        @Override
+        public RepoSnapshotRecord snapshot(String triggerEvent, String description, String gitCommit) {
+            snapshotCount++;
+            lastTriggerEvent = triggerEvent;
+            return new RepoSnapshotRecord(1L, null, triggerEvent, gitCommit, description, 0);
+        }
+
+        private int getSnapshotCount() {
+            return snapshotCount;
+        }
+
+        private String getLastTriggerEvent() {
+            return lastTriggerEvent;
         }
     }
 

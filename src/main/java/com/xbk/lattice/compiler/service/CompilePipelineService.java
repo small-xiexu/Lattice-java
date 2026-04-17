@@ -11,6 +11,7 @@ import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
+import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,6 +64,8 @@ public class CompilePipelineService {
     private final IncrementalCompileService incrementalCompileService;
 
     private final ArticleVectorIndexService articleVectorIndexService;
+
+    private RepoSnapshotService repoSnapshotService;
 
     /**
      * 创建最小编译链路服务。
@@ -122,6 +125,17 @@ public class CompilePipelineService {
             sourceFileChunkJdbcRepository,
             articleVectorIndexService
         );
+    }
+
+    /**
+     * 注入整库快照服务。
+     *
+     * @param repoSnapshotService 整库快照服务
+     */
+    @Autowired(required = false)
+    void setRepoSnapshotService(RepoSnapshotService repoSnapshotService) {
+        this.repoSnapshotService = repoSnapshotService;
+        this.incrementalCompileService.setRepoSnapshotService(repoSnapshotService);
     }
 
     /**
@@ -223,6 +237,7 @@ public class CompilePipelineService {
         if (synthesisArtifactsService != null && !mergedConcepts.isEmpty()) {
             synthesisArtifactsService.generateAll(mergedConcepts);
         }
+        captureRepoSnapshot("compile.full", sourceDir, persistedCount);
         CompileResult compileResult = new CompileResult(persistedCount, jobId);
         log.info("Compile completed sourceDir: {}, jobId: {}, persistedCount: {}", sourceDir, jobId, compileResult.getPersistedCount());
         return compileResult;
@@ -236,6 +251,7 @@ public class CompilePipelineService {
      */
     public CompileResult retry(String jobId) {
         int persistedCount = commitPendingConcepts(jobId, null);
+        captureRepoSnapshot("compile.retry", null, persistedCount);
         return new CompileResult(persistedCount, jobId);
     }
 
@@ -248,6 +264,16 @@ public class CompilePipelineService {
      */
     public CompileResult incrementalCompile(Path sourceDir) throws IOException {
         return incrementalCompileService.incrementalCompile(sourceDir);
+    }
+
+    private void captureRepoSnapshot(String triggerEvent, Path sourceDir, int persistedCount) {
+        if (repoSnapshotService == null || persistedCount <= 0) {
+            return;
+        }
+        String description = sourceDir == null
+                ? "CLI/HTTP write operation"
+                : "sourceDir=" + sourceDir;
+        repoSnapshotService.snapshot(triggerEvent, description, null);
     }
 
     /**

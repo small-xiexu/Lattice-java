@@ -3,9 +3,11 @@ package com.xbk.lattice.compiler.service;
 import com.xbk.lattice.compiler.config.CompilerProperties;
 import com.xbk.lattice.compiler.config.LlmProperties;
 import com.xbk.lattice.compiler.model.MergedConcept;
+import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
+import com.xbk.lattice.infra.persistence.RepoSnapshotRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
@@ -62,6 +64,7 @@ class IncrementalCompileServiceTests {
         articleChunkJdbcRepository.replaceChunks("payment-timeout", List.of("retry=3"));
         FakeSourceFileJdbcRepository sourceFileJdbcRepository = new FakeSourceFileJdbcRepository();
         RecordingSynthesisArtifactsService synthesisArtifactsService = new RecordingSynthesisArtifactsService();
+        RecordingRepoSnapshotService repoSnapshotService = new RecordingRepoSnapshotService();
         IncrementalCompileService incrementalCompileService = new IncrementalCompileService(
                 createCompilerProperties(),
                 null,
@@ -72,6 +75,7 @@ class IncrementalCompileServiceTests {
                 articleChunkJdbcRepository,
                 sourceFileJdbcRepository
         );
+        incrementalCompileService.setRepoSnapshotService(repoSnapshotService);
 
         Path paymentDir = Files.createDirectories(tempDir.resolve("payment"));
         Files.writeString(
@@ -98,6 +102,8 @@ class IncrementalCompileServiceTests {
         assertThat(String.join("\n", articleChunkJdbcRepository.findChunkTexts("payment-timeout"))).contains("## 增量更新");
         assertThat(String.join("\n", articleChunkJdbcRepository.findChunkTexts("payment-timeout"))).contains("manual-review");
         assertThat(synthesisArtifactsService.getLastConcepts()).hasSize(1);
+        assertThat(repoSnapshotService.getSnapshotCount()).isEqualTo(1);
+        assertThat(repoSnapshotService.getLastTriggerEvent()).isEqualTo("compile.incremental");
     }
 
     /**
@@ -515,6 +521,37 @@ class IncrementalCompileServiceTests {
 
         private List<MergedConcept> getLastConcepts() {
             return lastConcepts;
+        }
+    }
+
+    /**
+     * 整库快照服务测试替身。
+     *
+     * @author xiexu
+     */
+    private static class RecordingRepoSnapshotService extends RepoSnapshotService {
+
+        private int snapshotCount;
+
+        private String lastTriggerEvent;
+
+        private RecordingRepoSnapshotService() {
+            super(null, null, null, null);
+        }
+
+        @Override
+        public RepoSnapshotRecord snapshot(String triggerEvent, String description, String gitCommit) {
+            snapshotCount++;
+            lastTriggerEvent = triggerEvent;
+            return new RepoSnapshotRecord(1L, null, triggerEvent, gitCommit, description, 0);
+        }
+
+        private int getSnapshotCount() {
+            return snapshotCount;
+        }
+
+        private String getLastTriggerEvent() {
+            return lastTriggerEvent;
         }
     }
 }

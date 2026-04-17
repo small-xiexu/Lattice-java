@@ -183,14 +183,21 @@ class CompilePipelineServiceTests {
                 "select count(*) from lattice_b1_compile_test.synthesis_artifacts",
                 Integer.class
         );
+        Integer repoSnapshotCount = jdbcTemplate.queryForObject(
+                "select count(*) from lattice_b1_compile_test.repo_snapshots",
+                Integer.class
+        );
 
         assertThat(synthesisCount).isEqualTo(4);
+        assertThat(repoSnapshotCount).isEqualTo(1);
     }
 
     /**
      * 重置编译相关测试表，避免测试之间相互污染。
      */
     private void resetCompileTables() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.repo_snapshot_items");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.repo_snapshots RESTART IDENTITY CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.source_files CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.synthesis_artifacts");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.articles CASCADE");

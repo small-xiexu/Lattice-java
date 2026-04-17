@@ -6,8 +6,10 @@ import com.xbk.lattice.compiler.service.LlmClient;
 import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.compiler.service.LlmUsageRecord;
 import com.xbk.lattice.compiler.service.LlmUsageStore;
+import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
+import com.xbk.lattice.infra.persistence.RepoSnapshotRecord;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
@@ -79,6 +81,7 @@ class ArticleCorrectionServiceTests {
                 )
         ));
         FakeArticleSnapshotJdbcRepository articleSnapshotJdbcRepository = new FakeArticleSnapshotJdbcRepository();
+        RecordingRepoSnapshotService repoSnapshotService = new RecordingRepoSnapshotService();
         CapturingLlmClient compileClient = new CapturingLlmClient(
                 "{\"supported\":true,\"evidence\":\"源文件明确写的是 retry=5\"}",
                 "# Payment Config\n\n已按源文件修正为 retry=5。"
@@ -90,6 +93,7 @@ class ArticleCorrectionServiceTests {
                 new DependencyGraphService(articleJdbcRepository),
                 newLlmGateway(compileClient)
         );
+        articleCorrectionService.setRepoSnapshotService(repoSnapshotService);
 
         ArticleCorrectionResult result = articleCorrectionService.correct("payment-config", "重试次数应为 5");
 
@@ -103,6 +107,8 @@ class ArticleCorrectionServiceTests {
         assertThat(articleSnapshotJdbcRepository.getSavedRecords()).hasSize(1);
         assertThat(articleSnapshotJdbcRepository.getSavedRecords().get(0).getSnapshotReason()).isEqualTo("correction");
         assertThat(articleSnapshotJdbcRepository.getSavedRecords().get(0).getContent()).isEqualTo(result.getRevisedContent());
+        assertThat(repoSnapshotService.getSnapshotCount()).isEqualTo(1);
+        assertThat(repoSnapshotService.getLastTriggerEvent()).isEqualTo("governance.correct");
         assertThat(compileClient.getSystemPrompts()).hasSize(2);
         assertThat(compileClient.getUserPrompts().get(0))
                 .contains("重试次数应为 5")
@@ -286,6 +292,39 @@ class ArticleCorrectionServiceTests {
 
         private List<ArticleSnapshotRecord> getSavedRecords() {
             return savedRecords;
+        }
+    }
+
+    /**
+     * 整库快照服务替身。
+     *
+     * 职责：记录纠错流程是否触发 repo snapshot
+     *
+     * @author xiexu
+     */
+    private static class RecordingRepoSnapshotService extends RepoSnapshotService {
+
+        private int snapshotCount;
+
+        private String lastTriggerEvent;
+
+        private RecordingRepoSnapshotService() {
+            super(null, null, null, null);
+        }
+
+        @Override
+        public RepoSnapshotRecord snapshot(String triggerEvent, String description, String gitCommit) {
+            snapshotCount++;
+            lastTriggerEvent = triggerEvent;
+            return new RepoSnapshotRecord(1L, null, triggerEvent, gitCommit, description, 0);
+        }
+
+        private int getSnapshotCount() {
+            return snapshotCount;
+        }
+
+        private String getLastTriggerEvent() {
+            return lastTriggerEvent;
         }
     }
 

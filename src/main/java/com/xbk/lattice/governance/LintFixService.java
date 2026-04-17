@@ -2,10 +2,12 @@ package com.xbk.lattice.governance;
 
 import com.xbk.lattice.compiler.service.LatticePrompts;
 import com.xbk.lattice.compiler.service.LlmGateway;
+import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotRecord;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +38,8 @@ public class LintFixService {
 
     private final LlmGateway llmGateway;
 
+    private RepoSnapshotService repoSnapshotService;
+
     /**
      * 创建 Lint 自动修复服务。
      *
@@ -51,6 +55,16 @@ public class LintFixService {
         this.articleJdbcRepository = articleJdbcRepository;
         this.articleSnapshotJdbcRepository = articleSnapshotJdbcRepository;
         this.llmGateway = llmGateway;
+    }
+
+    /**
+     * 注入整库快照服务。
+     *
+     * @param repoSnapshotService 整库快照服务
+     */
+    @Autowired(required = false)
+    void setRepoSnapshotService(RepoSnapshotService repoSnapshotService) {
+        this.repoSnapshotService = repoSnapshotService;
     }
 
     /**
@@ -146,7 +160,15 @@ public class LintFixService {
                 errors.add(entry.getKey());
             }
         }
+        captureRepoSnapshot(fixed);
         return new LintFixResult(fixed, skipped, errors);
+    }
+
+    private void captureRepoSnapshot(int fixed) {
+        if (repoSnapshotService == null || fixed <= 0) {
+            return;
+        }
+        repoSnapshotService.snapshot("governance.lint_fix", "fixed=" + fixed, null);
     }
 
     private String buildPrompt(ArticleRecord articleRecord, List<LintIssue> issues) {

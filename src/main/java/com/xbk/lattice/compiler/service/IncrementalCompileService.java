@@ -15,6 +15,7 @@ import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
+import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
 import lombok.extern.slf4j.Slf4j;
 
@@ -74,6 +75,8 @@ public class IncrementalCompileService {
     private final SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository;
 
     private final ArticleVectorIndexService articleVectorIndexService;
+
+    private RepoSnapshotService repoSnapshotService;
 
     /**
      * 创建增量编译服务。
@@ -160,6 +163,15 @@ public class IncrementalCompileService {
         this.sourceFileJdbcRepository = sourceFileJdbcRepository;
         this.sourceFileChunkJdbcRepository = sourceFileChunkJdbcRepository;
         this.articleVectorIndexService = articleVectorIndexService;
+    }
+
+    /**
+     * 注入整库快照服务。
+     *
+     * @param repoSnapshotService 整库快照服务
+     */
+    public void setRepoSnapshotService(RepoSnapshotService repoSnapshotService) {
+        this.repoSnapshotService = repoSnapshotService;
     }
 
     /**
@@ -255,8 +267,16 @@ public class IncrementalCompileService {
         }
 
         refreshSynthesisArtifacts();
+        captureRepoSnapshot(sourceDir, persistedCount);
         log.info("Incremental compile completed sourceDir: {}, jobId: {}, persistedCount: {}", sourceDir, jobId, persistedCount);
         return new CompileResult(persistedCount, jobId);
+    }
+
+    private void captureRepoSnapshot(Path sourceDir, int persistedCount) {
+        if (repoSnapshotService == null || persistedCount <= 0) {
+            return;
+        }
+        repoSnapshotService.snapshot("compile.incremental", "sourceDir=" + sourceDir, null);
     }
 
     /**

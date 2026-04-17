@@ -1,0 +1,124 @@
+package com.xbk.lattice.vault;
+
+import com.xbk.lattice.compiler.service.SynthesisArtifactJdbcStore;
+import com.xbk.lattice.compiler.service.SynthesisArtifactRecord;
+import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
+import com.xbk.lattice.infra.persistence.ArticleRecord;
+import com.xbk.lattice.infra.persistence.ContributionJdbcRepository;
+import com.xbk.lattice.infra.persistence.ContributionRecord;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * VaultExportService 测试
+ *
+ * 职责：验证文章、合成产物与贡献可导出为 Vault 文件树
+ *
+ * @author xiexu
+ */
+@SpringBootTest(properties = {
+        "spring.profiles.active=jdbc",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b9_vault_export_test",
+        "spring.datasource.username=postgres",
+        "spring.datasource.password=postgres",
+        "spring.flyway.enabled=true",
+        "spring.flyway.schemas=lattice_b9_vault_export_test",
+        "spring.flyway.default-schema=lattice_b9_vault_export_test",
+        "spring.ai.openai.api-key=test-openai-key",
+        "spring.ai.anthropic.api-key=test-anthropic-key"
+})
+class VaultExportServiceTests {
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private ArticleJdbcRepository articleJdbcRepository;
+
+    @Autowired
+    private ContributionJdbcRepository contributionJdbcRepository;
+
+    @Autowired
+    private SynthesisArtifactJdbcStore synthesisArtifactJdbcStore;
+
+    @Autowired
+    private VaultExportService vaultExportService;
+
+    /**
+     * 验证 Vault 导出会写出文章、合成产物、贡献与 manifest。
+     *
+     * @param tempDir 临时目录
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldExportManagedVault(@TempDir Path tempDir) throws Exception {
+        resetTables();
+        articleJdbcRepository.upsert(new ArticleRecord(
+                "payment-timeout",
+                "Payment Timeout",
+                """
+                        ---
+                        title: "Payment Timeout"
+                        review_status: pending
+                        ---
+
+                        # Payment Timeout
+                        """,
+                "ACTIVE",
+                OffsetDateTime.parse("2026-04-16T17:00:00+08:00"),
+                List.of("payment/a.md"),
+                "{\"description\":\"payment summary\"}",
+                "payment summary",
+                List.of("retry=3"),
+                List.of(),
+                List.of(),
+                "medium",
+                "pending"
+        ));
+        contributionJdbcRepository.save(new ContributionRecord(
+                UUID.fromString("11111111-1111-1111-1111-111111111111"),
+                "payment timeout?",
+                "retry=3",
+                "{}",
+                "tester",
+                OffsetDateTime.parse("2026-04-16T17:10:00+08:00")
+        ));
+        synthesisArtifactJdbcStore.save(new SynthesisArtifactRecord(
+                "index",
+                "Knowledge Index",
+                "# Index",
+                OffsetDateTime.parse("2026-04-16T17:20:00+08:00")
+        ));
+
+        VaultExportResult result = vaultExportService.export(tempDir);
+
+        assertThat(result.getWrittenFiles()).isGreaterThanOrEqualTo(3);
+        assertThat(Files.exists(tempDir.resolve("concepts/payment-timeout.md"))).isTrue();
+        assertThat(Files.readString(tempDir.resolve("concepts/payment-timeout.md"), StandardCharsets.UTF_8))
+                .contains("# Payment Timeout");
+        assertThat(Files.exists(tempDir.resolve("index.md"))).isTrue();
+        assertThat(Files.readString(tempDir.resolve("index.md"), StandardCharsets.UTF_8)).contains("# Index");
+        assertThat(Files.list(tempDir.resolve("_contributions")).count()).isEqualTo(1L);
+        assertThat(Files.exists(tempDir.resolve("_meta/README.md"))).isTrue();
+        assertThat(Files.exists(tempDir.resolve("_meta/export-manifest.json"))).isTrue();
+        assertThat(Files.exists(tempDir.resolve(".git"))).isTrue();
+    }
+
+    private void resetTables() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_export_test.contributions");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_export_test.synthesis_artifacts");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_export_test.articles CASCADE");
+    }
+}

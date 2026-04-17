@@ -4,12 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.service.LatticePrompts;
 import com.xbk.lattice.compiler.service.LlmGateway;
+import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +50,8 @@ public class ArticleCorrectionService {
 
     private final LlmGateway llmGateway;
 
+    private RepoSnapshotService repoSnapshotService;
+
     /**
      * 创建文章纠错服务。
      *
@@ -69,6 +73,16 @@ public class ArticleCorrectionService {
         this.articleSnapshotJdbcRepository = articleSnapshotJdbcRepository;
         this.dependencyGraphService = dependencyGraphService;
         this.llmGateway = llmGateway;
+    }
+
+    /**
+     * 注入整库快照服务。
+     *
+     * @param repoSnapshotService 整库快照服务
+     */
+    @Autowired(required = false)
+    void setRepoSnapshotService(RepoSnapshotService repoSnapshotService) {
+        this.repoSnapshotService = repoSnapshotService;
     }
 
     /**
@@ -135,6 +149,7 @@ public class ArticleCorrectionService {
                 OffsetDateTime.now()
         );
         articleSnapshotJdbcRepository.save(snapshotRecord);
+        captureRepoSnapshot(conceptId);
 
         return new ArticleCorrectionResult(
                 updatedRecord.getConceptId(),
@@ -142,6 +157,13 @@ public class ArticleCorrectionService {
                 collectDownstreamIds(conceptId),
                 validationResult.supported
         );
+    }
+
+    private void captureRepoSnapshot(String conceptId) {
+        if (repoSnapshotService == null) {
+            return;
+        }
+        repoSnapshotService.snapshot("governance.correct", "conceptId=" + conceptId, null);
     }
 
     private List<SourceExcerpt> collectSourceExcerpts(List<String> sourcePaths) {

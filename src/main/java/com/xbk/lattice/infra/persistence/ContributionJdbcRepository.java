@@ -72,6 +72,13 @@ public class ContributionJdbcRepository {
     }
 
     /**
+     * 清空全部贡献记录。
+     */
+    public void deleteAll() {
+        jdbcTemplate.execute("TRUNCATE TABLE contributions");
+    }
+
+    /**
      * 映射贡献记录。
      *
      * @param resultSet 结果集

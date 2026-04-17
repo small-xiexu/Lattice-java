@@ -205,6 +205,13 @@ public class ArticleJdbcRepository {
     }
 
     /**
+     * 清空全部文章与级联受管数据。
+     */
+    public void deleteAll() {
+        jdbcTemplate.execute("TRUNCATE TABLE articles CASCADE");
+    }
+
+    /**
      * 映射单行文章记录。
      *
      * @param resultSet 结果集

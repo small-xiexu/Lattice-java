@@ -1,5 +1,7 @@
 package com.xbk.lattice.api.admin;
 
+import com.xbk.lattice.governance.ArticleCorrectionResult;
+import com.xbk.lattice.governance.ArticleCorrectionService;
 import com.xbk.lattice.governance.LifecycleService;
 import com.xbk.lattice.governance.LifecycleTransitionResult;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
@@ -32,18 +34,23 @@ public class AdminArticleController {
 
     private final LifecycleService lifecycleService;
 
+    private final ArticleCorrectionService articleCorrectionService;
+
     /**
      * 创建管理侧文章控制器。
      *
      * @param adminArticleQueryService 管理侧文章查询服务
      * @param lifecycleService 生命周期服务
+     * @param articleCorrectionService 文章纠错服务
      */
     public AdminArticleController(
             AdminArticleQueryService adminArticleQueryService,
-            LifecycleService lifecycleService
+            LifecycleService lifecycleService,
+            ArticleCorrectionService articleCorrectionService
     ) {
         this.adminArticleQueryService = adminArticleQueryService;
         this.lifecycleService = lifecycleService;
+        this.articleCorrectionService = articleCorrectionService;
     }
 
     /**
@@ -125,5 +132,20 @@ public class AdminArticleController {
             return lifecycleService.activate(conceptId, lifecycleRequest.getReason(), lifecycleRequest.getUpdatedBy());
         }
         throw new IllegalArgumentException("unsupported lifecycle action: " + action);
+    }
+
+    /**
+     * 纠正单篇文章。
+     *
+     * @param conceptId 概念标识
+     * @param request 纠错请求
+     * @return 纠错结果
+     */
+    @PostMapping("/{conceptId}/correct")
+    public ArticleCorrectionResult correct(
+            @PathVariable String conceptId,
+            @RequestBody AdminArticleCorrectionRequest request
+    ) {
+        return articleCorrectionService.correct(conceptId, request.getCorrectionSummary());
     }
 }
