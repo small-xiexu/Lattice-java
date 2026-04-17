@@ -226,7 +226,10 @@ java -jar target/lattice-java-1.0-SNAPSHOT.jar
 Started LatticeApplication in X.XXX seconds
 ```
 
-Flyway 会在首次启动时自动执行 V1–V5 建表迁移，无需手动建表。
+Flyway 会在首次启动时自动执行当前基线迁移 `V1__baseline_schema.sql`，无需手动逐条建表。
+
+> 如果你本地之前已经用旧版 `V1` 到 `V15` 迁移初始化过 `lattice` schema，需要先重建该 schema 或重建数据库，再启动新版本。
+> 如果你的工作区之前已经构建过旧版迁移资源，请先执行一次 `mvn clean`，避免 `target/classes/db/migration` 残留旧脚本导致 Flyway 看到重复版本。
 
 ---
 
@@ -596,7 +599,7 @@ curl -X POST http://localhost:8080/api/v1/compile/retry \
 | `pending_queries` | 待确认查询，TTL 7 天 |
 | `contributions` | 已确认问答贡献，永久保存 |
 
-所有表由 Flyway 自动创建（V1–V5），首次启动无需手动建表。
+所有表由 Flyway 自动创建（当前基线为 `V1__baseline_schema.sql`），首次启动无需手动建表。
 
 ---
 

@@ -1,10 +1,24 @@
 spring:
   application:
     name: lattice-app
+  profiles:
+    default: jdbc
   ai:
+    openai:
+      api-key: ${SPRING_AI_OPENAI_API_KEY:any-non-empty-value}
+    anthropic:
+      api-key: ${SPRING_AI_ANTHROPIC_API_KEY:any-non-empty-value}
     mcp:
       server:
         protocol: STREAMABLE
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+  flyway:
+    enabled: ${SPRING_FLYWAY_ENABLED:true}
+    schemas: ${SPRING_FLYWAY_SCHEMAS:lattice}
+    default-schema: ${SPRING_FLYWAY_DEFAULT_SCHEMA:lattice}
   data:
     redis:
       host: ${LATTICE_REDIS_HOST:127.0.0.1}

@@ -1,7 +1,0 @@
-CREATE TABLE IF NOT EXISTS synthesis_artifacts (
-    id BIGSERIAL PRIMARY KEY,
-    artifact_type VARCHAR(32) NOT NULL UNIQUE,
-    title VARCHAR(255) NOT NULL,
-    content TEXT NOT NULL,
-    compiled_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);

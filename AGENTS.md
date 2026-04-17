@@ -23,7 +23,7 @@
 
 ## 实施约定
 
-- 当前以 [`.codex/实施方案.md`](/Users/sxie/xbk/Lattice-java/.codex/实施方案.md) 和 [`.codex/P0-0 技术基线验证记录.md`](/Users/sxie/xbk/Lattice-java/.codex/P0-0%20技术基线验证记录.md) 作为实施与验证台账
-- 若继续推进 B1 及后续阶段，先读取上述台账，再决定下一步
+- 当前以 [`.codex/B5-B8 对齐原始项目完整改动方案.md`](/Users/sxie/xbk/Lattice-java/.codex/B5-B8%20对齐原始项目完整改动方案.md)、[`.codex/B9 原版能力超越执行清单.md`](/Users/sxie/xbk/Lattice-java/.codex/B9%20原版能力超越执行清单.md) 和 [`.codex/项目启动配置清单.md`](/Users/sxie/xbk/Lattice-java/.codex/项目启动配置清单.md) 作为当前实施、验收与运行入口
+- 若继续推进后续迭代，先读取上述文档，再决定下一步
 - B1 默认不引入向量 ORM 映射；向量字段写入和检索后置到 B3，优先使用 `JdbcTemplate/jOOQ + SQL`
 - 涉及 PostgreSQL 本机端口访问、Docker `exec` 或外网依赖下载时，注意当前环境可能需要额外权限
