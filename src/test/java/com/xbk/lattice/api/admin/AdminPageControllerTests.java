@@ -15,7 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * AdminPageController 测试
  *
- * 职责：验证管理后台页面入口可直接访问
+ * 职责：验证知识库控制台页面入口可直接访问
  *
  * @author xiexu
  */
@@ -38,7 +38,7 @@ class AdminPageControllerTests {
     private MockMvc mockMvc;
 
     /**
-     * 验证 `/admin` 会返回管理后台页面。
+     * 验证 `/admin` 会返回知识库控制台页面。
      *
      * @throws Exception 测试异常
      */
@@ -50,13 +50,21 @@ class AdminPageControllerTests {
 
         mockMvc.perform(get("/admin/index.html"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Lattice Admin")))
+                .andExpect(content().string(containsString("Lattice Knowledge Console")))
                 .andExpect(content().string(containsString("id=\"refresh-all\"")))
+                .andExpect(content().string(containsString("id=\"refresh-overview\"")))
+                .andExpect(content().string(containsString("id=\"overview-story-title\"")))
+                .andExpect(content().string(containsString("id=\"overview-story-copy\"")))
+                .andExpect(content().string(containsString("id=\"overview-cards\"")))
+                .andExpect(content().string(containsString("id=\"overview-focus\"")))
+                .andExpect(content().string(containsString("id=\"health-cards\"")))
+                .andExpect(content().string(containsString("data-jump-tab=\"pending\"")))
                 .andExpect(content().string(containsString("id=\"job-list\"")))
                 .andExpect(content().string(containsString("data-tab=\"governance\"")))
                 .andExpect(content().string(containsString("data-governance-tab=\"lint\"")))
                 .andExpect(content().string(containsString("data-governance-tab=\"quality\"")))
                 .andExpect(content().string(containsString("data-governance-tab=\"coverage\"")))
+                .andExpect(content().string(containsString("data-governance-tab=\"inspect\"")))
                 .andExpect(content().string(containsString("data-governance-tab=\"snapshot\"")))
                 .andExpect(content().string(containsString("data-governance-tab=\"link\"")))
                 .andExpect(content().string(containsString("id=\"admin-vault-sync\"")))

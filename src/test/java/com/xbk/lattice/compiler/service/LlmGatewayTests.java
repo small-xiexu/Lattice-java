@@ -5,9 +5,7 @@ import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,26 +14,24 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * LlmGateway 测试
  *
- * 职责：验证模型路由、缓存、预算守卫与用量记录
+ * 职责：验证模型路由、缓存与预算守卫
  *
  * @author xiexu
  */
 class LlmGatewayTests {
 
     /**
-     * 验证 compile 会路由到编译模型，并写入缓存与 usage。
+     * 验证 compile 会路由到编译模型，并写入缓存。
      */
     @Test
-    void shouldRouteCompileCallsToCompileClientAndStoreUsage() {
+    void shouldRouteCompileCallsToCompileClientAndCacheResult() {
         FakeLlmClient compileClient = new FakeLlmClient("compiled-article", 120, 30);
         FakeLlmClient reviewClient = new FakeLlmClient("review-result", 60, 10);
         FakeRedisKeyValueStore redisKeyValueStore = new FakeRedisKeyValueStore();
-        FakeLlmUsageStore llmUsageStore = new FakeLlmUsageStore();
         LlmGateway llmGateway = new LlmGateway(
                 compileClient,
                 reviewClient,
                 redisKeyValueStore,
-                llmUsageStore,
                 createProperties()
         );
 
@@ -44,8 +40,6 @@ class LlmGatewayTests {
         assertThat(result).isEqualTo("compiled-article");
         assertThat(compileClient.getCallCount()).isEqualTo(1);
         assertThat(reviewClient.getCallCount()).isZero();
-        assertThat(llmUsageStore.getRecords()).hasSize(1);
-        assertThat(llmUsageStore.getRecords().get(0).getPurpose()).isEqualTo("compile");
         assertThat(redisKeyValueStore.values).hasSize(1);
     }
 
@@ -60,7 +54,6 @@ class LlmGatewayTests {
                 compileClient,
                 reviewClient,
                 new FakeRedisKeyValueStore(),
-                new FakeLlmUsageStore(),
                 createProperties()
         );
 
@@ -78,12 +71,10 @@ class LlmGatewayTests {
     void shouldReuseCachedResponseWithoutCallingModelAgain() {
         FakeLlmClient compileClient = new FakeLlmClient("compiled-article", 120, 30);
         FakeRedisKeyValueStore redisKeyValueStore = new FakeRedisKeyValueStore();
-        FakeLlmUsageStore llmUsageStore = new FakeLlmUsageStore();
         LlmGateway llmGateway = new LlmGateway(
                 compileClient,
                 new FakeLlmClient("review-result", 60, 10),
                 redisKeyValueStore,
-                llmUsageStore,
                 createProperties()
         );
 
@@ -93,7 +84,6 @@ class LlmGatewayTests {
         assertThat(first).isEqualTo("compiled-article");
         assertThat(second).isEqualTo("compiled-article");
         assertThat(compileClient.getCallCount()).isEqualTo(1);
-        assertThat(llmUsageStore.getRecords()).hasSize(1);
     }
 
     /**
@@ -108,7 +98,6 @@ class LlmGatewayTests {
                 compileClient,
                 new FakeLlmClient("review-result", 60, 10),
                 new FakeRedisKeyValueStore(),
-                new FakeLlmUsageStore(),
                 llmProperties
         );
 
@@ -193,27 +182,6 @@ class LlmGatewayTests {
         @Override
         public Long getExpire(String key) {
             return ttlSeconds.get(key);
-        }
-    }
-
-    /**
-     * LLM 用量存储测试替身。
-     *
-     * 职责：记录保存的 usage 条目，便于断言
-     *
-     * @author xiexu
-     */
-    private static class FakeLlmUsageStore implements LlmUsageStore {
-
-        private final List<LlmUsageRecord> records = new ArrayList<LlmUsageRecord>();
-
-        @Override
-        public void save(LlmUsageRecord llmUsageRecord) {
-            records.add(llmUsageRecord);
-        }
-
-        private List<LlmUsageRecord> getRecords() {
-            return records;
         }
     }
 }

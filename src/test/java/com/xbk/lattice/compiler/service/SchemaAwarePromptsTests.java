@@ -78,7 +78,6 @@ class SchemaAwarePromptsTests {
                         llmClient,
                         llmClient,
                         new NoopRedisKeyValueStore(),
-                        new NoopLlmUsageStore(),
                         createLlmProperties()
                 ),
                 new SchemaAwarePrompts(new CompilerProperties())
@@ -119,7 +118,6 @@ class SchemaAwarePromptsTests {
                         llmClient,
                         llmClient,
                         new NoopRedisKeyValueStore(),
-                        new NoopLlmUsageStore(),
                         createLlmProperties()
                 ),
                 new FixedSourceFileJdbcRepository(new SourceFileRecord(
@@ -213,11 +211,4 @@ class SchemaAwarePromptsTests {
         }
     }
 
-    private static class NoopLlmUsageStore implements LlmUsageStore {
-
-        @Override
-        public void save(LlmUsageRecord llmUsageRecord) {
-            // 无操作
-        }
-    }
 }

@@ -324,7 +324,6 @@ class AdminGovernanceApiIntegrationTests {
     private void resetTables() {
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_governance_api_test.pending_queries");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_governance_api_test.contributions");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_governance_api_test.llm_usage");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_governance_api_test.repo_snapshot_items");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_governance_api_test.repo_snapshots RESTART IDENTITY CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_governance_api_test.source_files CASCADE");

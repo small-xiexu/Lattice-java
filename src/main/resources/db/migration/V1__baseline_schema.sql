@@ -115,30 +115,6 @@ COMMENT ON COLUMN contributions.corrections IS '人工修正记录 JSON 数组';
 COMMENT ON COLUMN contributions.confirmed_by IS '确认人';
 COMMENT ON COLUMN contributions.confirmed_at IS '确认时间';
 
-CREATE TABLE IF NOT EXISTS llm_usage (
-    id BIGSERIAL PRIMARY KEY,
-    call_id VARCHAR(64) NOT NULL,
-    model VARCHAR(64) NOT NULL,
-    purpose VARCHAR(32) NOT NULL,
-    input_tokens INT NOT NULL,
-    output_tokens INT NOT NULL,
-    cost_usd NUMERIC(10, 6) NOT NULL,
-    called_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-COMMENT ON TABLE llm_usage IS 'LLM 调用用量台账';
-COMMENT ON COLUMN llm_usage.id IS '用量记录主键 ID';
-COMMENT ON COLUMN llm_usage.call_id IS '调用链路唯一标识';
-COMMENT ON COLUMN llm_usage.model IS '调用模型名称';
-COMMENT ON COLUMN llm_usage.purpose IS '调用用途';
-COMMENT ON COLUMN llm_usage.input_tokens IS '输入 Token 数';
-COMMENT ON COLUMN llm_usage.output_tokens IS '输出 Token 数';
-COMMENT ON COLUMN llm_usage.cost_usd IS '调用成本（美元）';
-COMMENT ON COLUMN llm_usage.called_at IS '调用时间';
-
-CREATE INDEX IF NOT EXISTS idx_llm_usage_called_at
-    ON llm_usage (called_at DESC);
-
 CREATE TABLE IF NOT EXISTS synthesis_artifacts (
     id BIGSERIAL PRIMARY KEY,
     artifact_type VARCHAR(32) NOT NULL UNIQUE,

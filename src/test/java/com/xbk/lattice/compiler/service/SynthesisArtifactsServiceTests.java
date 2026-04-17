@@ -77,7 +77,6 @@ class SynthesisArtifactsServiceTests {
                 new StaticLlmClient(compileResponse),
                 new StaticLlmClient("{}"),
                 new NoopRedisKeyValueStore(),
-                new NoopLlmUsageStore(),
                 llmProperties
         );
     }
@@ -93,7 +92,6 @@ class SynthesisArtifactsServiceTests {
                 new FailingLlmClient(),
                 new StaticLlmClient("{}"),
                 new NoopRedisKeyValueStore(),
-                new NoopLlmUsageStore(),
                 llmProperties
         );
     }
@@ -134,13 +132,6 @@ class SynthesisArtifactsServiceTests {
         @Override
         public Long getExpire(String key) {
             return null;
-        }
-    }
-
-    private static class NoopLlmUsageStore implements LlmUsageStore {
-
-        @Override
-        public void save(LlmUsageRecord llmUsageRecord) {
         }
     }
 

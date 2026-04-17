@@ -4,8 +4,6 @@ import com.xbk.lattice.compiler.config.LlmProperties;
 import com.xbk.lattice.compiler.service.LlmCallResult;
 import com.xbk.lattice.compiler.service.LlmClient;
 import com.xbk.lattice.compiler.service.LlmGateway;
-import com.xbk.lattice.compiler.service.LlmUsageRecord;
-import com.xbk.lattice.compiler.service.LlmUsageStore;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotJdbcRepository;
@@ -113,7 +111,6 @@ class PropagateExecutionServiceTests {
                 LlmClient.class,
                 LlmClient.class,
                 RedisKeyValueStore.class,
-                LlmUsageStore.class,
                 LlmProperties.class
         );
         constructor.setAccessible(true);
@@ -121,7 +118,6 @@ class PropagateExecutionServiceTests {
                 compileClient,
                 new CapturingLlmClient("{\"passed\":true}"),
                 new FakeRedisKeyValueStore(),
-                new FakeLlmUsageStore(),
                 createProperties()
         );
     }
@@ -260,11 +256,4 @@ class PropagateExecutionServiceTests {
         }
     }
 
-    private static class FakeLlmUsageStore implements LlmUsageStore {
-
-        @Override
-        public void save(LlmUsageRecord llmUsageRecord) {
-            // 无操作：当前测试只关心传播执行行为
-        }
-    }
 }

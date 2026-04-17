@@ -51,10 +51,18 @@
                 transitionLifecycle(button.dataset.action);
             });
         });
+
+        document.addEventListener("click", function (event) {
+            const trigger = event.target.closest("[data-jump-tab]");
+            if (!trigger) {
+                return;
+            }
+            jumpToTab(trigger.dataset.jumpTab);
+        });
     }
 
     async function refreshAll() {
-        setStatus("正在刷新后台数据...");
+        setStatus("正在刷新知识库工作台...");
         await Promise.all([
             refreshOverview(),
             loadArticles(),
@@ -62,15 +70,18 @@
             loadJobs(),
             refreshGovernance()
         ]);
-        setStatus("后台数据已刷新");
+        setStatus("知识库工作台已刷新");
     }
 
     async function refreshOverview() {
         try {
-            const overview = await fetchJson("/api/v1/admin/overview");
-            const usage = await fetchJson("/api/v1/admin/usage");
-            renderOverview(overview);
-            renderUsage(usage);
+            const results = await Promise.all([
+                fetchJson("/api/v1/admin/overview"),
+                fetchJson("/api/v1/admin/quality?days=7"),
+                fetchJson("/api/v1/admin/coverage"),
+                fetchJson("/api/v1/admin/omissions")
+            ]);
+            renderOverview(results[0], results[1], results[2], results[3]);
         }
         catch (error) {
             showError("刷新总览失败", error);
@@ -115,7 +126,7 @@
             setStatus("请先选择一篇文章");
             return;
         }
-        const confirmed = window.confirm("将对文章执行生命周期变更 " + action + "，确认继续吗？");
+        const confirmed = window.confirm("将把文章生命周期切换为“" + formatLifecycleAction(action) + "”，确认继续吗？");
         if (!confirmed) {
             return;
         }
@@ -156,7 +167,7 @@
             renderPendingQueries(response);
         }
         catch (error) {
-            showError("加载待处理查询失败", error);
+            showError("加载待处理反馈失败", error);
         }
     }
 
@@ -167,7 +178,7 @@
             setStatus("请输入修正内容");
             return;
         }
-        const confirmed = window.confirm("将提交该待处理查询的修正内容，确认继续吗？");
+        const confirmed = window.confirm("将提交该待处理反馈的修正内容，确认继续吗？");
         if (!confirmed) {
             return;
         }
@@ -191,7 +202,7 @@
     }
 
     async function confirmPending(queryId) {
-        const confirmed = window.confirm("将确认该待处理查询并沉淀为 contribution，确认继续吗？");
+        const confirmed = window.confirm("将确认该待处理反馈并沉淀为知识反馈记录，确认继续吗？");
         if (!confirmed) {
             return;
         }
@@ -204,7 +215,7 @@
                 queryId: queryId,
                 status: "confirmed"
             });
-            setStatus("待处理查询已确认");
+            setStatus("待处理反馈已确认");
             await Promise.all([loadPendingQueries(), refreshOverview()]);
         }
         catch (error) {
@@ -214,7 +225,7 @@
     }
 
     async function discardPending(queryId) {
-        const confirmed = window.confirm("将丢弃该待处理查询，确认继续吗？");
+        const confirmed = window.confirm("将丢弃该待处理反馈，确认继续吗？");
         if (!confirmed) {
             return;
         }
@@ -227,7 +238,7 @@
                 queryId: queryId,
                 status: "discarded"
             });
-            setStatus("待处理查询已丢弃");
+            setStatus("待处理反馈已丢弃");
             await Promise.all([loadPendingQueries(), refreshOverview()]);
         }
         catch (error) {
@@ -323,7 +334,7 @@
     }
 
     async function rebuildChunks() {
-        const confirmed = window.confirm("将基于当前 articles/source_files 正文重建全部 chunks，确认继续吗？");
+        const confirmed = window.confirm("将基于当前文章与源文件正文重建全部知识切片，确认继续吗？");
         if (!confirmed) {
             return;
         }
@@ -332,12 +343,12 @@
                 method: "POST"
             });
             document.getElementById("rebuild-result").textContent = JSON.stringify(result, null, 2);
-            setStatus("chunks 重建已完成");
+            setStatus("知识切片重建已完成");
             await Promise.all([loadJobs(), refreshOverview()]);
         }
         catch (error) {
-            renderResultError("rebuild-result", "chunks 重建失败", error);
-            showError("chunks 重建失败", error);
+            renderResultError("rebuild-result", "知识切片重建失败", error);
+            showError("知识切片重建失败", error);
         }
     }
 
@@ -352,11 +363,11 @@
                 body: JSON.stringify({vaultDir: vaultDir})
             });
             renderVaultAdminResult(result);
-            setStatus("Vault 导出已完成");
+            setStatus("知识仓导出已完成");
         }
         catch (error) {
-            renderResultError("vault-admin-result", "Vault 导出失败", error);
-            showError("Vault 导出失败", error);
+            renderResultError("vault-admin-result", "知识仓导出失败", error);
+            showError("知识仓导出失败", error);
         }
     }
 
@@ -368,8 +379,8 @@
         const force = document.getElementById("vault-sync-force").checked;
         const confirmed = window.confirm(
                 force
-                        ? "将强制覆盖冲突并回写 Vault，确认继续吗？"
-                        : "将执行 Vault inbound sync，确认继续吗？"
+                        ? "将强制覆盖冲突并回写知识仓，确认继续吗？"
+                        : "将执行知识仓内容回写，确认继续吗？"
         );
         if (!confirmed) {
             return;
@@ -383,12 +394,12 @@
                 })
             });
             renderVaultAdminResult(result);
-            setStatus("Vault 回写已完成");
+            setStatus("知识仓回写已完成");
             await Promise.all([loadArticles(), refreshOverview()]);
         }
         catch (error) {
-            renderResultError("vault-admin-result", "Vault 回写失败", error);
-            showError("Vault 回写失败", error);
+            renderResultError("vault-admin-result", "知识仓回写失败", error);
+            showError("知识仓回写失败", error);
         }
     }
 
@@ -402,11 +413,11 @@
             const result = await fetchJson("/api/v1/admin/snapshot/repo/" + encodeURIComponent(snapshotId)
                     + "/diff?vaultDir=" + encodeURIComponent(vaultDir));
             renderVaultAdminResult(result);
-            setStatus("Repo diff 已加载");
+            setStatus("版本差异已加载");
         }
         catch (error) {
-            renderResultError("vault-admin-result", "加载 Repo diff 失败", error);
-            showError("加载 Repo diff 失败", error);
+            renderResultError("vault-admin-result", "加载版本差异失败", error);
+            showError("加载版本差异失败", error);
         }
     }
 
@@ -416,7 +427,7 @@
         if (!vaultDir || !snapshotId) {
             return;
         }
-        const confirmed = window.confirm("将整库回滚到 snapshot " + snapshotId + "，确认继续吗？");
+        const confirmed = window.confirm("将整库回滚到快照版本 " + snapshotId + "，确认继续吗？");
         if (!confirmed) {
             return;
         }
@@ -453,17 +464,17 @@
             const lint = await fetchJson("/api/v1/admin/lint");
             document.getElementById("governance-lint-result").textContent = JSON.stringify(lint, null, 2);
             if (!silent) {
-                setStatus("Lint 已完成");
+                setStatus("规则巡检已完成");
             }
         }
         catch (error) {
-            renderResultError("governance-lint-result", "执行 Lint 失败", error);
-            showError("执行 Lint 失败", error);
+            renderResultError("governance-lint-result", "执行规则巡检失败", error);
+            showError("执行规则巡检失败", error);
         }
     }
 
     async function runLintFix() {
-        const confirmed = window.confirm("将执行 Lint Fix，确认继续吗？");
+        const confirmed = window.confirm("将执行规则自动修复，确认继续吗？");
         if (!confirmed) {
             return;
         }
@@ -473,12 +484,12 @@
                 body: JSON.stringify({})
             });
             document.getElementById("governance-lint-result").textContent = JSON.stringify(result, null, 2);
-            setStatus("Lint Fix 已完成");
+            setStatus("规则自动修复已完成");
             await Promise.all([loadArticles(), refreshOverview()]);
         }
         catch (error) {
-            renderResultError("governance-lint-result", "执行 Lint Fix 失败", error);
-            showError("执行 Lint Fix 失败", error);
+            renderResultError("governance-lint-result", "执行规则自动修复失败", error);
+            showError("执行规则自动修复失败", error);
         }
     }
 
@@ -519,12 +530,12 @@
             const result = await fetchJson("/api/v1/admin/inspect");
             document.getElementById("governance-inspect-result").textContent = JSON.stringify(result, null, 2);
             if (!silent) {
-                setStatus("Inspection 列表已加载");
+                setStatus("人工核查列表已加载");
             }
         }
         catch (error) {
-            renderResultError("governance-inspect-result", "加载 Inspection 失败", error);
-            showError("加载 Inspection 失败", error);
+            renderResultError("governance-inspect-result", "加载人工核查失败", error);
+            showError("加载人工核查失败", error);
         }
     }
 
@@ -533,10 +544,10 @@
         const finalAnswer = document.getElementById("inspection-answer").value.trim();
         const confirmedBy = document.getElementById("inspection-confirmed-by").value.trim() || "admin";
         if (!inspectionId || !finalAnswer) {
-            setStatus("请输入 Inspection ID 和最终答案");
+            setStatus("请输入核查记录 ID 和最终答案");
             return;
         }
-        const confirmed = window.confirm("将导入 Inspection 最终答案并写入 contribution，确认继续吗？");
+        const confirmed = window.confirm("将导入核查最终答案并写入知识反馈记录，确认继续吗？");
         if (!confirmed) {
             return;
         }
@@ -550,23 +561,23 @@
                 })
             });
             document.getElementById("governance-inspect-result").textContent = JSON.stringify(result, null, 2);
-            setStatus("Inspection 答案已导入");
+            setStatus("人工核查答案已导入");
             await Promise.all([loadPendingQueries(), refreshOverview()]);
         }
         catch (error) {
-            renderResultError("governance-inspect-result", "导入 Inspection 答案失败", error);
-            showError("导入 Inspection 答案失败", error);
+            renderResultError("governance-inspect-result", "导入人工核查答案失败", error);
+            showError("导入人工核查答案失败", error);
         }
     }
 
     async function loadArticleSnapshots() {
         try {
             const result = await fetchJson("/api/v1/admin/snapshot/article?limit=10");
-            document.getElementById("governance-inspect-result").textContent = JSON.stringify(result, null, 2);
+            document.getElementById("governance-snapshot-result").textContent = JSON.stringify(result, null, 2);
             setStatus("文章快照已加载");
         }
         catch (error) {
-            renderResultError("governance-inspect-result", "加载文章快照失败", error);
+            renderResultError("governance-snapshot-result", "加载文章快照失败", error);
             showError("加载文章快照失败", error);
         }
     }
@@ -576,12 +587,12 @@
             const result = await fetchJson("/api/v1/admin/snapshot/repo?limit=10");
             document.getElementById("governance-snapshot-result").textContent = JSON.stringify(result, null, 2);
             if (!silent) {
-                setStatus("Repo 快照已加载");
+                setStatus("整库快照已加载");
             }
         }
         catch (error) {
-            renderResultError("governance-snapshot-result", "加载 Repo 快照失败", error);
-            showError("加载 Repo 快照失败", error);
+            renderResultError("governance-snapshot-result", "加载整库快照失败", error);
+            showError("加载整库快照失败", error);
         }
     }
 
@@ -608,7 +619,7 @@
         if (!conceptId || !snapshotId) {
             return;
         }
-        const confirmed = window.confirm("将文章 " + conceptId + " 回滚到 snapshot " + snapshotId + "，确认继续吗？");
+        const confirmed = window.confirm("将文章 " + conceptId + " 回滚到快照版本 " + snapshotId + "，确认继续吗？");
         if (!confirmed) {
             return;
         }
@@ -633,7 +644,7 @@
     async function runLinkEnhance() {
         const persist = document.getElementById("link-enhance-persist").checked;
         if (persist) {
-            const confirmed = window.confirm("将持久化 Link Enhance 结果并改写文章内容，确认继续吗？");
+            const confirmed = window.confirm("将持久化链接增强结果并改写文章内容，确认继续吗？");
             if (!confirmed) {
                 return;
             }
@@ -646,54 +657,110 @@
                 })
             });
             document.getElementById("governance-link-result").textContent = JSON.stringify(result, null, 2);
-            setStatus("Link Enhance 已完成");
+            setStatus("链接增强已完成");
             await loadArticles();
         }
         catch (error) {
-            renderResultError("governance-link-result", "执行 Link Enhance 失败", error);
-            showError("执行 Link Enhance 失败", error);
+            renderResultError("governance-link-result", "执行链接增强失败", error);
+            showError("执行链接增强失败", error);
         }
     }
 
-    function renderOverview(overview) {
+    function renderOverview(overview, qualityResponse, coverage, omissions) {
         const status = overview.status || {};
-        const quality = overview.quality || {};
+        const pending = overview.pending || {};
+        const overviewQuality = overview.quality || {};
+        const report = qualityResponse && qualityResponse.report ? qualityResponse.report : overviewQuality;
+        const trend = qualityResponse && qualityResponse.trend ? qualityResponse.trend : {};
+        const reviewPassRate = report.totalArticles > 0
+                ? (report.passedArticles || 0) * 100 / report.totalArticles
+                : 0;
+        const coveragePercent = (coverage.coverageRatio || 0) * 100;
+        const omittedSourceFileCount = omissions.omittedSourceFileCount || 0;
+        const pendingCount = status.pendingQueryCount || 0;
+        const manualReviewCount = report.needsHumanReviewArticles || status.reviewPendingArticleCount || 0;
+
         const cards = [
-            {label: "文章数", value: status.articleCount || 0},
-            {label: "源文件数", value: status.sourceFileCount || 0},
-            {label: "贡献数", value: status.contributionCount || 0},
-            {label: "Pending 查询", value: status.pendingQueryCount || 0},
-            {label: "待人工文章", value: status.reviewPendingArticleCount || 0}
+            {
+                label: "知识文章",
+                value: status.articleCount || 0,
+                note: "当前沉淀的知识条目",
+                tone: status.articleCount > 0 ? "success" : ""
+            },
+            {
+                label: "源文件",
+                value: status.sourceFileCount || 0,
+                note: "已纳入管理的知识来源",
+                tone: status.sourceFileCount > 0 ? "success" : ""
+            },
+            {
+                label: "反馈沉淀",
+                value: status.contributionCount || 0,
+                note: "已确认并沉淀的反馈",
+                tone: status.contributionCount > 0 ? "success" : ""
+            },
+            {
+                label: "待处理反馈",
+                value: pendingCount,
+                note: pendingCount > 0 ? "建议优先处理" : "当前没有积压",
+                tone: pendingCount > 0 ? "warning" : "success"
+            },
+            {
+                label: "需人工复核",
+                value: manualReviewCount,
+                note: manualReviewCount > 0 ? "建议进入治理修复" : "当前没有人工复核积压",
+                tone: manualReviewCount > 0 ? "danger" : "success"
+            }
         ];
         document.getElementById("overview-cards").innerHTML = cards.map(renderMetricCard).join("");
 
-        const qualityCards = [
-            {label: "总文章", value: quality.totalArticles || 0},
-            {label: "已通过", value: quality.passedArticles || 0},
-            {label: "待审查", value: quality.pendingReviewArticles || 0},
-            {label: "需人工", value: quality.needsHumanReviewArticles || 0},
-            {label: "贡献数", value: quality.contributionCount || 0},
-            {label: "源文件", value: quality.sourceFileCount || 0}
-        ];
-        document.getElementById("quality-cards").innerHTML = qualityCards.map(renderMetricCard).join("");
-    }
+        const story = buildOverviewStory(status, report, pending, coveragePercent, trend, omittedSourceFileCount);
+        document.getElementById("overview-story-title").textContent = story.title;
+        document.getElementById("overview-story-copy").textContent = story.copy;
 
-    function renderUsage(usage) {
-        const summaryCards = [
-            {label: "调用次数", value: usage.totalCalls || 0},
-            {label: "输入 Token", value: usage.totalInputTokens || 0},
-            {label: "输出 Token", value: usage.totalOutputTokens || 0},
-            {label: "总成本 USD", value: formatNumber(usage.totalCostUsd || 0, 4)}
+        const healthCards = [
+            {
+                label: "审查通过率",
+                value: formatPercent(reviewPassRate, 1),
+                note: (report.passedArticles || 0) + " / " + (report.totalArticles || 0) + " 篇文章已通过",
+                tone: reviewPassRate >= 80 ? "success" : reviewPassRate >= 50 ? "warning" : "danger"
+            },
+            {
+                label: "来源覆盖率",
+                value: formatPercent(coveragePercent, 1),
+                note: (coverage.coveredSourceFileCount || 0) + " / " + (coverage.totalSourceFileCount || 0) + " 源文件已被文章引用",
+                tone: coveragePercent >= 80 ? "success" : coveragePercent >= 50 ? "warning" : "danger"
+            },
+            {
+                label: "未覆盖源文件",
+                value: omittedSourceFileCount,
+                note: omittedSourceFileCount > 0 ? "说明还有素材未沉淀进知识文章" : "当前没有覆盖遗漏",
+                tone: omittedSourceFileCount > 0 ? "warning" : "success"
+            },
+            {
+                label: "待审文章",
+                value: report.pendingReviewArticles || 0,
+                note: "等待系统或人工继续处理",
+                tone: (report.pendingReviewArticles || 0) > 0 ? "warning" : "success"
+            },
+            {
+                label: "7 日文章变化",
+                value: formatSignedInteger(trend.totalArticlesDelta || 0),
+                note: trend.latestMeasuredAt
+                        ? "最近测量 " + formatDateTime(trend.latestMeasuredAt)
+                        : "暂无趋势历史",
+                tone: trend.totalArticlesDelta >= 0 ? "success" : "warning"
+            },
+            {
+                label: "7 日质量变化",
+                value: formatSignedPercent(trend.reviewPassRateDelta || 0),
+                note: "覆盖 " + formatSignedPercent(trend.groundingRateDelta || 0)
+                        + " / 明确性 " + formatSignedPercent(trend.referentialRateDelta || 0),
+                tone: (trend.reviewPassRateDelta || 0) >= 0 ? "success" : "warning"
+            }
         ];
-        document.getElementById("usage-summary").innerHTML = summaryCards.map(renderMetricCard).join("");
-        document.getElementById("usage-purpose-table").innerHTML = renderUsageTable(
-                usage.purposes || [],
-                "purpose"
-        );
-        document.getElementById("usage-model-table").innerHTML = renderUsageTable(
-                usage.models || [],
-                "model"
-        );
+        document.getElementById("health-cards").innerHTML = healthCards.map(renderMetricCard).join("");
+        document.getElementById("overview-focus").innerHTML = renderOverviewFocus(pending, manualReviewCount, omittedSourceFileCount);
     }
 
     function renderArticleList(response) {
@@ -728,7 +795,12 @@
     function renderArticleDetail(detail) {
         document.getElementById("article-detail-title").textContent = detail.title || "未命名文章";
         document.getElementById("article-detail-meta").textContent =
-                [detail.conceptId, detail.lifecycle, detail.reviewStatus, detail.compiledAt]
+                [
+                    detail.conceptId,
+                    detail.lifecycle ? "生命周期：" + getBadgeLabel(detail.lifecycle) : "",
+                    detail.reviewStatus ? "审查：" + getBadgeLabel(detail.reviewStatus) : "",
+                    detail.compiledAt ? "编译时间：" + formatDateTime(detail.compiledAt) : ""
+                ]
                         .filter(Boolean)
                         .join(" | ");
         document.getElementById("article-detail-summary").textContent = detail.summary || "暂无摘要";
@@ -779,7 +851,7 @@
     function readVaultDir() {
         const vaultDir = document.getElementById("vault-dir").value.trim();
         if (!vaultDir) {
-            setStatus("请输入 Vault 目录");
+            setStatus("请输入知识仓目录");
             return "";
         }
         return vaultDir;
@@ -788,7 +860,7 @@
     function readRepoSnapshotId() {
         const snapshotId = document.getElementById("repo-snapshot-id").value.trim();
         if (!snapshotId) {
-            setStatus("请输入 Repo Snapshot ID");
+            setStatus("请输入版本快照 ID");
             return "";
         }
         return snapshotId;
@@ -797,7 +869,7 @@
     function readArticleConceptId() {
         const conceptId = document.getElementById("article-snapshot-concept-id").value.trim();
         if (!conceptId) {
-            setStatus("请输入 Article Concept ID");
+            setStatus("请输入文章概念 ID");
             return "";
         }
         return conceptId;
@@ -806,7 +878,7 @@
     function readArticleSnapshotId() {
         const snapshotId = document.getElementById("article-snapshot-id").value.trim();
         if (!snapshotId) {
-            setStatus("请输入 Article Snapshot ID");
+            setStatus("请输入文章快照 ID");
             return "";
         }
         return snapshotId;
@@ -822,7 +894,7 @@
         const items = response.items || [];
         const container = document.getElementById("pending-list");
         if (items.length === 0) {
-            container.innerHTML = "<div class='pending-card'><p class='item-summary'>当前没有待处理查询</p></div>";
+            container.innerHTML = "<div class='pending-card'><p class='item-summary'>当前没有待处理反馈，可以回到知识文章页继续巡检内容。</p></div>";
             return;
         }
         container.innerHTML = items.map(function (item) {
@@ -864,7 +936,7 @@
     function renderJobs(items) {
         const container = document.getElementById("job-list");
         if (!items || items.length === 0) {
-            container.innerHTML = "<div class='job-card'><p class='item-summary'>暂无编译作业</p></div>";
+            container.innerHTML = "<div class='job-card'><p class='item-summary'>暂无编译作业，知识库目前没有排队中的导入或重建任务。</p></div>";
             return;
         }
         container.innerHTML = items.map(function (item) {
@@ -875,12 +947,12 @@
                     + "<div class='meta-row'>"
                     + "<span class='pill'>" + escapeHtml(item.jobId) + "</span>"
                     + renderBadge(item.status)
-                    + "<span class='pill'>" + escapeHtml(item.orchestrationMode || "-") + "</span>"
+                    + "<span class='pill'>" + escapeHtml(formatOrchestrationMode(item.orchestrationMode)) + "</span>"
                     + "</div>"
                     + "<h4>" + escapeHtml(item.sourceDir || "-") + "</h4>"
                     + "<p class='item-summary'>持久化: " + escapeHtml(String(item.persistedCount || 0))
                     + " | 尝试次数: " + escapeHtml(String(item.attemptCount || 0))
-                    + " | 增量: " + escapeHtml(String(item.incremental)) + "</p>"
+                    + " | 增量: " + escapeHtml(item.incremental ? "是" : "否") + "</p>"
                     + "<p class='item-summary'>" + escapeHtml(item.errorMessage || "无错误信息") + "</p>"
                     + "<div class='card-actions'>"
                     + retryButton
@@ -906,6 +978,17 @@
         });
     }
 
+    function jumpToTab(tabName) {
+        if (!tabName) {
+            return;
+        }
+        activateTab(tabName);
+        const workspacePanel = document.querySelector(".workspace-panel");
+        if (workspacePanel && typeof workspacePanel.scrollIntoView === "function") {
+            workspacePanel.scrollIntoView({behavior: "smooth", block: "start"});
+        }
+    }
+
     function activateGovernanceTab(tabName) {
         document.querySelectorAll("[data-governance-tab]").forEach(function (button) {
             button.classList.toggle("active", button.dataset.governanceTab === tabName);
@@ -916,23 +999,12 @@
     }
 
     function renderMetricCard(item) {
-        return "<div class='metric-card'><span class='label'>" + escapeHtml(item.label)
-                + "</span><span class='value'>" + escapeHtml(String(item.value)) + "</span></div>";
-    }
-
-    function renderUsageTable(items, keyField) {
-        if (!items || items.length === 0) {
-            return "<p class='item-summary'>暂无数据</p>";
-        }
-        return "<table class='simple-table'><thead><tr><th>维度</th><th>调用</th><th>输入</th><th>输出</th><th>成本</th></tr></thead><tbody>"
-                + items.map(function (item) {
-                    return "<tr><td>" + escapeHtml(item[keyField] || "-")
-                            + "</td><td>" + escapeHtml(String(item.callCount || 0))
-                            + "</td><td>" + escapeHtml(String(item.inputTokens || 0))
-                            + "</td><td>" + escapeHtml(String(item.outputTokens || 0))
-                            + "</td><td>" + escapeHtml(formatNumber(item.costUsd || 0, 4)) + "</td></tr>";
-                }).join("")
-                + "</tbody></table>";
+        const toneClass = item.tone ? " " + item.tone : "";
+        const note = item.note
+                ? "<span class='note'>" + escapeHtml(item.note) + "</span>"
+                : "";
+        return "<div class='metric-card" + toneClass + "'><span class='label'>" + escapeHtml(item.label)
+                + "</span><span class='value'>" + escapeHtml(String(item.value)) + "</span>" + note + "</div>";
     }
 
     function renderTagGroup(items) {
@@ -956,7 +1028,98 @@
         else if (normalized) {
             className += " warning";
         }
-        return "<span class='" + className + "'>" + escapeHtml(value || "-") + "</span>";
+        return "<span class='" + className + "'>" + escapeHtml(getBadgeLabel(value)) + "</span>";
+    }
+
+    function buildOverviewStory(status, report, pending, coveragePercent, trend, omittedSourceFileCount) {
+        const articleCount = status.articleCount || 0;
+        const sourceFileCount = status.sourceFileCount || 0;
+        const contributionCount = status.contributionCount || 0;
+        const pendingCount = pending.count || 0;
+        const manualReviewCount = report.needsHumanReviewArticles || status.reviewPendingArticleCount || 0;
+
+        if (articleCount === 0 && sourceFileCount === 0) {
+            return {
+                title: "知识库还是空的，先导入第一批资料",
+                copy: "可以直接去“编译导入”上传文件或指定源目录。完成后，首页会开始展示文章、覆盖率和待处理信号。"
+            };
+        }
+
+        if (pendingCount > 0 || manualReviewCount > 0 || omittedSourceFileCount > 0) {
+            return {
+                title: "知识库已有沉淀，但还有一些内容需要你接手",
+                copy: "当前管理 " + articleCount + " 篇知识文章、" + sourceFileCount + " 份源文件，"
+                        + pendingCount + " 条待处理反馈，"
+                        + manualReviewCount + " 篇需人工复核，"
+                        + omittedSourceFileCount + " 个源文件尚未被文章覆盖。来源覆盖率 "
+                        + formatPercent(coveragePercent, 1)
+                        + "，近 7 天文章变化 "
+                        + formatSignedInteger(trend.totalArticlesDelta || 0)
+                        + "。"
+            };
+        }
+
+        return {
+            title: "知识库运行平稳，可以继续扩充和巡检",
+            copy: "当前已管理 " + articleCount + " 篇知识文章、"
+                    + sourceFileCount + " 份源文件，并沉淀了 "
+                    + contributionCount + " 条确认反馈。来源覆盖率 "
+                    + formatPercent(coveragePercent, 1)
+                    + "，目前没有待处理反馈或明显积压。"
+        };
+    }
+
+    function renderOverviewFocus(pending, manualReviewCount, omittedSourceFileCount) {
+        const items = [];
+        (pending.items || []).slice(0, 3).forEach(function (item) {
+            items.push({
+                title: item.question || "待处理反馈",
+                badge: renderBadge(item.reviewStatus),
+                meta: "<span class='pill'>" + escapeHtml(item.queryId || "-") + "</span>",
+                copy: "这条反馈还没有完成修正或确认，建议优先处理。",
+                tab: "pending",
+                actionLabel: "去处理"
+            });
+        });
+
+        if (manualReviewCount > 0) {
+            items.push({
+                title: "有 " + manualReviewCount + " 篇文章需要人工复核",
+                badge: renderBadge("needs_human_review"),
+                meta: "<span class='pill'>文章治理</span>",
+                copy: "可以进入知识文章或治理修复页，优先处理审查未闭环的内容。",
+                tab: "articles",
+                actionLabel: "查看文章"
+            });
+        }
+
+        if (omittedSourceFileCount > 0) {
+            items.push({
+                title: "有 " + omittedSourceFileCount + " 个源文件尚未被文章覆盖",
+                badge: renderBadge("coverage_gap"),
+                meta: "<span class='pill'>覆盖缺口</span>",
+                copy: "说明还有素材尚未沉淀成知识，可去编译导入或治理修复继续推进。",
+                tab: "compile",
+                actionLabel: "去导入"
+            });
+        }
+
+        if (items.length === 0) {
+            return "<div class='focus-empty'><h4>当前没有高优先级积压</h4>"
+                    + "<p>首页已经比较干净了。接下来更适合去文章页抽样检查内容，或继续导入新知识。</p></div>";
+        }
+
+        return items.map(function (item) {
+            return "<div class='focus-item'>"
+                    + "<div class='meta-row'>" + item.meta + item.badge + "</div>"
+                    + "<h4>" + escapeHtml(item.title) + "</h4>"
+                    + "<p>" + escapeHtml(item.copy) + "</p>"
+                    + "<div class='card-actions'>"
+                    + "<button class='ghost-btn jump-btn' data-jump-tab='" + escapeHtml(item.tab) + "' type='button'>"
+                    + escapeHtml(item.actionLabel)
+                    + "</button>"
+                    + "</div></div>";
+        }).join("");
     }
 
     async function fetchJson(url, options) {
@@ -989,6 +1152,97 @@
 
     function formatNumber(value, digits) {
         return Number(value).toFixed(digits);
+    }
+
+    function formatPercent(value, digits) {
+        return formatNumber(value || 0, digits) + "%";
+    }
+
+    function formatSignedInteger(value) {
+        const number = Number(value || 0);
+        if (number > 0) {
+            return "+" + number;
+        }
+        return String(number);
+    }
+
+    function formatSignedPercent(value) {
+        const number = Number(value || 0);
+        const formatted = formatNumber(Math.abs(number), 2) + "pt";
+        if (number > 0) {
+            return "+" + formatted;
+        }
+        if (number < 0) {
+            return "-" + formatted;
+        }
+        return formatted;
+    }
+
+    function formatOrchestrationMode(value) {
+        if (!value) {
+            return "-";
+        }
+        if (value === "service") {
+            return "标准流程";
+        }
+        if (value === "state_graph") {
+            return "图式流程";
+        }
+        return value;
+    }
+
+    function formatLifecycleAction(value) {
+        if (value === "activate") {
+            return "激活";
+        }
+        if (value === "deprecate") {
+            return "废弃";
+        }
+        if (value === "archive") {
+            return "归档";
+        }
+        return value || "-";
+    }
+
+    function getBadgeLabel(value) {
+        const normalized = (value || "").toUpperCase();
+        const labels = {
+            ACTIVE: "生效中",
+            DEPRECATED: "已废弃",
+            ARCHIVED: "已归档",
+            PASSED: "已通过",
+            PENDING: "待处理",
+            NEEDS_HUMAN_REVIEW: "需人工复核",
+            NEEDS_REVIEW: "待复核",
+            SUCCEEDED: "成功",
+            FAILED: "失败",
+            RUNNING: "进行中",
+            QUEUED: "排队中",
+            CONFIRMED: "已确认",
+            DISCARDED: "已丢弃",
+            ISSUES_FOUND: "发现问题",
+            PARSE_RESCUED: "解析兜底",
+            PARSE_FAILED: "解析失败",
+            TIMEOUT_FALLBACK: "超时兜底",
+            COVERAGE_GAP: "覆盖缺口"
+        };
+        return labels[normalized] || value || "-";
+    }
+
+    function formatDateTime(value) {
+        if (!value) {
+            return "暂无";
+        }
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return String(value);
+        }
+        return date.toLocaleString("zh-CN", {
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit"
+        });
     }
 
     function escapeHtml(value) {

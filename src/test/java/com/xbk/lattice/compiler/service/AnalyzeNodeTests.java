@@ -190,7 +190,6 @@ class AnalyzeNodeTests {
                         """),
                 new StaticLlmClient("{}"),
                 new NoopRedisKeyValueStore(),
-                new NoopLlmUsageStore(),
                 createLlmProperties()
         );
         AnalyzeNode analyzeNode = new AnalyzeNode(llmGateway);
@@ -218,7 +217,6 @@ class AnalyzeNodeTests {
                 new StaticLlmClient("not-json-response"),
                 new StaticLlmClient("{}"),
                 new NoopRedisKeyValueStore(),
-                new NoopLlmUsageStore(),
                 createLlmProperties()
         );
         AnalyzeNode analyzeNode = new AnalyzeNode(llmGateway);
@@ -292,15 +290,4 @@ class AnalyzeNodeTests {
         }
     }
 
-    /**
-     * 空操作 usage 存储。
-     *
-     * @author xiexu
-     */
-    private static class NoopLlmUsageStore implements LlmUsageStore {
-
-        @Override
-        public void save(LlmUsageRecord llmUsageRecord) {
-        }
-    }
 }

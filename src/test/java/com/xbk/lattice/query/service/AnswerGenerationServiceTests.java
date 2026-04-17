@@ -4,8 +4,6 @@ import com.xbk.lattice.compiler.config.LlmProperties;
 import com.xbk.lattice.compiler.service.LlmCallResult;
 import com.xbk.lattice.compiler.service.LlmClient;
 import com.xbk.lattice.compiler.service.LlmGateway;
-import com.xbk.lattice.compiler.service.LlmUsageRecord;
-import com.xbk.lattice.compiler.service.LlmUsageStore;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
@@ -97,7 +95,6 @@ class AnswerGenerationServiceTests {
                 LlmClient.class,
                 LlmClient.class,
                 RedisKeyValueStore.class,
-                LlmUsageStore.class,
                 LlmProperties.class
         );
         constructor.setAccessible(true);
@@ -105,7 +102,6 @@ class AnswerGenerationServiceTests {
                 recordingLlmClient,
                 recordingLlmClient,
                 new FakeRedisKeyValueStore(),
-                new NoOpLlmUsageStore(),
                 createProperties()
         );
     }
@@ -219,21 +215,4 @@ class AnswerGenerationServiceTests {
         }
     }
 
-    /**
-     * 空实现的用量存储替身。
-     *
-     * @author xiexu
-     */
-    private static class NoOpLlmUsageStore implements LlmUsageStore {
-
-        /**
-         * 忽略用量写入。
-         *
-         * @param llmUsageRecord 用量记录
-         */
-        @Override
-        public void save(LlmUsageRecord llmUsageRecord) {
-            // no-op
-        }
-    }
 }

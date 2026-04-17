@@ -5,9 +5,7 @@ import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,7 +29,6 @@ class LlmGatewayMaxInputCharsTests {
                 compileClient,
                 new CapturingLlmClient("review"),
                 new FakeRedisKeyValueStore(),
-                new FakeLlmUsageStore(),
                 createProperties()
         );
         String systemPrompt = "system";
@@ -150,28 +147,6 @@ class LlmGatewayMaxInputCharsTests {
         @Override
         public Long getExpire(String key) {
             return ttlSeconds.get(key);
-        }
-    }
-
-    /**
-     * LLM 用量存储测试替身。
-     *
-     * 职责：记录保存的 usage 条目，便于断言
-     *
-     * @author xiexu
-     */
-    private static class FakeLlmUsageStore implements LlmUsageStore {
-
-        private final List<LlmUsageRecord> records = new ArrayList<LlmUsageRecord>();
-
-        /**
-         * 保存用量记录。
-         *
-         * @param llmUsageRecord 用量记录
-         */
-        @Override
-        public void save(LlmUsageRecord llmUsageRecord) {
-            records.add(llmUsageRecord);
         }
     }
 }

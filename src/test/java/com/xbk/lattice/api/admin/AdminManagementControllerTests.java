@@ -24,7 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * AdminManagementController 测试
  *
- * 职责：验证 B8 管理侧可完成文章浏览、生命周期切换、pending 管理与 usage 汇总
+ * 职责：验证 B8 管理侧可完成文章浏览、生命周期切换与 pending 管理
  *
  * @author xiexu
  */
@@ -142,36 +142,6 @@ class AdminManagementControllerTests {
     }
 
     /**
-     * 验证管理侧可汇总 LLM usage。
-     */
-    @Test
-    void shouldSummarizeUsageViaAdminApi() throws Exception {
-        resetTables();
-        jdbcTemplate.update(
-                """
-                        insert into lattice_b8_admin_manage_test.llm_usage (
-                            call_id, model, purpose, input_tokens, output_tokens, cost_usd, called_at
-                        )
-                        values (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                        """,
-                "call-1",
-                "gpt-5.4",
-                "compile-article",
-                120,
-                30,
-                0.42D
-        );
-
-        mockMvc.perform(get("/api/v1/admin/usage"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalCalls").value(1))
-                .andExpect(jsonPath("$.totalInputTokens").value(120))
-                .andExpect(jsonPath("$.totalOutputTokens").value(30))
-                .andExpect(jsonPath("$.totalCostUsd").value(0.42D))
-                .andExpect(jsonPath("$.purposes[0].purpose").value("compile-article"));
-    }
-
-    /**
      * 准备最小知识库测试数据。
      *
      * @param tempDir 临时目录
@@ -203,7 +173,6 @@ class AdminManagementControllerTests {
     private void resetTables() {
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_admin_manage_test.pending_queries");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_admin_manage_test.contributions");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_admin_manage_test.llm_usage");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_admin_manage_test.source_files CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_admin_manage_test.articles CASCADE");
     }

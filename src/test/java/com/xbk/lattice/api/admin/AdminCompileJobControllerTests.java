@@ -204,7 +204,6 @@ class AdminCompileJobControllerTests {
     private void resetTables() {
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_compile_job_test.pending_queries");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_compile_job_test.contributions");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_compile_job_test.llm_usage");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_compile_job_test.compile_jobs");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_compile_job_test.source_files CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_compile_job_test.articles CASCADE");

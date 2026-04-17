@@ -4,8 +4,6 @@ import com.xbk.lattice.compiler.config.LlmProperties;
 import com.xbk.lattice.compiler.service.LlmCallResult;
 import com.xbk.lattice.compiler.service.LlmClient;
 import com.xbk.lattice.compiler.service.LlmGateway;
-import com.xbk.lattice.compiler.service.LlmUsageRecord;
-import com.xbk.lattice.compiler.service.LlmUsageStore;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
@@ -96,7 +94,6 @@ class LintFixServiceTests {
                 LlmClient.class,
                 LlmClient.class,
                 RedisKeyValueStore.class,
-                LlmUsageStore.class,
                 LlmProperties.class
         );
         constructor.setAccessible(true);
@@ -110,7 +107,6 @@ class LintFixServiceTests {
                 compileClient,
                 compileClient,
                 new FakeRedisKeyValueStore(),
-                new FakeLlmUsageStore(),
                 properties
         );
     }
@@ -227,11 +223,4 @@ class LintFixServiceTests {
         }
     }
 
-    private static class FakeLlmUsageStore implements LlmUsageStore {
-
-        @Override
-        public void save(LlmUsageRecord llmUsageRecord) {
-            // 无操作
-        }
-    }
 }

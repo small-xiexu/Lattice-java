@@ -143,7 +143,6 @@ class CompileArticleReviewFlowTests {
                 new StaticLlmClient(compileResponse),
                 new StaticLlmClient(reviewResponse),
                 new NoopRedisKeyValueStore(),
-                new NoopLlmUsageStore(),
                 llmProperties
         );
     }
@@ -186,18 +185,6 @@ class CompileArticleReviewFlowTests {
         @Override
         public Long getExpire(String key) {
             return null;
-        }
-    }
-
-    /**
-     * 空操作 usage 存储。
-     *
-     * @author xiexu
-     */
-    private static class NoopLlmUsageStore implements LlmUsageStore {
-
-        @Override
-        public void save(LlmUsageRecord llmUsageRecord) {
         }
     }
 

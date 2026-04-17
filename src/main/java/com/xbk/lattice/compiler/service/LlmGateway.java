@@ -16,14 +16,12 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.time.OffsetDateTime;
 import java.util.Locale;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * LLM 网关
  *
- * 职责：统一封装编译/审查模型路由、缓存、预算守卫与用量记录
+ * 职责：统一封装编译/审查模型路由、缓存与预算守卫
  *
  * @author xiexu
  */
@@ -32,15 +30,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public class LlmGateway {
 
-    private static final AtomicInteger CALL_SEQUENCE = new AtomicInteger(0);
-
     private final LlmClient compileClient;
 
     private final LlmClient reviewClient;
 
     private final RedisKeyValueStore redisKeyValueStore;
-
-    private final LlmUsageStore llmUsageStore;
 
     private final LlmProperties llmProperties;
 
@@ -55,7 +49,6 @@ public class LlmGateway {
      * @param anthropicConnectionProperties Anthropic 连接配置
      * @param anthropicChatProperties Anthropic Chat 配置
      * @param redisKeyValueStore Redis 键值存储
-     * @param llmUsageStore 用量存储
      * @param llmProperties LLM 配置
      */
     @Autowired
@@ -66,7 +59,6 @@ public class LlmGateway {
             AnthropicConnectionProperties anthropicConnectionProperties,
             AnthropicChatProperties anthropicChatProperties,
             RedisKeyValueStore redisKeyValueStore,
-            LlmUsageStore llmUsageStore,
             LlmProperties llmProperties
     ) {
         this(
@@ -78,7 +70,6 @@ public class LlmGateway {
                         anthropicChatProperties
                 ),
                 redisKeyValueStore,
-                llmUsageStore,
                 llmProperties
         );
     }
@@ -89,20 +80,17 @@ public class LlmGateway {
      * @param compileClient 编译模型客户端
      * @param reviewClient 审查模型客户端
      * @param redisKeyValueStore Redis 键值存储
-     * @param llmUsageStore 用量存储
      * @param llmProperties LLM 配置
      */
     LlmGateway(
             LlmClient compileClient,
             LlmClient reviewClient,
             RedisKeyValueStore redisKeyValueStore,
-            LlmUsageStore llmUsageStore,
             LlmProperties llmProperties
     ) {
         this.compileClient = compileClient;
         this.reviewClient = reviewClient;
         this.redisKeyValueStore = redisKeyValueStore;
-        this.llmUsageStore = llmUsageStore;
         this.llmProperties = llmProperties;
         this.spentUsd = 0.0D;
     }
@@ -204,15 +192,6 @@ public class LlmGateway {
             throw new BudgetExceededException("LLM budget exceeded");
         }
         spentUsd += estimatedCost;
-        llmUsageStore.save(new LlmUsageRecord(
-                "call-" + CALL_SEQUENCE.incrementAndGet(),
-                modelName,
-                purpose,
-                llmCallResult.getInputTokens(),
-                llmCallResult.getOutputTokens(),
-                estimatedCost,
-                OffsetDateTime.now()
-        ));
         redisKeyValueStore.set(
                 cacheKey,
                 llmCallResult.getContent(),

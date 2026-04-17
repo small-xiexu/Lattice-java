@@ -6,8 +6,10 @@ spring:
   ai:
     openai:
       api-key: ${SPRING_AI_OPENAI_API_KEY:any-non-empty-value}
+      base-url: ${SPRING_AI_OPENAI_BASE_URL:https://api.openai.com}
     anthropic:
       api-key: ${SPRING_AI_ANTHROPIC_API_KEY:any-non-empty-value}
+      base-url: ${SPRING_AI_ANTHROPIC_BASE_URL:https://api.anthropic.com}
     mcp:
       server:
         protocol: STREAMABLE
