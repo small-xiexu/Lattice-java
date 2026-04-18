@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 知识检索服务
@@ -27,7 +28,11 @@ public class KnowledgeSearchService {
 
     private final VectorSearchService vectorSearchService;
 
+    private final ChunkVectorSearchService chunkVectorSearchService;
+
     private final RrfFusionService rrfFusionService;
+
+    private final QueryRetrievalSettingsService queryRetrievalSettingsService;
 
     /**
      * 创建知识检索服务。
@@ -46,14 +51,18 @@ public class KnowledgeSearchService {
             SourceSearchService sourceSearchService,
             ContributionSearchService contributionSearchService,
             VectorSearchService vectorSearchService,
-            RrfFusionService rrfFusionService
+            ChunkVectorSearchService chunkVectorSearchService,
+            RrfFusionService rrfFusionService,
+            QueryRetrievalSettingsService queryRetrievalSettingsService
     ) {
         this.ftsSearchService = ftsSearchService;
         this.refKeySearchService = refKeySearchService;
         this.sourceSearchService = sourceSearchService;
         this.contributionSearchService = contributionSearchService;
         this.vectorSearchService = vectorSearchService;
+        this.chunkVectorSearchService = chunkVectorSearchService;
         this.rrfFusionService = rrfFusionService;
+        this.queryRetrievalSettingsService = queryRetrievalSettingsService;
     }
 
     /**
@@ -78,7 +87,9 @@ public class KnowledgeSearchService {
                 sourceSearchService,
                 contributionSearchService,
                 new VectorSearchService(),
-                rrfFusionService
+                new ChunkVectorSearchService(),
+                rrfFusionService,
+                new QueryRetrievalSettingsService()
         );
     }
 
@@ -95,10 +106,30 @@ public class KnowledgeSearchService {
         List<QueryArticleHit> refKeyHits = refKeySearchService.search(question, safeLimit);
         List<QueryArticleHit> sourceHits = sourceSearchService.search(question, safeLimit);
         List<QueryArticleHit> contributionHits = contributionSearchService.search(question, safeLimit);
-        List<QueryArticleHit> vectorHits = vectorSearchService.search(question, safeLimit);
+        List<QueryArticleHit> articleVectorHits = vectorSearchService.search(question, safeLimit);
+        List<QueryArticleHit> chunkVectorHits = chunkVectorSearchService.search(question, safeLimit);
+        QueryRetrievalSettingsState settings = queryRetrievalSettingsService == null
+                ? new QueryRetrievalSettingsService().defaultState()
+                : queryRetrievalSettingsService.getCurrentState();
         return rrfFusionService.fuse(
-                List.of(ftsHits, refKeyHits, sourceHits, contributionHits, vectorHits),
-                safeLimit
+                Map.of(
+                        "fts", ftsHits,
+                        "refkey", refKeyHits,
+                        "source", sourceHits,
+                        "contribution", contributionHits,
+                        "article_vector", articleVectorHits,
+                        "chunk_vector", chunkVectorHits
+                ),
+                Map.of(
+                        "fts", settings.getFtsWeight(),
+                        "refkey", settings.getFtsWeight(),
+                        "source", settings.getSourceWeight(),
+                        "contribution", settings.getContributionWeight(),
+                        "article_vector", settings.getArticleVectorWeight(),
+                        "chunk_vector", settings.getChunkVectorWeight()
+                ),
+                safeLimit,
+                settings.getRrfK()
         );
     }
 }

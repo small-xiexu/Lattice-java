@@ -1,9 +1,16 @@
 (function () {
+    const LLM_BINDING_ROLE_OPTIONS = {
+        compile: ["writer", "reviewer", "fixer"],
+        query: ["answer", "reviewer", "rewrite"]
+    };
+
     const state = {
         selectedConceptId: null,
         llmConnections: [],
         llmModels: [],
-        llmBindings: []
+        llmBindings: [],
+        vectorConfig: null,
+        retrievalConfig: null
     };
 
     document.addEventListener("DOMContentLoaded", function () {
@@ -20,13 +27,24 @@
         document.getElementById("submit-compile-job").addEventListener("click", submitCompileJob);
         document.getElementById("submit-upload-job").addEventListener("click", uploadAndCompile);
         document.getElementById("rebuild-chunks").addEventListener("click", rebuildChunks);
+        document.getElementById("load-vector-config").addEventListener("click", loadVectorConfig);
+        document.getElementById("save-vector-config").addEventListener("click", saveVectorConfig);
+        document.getElementById("refresh-vector-status").addEventListener("click", loadVectorStatus);
+        document.getElementById("rebuild-vector-index").addEventListener("click", rebuildVectorIndex);
+        document.getElementById("load-retrieval-config").addEventListener("click", loadRetrievalConfig);
+        document.getElementById("save-retrieval-config").addEventListener("click", saveRetrievalConfig);
         document.getElementById("refresh-llm").addEventListener("click", loadLlmConfig);
+        document.getElementById("vector-config-profile-id").addEventListener("change", syncVectorProfilePreview);
         document.getElementById("save-llm-connection").addEventListener("click", saveLlmConnection);
         document.getElementById("reset-llm-connection").addEventListener("click", resetLlmConnectionForm);
         document.getElementById("save-llm-model").addEventListener("click", saveLlmModel);
         document.getElementById("reset-llm-model").addEventListener("click", resetLlmModelForm);
+        document.getElementById("llm-model-kind").addEventListener("change", syncLlmModelKindForm);
         document.getElementById("save-llm-binding").addEventListener("click", saveLlmBinding);
         document.getElementById("reset-llm-binding").addEventListener("click", resetLlmBindingForm);
+        document.getElementById("llm-binding-scene").addEventListener("change", function () {
+            renderLlmBindingRoleOptions();
+        });
         document.getElementById("admin-vault-export").addEventListener("click", exportVaultFromAdmin);
         document.getElementById("admin-vault-sync").addEventListener("click", syncVaultFromAdmin);
         document.getElementById("admin-repo-diff").addEventListener("click", loadRepoDiffFromAdmin);
@@ -78,6 +96,9 @@
             loadArticles(),
             loadPendingQueries(),
             loadJobs(),
+            loadVectorConfig(),
+            loadVectorStatus(),
+            loadRetrievalConfig(),
             loadLlmConfig(),
             refreshGovernance()
         ]);
@@ -333,6 +354,8 @@
             state.llmBindings = responses[2].items || [];
             renderLlmConnectionOptions();
             renderLlmModelOptions();
+            renderVectorProfileOptions(state.vectorConfig ? state.vectorConfig.embeddingModelProfileId : null);
+            renderLlmBindingRoleOptions();
             renderLlmConnectionList(state.llmConnections);
             renderLlmModelList(state.llmModels);
             renderLlmBindingList(state.llmBindings);
@@ -385,6 +408,9 @@
             modelCode: document.getElementById("llm-model-code").value.trim(),
             connectionId: parseOptionalInteger(document.getElementById("llm-model-connection-id").value),
             modelName: document.getElementById("llm-model-name").value.trim(),
+            modelKind: document.getElementById("llm-model-kind").value,
+            expectedDimensions: parseOptionalInteger(document.getElementById("llm-model-expected-dimensions").value),
+            supportsDimensionOverride: document.getElementById("llm-model-supports-dimension-override").checked,
             temperature: parseOptionalDecimal(document.getElementById("llm-model-temperature").value),
             maxTokens: parseOptionalInteger(document.getElementById("llm-model-max-tokens").value),
             timeoutSeconds: parseOptionalInteger(document.getElementById("llm-model-timeout-seconds").value),
@@ -398,6 +424,14 @@
         if (!payload.modelCode || !payload.modelName || !payload.connectionId) {
             setStatus("请填写模型编码、模型名称并选择连接");
             return;
+        }
+        if (payload.modelKind === "EMBEDDING" && (!payload.expectedDimensions || payload.expectedDimensions <= 0)) {
+            setStatus("EMBEDDING 模型必须填写正整数维度");
+            return;
+        }
+        if (payload.modelKind !== "EMBEDDING") {
+            payload.expectedDimensions = null;
+            payload.supportsDimensionOverride = false;
         }
         try {
             const result = await fetchJson(id
@@ -548,6 +582,159 @@
             renderResultError("rebuild-result", "知识切片重建失败", error);
             showError("知识切片重建失败", error);
         }
+    }
+
+    async function loadVectorStatus() {
+        try {
+            const result = await fetchJson("/api/v1/admin/vector/status");
+            document.getElementById("vector-status-view").textContent = JSON.stringify(result, null, 2);
+        }
+        catch (error) {
+            renderResultError("vector-status-view", "加载向量索引状态失败", error);
+            showError("加载向量索引状态失败", error);
+        }
+    }
+
+    async function loadVectorConfig() {
+        try {
+            const result = await fetchJson("/api/v1/admin/vector/config");
+            fillVectorConfigForm(result);
+            document.getElementById("vector-config-result").textContent = JSON.stringify(result, null, 2);
+        }
+        catch (error) {
+            renderResultError("vector-config-result", "加载向量配置失败", error);
+            showError("加载向量配置失败", error);
+        }
+    }
+
+    async function saveVectorConfig() {
+        const payload = {
+            vectorEnabled: document.getElementById("vector-config-enabled").checked,
+            embeddingModelProfileId: parseOptionalInteger(document.getElementById("vector-config-profile-id").value),
+            operator: document.getElementById("vector-config-operator").value.trim() || "admin"
+        };
+        if (payload.embeddingModelProfileId === null || payload.embeddingModelProfileId <= 0) {
+            showError("保存向量配置失败", new Error("请选择 Embedding Profile"));
+            return;
+        }
+        try {
+            const result = await fetchJson("/api/v1/admin/vector/config", {
+                method: "PUT",
+                body: JSON.stringify(payload)
+            });
+            fillVectorConfigForm(result);
+            document.getElementById("vector-config-result").textContent = JSON.stringify(result, null, 2);
+            if (result.rebuildRecommended) {
+                setStatus("向量配置已保存，建议继续执行一次向量索引重建");
+            }
+            else {
+                setStatus("向量配置已保存");
+            }
+            await loadVectorStatus();
+        }
+        catch (error) {
+            renderResultError("vector-config-result", "保存向量配置失败", error);
+            showError("保存向量配置失败", error);
+        }
+    }
+
+    async function rebuildVectorIndex() {
+        const truncateFirst = document.getElementById("vector-truncate-first").checked;
+        const operator = document.getElementById("vector-rebuild-operator").value.trim() || "admin";
+        const confirmed = window.confirm(
+                truncateFirst
+                        ? "将先清空当前 article_vector_index，再按现有文章全文重建，确认继续吗？"
+                        : "将按现有文章全文补齐或刷新 article_vector_index，确认继续吗？"
+        );
+        if (!confirmed) {
+            return;
+        }
+        try {
+            const result = await fetchJson("/api/v1/admin/vector/rebuild", {
+                method: "POST",
+                body: JSON.stringify({
+                    truncateFirst: truncateFirst,
+                    operator: operator
+                })
+            });
+            document.getElementById("vector-rebuild-result").textContent = JSON.stringify(result, null, 2);
+            setStatus("向量索引重建已完成");
+            await loadVectorStatus();
+        }
+        catch (error) {
+            renderResultError("vector-rebuild-result", "向量索引重建失败", error);
+            showError("向量索引重建失败", error);
+        }
+    }
+
+    async function loadRetrievalConfig() {
+        try {
+            const result = await fetchJson("/api/v1/admin/query/retrieval/config");
+            fillRetrievalConfigForm(result);
+            document.getElementById("retrieval-config-result").textContent = JSON.stringify(result, null, 2);
+        }
+        catch (error) {
+            renderResultError("retrieval-config-result", "加载检索配置失败", error);
+            showError("加载检索配置失败", error);
+        }
+    }
+
+    async function saveRetrievalConfig() {
+        const payload = {
+            parallelEnabled: document.getElementById("retrieval-config-parallel-enabled").checked,
+            ftsWeight: parseOptionalDecimal(document.getElementById("retrieval-config-fts-weight").value),
+            sourceWeight: parseOptionalDecimal(document.getElementById("retrieval-config-source-weight").value),
+            contributionWeight: parseOptionalDecimal(document.getElementById("retrieval-config-contribution-weight").value),
+            articleVectorWeight: parseOptionalDecimal(document.getElementById("retrieval-config-article-vector-weight").value),
+            chunkVectorWeight: parseOptionalDecimal(document.getElementById("retrieval-config-chunk-vector-weight").value),
+            rrfK: parseOptionalInteger(document.getElementById("retrieval-config-rrf-k").value)
+        };
+        if (payload.ftsWeight === null
+                || payload.sourceWeight === null
+                || payload.contributionWeight === null
+                || payload.articleVectorWeight === null
+                || payload.chunkVectorWeight === null) {
+            showError("保存检索配置失败", new Error("请填写完整的权重配置"));
+            return;
+        }
+        if (payload.rrfK === null || payload.rrfK <= 0) {
+            showError("保存检索配置失败", new Error("RRF K 必须为正整数"));
+            return;
+        }
+        try {
+            const result = await fetchJson("/api/v1/admin/query/retrieval/config", {
+                method: "PUT",
+                body: JSON.stringify(payload)
+            });
+            fillRetrievalConfigForm(result);
+            document.getElementById("retrieval-config-result").textContent = JSON.stringify(result, null, 2);
+            setStatus("检索配置已保存");
+        }
+        catch (error) {
+            renderResultError("retrieval-config-result", "保存检索配置失败", error);
+            showError("保存检索配置失败", error);
+        }
+    }
+
+    function fillRetrievalConfigForm(result) {
+        state.retrievalConfig = result;
+        document.getElementById("retrieval-config-parallel-enabled").checked = !!result.parallelEnabled;
+        document.getElementById("retrieval-config-fts-weight").value = result.ftsWeight;
+        document.getElementById("retrieval-config-source-weight").value = result.sourceWeight;
+        document.getElementById("retrieval-config-contribution-weight").value = result.contributionWeight;
+        document.getElementById("retrieval-config-article-vector-weight").value = result.articleVectorWeight;
+        document.getElementById("retrieval-config-chunk-vector-weight").value = result.chunkVectorWeight;
+        document.getElementById("retrieval-config-rrf-k").value = result.rrfK;
+    }
+
+    function fillVectorConfigForm(result) {
+        state.vectorConfig = result;
+        document.getElementById("vector-config-enabled").checked = !!result.vectorEnabled;
+        renderVectorProfileOptions(result.embeddingModelProfileId || "");
+        document.getElementById("vector-config-provider").value = result.providerType || "";
+        document.getElementById("vector-config-model-name").value = result.modelName || "";
+        document.getElementById("vector-config-profile-dimensions").value = result.profileDimensions || "";
+        document.getElementById("vector-config-operator").value = result.updatedBy || "admin";
     }
 
     async function exportVaultFromAdmin() {
@@ -1186,18 +1373,65 @@
         if (!primarySelect || !fallbackSelect) {
             return;
         }
-        if (!state.llmModels || state.llmModels.length === 0) {
+        const bindingModels = getBindingModels();
+        if (!bindingModels || bindingModels.length === 0) {
             primarySelect.innerHTML = "<option value=''>暂无模型，请先创建</option>";
             fallbackSelect.innerHTML = "<option value=''>不配置</option>";
             return;
         }
-        const options = state.llmModels.map(function (item) {
+        const options = bindingModels.map(function (item) {
             return "<option value='" + escapeHtml(String(item.id)) + "'>"
                     + escapeHtml(item.modelCode + " -> " + item.modelName)
                     + "</option>";
         }).join("");
         primarySelect.innerHTML = options;
         fallbackSelect.innerHTML = "<option value=''>不配置</option>" + options;
+    }
+
+    function renderVectorProfileOptions(selectedId) {
+        const select = document.getElementById("vector-config-profile-id");
+        if (!select) {
+            return;
+        }
+        const embeddingModels = getEmbeddingModels();
+        if (!embeddingModels || embeddingModels.length === 0) {
+            select.innerHTML = "<option value=''>请先在 LLM 配置中创建 EMBEDDING 模型</option>";
+            syncVectorProfilePreview();
+            return;
+        }
+        select.innerHTML = embeddingModels.map(function (item) {
+            return "<option value='" + escapeHtml(String(item.id)) + "'"
+                    + " data-provider-type='" + escapeHtml(item.providerType || "") + "'"
+                    + " data-model-name='" + escapeHtml(item.modelName || "") + "'"
+                    + " data-dimensions='" + escapeHtml(String(item.expectedDimensions || "")) + "'>"
+                    + escapeHtml(item.modelCode + " -> " + item.modelName + " (" + (item.expectedDimensions || "-") + "d)")
+                    + "</option>";
+        }).join("");
+        const resolvedValue = selectedId || select.dataset.pendingValue || "";
+        if (resolvedValue) {
+            select.value = String(resolvedValue);
+        }
+        select.dataset.pendingValue = resolvedValue;
+        syncVectorProfilePreview();
+    }
+
+    function renderLlmBindingRoleOptions(preferredRole) {
+        const sceneSelect = document.getElementById("llm-binding-scene");
+        const roleSelect = document.getElementById("llm-binding-agent-role");
+        const routeInput = document.getElementById("llm-binding-route-label");
+        if (!sceneSelect || !roleSelect) {
+            return;
+        }
+        const scene = sceneSelect.value || "compile";
+        const roles = LLM_BINDING_ROLE_OPTIONS[scene] || LLM_BINDING_ROLE_OPTIONS.compile;
+        roleSelect.innerHTML = roles.map(function (role) {
+            return "<option value='" + escapeHtml(role) + "'>" + escapeHtml(role) + "</option>";
+        }).join("");
+        const targetRole = preferredRole && roles.indexOf(preferredRole) >= 0 ? preferredRole : roles[0];
+        roleSelect.value = targetRole;
+        if (routeInput && !routeInput.value.trim()) {
+            routeInput.placeholder = scene + "." + targetRole + ".model-route";
+        }
     }
 
     function renderLlmConnectionList(items) {
@@ -1248,12 +1482,15 @@
             return;
         }
         container.innerHTML = "<table class='simple-table'>"
-                + "<thead><tr><th>模型编码</th><th>模型名称</th><th>连接</th><th>价格</th><th>状态</th><th>操作</th></tr></thead>"
+                + "<thead><tr><th>模型编码</th><th>模型信息</th><th>连接</th><th>价格</th><th>状态</th><th>操作</th></tr></thead>"
                 + "<tbody>"
                 + items.map(function (item) {
+                    const modelInfo = item.modelName
+                            + " [" + (item.modelKind || "CHAT") + "]"
+                            + (item.expectedDimensions ? " / " + item.expectedDimensions + "d" : "");
                     return "<tr>"
                             + "<td>" + escapeHtml(item.modelCode) + "</td>"
-                            + "<td>" + escapeHtml(item.modelName) + "</td>"
+                            + "<td>" + escapeHtml(modelInfo) + "</td>"
                             + "<td>" + escapeHtml(String(item.connectionId)) + "</td>"
                             + "<td>in " + escapeHtml(String(item.inputPricePer1kTokens || "-"))
                             + " / out " + escapeHtml(String(item.outputPricePer1kTokens || "-")) + "</td>"
@@ -1283,7 +1520,7 @@
             return;
         }
         if (!items || items.length === 0) {
-            container.innerHTML = "<div class='job-card'><p class='item-summary'>还没有 Agent 绑定，compile 侧会继续走本地 fallback 配置。</p></div>";
+            container.innerHTML = "<div class='job-card'><p class='item-summary'>还没有 Agent 绑定，compile / query 两侧都会继续走本地 fallback 配置。</p></div>";
             return;
         }
         container.innerHTML = "<table class='simple-table'>"
@@ -1345,6 +1582,8 @@
         document.getElementById("llm-model-code").value = item.modelCode || "";
         document.getElementById("llm-model-connection-id").value = String(item.connectionId || "");
         document.getElementById("llm-model-name").value = item.modelName || "";
+        document.getElementById("llm-model-kind").value = item.modelKind || "CHAT";
+        document.getElementById("llm-model-expected-dimensions").value = item.expectedDimensions || "";
         document.getElementById("llm-model-temperature").value = item.temperature || "";
         document.getElementById("llm-model-max-tokens").value = item.maxTokens || "";
         document.getElementById("llm-model-timeout-seconds").value = item.timeoutSeconds || "";
@@ -1354,6 +1593,8 @@
         document.getElementById("llm-model-remarks").value = item.remarks || "";
         document.getElementById("llm-model-operator").value = item.updatedBy || "admin";
         document.getElementById("llm-model-enabled").checked = !!item.enabled;
+        document.getElementById("llm-model-supports-dimension-override").checked = !!item.supportsDimensionOverride;
+        syncLlmModelKindForm();
         activateTab("llm");
     }
 
@@ -1366,7 +1607,7 @@
         }
         document.getElementById("llm-binding-id").value = item.id;
         document.getElementById("llm-binding-scene").value = item.scene || "compile";
-        document.getElementById("llm-binding-agent-role").value = item.agentRole || "writer";
+        renderLlmBindingRoleOptions(item.agentRole || "writer");
         document.getElementById("llm-binding-primary-model-id").value = String(item.primaryModelProfileId || "");
         document.getElementById("llm-binding-fallback-model-id").value = item.fallbackModelProfileId
                 ? String(item.fallbackModelProfileId)
@@ -1393,6 +1634,8 @@
         document.getElementById("llm-model-id").value = "";
         document.getElementById("llm-model-code").value = "";
         document.getElementById("llm-model-name").value = "";
+        document.getElementById("llm-model-kind").value = "CHAT";
+        document.getElementById("llm-model-expected-dimensions").value = "";
         document.getElementById("llm-model-temperature").value = "";
         document.getElementById("llm-model-max-tokens").value = "";
         document.getElementById("llm-model-timeout-seconds").value = "";
@@ -1402,18 +1645,66 @@
         document.getElementById("llm-model-remarks").value = "";
         document.getElementById("llm-model-operator").value = "admin";
         document.getElementById("llm-model-enabled").checked = true;
+        document.getElementById("llm-model-supports-dimension-override").checked = false;
         renderLlmConnectionOptions();
+        syncLlmModelKindForm();
+    }
+
+    function syncVectorProfilePreview() {
+        const select = document.getElementById("vector-config-profile-id");
+        const option = select && select.options && select.selectedIndex >= 0
+                ? select.options[select.selectedIndex]
+                : null;
+        document.getElementById("vector-config-provider").value = option ? (option.dataset.providerType || "") : "";
+        document.getElementById("vector-config-model-name").value = option ? (option.dataset.modelName || "") : "";
+        document.getElementById("vector-config-profile-dimensions").value = option ? (option.dataset.dimensions || "") : "";
+    }
+
+    function syncLlmModelKindForm() {
+        const modelKind = document.getElementById("llm-model-kind").value || "CHAT";
+        const expectedDimensionsInput = document.getElementById("llm-model-expected-dimensions");
+        const supportsDimensionOverride = document.getElementById("llm-model-supports-dimension-override");
+        const isEmbedding = modelKind === "EMBEDDING";
+        expectedDimensionsInput.disabled = !isEmbedding;
+        supportsDimensionOverride.disabled = !isEmbedding;
+        if (!isEmbedding) {
+            expectedDimensionsInput.value = "";
+            supportsDimensionOverride.checked = false;
+        }
+    }
+
+    function getEmbeddingModels() {
+        return (state.llmModels || []).filter(function (item) {
+            return item.modelKind === "EMBEDDING";
+        }).map(function (item) {
+            return Object.assign({}, item, {
+                providerType: resolveConnectionProviderType(item.connectionId)
+            });
+        });
+    }
+
+    function getBindingModels() {
+        return (state.llmModels || []).filter(function (item) {
+            return item.modelKind !== "EMBEDDING";
+        });
+    }
+
+    function resolveConnectionProviderType(connectionId) {
+        const connection = (state.llmConnections || []).find(function (item) {
+            return String(item.id) === String(connectionId);
+        });
+        return connection ? connection.providerType : "";
     }
 
     function resetLlmBindingForm() {
         document.getElementById("llm-binding-id").value = "";
         document.getElementById("llm-binding-scene").value = "compile";
-        document.getElementById("llm-binding-agent-role").value = "writer";
         document.getElementById("llm-binding-route-label").value = "";
         document.getElementById("llm-binding-remarks").value = "";
         document.getElementById("llm-binding-operator").value = "admin";
         document.getElementById("llm-binding-enabled").checked = true;
         renderLlmModelOptions();
+        renderLlmBindingRoleOptions("writer");
     }
 
     function activateTab(tabName) {

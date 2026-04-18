@@ -12,6 +12,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
 import java.net.Proxy;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -95,11 +96,12 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     @Override
     public LlmCallResult call(String systemPrompt, String userPrompt) {
         String requestJson = serialize(buildRequestBody(systemPrompt, userPrompt));
-        String responseJson = restClient.post()
+        byte[] responseBytes = restClient.post()
                 .uri(completionPath)
                 .body(requestJson)
                 .retrieve()
-                .body(String.class);
+                .body(byte[].class);
+        String responseJson = decodeResponse(responseBytes);
         return parseResponse(systemPrompt, userPrompt, responseJson);
     }
 
@@ -182,6 +184,19 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         catch (JsonProcessingException exception) {
             throw new IllegalStateException("Failed to serialize OpenAI request", exception);
         }
+    }
+
+    /**
+     * 将原始响应字节解码为 UTF-8 文本。
+     *
+     * @param responseBytes 原始响应
+     * @return 响应文本
+     */
+    private String decodeResponse(byte[] responseBytes) {
+        if (responseBytes == null || responseBytes.length == 0) {
+            return "";
+        }
+        return new String(responseBytes, StandardCharsets.UTF_8);
     }
 
     private LlmCallResult parseResponse(String systemPrompt, String userPrompt, String responseJson) {

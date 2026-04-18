@@ -11,6 +11,7 @@ import picocli.CommandLine;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.time.Duration;
 
 /**
  * search 命令
@@ -62,5 +63,15 @@ public class SearchCommand extends AbstractCliCommand {
         );
         printJson(searchResponse);
         return CliExitCodes.SUCCESS;
+    }
+
+    /**
+     * 返回 search 命令远程模式默认超时时间。
+     *
+     * @return 默认超时时间
+     */
+    @Override
+    protected Duration defaultRemoteRequestTimeout() {
+        return Duration.ofMinutes(2);
     }
 }

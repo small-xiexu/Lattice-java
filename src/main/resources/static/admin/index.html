@@ -241,6 +241,98 @@
                     </div>
 
                     <div class="sub-panel">
+                        <h3>向量索引维护</h3>
+                        <p class="muted">在后台保存 query 向量配置，查看 `article_vector_index` 当前状态，并在需要时执行全量补齐或重建。</p>
+                        <div class="form-grid">
+                            <label class="checkbox-row">
+                                <input id="vector-config-enabled" type="checkbox">
+                                <span>启用向量检索</span>
+                            </label>
+                            <label>
+                                <span>Embedding Profile</span>
+                                <select id="vector-config-profile-id">
+                                    <option value="">请先在 LLM 配置中创建 EMBEDDING 模型</option>
+                                </select>
+                            </label>
+                            <label>
+                                <span>Provider 类型</span>
+                                <input id="vector-config-provider" type="text" placeholder="自动带出" readonly>
+                            </label>
+                            <label>
+                                <span>模型名称</span>
+                                <input id="vector-config-model-name" type="text" placeholder="自动带出" readonly>
+                            </label>
+                            <label>
+                                <span>Profile 维度</span>
+                                <input id="vector-config-profile-dimensions" type="text" placeholder="自动带出" readonly>
+                            </label>
+                            <label>
+                                <span>配置操作人</span>
+                                <input id="vector-config-operator" type="text" value="admin">
+                            </label>
+                        </div>
+                        <div class="form-grid">
+                            <label>
+                                <span>操作人</span>
+                                <input id="vector-rebuild-operator" type="text" value="admin">
+                            </label>
+                            <label class="checkbox-row">
+                                <input id="vector-truncate-first" type="checkbox">
+                                <span>先清空旧向量再重建</span>
+                            </label>
+                        </div>
+                        <div class="button-row wrap">
+                            <button id="load-vector-config" class="ghost-btn" type="button">加载向量配置</button>
+                            <button id="save-vector-config" class="primary-btn" type="button">保存向量配置</button>
+                            <button id="refresh-vector-status" class="ghost-btn" type="button">刷新向量状态</button>
+                            <button id="rebuild-vector-index" class="warn-btn" type="button">重建向量索引</button>
+                        </div>
+                        <pre id="vector-config-result" class="code-view compact">尚未加载向量配置</pre>
+                        <pre id="vector-status-view" class="code-view compact">尚未加载向量索引状态</pre>
+                        <pre id="vector-rebuild-result" class="code-view compact">尚未执行向量索引重建</pre>
+                    </div>
+
+                    <div class="sub-panel">
+                        <h3>检索融合配置</h3>
+                        <p class="muted">调整并行召回和各通道权重，保存后立即影响 Query 图融合策略。</p>
+                        <div class="form-grid">
+                            <label class="checkbox-row">
+                                <input id="retrieval-config-parallel-enabled" type="checkbox" checked>
+                                <span>启用并行召回</span>
+                            </label>
+                            <label>
+                                <span>FTS 权重</span>
+                                <input id="retrieval-config-fts-weight" type="number" min="0" step="0.1" value="1.0">
+                            </label>
+                            <label>
+                                <span>Source 权重</span>
+                                <input id="retrieval-config-source-weight" type="number" min="0" step="0.1" value="1.0">
+                            </label>
+                            <label>
+                                <span>Contribution 权重</span>
+                                <input id="retrieval-config-contribution-weight" type="number" min="0" step="0.1" value="1.0">
+                            </label>
+                            <label>
+                                <span>文章向量权重</span>
+                                <input id="retrieval-config-article-vector-weight" type="number" min="0" step="0.1" value="0.6">
+                            </label>
+                            <label>
+                                <span>Chunk 向量权重</span>
+                                <input id="retrieval-config-chunk-vector-weight" type="number" min="0" step="0.1" value="1.2">
+                            </label>
+                            <label>
+                                <span>RRF K</span>
+                                <input id="retrieval-config-rrf-k" type="number" min="1" step="1" value="60">
+                            </label>
+                        </div>
+                        <div class="button-row wrap">
+                            <button id="load-retrieval-config" class="ghost-btn" type="button">加载检索配置</button>
+                            <button id="save-retrieval-config" class="primary-btn" type="button">保存检索配置</button>
+                        </div>
+                        <pre id="retrieval-config-result" class="code-view compact">尚未加载检索配置</pre>
+                    </div>
+
+                    <div class="sub-panel">
                         <h3>知识仓同步</h3>
                         <div class="form-grid">
                             <label>
@@ -280,7 +372,7 @@
                 <div class="panel-title-row">
                     <div>
                         <h3>模型池与 Agent 绑定</h3>
-                        <p>在后台管理 Provider 连接、模型参数和 compile 侧 Agent 绑定。修改只影响新任务，运行中的任务继续使用启动时快照。</p>
+                        <p>在后台管理 Provider 连接、模型参数以及 compile / query 两侧 Agent 绑定。修改只影响新任务，运行中的任务继续使用启动时快照。</p>
                     </div>
                     <button id="refresh-llm" class="ghost-btn" type="button">刷新配置</button>
                 </div>
@@ -300,6 +392,7 @@
                                     <option value="openai">openai</option>
                                     <option value="anthropic">anthropic</option>
                                     <option value="openai_compatible">openai_compatible</option>
+                                    <option value="ollama">ollama</option>
                                 </select>
                             </label>
                             <label>
@@ -347,6 +440,17 @@
                                 <input id="llm-model-name" type="text" placeholder="gpt-5.4">
                             </label>
                             <label>
+                                <span>模型类型</span>
+                                <select id="llm-model-kind">
+                                    <option value="CHAT">CHAT</option>
+                                    <option value="EMBEDDING">EMBEDDING</option>
+                                </select>
+                            </label>
+                            <label>
+                                <span>Embedding 维度</span>
+                                <input id="llm-model-expected-dimensions" type="text" placeholder="1536">
+                            </label>
+                            <label>
                                 <span>Temperature</span>
                                 <input id="llm-model-temperature" type="text" placeholder="0.2">
                             </label>
@@ -382,6 +486,10 @@
                                 <input id="llm-model-enabled" type="checkbox" checked>
                                 <span>启用该模型</span>
                             </label>
+                            <label class="checkbox-row">
+                                <input id="llm-model-supports-dimension-override" type="checkbox">
+                                <span>支持维度覆盖</span>
+                            </label>
                         </div>
                         <div class="button-row wrap">
                             <button id="save-llm-model" class="primary-btn" type="button">保存模型</button>
@@ -398,6 +506,7 @@
                                 <span>场景</span>
                                 <select id="llm-binding-scene">
                                     <option value="compile">compile</option>
+                                    <option value="query">query</option>
                                 </select>
                             </label>
                             <label>
@@ -406,6 +515,8 @@
                                     <option value="writer">writer</option>
                                     <option value="reviewer">reviewer</option>
                                     <option value="fixer">fixer</option>
+                                    <option value="answer">answer</option>
+                                    <option value="rewrite">rewrite</option>
                                 </select>
                             </label>
                             <label>

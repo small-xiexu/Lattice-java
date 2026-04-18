@@ -12,6 +12,7 @@ import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
+import com.xbk.lattice.query.service.ArticleChunkVectorIndexService;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,6 +55,8 @@ public class CompilePipelineService {
 
     private final ArticleVectorIndexService articleVectorIndexService;
 
+    private final ArticleChunkVectorIndexService articleChunkVectorIndexService;
+
     private final IncrementalCompileService incrementalCompileService;
 
     /**
@@ -87,6 +90,7 @@ public class CompilePipelineService {
             SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
             CompilationWalStore compilationWalStore,
             ArticleVectorIndexService articleVectorIndexService,
+            ArticleChunkVectorIndexService articleChunkVectorIndexService,
             SourceIngestSupport sourceIngestSupport,
             ArticleCompileSupport articleCompileSupport,
             ArticlePersistSupport articlePersistSupport
@@ -106,7 +110,8 @@ public class CompilePipelineService {
                         sourceIngestSupport,
                         articleCompileSupport,
                         articlePersistSupport,
-                        articleVectorIndexService
+                        articleVectorIndexService,
+                        articleChunkVectorIndexService
                 )
         );
     }
@@ -150,6 +155,51 @@ public class CompilePipelineService {
                 sourceFileJdbcRepository,
                 sourceFileChunkJdbcRepository,
                 compilationWalStore,
+                articleVectorIndexService,
+                new ArticleChunkVectorIndexService()
+        );
+    }
+
+    /**
+     * 创建最小编译链路服务。
+     *
+     * @param compilerProperties 编译配置
+     * @param llmGateway LLM 网关
+     * @param articleReviewerGateway 文章审查网关
+     * @param reviewFixService 审查修复服务
+     * @param synthesisArtifactsService 合成产物服务
+     * @param articleJdbcRepository 文章仓储
+     * @param articleChunkJdbcRepository 文章 chunk 仓储
+     * @param sourceFileJdbcRepository 源文件仓储
+     * @param sourceFileChunkJdbcRepository 源文件 chunk 仓储
+     * @param compilationWalStore 编译 WAL 存储
+     * @param articleVectorIndexService 文章向量索引服务
+     */
+    public CompilePipelineService(
+            CompilerProperties compilerProperties,
+            LlmGateway llmGateway,
+            ArticleReviewerGateway articleReviewerGateway,
+            ReviewFixService reviewFixService,
+            SynthesisArtifactsService synthesisArtifactsService,
+            ArticleJdbcRepository articleJdbcRepository,
+            ArticleChunkJdbcRepository articleChunkJdbcRepository,
+            SourceFileJdbcRepository sourceFileJdbcRepository,
+            SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
+            CompilationWalStore compilationWalStore,
+            ArticleVectorIndexService articleVectorIndexService,
+            ArticleChunkVectorIndexService articleChunkVectorIndexService
+    ) {
+        this(
+                compilerProperties,
+                llmGateway,
+                articleReviewerGateway,
+                reviewFixService,
+                synthesisArtifactsService,
+                articleJdbcRepository,
+                articleChunkJdbcRepository,
+                sourceFileJdbcRepository,
+                sourceFileChunkJdbcRepository,
+                compilationWalStore,
                 createSupportBundle(
                         compilerProperties,
                         llmGateway,
@@ -161,7 +211,8 @@ public class CompilePipelineService {
                         sourceFileJdbcRepository,
                         sourceFileChunkJdbcRepository,
                         compilationWalStore,
-                        articleVectorIndexService
+                        articleVectorIndexService,
+                        articleChunkVectorIndexService
                 )
         );
     }
@@ -214,7 +265,8 @@ public class CompilePipelineService {
                         sourceFileJdbcRepository,
                         sourceFileChunkJdbcRepository,
                         compilationWalStore,
-                        new ArticleVectorIndexService()
+                        new ArticleVectorIndexService(),
+                        new ArticleChunkVectorIndexService()
                 )
         );
     }
@@ -257,7 +309,8 @@ public class CompilePipelineService {
                         sourceFileJdbcRepository,
                         null,
                         compilationWalStore,
-                        new ArticleVectorIndexService()
+                        new ArticleVectorIndexService(),
+                        new ArticleChunkVectorIndexService()
                 )
         );
     }
@@ -306,6 +359,7 @@ public class CompilePipelineService {
         this.articleJdbcRepository = articleJdbcRepository;
         this.articleChunkJdbcRepository = articleChunkJdbcRepository;
         this.articleVectorIndexService = supportBundle.articleVectorIndexService;
+        this.articleChunkVectorIndexService = supportBundle.articleChunkVectorIndexService;
         this.incrementalCompileService = new IncrementalCompileService(
                 compilerProperties,
                 llmGateway,
@@ -316,7 +370,8 @@ public class CompilePipelineService {
                 articleChunkJdbcRepository,
                 sourceFileJdbcRepository,
                 sourceFileChunkJdbcRepository,
-                this.articleVectorIndexService
+                this.articleVectorIndexService,
+                this.articleChunkVectorIndexService
         );
     }
 
@@ -593,6 +648,9 @@ public class CompilePipelineService {
             articleJdbcRepository.upsert(articleRecord);
             articleChunkJdbcRepository.replaceChunksFromContent(articleRecord.getConceptId(), articleRecord.getContent());
             articleVectorIndexService.indexArticle(articleRecord);
+            if (articleChunkVectorIndexService != null) {
+                articleChunkVectorIndexService.indexArticle(articleRecord);
+            }
             compilationWalStore.markCommitted(jobId, mergedConcept.getConceptId());
             persistedCount++;
         }
@@ -640,6 +698,7 @@ public class CompilePipelineService {
      * @param sourceFileChunkJdbcRepository 源文件 chunk 仓储
      * @param compilationWalStore 编译 WAL 存储
      * @param articleVectorIndexService 文章向量索引服务
+     * @param articleChunkVectorIndexService 文章分块向量索引服务
      * @return 支撑服务集合
      */
     private static SupportBundle createSupportBundle(
@@ -653,11 +712,15 @@ public class CompilePipelineService {
             SourceFileJdbcRepository sourceFileJdbcRepository,
             SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
             CompilationWalStore compilationWalStore,
-            ArticleVectorIndexService articleVectorIndexService
+            ArticleVectorIndexService articleVectorIndexService,
+            ArticleChunkVectorIndexService articleChunkVectorIndexService
     ) {
         ArticleVectorIndexService resolvedArticleVectorIndexService = articleVectorIndexService == null
                 ? new ArticleVectorIndexService()
                 : articleVectorIndexService;
+        ArticleChunkVectorIndexService resolvedArticleChunkVectorIndexService = articleChunkVectorIndexService == null
+                ? new ArticleChunkVectorIndexService()
+                : articleChunkVectorIndexService;
         SourceIngestSupport sourceIngestSupport = new SourceIngestSupport(
                 compilerProperties,
                 llmGateway,
@@ -684,13 +747,15 @@ public class CompilePipelineService {
                 articleChunkJdbcRepository,
                 compilationWalStore,
                 resolvedArticleVectorIndexService,
+                resolvedArticleChunkVectorIndexService,
                 sourceIngestSupport
         );
         return new SupportBundle(
                 sourceIngestSupport,
                 articleCompileSupport,
                 articlePersistSupport,
-                resolvedArticleVectorIndexService
+                resolvedArticleVectorIndexService,
+                resolvedArticleChunkVectorIndexService
         );
     }
 
@@ -709,6 +774,8 @@ public class CompilePipelineService {
 
         private final ArticleVectorIndexService articleVectorIndexService;
 
+        private final ArticleChunkVectorIndexService articleChunkVectorIndexService;
+
         /**
          * 创建编译支撑服务集合。
          *
@@ -721,12 +788,14 @@ public class CompilePipelineService {
                 SourceIngestSupport sourceIngestSupport,
                 ArticleCompileSupport articleCompileSupport,
                 ArticlePersistSupport articlePersistSupport,
-                ArticleVectorIndexService articleVectorIndexService
+                ArticleVectorIndexService articleVectorIndexService,
+                ArticleChunkVectorIndexService articleChunkVectorIndexService
         ) {
             this.sourceIngestSupport = sourceIngestSupport;
             this.articleCompileSupport = articleCompileSupport;
             this.articlePersistSupport = articlePersistSupport;
             this.articleVectorIndexService = articleVectorIndexService;
+            this.articleChunkVectorIndexService = articleChunkVectorIndexService;
         }
     }
 }

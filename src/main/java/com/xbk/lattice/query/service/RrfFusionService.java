@@ -1,5 +1,6 @@
 package com.xbk.lattice.query.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -12,7 +13,7 @@ import java.util.Map;
 /**
  * RRF 融合服务
  *
- * 职责：融合多路查询结果
+ * 职责：按 channel 权重执行 RRF 融合
  *
  * @author xiexu
  */
@@ -20,10 +21,29 @@ import java.util.Map;
 @Profile("jdbc")
 public class RrfFusionService {
 
-    private static final double RRF_K = 60.0;
+    private static final int DEFAULT_RRF_K = 60;
+
+    private final QueryRetrievalSettingsService queryRetrievalSettingsService;
 
     /**
-     * 融合多路检索结果。
+     * 创建 RRF 融合服务。
+     */
+    public RrfFusionService() {
+        this(null);
+    }
+
+    /**
+     * 创建 RRF 融合服务。
+     *
+     * @param queryRetrievalSettingsService Query 检索配置服务
+     */
+    @Autowired
+    public RrfFusionService(QueryRetrievalSettingsService queryRetrievalSettingsService) {
+        this.queryRetrievalSettingsService = queryRetrievalSettingsService;
+    }
+
+    /**
+     * 融合两路检索结果。
      *
      * @param ftsHits FTS 命中
      * @param refKeyHits 引用词命中
@@ -42,10 +62,55 @@ public class RrfFusionService {
      * @return 融合结果
      */
     public List<QueryArticleHit> fuse(List<List<QueryArticleHit>> hitGroups, int limit) {
+        Map<String, List<QueryArticleHit>> channelHits = new LinkedHashMap<String, List<QueryArticleHit>>();
+        Map<String, Double> weights = new LinkedHashMap<String, Double>();
+        for (int index = 0; index < hitGroups.size(); index++) {
+            String channel = "channel_" + index;
+            channelHits.put(channel, hitGroups.get(index));
+            weights.put(channel, 1.0D);
+        }
+        return fuse(channelHits, weights, limit, DEFAULT_RRF_K);
+    }
+
+    /**
+     * 按 channel 与权重融合多路检索结果。
+     *
+     * @param channelHits 分通道命中
+     * @param weights 通道权重
+     * @param limit 返回数量
+     * @return 融合结果
+     */
+    public List<QueryArticleHit> fuse(
+            Map<String, List<QueryArticleHit>> channelHits,
+            Map<String, Double> weights,
+            int limit
+    ) {
+        int rrfK = queryRetrievalSettingsService == null
+                ? DEFAULT_RRF_K
+                : queryRetrievalSettingsService.getCurrentState().getRrfK();
+        return fuse(channelHits, weights, limit, rrfK);
+    }
+
+    /**
+     * 按 channel、权重与 rrfK 融合多路检索结果。
+     *
+     * @param channelHits 分通道命中
+     * @param weights 通道权重
+     * @param limit 返回数量
+     * @param rrfK RRF K 值
+     * @return 融合结果
+     */
+    public List<QueryArticleHit> fuse(
+            Map<String, List<QueryArticleHit>> channelHits,
+            Map<String, Double> weights,
+            int limit,
+            int rrfK
+    ) {
         Map<String, QueryArticleHit> articleHitMap = new LinkedHashMap<String, QueryArticleHit>();
         Map<String, Double> scoreMap = new LinkedHashMap<String, Double>();
-        for (List<QueryArticleHit> hitGroup : hitGroups) {
-            mergeHits(articleHitMap, scoreMap, hitGroup);
+        for (Map.Entry<String, List<QueryArticleHit>> entry : channelHits.entrySet()) {
+            double weight = weights.getOrDefault(entry.getKey(), 1.0D);
+            mergeHits(articleHitMap, scoreMap, entry.getValue(), weight, rrfK);
         }
 
         List<QueryArticleHit> fusedHits = new ArrayList<QueryArticleHit>();
@@ -57,7 +122,7 @@ public class RrfFusionService {
                     entry.getValue().getContent(),
                     entry.getValue().getMetadataJson(),
                     entry.getValue().getSourcePaths(),
-                    scoreMap.getOrDefault(entry.getKey(), 0.0)
+                    scoreMap.getOrDefault(entry.getKey(), 0.0D)
             ));
         }
         fusedHits.sort(Comparator.comparing(QueryArticleHit::getScore).reversed()
@@ -68,33 +133,22 @@ public class RrfFusionService {
         return fusedHits.subList(0, limit);
     }
 
-    /**
-     * 合并单路检索结果。
-     *
-     * @param articleHitMap 命中映射
-     * @param scoreMap 评分映射
-     * @param hits 命中列表
-     */
     private void mergeHits(
             Map<String, QueryArticleHit> articleHitMap,
             Map<String, Double> scoreMap,
-            List<QueryArticleHit> hits
+            List<QueryArticleHit> hits,
+            double weight,
+            int rrfK
     ) {
         for (int index = 0; index < hits.size(); index++) {
             QueryArticleHit hit = hits.get(index);
             String hitKey = buildHitKey(hit);
             articleHitMap.putIfAbsent(hitKey, hit);
-            double rrfScore = 1.0 / (RRF_K + index + 1);
+            double rrfScore = weight / (rrfK + index + 1.0D);
             scoreMap.merge(hitKey, rrfScore, Double::sum);
         }
     }
 
-    /**
-     * 构建命中的稳定融合键。
-     *
-     * @param queryArticleHit 查询命中
-     * @return 融合键
-     */
     private String buildHitKey(QueryArticleHit queryArticleHit) {
         return queryArticleHit.getEvidenceType().name() + ":" + queryArticleHit.getConceptId();
     }

@@ -5,6 +5,7 @@ import com.xbk.lattice.cli.CliRuntimeSupport;
 import com.xbk.lattice.cli.remote.LatticeHttpClient;
 import picocli.CommandLine;
 
+import java.time.Duration;
 import java.util.concurrent.Callable;
 
 /**
@@ -29,11 +30,20 @@ public abstract class AbstractCliCommand implements Callable<Integer> {
     )
     protected String serverUrl;
 
+    @CommandLine.Option(
+            names = "--request-timeout-seconds",
+            description = "远程模式请求超时秒数，默认按命令预设值"
+    )
+    protected Long requestTimeoutSeconds;
+
     @Override
     public final Integer call() {
         String effectiveServerUrl = resolveServerUrl();
         if (effectiveServerUrl != null && !effectiveServerUrl.isBlank()) {
-            return CliRuntimeSupport.runWithContext(() -> runInRemoteMode(new LatticeHttpClient(effectiveServerUrl)));
+            Duration requestTimeout = resolveRemoteRequestTimeout();
+            return CliRuntimeSupport.runWithContext(() -> runInRemoteMode(
+                    new LatticeHttpClient(effectiveServerUrl, requestTimeout)
+            ));
         }
         return CliRuntimeSupport.runWithContext(this::runInStandaloneMode);
     }
@@ -66,6 +76,15 @@ public abstract class AbstractCliCommand implements Callable<Integer> {
         CliOutputFormatter.printLine(CliOutputFormatter.toJson(value));
     }
 
+    /**
+     * 返回命令默认远程请求超时时间。
+     *
+     * @return 默认超时时间
+     */
+    protected Duration defaultRemoteRequestTimeout() {
+        return Duration.ofSeconds(60);
+    }
+
     private String resolveServerUrl() {
         if (serverUrl != null && !serverUrl.isBlank()) {
             return serverUrl.trim();
@@ -75,5 +94,15 @@ public abstract class AbstractCliCommand implements Callable<Integer> {
             return null;
         }
         return envServerUrl.trim();
+    }
+
+    private Duration resolveRemoteRequestTimeout() {
+        if (requestTimeoutSeconds == null) {
+            return defaultRemoteRequestTimeout();
+        }
+        if (requestTimeoutSeconds <= 0) {
+            throw new IllegalArgumentException("request-timeout-seconds 必须大于 0");
+        }
+        return Duration.ofSeconds(requestTimeoutSeconds);
     }
 }

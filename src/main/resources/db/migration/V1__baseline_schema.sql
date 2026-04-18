@@ -357,6 +357,9 @@ CREATE TABLE IF NOT EXISTS llm_model_profiles (
     model_code VARCHAR(64) NOT NULL,
     connection_id BIGINT NOT NULL REFERENCES llm_provider_connections (id),
     model_name VARCHAR(128) NOT NULL,
+    model_kind VARCHAR(16) NOT NULL DEFAULT 'CHAT',
+    expected_dimensions INTEGER,
+    supports_dimension_override BOOLEAN NOT NULL DEFAULT FALSE,
     temperature NUMERIC(4, 2),
     max_tokens INTEGER,
     timeout_seconds INTEGER,
@@ -375,6 +378,9 @@ COMMENT ON TABLE llm_model_profiles IS 'LLM 模型配置表';
 COMMENT ON COLUMN llm_model_profiles.model_code IS '模型配置编码';
 COMMENT ON COLUMN llm_model_profiles.connection_id IS '关联连接配置 ID';
 COMMENT ON COLUMN llm_model_profiles.model_name IS '实际模型名称';
+COMMENT ON COLUMN llm_model_profiles.model_kind IS '模型类型：CHAT / EMBEDDING';
+COMMENT ON COLUMN llm_model_profiles.expected_dimensions IS 'Embedding 模型期望维度';
+COMMENT ON COLUMN llm_model_profiles.supports_dimension_override IS '是否支持运行时维度覆盖';
 COMMENT ON COLUMN llm_model_profiles.temperature IS '温度参数';
 COMMENT ON COLUMN llm_model_profiles.max_tokens IS '最大输出 token';
 COMMENT ON COLUMN llm_model_profiles.timeout_seconds IS '超时秒数';
@@ -393,6 +399,49 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_llm_model_profiles_model_code
 
 CREATE INDEX IF NOT EXISTS idx_llm_model_profiles_connection_enabled
     ON llm_model_profiles (connection_id, enabled, id DESC);
+
+CREATE TABLE IF NOT EXISTS query_vector_settings (
+    config_scope VARCHAR(32) PRIMARY KEY,
+    vector_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    embedding_model_profile_id BIGINT NOT NULL REFERENCES llm_model_profiles (id),
+    created_by VARCHAR(64) NOT NULL DEFAULT 'system',
+    updated_by VARCHAR(64) NOT NULL DEFAULT 'system',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE query_vector_settings IS 'Query 向量检索配置表';
+COMMENT ON COLUMN query_vector_settings.config_scope IS '配置作用域，当前固定为 default';
+COMMENT ON COLUMN query_vector_settings.vector_enabled IS '是否启用向量检索';
+COMMENT ON COLUMN query_vector_settings.embedding_model_profile_id IS '当前选中的 embedding profile 主键';
+COMMENT ON COLUMN query_vector_settings.created_by IS '创建人';
+COMMENT ON COLUMN query_vector_settings.updated_by IS '更新人';
+COMMENT ON COLUMN query_vector_settings.created_at IS '创建时间';
+COMMENT ON COLUMN query_vector_settings.updated_at IS '更新时间';
+
+CREATE TABLE IF NOT EXISTS query_retrieval_settings (
+    id BIGINT PRIMARY KEY DEFAULT 1,
+    parallel_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    fts_weight NUMERIC NOT NULL DEFAULT 1.0,
+    source_weight NUMERIC NOT NULL DEFAULT 1.0,
+    contribution_weight NUMERIC NOT NULL DEFAULT 1.0,
+    article_vector_weight NUMERIC NOT NULL DEFAULT 0.6,
+    chunk_vector_weight NUMERIC NOT NULL DEFAULT 1.2,
+    rrf_k INTEGER NOT NULL DEFAULT 60,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE query_retrieval_settings IS 'Query 检索融合配置表';
+COMMENT ON COLUMN query_retrieval_settings.parallel_enabled IS '是否启用并行召回';
+COMMENT ON COLUMN query_retrieval_settings.fts_weight IS 'FTS 召回权重';
+COMMENT ON COLUMN query_retrieval_settings.source_weight IS 'Source 召回权重';
+COMMENT ON COLUMN query_retrieval_settings.contribution_weight IS 'Contribution 召回权重';
+COMMENT ON COLUMN query_retrieval_settings.article_vector_weight IS '文章级向量召回权重';
+COMMENT ON COLUMN query_retrieval_settings.chunk_vector_weight IS 'Chunk 级向量召回权重';
+COMMENT ON COLUMN query_retrieval_settings.rrf_k IS 'RRF 融合 K 值';
+COMMENT ON COLUMN query_retrieval_settings.updated_at IS '更新时间';
+
+INSERT INTO query_retrieval_settings DEFAULT VALUES ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS agent_model_bindings (
     id BIGSERIAL PRIMARY KEY,
@@ -486,7 +535,9 @@ BEGIN
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS article_vector_index (
                 concept_id VARCHAR(128) PRIMARY KEY REFERENCES articles (concept_id) ON DELETE CASCADE,
-                model_name VARCHAR(128) NOT NULL,
+                model_profile_id BIGINT NOT NULL REFERENCES llm_model_profiles (id),
+                embedding_dimensions INTEGER NOT NULL,
+                index_version VARCHAR(64) NOT NULL,
                 content_hash VARCHAR(64) NOT NULL,
                 embedding %s(1536) NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -496,6 +547,24 @@ BEGIN
 
         CREATE INDEX IF NOT EXISTS idx_article_vector_index_updated_at
             ON article_vector_index (updated_at DESC);
+
+        EXECUTE format(
+            'CREATE TABLE IF NOT EXISTS article_chunk_vector_index (
+                article_chunk_id BIGINT PRIMARY KEY REFERENCES article_chunks (id) ON DELETE CASCADE,
+                article_id BIGINT NOT NULL REFERENCES articles (id) ON DELETE CASCADE,
+                concept_id VARCHAR(128) NOT NULL,
+                chunk_index INTEGER NOT NULL,
+                model_profile_id BIGINT NOT NULL REFERENCES llm_model_profiles (id),
+                content_hash VARCHAR(64) NOT NULL,
+                embedding %s(1536) NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )',
+            vector_type_name
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_article_chunk_vector_index_concept
+            ON article_chunk_vector_index (concept_id, chunk_index);
+
     END IF;
 END $$;
 
@@ -504,10 +573,23 @@ BEGIN
     IF to_regclass(current_schema() || '.article_vector_index') IS NOT NULL THEN
         EXECUTE 'COMMENT ON TABLE article_vector_index IS ''文章向量索引表''';
         EXECUTE 'COMMENT ON COLUMN article_vector_index.concept_id IS ''关联文章概念唯一标识''';
-        EXECUTE 'COMMENT ON COLUMN article_vector_index.model_name IS ''Embedding 模型名称''';
+        EXECUTE 'COMMENT ON COLUMN article_vector_index.model_profile_id IS ''Embedding profile 主键''';
+        EXECUTE 'COMMENT ON COLUMN article_vector_index.embedding_dimensions IS ''向量维度''';
+        EXECUTE 'COMMENT ON COLUMN article_vector_index.index_version IS ''索引版本''';
         EXECUTE 'COMMENT ON COLUMN article_vector_index.content_hash IS ''正文内容哈希''';
         EXECUTE 'COMMENT ON COLUMN article_vector_index.embedding IS ''文章向量嵌入''';
         EXECUTE 'COMMENT ON COLUMN article_vector_index.updated_at IS ''向量索引更新时间''';
+    END IF;
+    IF to_regclass(current_schema() || '.article_chunk_vector_index') IS NOT NULL THEN
+        EXECUTE 'COMMENT ON TABLE article_chunk_vector_index IS ''文章分块向量索引表''';
+        EXECUTE 'COMMENT ON COLUMN article_chunk_vector_index.article_chunk_id IS ''关联文章分块主键 ID''';
+        EXECUTE 'COMMENT ON COLUMN article_chunk_vector_index.article_id IS ''关联文章主键 ID''';
+        EXECUTE 'COMMENT ON COLUMN article_chunk_vector_index.concept_id IS ''关联文章概念唯一标识''';
+        EXECUTE 'COMMENT ON COLUMN article_chunk_vector_index.chunk_index IS ''分块顺序号''';
+        EXECUTE 'COMMENT ON COLUMN article_chunk_vector_index.model_profile_id IS ''Embedding profile 主键''';
+        EXECUTE 'COMMENT ON COLUMN article_chunk_vector_index.content_hash IS ''Chunk 内容哈希''';
+        EXECUTE 'COMMENT ON COLUMN article_chunk_vector_index.embedding IS ''Chunk 向量嵌入''';
+        EXECUTE 'COMMENT ON COLUMN article_chunk_vector_index.updated_at IS ''向量索引更新时间''';
     END IF;
 END $$;
 

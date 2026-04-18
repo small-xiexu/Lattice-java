@@ -1,5 +1,8 @@
 package com.xbk.lattice.api.compiler;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * 编译响应
  *
@@ -28,7 +31,11 @@ public class CompileResponse {
      * @param persistedCount 落盘数量
      * @param jobId 作业标识
      */
-    public CompileResponse(int persistedCount, String jobId) {
+    @JsonCreator
+    public CompileResponse(
+            @JsonProperty("persistedCount") int persistedCount,
+            @JsonProperty("jobId") String jobId
+    ) {
         this.persistedCount = persistedCount;
         this.jobId = jobId;
     }

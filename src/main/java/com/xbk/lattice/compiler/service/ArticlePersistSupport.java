@@ -5,6 +5,7 @@ import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
+import com.xbk.lattice.query.service.ArticleChunkVectorIndexService;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
@@ -35,6 +36,8 @@ public class ArticlePersistSupport {
 
     private final ArticleVectorIndexService articleVectorIndexService;
 
+    private final ArticleChunkVectorIndexService articleChunkVectorIndexService;
+
     private final SourceIngestSupport sourceIngestSupport;
 
     private RepoSnapshotService repoSnapshotService;
@@ -55,6 +58,7 @@ public class ArticlePersistSupport {
             ArticleChunkJdbcRepository articleChunkJdbcRepository,
             CompilationWalStore compilationWalStore,
             ArticleVectorIndexService articleVectorIndexService,
+            ArticleChunkVectorIndexService articleChunkVectorIndexService,
             SourceIngestSupport sourceIngestSupport
     ) {
         this.articleCompileSupport = articleCompileSupport;
@@ -62,6 +66,7 @@ public class ArticlePersistSupport {
         this.articleChunkJdbcRepository = articleChunkJdbcRepository;
         this.compilationWalStore = compilationWalStore;
         this.articleVectorIndexService = articleVectorIndexService;
+        this.articleChunkVectorIndexService = articleChunkVectorIndexService;
         this.sourceIngestSupport = sourceIngestSupport;
     }
 
@@ -119,6 +124,9 @@ public class ArticlePersistSupport {
         for (ArticleReviewEnvelope reviewEnvelope : reviewedArticles) {
             ArticleRecord articleRecord = finalizeArticleForPersist(reviewEnvelope);
             articleVectorIndexService.indexArticle(articleRecord);
+            if (articleChunkVectorIndexService != null) {
+                articleChunkVectorIndexService.indexArticle(articleRecord);
+            }
         }
     }
 

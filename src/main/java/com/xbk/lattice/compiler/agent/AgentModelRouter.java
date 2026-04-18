@@ -173,6 +173,9 @@ public class AgentModelRouter {
         if (ExecutionLlmSnapshotService.COMPILE_SCENE.equals(normalizedScene)) {
             return ExecutionLlmSnapshotService.COMPILE_SCOPE_TYPE;
         }
+        if (ExecutionLlmSnapshotService.QUERY_SCENE.equals(normalizedScene)) {
+            return ExecutionLlmSnapshotService.QUERY_SCOPE_TYPE;
+        }
         return normalizedScene + "_scope";
     }
 

@@ -129,6 +129,30 @@ public class JdbcSearchCapabilityService implements SearchCapabilityService {
     }
 
     /**
+     * 返回文章分块向量索引表是否可用。
+     *
+     * @return 是否可用
+     */
+    @Override
+    public boolean hasArticleChunkVectorIndex() {
+        if (jdbcTemplate == null) {
+            return false;
+        }
+
+        try {
+            Boolean available = jdbcTemplate.queryForObject(
+                    "select to_regclass(current_schema() || '.article_chunk_vector_index') is not null",
+                    Boolean.class
+            );
+            return Boolean.TRUE.equals(available);
+        }
+        catch (RuntimeException ex) {
+            log.warn("Failed to inspect article_chunk_vector_index availability", ex);
+            return false;
+        }
+    }
+
+    /**
      * 规范化配置名。
      *
      * @param configName 配置名

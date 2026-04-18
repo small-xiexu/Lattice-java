@@ -4,7 +4,6 @@ import com.xbk.lattice.infra.persistence.ArticleVectorJdbcRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -28,7 +27,7 @@ public class VectorSearchService {
 
     private final ArticleVectorJdbcRepository articleVectorJdbcRepository;
 
-    private final EmbeddingModel embeddingModel;
+    private final ConfiguredVectorEmbeddingService configuredVectorEmbeddingService;
 
     /**
      * 创建向量检索服务。
@@ -36,21 +35,19 @@ public class VectorSearchService {
      * @param querySearchProperties 查询检索配置
      * @param searchCapabilityService 检索能力探测服务
      * @param articleVectorJdbcRepository 文章向量索引仓储
-     * @param embeddingModelProvider embedding 模型提供器
+     * @param configuredVectorEmbeddingService 可配置 embedding 服务
      */
     @Autowired
     public VectorSearchService(
             QuerySearchProperties querySearchProperties,
             SearchCapabilityService searchCapabilityService,
             ArticleVectorJdbcRepository articleVectorJdbcRepository,
-            ObjectProvider<EmbeddingModel> embeddingModelProvider
+            ConfiguredVectorEmbeddingService configuredVectorEmbeddingService
     ) {
-        this(
-                querySearchProperties,
-                searchCapabilityService,
-                articleVectorJdbcRepository,
-                embeddingModelProvider.getIfAvailable()
-        );
+        this.querySearchProperties = querySearchProperties;
+        this.searchCapabilityService = searchCapabilityService;
+        this.articleVectorJdbcRepository = articleVectorJdbcRepository;
+        this.configuredVectorEmbeddingService = configuredVectorEmbeddingService;
     }
 
     /**
@@ -67,10 +64,12 @@ public class VectorSearchService {
             ArticleVectorJdbcRepository articleVectorJdbcRepository,
             EmbeddingModel embeddingModel
     ) {
-        this.querySearchProperties = querySearchProperties;
-        this.searchCapabilityService = searchCapabilityService;
-        this.articleVectorJdbcRepository = articleVectorJdbcRepository;
-        this.embeddingModel = embeddingModel;
+        this(
+                querySearchProperties,
+                searchCapabilityService,
+                articleVectorJdbcRepository,
+                new ConfiguredVectorEmbeddingService(querySearchProperties, embeddingModel)
+        );
     }
 
     /**
@@ -93,7 +92,7 @@ public class VectorSearchService {
         }
 
         try {
-            float[] embedding = embeddingModel.embed(question);
+            float[] embedding = configuredVectorEmbeddingService.embed(question);
             if (!hasExpectedDimensions(embedding)) {
                 return List.of();
             }
@@ -113,7 +112,8 @@ public class VectorSearchService {
     public boolean isQueryAvailable() {
         return querySearchProperties.getVector().isEnabled()
                 && articleVectorJdbcRepository != null
-                && embeddingModel != null
+                && configuredVectorEmbeddingService != null
+                && configuredVectorEmbeddingService.isAvailable()
                 && searchCapabilityService.supportsVectorType()
                 && searchCapabilityService.hasArticleVectorIndex();
     }
@@ -125,7 +125,7 @@ public class VectorSearchService {
      * @return 是否匹配
      */
     private boolean hasExpectedDimensions(float[] embedding) {
-        int expectedDimensions = querySearchProperties.getVector().getExpectedDimensions();
+        int expectedDimensions = configuredVectorEmbeddingService.getConfiguredExpectedDimensions();
         if (expectedDimensions <= 0) {
             return true;
         }

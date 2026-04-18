@@ -24,9 +24,13 @@ public class LatticeHttpClient {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
 
+    private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
+
     private final String serverUrl;
 
     private final HttpClient httpClient;
+
+    private final Duration requestTimeout;
 
     /**
      * 创建 CLI 远程 HTTP 客户端。
@@ -34,7 +38,18 @@ public class LatticeHttpClient {
      * @param serverUrl 服务地址
      */
     public LatticeHttpClient(String serverUrl) {
+        this(serverUrl, DEFAULT_REQUEST_TIMEOUT);
+    }
+
+    /**
+     * 创建带自定义超时的 CLI 远程 HTTP 客户端。
+     *
+     * @param serverUrl 服务地址
+     * @param requestTimeout 请求超时时间
+     */
+    public LatticeHttpClient(String serverUrl, Duration requestTimeout) {
         this.serverUrl = trimTrailingSlash(serverUrl);
+        this.requestTimeout = requestTimeout == null ? DEFAULT_REQUEST_TIMEOUT : requestTimeout;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
@@ -56,7 +71,7 @@ public class LatticeHttpClient {
         String uri = buildUri(path, queryParams);
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(uri))
-                .timeout(Duration.ofSeconds(60))
+                .timeout(requestTimeout)
                 .GET()
                 .build();
         return send(request, responseType);
@@ -77,7 +92,7 @@ public class LatticeHttpClient {
             throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(buildUri(path, Map.of())))
-                .timeout(Duration.ofSeconds(60))
+                .timeout(requestTimeout)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(toJson(requestBody), StandardCharsets.UTF_8))
                 .build();

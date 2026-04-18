@@ -37,7 +37,7 @@ public class QueryGraphConditions {
         if (state.isCacheHit()) {
             return "finalize_response";
         }
-        return "retrieve_candidates";
+        return "dispatch_retrieval";
     }
 
     /**

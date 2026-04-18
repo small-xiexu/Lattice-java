@@ -86,7 +86,7 @@ public class ArticleChunkJdbcRepository {
             return 0;
         }
 
-        jdbcTemplate.execute("TRUNCATE TABLE article_chunks RESTART IDENTITY");
+        jdbcTemplate.execute("TRUNCATE TABLE article_chunks RESTART IDENTITY CASCADE");
         int rebuiltCount = 0;
         for (ArticleRecord articleRecord : articleRecords) {
             replaceChunksFromContent(articleRecord.getConceptId(), articleRecord.getContent());
@@ -124,5 +124,54 @@ public class ArticleChunkJdbcRepository {
                 order by ac.chunk_index
                 """;
         return jdbcTemplate.query(sql, (resultSet, rowNum) -> resultSet.getString("chunk_text"), conceptId);
+    }
+
+    /**
+     * 按 conceptId 查询完整 chunk 记录。
+     *
+     * @param conceptId 概念标识
+     * @return chunk 记录列表
+     */
+    public List<ArticleChunkRecord> findByConceptId(String conceptId) {
+        String sql = """
+                select ac.id, ac.article_id, a.concept_id, ac.chunk_index, ac.chunk_text
+                from article_chunks ac
+                join articles a on a.id = ac.article_id
+                where a.concept_id = ?
+                order by ac.chunk_index
+                """;
+        return jdbcTemplate.query(sql, this::mapArticleChunkRecord, conceptId);
+    }
+
+    /**
+     * 查询全部 chunk 记录。
+     *
+     * @return 全部 chunk 记录
+     */
+    public List<ArticleChunkRecord> findAllRecords() {
+        String sql = """
+                select ac.id, ac.article_id, a.concept_id, ac.chunk_index, ac.chunk_text
+                from article_chunks ac
+                join articles a on a.id = ac.article_id
+                order by ac.article_id asc, ac.chunk_index asc
+                """;
+        return jdbcTemplate.query(sql, this::mapArticleChunkRecord);
+    }
+
+    /**
+     * 映射 chunk 记录。
+     *
+     * @param resultSet 结果集
+     * @param rowNum 行号
+     * @return chunk 记录
+     */
+    private ArticleChunkRecord mapArticleChunkRecord(java.sql.ResultSet resultSet, int rowNum) throws java.sql.SQLException {
+        return new ArticleChunkRecord(
+                resultSet.getLong("id"),
+                resultSet.getLong("article_id"),
+                resultSet.getString("concept_id"),
+                resultSet.getInt("chunk_index"),
+                resultSet.getString("chunk_text")
+        );
     }
 }

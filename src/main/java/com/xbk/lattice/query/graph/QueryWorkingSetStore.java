@@ -33,6 +33,24 @@ public interface QueryWorkingSetStore {
     List<List<QueryArticleHit>> loadRetrievedHitGroups(String ref);
 
     /**
+     * 保存单路检索命中。
+     *
+     * @param queryId 查询标识
+     * @param channel 通道路由
+     * @param hits 命中列表
+     * @return 工作集引用
+     */
+    String saveHits(String queryId, String channel, List<QueryArticleHit> hits);
+
+    /**
+     * 读取单路检索命中。
+     *
+     * @param ref 工作集引用
+     * @return 命中列表
+     */
+    List<QueryArticleHit> loadHits(String ref);
+
+    /**
      * 保存融合命中结果。
      *
      * @param queryId 查询标识

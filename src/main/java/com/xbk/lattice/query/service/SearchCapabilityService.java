@@ -32,6 +32,15 @@ public interface SearchCapabilityService {
     boolean hasArticleVectorIndex();
 
     /**
+     * 返回文章分块向量索引表是否可用。
+     *
+     * @return 是否可用
+     */
+    default boolean hasArticleChunkVectorIndex() {
+        return false;
+    }
+
+    /**
      * 返回默认禁用的能力探测实现。
      *
      * @return 禁用实现
@@ -77,6 +86,16 @@ public interface SearchCapabilityService {
              */
             @Override
             public boolean hasArticleVectorIndex() {
+                return false;
+            }
+
+            /**
+             * 返回分块向量索引表不可用。
+             *
+             * @return false
+             */
+            @Override
+            public boolean hasArticleChunkVectorIndex() {
                 return false;
             }
         };

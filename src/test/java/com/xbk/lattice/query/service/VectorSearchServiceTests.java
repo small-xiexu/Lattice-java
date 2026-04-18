@@ -8,6 +8,7 @@ import org.springframework.ai.embedding.Embedding;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
+import org.springframework.ai.openai.OpenAiEmbeddingOptions;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
@@ -127,6 +128,32 @@ class VectorSearchServiceTests {
 
         assertThat(vectorSearchService.search("退款状态是什么", 5)).isEmpty();
         assertThat(articleVectorJdbcRepository.getLastQueryEmbedding()).isNull();
+    }
+
+    /**
+     * 验证检索时会把配置中的模型名与维度透传到 embedding 请求。
+     */
+    @Test
+    void shouldPassConfiguredModelAndDimensionsIntoSearchEmbeddingRequest() {
+        QuerySearchProperties querySearchProperties = new QuerySearchProperties();
+        querySearchProperties.getVector().setEnabled(true);
+        querySearchProperties.getVector().setEmbeddingModel("text-embedding-3-large");
+        querySearchProperties.getVector().setExpectedDimensions(3072);
+
+        FakeArticleVectorJdbcRepository articleVectorJdbcRepository = new FakeArticleVectorJdbcRepository();
+        articleVectorJdbcRepository.setQueryResults(List.of());
+        FixedEmbeddingModel fixedEmbeddingModel = new FixedEmbeddingModel(createEmbedding(0.1F, 3072));
+        VectorSearchService vectorSearchService = new VectorSearchService(
+                querySearchProperties,
+                new FixedSearchCapabilityService(true, true, true),
+                articleVectorJdbcRepository,
+                fixedEmbeddingModel
+        );
+
+        vectorSearchService.search("退款状态是什么", 5);
+
+        assertThat(fixedEmbeddingModel.getLastRequestedModel()).isEqualTo("text-embedding-3-large");
+        assertThat(fixedEmbeddingModel.getLastRequestedDimensions()).isEqualTo(3072);
     }
 
     /**
@@ -292,6 +319,10 @@ class VectorSearchServiceTests {
 
         private final RuntimeException runtimeException;
 
+        private String lastRequestedModel;
+
+        private Integer lastRequestedDimensions;
+
         /**
          * 创建固定 embedding 模型替身。
          *
@@ -323,6 +354,7 @@ class VectorSearchServiceTests {
             if (runtimeException != null) {
                 throw runtimeException;
             }
+            captureRequestOptions(request);
             return new EmbeddingResponse(List.of(new Embedding(embedding, 0)));
         }
 
@@ -338,6 +370,38 @@ class VectorSearchServiceTests {
                 throw runtimeException;
             }
             return embedding;
+        }
+
+        /**
+         * 返回最近一次请求使用的模型名称。
+         *
+         * @return 模型名称
+         */
+        private String getLastRequestedModel() {
+            return lastRequestedModel;
+        }
+
+        /**
+         * 返回最近一次请求使用的维度。
+         *
+         * @return 维度
+         */
+        private Integer getLastRequestedDimensions() {
+            return lastRequestedDimensions;
+        }
+
+        /**
+         * 捕获最近一次 embedding 请求选项。
+         *
+         * @param request embedding 请求
+         */
+        private void captureRequestOptions(EmbeddingRequest request) {
+            if (!(request.getOptions() instanceof OpenAiEmbeddingOptions)) {
+                return;
+            }
+            OpenAiEmbeddingOptions options = (OpenAiEmbeddingOptions) request.getOptions();
+            lastRequestedModel = options.getModel();
+            lastRequestedDimensions = options.getDimensions();
         }
     }
 }

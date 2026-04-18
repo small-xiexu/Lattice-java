@@ -18,13 +18,33 @@ public class QueryGraphState {
 
     private String normalizedQuestion;
 
+    private String llmScopeType;
+
+    private String llmScopeId;
+
     private boolean cacheHit;
 
     private boolean hasFusedHits;
 
     private String retrievedHitGroupsRef;
 
+    private String ftsHitsRef;
+
+    private String refkeyHitsRef;
+
+    private String sourceHitsRef;
+
+    private String contributionHitsRef;
+
+    private String articleVectorHitsRef;
+
+    private String chunkVectorHitsRef;
+
     private String fusedHitsRef;
+
+    private String retrievalMode;
+
+    private long retrievalStartedAtEpochMs;
 
     private String draftAnswerRef;
 
@@ -33,6 +53,14 @@ public class QueryGraphState {
     private String cachedResponseRef;
 
     private String finalResponseRef;
+
+    private String llmBindingSnapshotRef;
+
+    private String answerRoute;
+
+    private String reviewRoute;
+
+    private String rewriteRoute;
 
     private String reviewStatus;
 

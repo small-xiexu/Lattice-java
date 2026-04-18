@@ -17,13 +17,33 @@ public final class QueryGraphStateKeys {
 
     public static final String NORMALIZED_QUESTION = "normalizedQuestion";
 
+    public static final String LLM_SCOPE_TYPE = "llmScopeType";
+
+    public static final String LLM_SCOPE_ID = "llmScopeId";
+
     public static final String CACHE_HIT = "cacheHit";
 
     public static final String HAS_FUSED_HITS = "hasFusedHits";
 
     public static final String RETRIEVED_HIT_GROUPS_REF = "retrievedHitGroupsRef";
 
+    public static final String FTS_HITS_REF = "ftsHitsRef";
+
+    public static final String REFKEY_HITS_REF = "refkeyHitsRef";
+
+    public static final String SOURCE_HITS_REF = "sourceHitsRef";
+
+    public static final String CONTRIBUTION_HITS_REF = "contributionHitsRef";
+
+    public static final String ARTICLE_VECTOR_HITS_REF = "articleVectorHitsRef";
+
+    public static final String CHUNK_VECTOR_HITS_REF = "chunkVectorHitsRef";
+
     public static final String FUSED_HITS_REF = "fusedHitsRef";
+
+    public static final String RETRIEVAL_MODE = "retrievalMode";
+
+    public static final String RETRIEVAL_STARTED_AT_EPOCH_MS = "retrievalStartedAtEpochMs";
 
     public static final String DRAFT_ANSWER_REF = "draftAnswerRef";
 
@@ -32,6 +52,14 @@ public final class QueryGraphStateKeys {
     public static final String CACHED_RESPONSE_REF = "cachedResponseRef";
 
     public static final String FINAL_RESPONSE_REF = "finalResponseRef";
+
+    public static final String LLM_BINDING_SNAPSHOT_REF = "llmBindingSnapshotRef";
+
+    public static final String ANSWER_ROUTE = "answerRoute";
+
+    public static final String REVIEW_ROUTE = "reviewRoute";
+
+    public static final String REWRITE_ROUTE = "rewriteRoute";
 
     public static final String REVIEW_STATUS = "reviewStatus";
 

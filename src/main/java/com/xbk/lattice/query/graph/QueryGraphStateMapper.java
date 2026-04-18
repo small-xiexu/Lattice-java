@@ -32,14 +32,28 @@ public class QueryGraphStateMapper {
         state.setQueryId(queryId);
         state.setQuestion(readString(stateMap, QueryGraphStateKeys.QUESTION));
         state.setNormalizedQuestion(readString(stateMap, QueryGraphStateKeys.NORMALIZED_QUESTION));
+        state.setLlmScopeType(readString(stateMap, QueryGraphStateKeys.LLM_SCOPE_TYPE));
+        state.setLlmScopeId(readString(stateMap, QueryGraphStateKeys.LLM_SCOPE_ID));
         state.setCacheHit(readBoolean(stateMap, QueryGraphStateKeys.CACHE_HIT));
         state.setHasFusedHits(readBoolean(stateMap, QueryGraphStateKeys.HAS_FUSED_HITS));
         state.setRetrievedHitGroupsRef(readString(stateMap, QueryGraphStateKeys.RETRIEVED_HIT_GROUPS_REF));
+        state.setFtsHitsRef(readString(stateMap, QueryGraphStateKeys.FTS_HITS_REF));
+        state.setRefkeyHitsRef(readString(stateMap, QueryGraphStateKeys.REFKEY_HITS_REF));
+        state.setSourceHitsRef(readString(stateMap, QueryGraphStateKeys.SOURCE_HITS_REF));
+        state.setContributionHitsRef(readString(stateMap, QueryGraphStateKeys.CONTRIBUTION_HITS_REF));
+        state.setArticleVectorHitsRef(readString(stateMap, QueryGraphStateKeys.ARTICLE_VECTOR_HITS_REF));
+        state.setChunkVectorHitsRef(readString(stateMap, QueryGraphStateKeys.CHUNK_VECTOR_HITS_REF));
         state.setFusedHitsRef(readString(stateMap, QueryGraphStateKeys.FUSED_HITS_REF));
+        state.setRetrievalMode(readString(stateMap, QueryGraphStateKeys.RETRIEVAL_MODE));
+        state.setRetrievalStartedAtEpochMs(readLong(stateMap, QueryGraphStateKeys.RETRIEVAL_STARTED_AT_EPOCH_MS));
         state.setDraftAnswerRef(readString(stateMap, QueryGraphStateKeys.DRAFT_ANSWER_REF));
         state.setReviewResultRef(readString(stateMap, QueryGraphStateKeys.REVIEW_RESULT_REF));
         state.setCachedResponseRef(readString(stateMap, QueryGraphStateKeys.CACHED_RESPONSE_REF));
         state.setFinalResponseRef(readString(stateMap, QueryGraphStateKeys.FINAL_RESPONSE_REF));
+        state.setLlmBindingSnapshotRef(readString(stateMap, QueryGraphStateKeys.LLM_BINDING_SNAPSHOT_REF));
+        state.setAnswerRoute(readString(stateMap, QueryGraphStateKeys.ANSWER_ROUTE));
+        state.setReviewRoute(readString(stateMap, QueryGraphStateKeys.REVIEW_ROUTE));
+        state.setRewriteRoute(readString(stateMap, QueryGraphStateKeys.REWRITE_ROUTE));
         state.setReviewStatus(readString(stateMap, QueryGraphStateKeys.REVIEW_STATUS));
         state.setRewriteAttemptCount(readInt(stateMap, QueryGraphStateKeys.REWRITE_ATTEMPT_COUNT));
         state.setMaxRewriteRounds(readInt(stateMap, QueryGraphStateKeys.MAX_REWRITE_ROUNDS));
@@ -57,14 +71,28 @@ public class QueryGraphStateMapper {
         values.put(QueryGraphStateKeys.QUERY_ID, state.getQueryId());
         values.put(QueryGraphStateKeys.QUESTION, state.getQuestion());
         values.put(QueryGraphStateKeys.NORMALIZED_QUESTION, state.getNormalizedQuestion());
+        values.put(QueryGraphStateKeys.LLM_SCOPE_TYPE, state.getLlmScopeType());
+        values.put(QueryGraphStateKeys.LLM_SCOPE_ID, state.getLlmScopeId());
         values.put(QueryGraphStateKeys.CACHE_HIT, state.isCacheHit());
         values.put(QueryGraphStateKeys.HAS_FUSED_HITS, state.isHasFusedHits());
         values.put(QueryGraphStateKeys.RETRIEVED_HIT_GROUPS_REF, state.getRetrievedHitGroupsRef());
+        values.put(QueryGraphStateKeys.FTS_HITS_REF, state.getFtsHitsRef());
+        values.put(QueryGraphStateKeys.REFKEY_HITS_REF, state.getRefkeyHitsRef());
+        values.put(QueryGraphStateKeys.SOURCE_HITS_REF, state.getSourceHitsRef());
+        values.put(QueryGraphStateKeys.CONTRIBUTION_HITS_REF, state.getContributionHitsRef());
+        values.put(QueryGraphStateKeys.ARTICLE_VECTOR_HITS_REF, state.getArticleVectorHitsRef());
+        values.put(QueryGraphStateKeys.CHUNK_VECTOR_HITS_REF, state.getChunkVectorHitsRef());
         values.put(QueryGraphStateKeys.FUSED_HITS_REF, state.getFusedHitsRef());
+        values.put(QueryGraphStateKeys.RETRIEVAL_MODE, state.getRetrievalMode());
+        values.put(QueryGraphStateKeys.RETRIEVAL_STARTED_AT_EPOCH_MS, state.getRetrievalStartedAtEpochMs());
         values.put(QueryGraphStateKeys.DRAFT_ANSWER_REF, state.getDraftAnswerRef());
         values.put(QueryGraphStateKeys.REVIEW_RESULT_REF, state.getReviewResultRef());
         values.put(QueryGraphStateKeys.CACHED_RESPONSE_REF, state.getCachedResponseRef());
         values.put(QueryGraphStateKeys.FINAL_RESPONSE_REF, state.getFinalResponseRef());
+        values.put(QueryGraphStateKeys.LLM_BINDING_SNAPSHOT_REF, state.getLlmBindingSnapshotRef());
+        values.put(QueryGraphStateKeys.ANSWER_ROUTE, state.getAnswerRoute());
+        values.put(QueryGraphStateKeys.REVIEW_ROUTE, state.getReviewRoute());
+        values.put(QueryGraphStateKeys.REWRITE_ROUTE, state.getRewriteRoute());
         values.put(QueryGraphStateKeys.REVIEW_STATUS, state.getReviewStatus());
         values.put(QueryGraphStateKeys.REWRITE_ATTEMPT_COUNT, state.getRewriteAttemptCount());
         values.put(QueryGraphStateKeys.MAX_REWRITE_ROUNDS, state.getMaxRewriteRounds());
@@ -113,6 +141,28 @@ public class QueryGraphStateMapper {
             }
         }
         return 0;
+    }
+
+    /**
+     * 读取长整型值。
+     *
+     * @param stateMap 状态 Map
+     * @param key 键名
+     * @return 长整型值
+     */
+    private long readLong(Map<String, Object> stateMap, String key) {
+        Object value = stateMap.get(key);
+        if (value instanceof Number) {
+            Number number = (Number) value;
+            return number.longValue();
+        }
+        if (value instanceof String) {
+            String stringValue = (String) value;
+            if (!stringValue.isBlank()) {
+                return Long.parseLong(stringValue);
+            }
+        }
+        return 0L;
     }
 
     /**

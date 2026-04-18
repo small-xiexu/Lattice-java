@@ -133,6 +133,8 @@ public class QuerySearchProperties {
 
         private boolean enabled = false;
 
+        private Long embeddingModelProfileId;
+
         private String embeddingModel = "text-embedding-3-small";
 
         private int expectedDimensions = 1536;
@@ -153,6 +155,24 @@ public class QuerySearchProperties {
          */
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+
+        /**
+         * 获取 embedding 模型配置主键。
+         *
+         * @return 模型配置主键
+         */
+        public Long getEmbeddingModelProfileId() {
+            return embeddingModelProfileId;
+        }
+
+        /**
+         * 设置 embedding 模型配置主键。
+         *
+         * @param embeddingModelProfileId 模型配置主键
+         */
+        public void setEmbeddingModelProfileId(Long embeddingModelProfileId) {
+            this.embeddingModelProfileId = embeddingModelProfileId;
         }
 
         /**

@@ -47,7 +47,12 @@ class AnthropicMessageApiLlmClientTests {
         AtomicReference<String> apiKeyHeader = new AtomicReference<String>();
         AtomicReference<String> contentTypeHeader = new AtomicReference<String>();
         httpServer = HttpServer.create(new InetSocketAddress(0), 0);
-        httpServer.createContext("/v1/messages", new SuccessHandler(requestBody, apiKeyHeader, contentTypeHeader));
+        httpServer.createContext("/v1/messages", new SuccessHandler(
+                requestBody,
+                apiKeyHeader,
+                contentTypeHeader,
+                "application/json"
+        ));
         httpServer.start();
         int port = httpServer.getAddress().getPort();
         AnthropicMessageApiLlmClient llmClient = new AnthropicMessageApiLlmClient(
@@ -78,6 +83,43 @@ class AnthropicMessageApiLlmClientTests {
     }
 
     /**
+     * 验证客户端能兼容错误标记为 octet-stream 的 Claude JSON 响应。
+     *
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldParseAnthropicResponseWhenGatewayReturnsOctetStream() throws IOException {
+        httpServer = HttpServer.create(new InetSocketAddress(0), 0);
+        httpServer.createContext("/v1/messages", new SuccessHandler(
+                new AtomicReference<String>(),
+                new AtomicReference<String>(),
+                new AtomicReference<String>(),
+                "application/octet-stream"
+        ));
+        httpServer.start();
+        int port = httpServer.getAddress().getPort();
+        AnthropicMessageApiLlmClient llmClient = new AnthropicMessageApiLlmClient(
+                RestClient.builder(),
+                new ObjectMapper(),
+                "http://127.0.0.1:" + port,
+                "test-anthropic-key",
+                "2023-06-01",
+                "tools-2024-04-04,pdfs-2024-09-25,structured-outputs-2025-11-13",
+                "claude-sonnet-4-6",
+                64,
+                0.2D,
+                null,
+                null
+        );
+
+        LlmCallResult result = llmClient.call("review-system", "review-user");
+
+        assertThat(result.getContent()).isEqualTo("review ok");
+        assertThat(result.getInputTokens()).isEqualTo(11);
+        assertThat(result.getOutputTokens()).isEqualTo(7);
+    }
+
+    /**
      * 成功响应处理器。
      *
      * 职责：记录请求头与请求体，并回写 Claude Messages JSON 响应
@@ -92,14 +134,18 @@ class AnthropicMessageApiLlmClientTests {
 
         private final AtomicReference<String> contentTypeHeader;
 
+        private final String responseContentType;
+
         private SuccessHandler(
                 AtomicReference<String> requestBody,
                 AtomicReference<String> apiKeyHeader,
-                AtomicReference<String> contentTypeHeader
+                AtomicReference<String> contentTypeHeader,
+                String responseContentType
         ) {
             this.requestBody = requestBody;
             this.apiKeyHeader = apiKeyHeader;
             this.contentTypeHeader = contentTypeHeader;
+            this.responseContentType = responseContentType;
         }
 
         /**
@@ -132,7 +178,7 @@ class AnthropicMessageApiLlmClientTests {
                     }
                     """;
             byte[] responseBytes = responseBody.getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.getResponseHeaders().add("Content-Type", responseContentType);
             exchange.sendResponseHeaders(200, responseBytes.length);
             exchange.getResponseBody().write(responseBytes);
             exchange.close();

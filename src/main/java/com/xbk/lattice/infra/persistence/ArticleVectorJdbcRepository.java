@@ -52,11 +52,13 @@ public class ArticleVectorJdbcRepository {
 
         String sql = """
                 insert into article_vector_index (
-                    concept_id, model_name, content_hash, embedding, updated_at
+                    concept_id, model_profile_id, embedding_dimensions, index_version, content_hash, embedding, updated_at
                 )
-                values (?, ?, ?, cast(? as %s), ?)
+                values (?, ?, ?, ?, ?, cast(? as %s), ?)
                 on conflict (concept_id) do update
-                set model_name = excluded.model_name,
+                set model_profile_id = excluded.model_profile_id,
+                    embedding_dimensions = excluded.embedding_dimensions,
+                    index_version = excluded.index_version,
                     content_hash = excluded.content_hash,
                     embedding = excluded.embedding,
                     updated_at = excluded.updated_at
@@ -64,7 +66,9 @@ public class ArticleVectorJdbcRepository {
         jdbcTemplate.update(
                 sql,
                 articleVectorRecord.getConceptId(),
-                articleVectorRecord.getModelName(),
+                articleVectorRecord.getModelProfileId(),
+                articleVectorRecord.getEmbeddingDimensions(),
+                articleVectorRecord.getIndexVersion(),
                 articleVectorRecord.getContentHash(),
                 formatVector(articleVectorRecord.getEmbedding()),
                 articleVectorRecord.getUpdatedAt()
@@ -84,7 +88,8 @@ public class ArticleVectorJdbcRepository {
 
         List<ArticleVectorRecord> records = jdbcTemplate.query(
                 """
-                        select concept_id, model_name, content_hash, embedding::text as embedding, updated_at
+                        select concept_id, model_profile_id, embedding_dimensions, index_version,
+                               content_hash, embedding::text as embedding, updated_at
                         from article_vector_index
                         where concept_id = ?
                         """,
@@ -95,6 +100,131 @@ public class ArticleVectorJdbcRepository {
             return Optional.empty();
         }
         return Optional.of(records.get(0));
+    }
+
+    /**
+     * 返回当前向量索引记录总数。
+     *
+     * @return 向量索引总数
+     */
+    public int countAll() {
+        if (jdbcTemplate == null) {
+            return 0;
+        }
+        Integer count = jdbcTemplate.queryForObject("select count(*) from article_vector_index", Integer.class);
+        return count == null ? 0 : count;
+    }
+
+    /**
+     * 清空全部向量索引记录。
+     *
+     * @return 删除记录数
+     */
+    public int deleteAll() {
+        if (jdbcTemplate == null) {
+            return 0;
+        }
+        return jdbcTemplate.update("delete from article_vector_index");
+    }
+
+    /**
+     * 返回当前向量索引最近更新时间。
+     *
+     * @return 最近更新时间
+     */
+    public Optional<OffsetDateTime> findLatestUpdatedAt() {
+        if (jdbcTemplate == null) {
+            return Optional.empty();
+        }
+        List<OffsetDateTime> values = jdbcTemplate.query(
+                "select updated_at from article_vector_index order by updated_at desc limit 1",
+                (resultSet, rowNum) -> resultSet.getObject("updated_at", OffsetDateTime.class)
+        );
+        if (values.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(values.get(0));
+    }
+
+    /**
+     * 返回当前向量索引中出现过的模型名称。
+     *
+     * @return 模型名称列表
+     */
+    public List<String> findDistinctModelNames() {
+        if (jdbcTemplate == null) {
+            return List.of();
+        }
+        return jdbcTemplate.queryForList(
+                """
+                        select distinct profile.model_name
+                        from article_vector_index vector_index
+                        join llm_model_profiles profile on profile.id = vector_index.model_profile_id
+                        order by profile.model_name asc
+                        """,
+                String.class
+        );
+    }
+
+    /**
+     * 返回向量列的数据库类型描述。
+     *
+     * @return 向量列类型描述
+     */
+    public Optional<String> findEmbeddingColumnType() {
+        if (jdbcTemplate == null) {
+            return Optional.empty();
+        }
+        List<String> values = jdbcTemplate.queryForList(
+                """
+                        select format_type(a.atttypid, a.atttypmod)
+                        from pg_attribute a
+                        join pg_class c on c.oid = a.attrelid
+                        join pg_namespace n on n.oid = c.relnamespace
+                        where n.nspname = current_schema()
+                          and c.relname = 'article_vector_index'
+                          and a.attname = 'embedding'
+                          and a.attnum > 0
+                          and not a.attisdropped
+                        """,
+                String.class
+        );
+        if (values.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(values.get(0));
+    }
+
+    /**
+     * 返回 embedding 列使用的 ANN 索引类型。
+     *
+     * @return ANN 索引类型
+     */
+    public Optional<String> findEmbeddingAnnIndexType() {
+        if (jdbcTemplate == null) {
+            return Optional.empty();
+        }
+        List<String> values = jdbcTemplate.queryForList(
+                """
+                        select am.amname
+                        from pg_index idx
+                        join pg_class index_rel on index_rel.oid = idx.indexrelid
+                        join pg_class table_rel on table_rel.oid = idx.indrelid
+                        join pg_namespace namespace_rel on namespace_rel.oid = table_rel.relnamespace
+                        join pg_am am on am.oid = index_rel.relam
+                        join pg_attribute attr on attr.attrelid = table_rel.oid
+                        where namespace_rel.nspname = current_schema()
+                          and table_rel.relname = 'article_vector_index'
+                          and attr.attname = 'embedding'
+                          and attr.attnum = any(idx.indkey)
+                        order by index_rel.relname asc
+                        """,
+                String.class
+        );
+        if (values.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(values.get(0));
     }
 
     /**
@@ -113,6 +243,7 @@ public class ArticleVectorJdbcRepository {
         if (vectorTypeName.isBlank()) {
             return List.of();
         }
+        String distanceOperator = resolveDistanceOperator(vectorTypeName);
 
         String vectorLiteral = formatVector(embedding);
         return jdbcTemplate.query(
@@ -122,12 +253,12 @@ public class ArticleVectorJdbcRepository {
                                a.content,
                                a.metadata_json::text as metadata_json,
                                a.source_paths,
-                               1 - (v.embedding <=> cast(? as %s)) as score
+                               1 - (v.embedding %s cast(? as %s)) as score
                         from article_vector_index v
                         join articles a on a.concept_id = v.concept_id
-                        order by v.embedding <=> cast(? as %s), a.compiled_at desc
+                        order by v.embedding %s cast(? as %s), a.compiled_at desc
                         limit ?
-                        """.formatted(vectorTypeName, vectorTypeName),
+                        """.formatted(distanceOperator, vectorTypeName, distanceOperator, vectorTypeName),
                 this::mapQueryArticleHit,
                 vectorLiteral,
                 vectorLiteral,
@@ -146,7 +277,9 @@ public class ArticleVectorJdbcRepository {
     private ArticleVectorRecord mapArticleVectorRecord(ResultSet resultSet, int rowNum) throws SQLException {
         return new ArticleVectorRecord(
                 resultSet.getString("concept_id"),
-                resultSet.getString("model_name"),
+                resultSet.getObject("model_profile_id", Long.class),
+                resultSet.getInt("embedding_dimensions"),
+                resultSet.getString("index_version"),
                 resultSet.getString("content_hash"),
                 parseVector(resultSet.getString("embedding")),
                 resultSet.getObject("updated_at", OffsetDateTime.class)
@@ -251,5 +384,23 @@ public class ArticleVectorJdbcRepository {
             return "";
         }
         return vectorTypeName;
+    }
+
+    /**
+     * 解析向量距离运算符表达式。
+     *
+     * <p>当连接通过 {@code currentSchema} 切到业务 schema 时，pgvector 扩展仍常驻在
+     * {@code public}，此时必须显式写成 {@code OPERATOR(public.<=>)} 才能命中对应运算符。</p>
+     *
+     * @param vectorTypeName vector 类型名
+     * @return 距离运算符表达式
+     */
+    private String resolveDistanceOperator(String vectorTypeName) {
+        int schemaSeparatorIndex = vectorTypeName.indexOf('.');
+        if (schemaSeparatorIndex < 0) {
+            return "<=>";
+        }
+        String schemaName = vectorTypeName.substring(0, schemaSeparatorIndex);
+        return "OPERATOR(" + schemaName + ".<=>)";
     }
 }

@@ -12,6 +12,10 @@ import java.time.OffsetDateTime;
  */
 public class LlmModelProfile {
 
+    public static final String MODEL_KIND_CHAT = "CHAT";
+
+    public static final String MODEL_KIND_EMBEDDING = "EMBEDDING";
+
     private final Long id;
 
     private final String modelCode;
@@ -19,6 +23,12 @@ public class LlmModelProfile {
     private final Long connectionId;
 
     private final String modelName;
+
+    private final String modelKind;
+
+    private final Integer expectedDimensions;
+
+    private final boolean supportsDimensionOverride;
 
     private final BigDecimal temperature;
 
@@ -51,6 +61,9 @@ public class LlmModelProfile {
      * @param modelCode 模型编码
      * @param connectionId 连接 ID
      * @param modelName 模型名称
+     * @param modelKind 模型类型
+     * @param expectedDimensions 期望维度
+     * @param supportsDimensionOverride 是否支持维度覆盖
      * @param temperature 温度参数
      * @param maxTokens 最大输出 token
      * @param timeoutSeconds 超时秒数
@@ -69,6 +82,9 @@ public class LlmModelProfile {
             String modelCode,
             Long connectionId,
             String modelName,
+            String modelKind,
+            Integer expectedDimensions,
+            boolean supportsDimensionOverride,
             BigDecimal temperature,
             Integer maxTokens,
             Integer timeoutSeconds,
@@ -86,6 +102,9 @@ public class LlmModelProfile {
         this.modelCode = modelCode;
         this.connectionId = connectionId;
         this.modelName = modelName;
+        this.modelKind = modelKind;
+        this.expectedDimensions = expectedDimensions;
+        this.supportsDimensionOverride = supportsDimensionOverride;
         this.temperature = temperature;
         this.maxTokens = maxTokens;
         this.timeoutSeconds = timeoutSeconds;
@@ -134,6 +153,33 @@ public class LlmModelProfile {
      */
     public String getModelName() {
         return modelName;
+    }
+
+    /**
+     * 返回模型类型。
+     *
+     * @return 模型类型
+     */
+    public String getModelKind() {
+        return modelKind;
+    }
+
+    /**
+     * 返回期望维度。
+     *
+     * @return 期望维度
+     */
+    public Integer getExpectedDimensions() {
+        return expectedDimensions;
+    }
+
+    /**
+     * 返回是否支持维度覆盖。
+     *
+     * @return 是否支持维度覆盖
+     */
+    public boolean isSupportsDimensionOverride() {
+        return supportsDimensionOverride;
     }
 
     /**

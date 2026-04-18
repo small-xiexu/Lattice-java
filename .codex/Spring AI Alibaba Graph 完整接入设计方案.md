@@ -28,9 +28,19 @@
   - 验收：`GeneratedKeyHolder` 主键提取已统一兼容 PostgreSQL 返回整行 key map；`AgentModelRouter` 已统一 `reviewEnabled=false -> rule-based`；无 scope 的 Reviewer/Fixer 调用已回退旧签名，兼容过渡期测试替身与旧链路。
   - 验收：`mvn -q -s .codex/maven-settings.xml -Dmaven.repo.local=/Users/sxie/maven/repository -Dtest=CompileArticleReviewFlowTests,CompilerAgentAdaptersTests,AgentModelRouterSnapshotTests,ExecutionLlmSnapshotServiceTests,LlmConfigCenterIntegrationTests,AdminPageControllerTests test` 通过。
   - 验收：`mvn -q -s .codex/maven-settings.xml -Dmaven.repo.local=/Users/sxie/maven/repository test` 通过。
-  - 边界：本轮仅覆盖 `compile` 侧模型池与 Agent 绑定配置中心；`query` 侧快照冻结与路由切换明确 deferred，后续单独推进。
-- [ ] Phase 8 收尾：迁移压平为单基线 V1 并完成清库回归验证
-  - 进行中：源码迁移已压平为仅保留 `V1__baseline_schema.sql`，实际使用数据库 `vector_db.ai-rag-knowledge` 已清库重建；待执行 `mvn clean test` 清掉旧 `target/classes` 后验证 classpath 不再残留 `V2/V3`。
+  - 历史说明：Phase 8 首轮先完成 `compile` 侧模型池与 Agent 绑定配置中心，`query` 侧在后续扩展阶段复用同一套配置中心能力完成接入。
+- [x] Phase 8 扩展：query 侧复用模型中心与快照路由
+  - 已完成：已补齐 `query_request` 作用域常量、`query` 场景 `answer / reviewer / rewrite` 快照冻结、`QueryGraphState` 的统一 scope 与快照引用，以及 `answer_question / review_answer / rewrite_answer` 三个节点按快照选路；后台配置页已支持 `query` 场景 Agent 绑定展示、编辑与保存。
+  - 验收：`mvn -q -s .codex/maven-settings.xml -Dmaven.repo.local=/Users/sxie/maven/repository -Dtest=AgentModelRouterSnapshotTests,QueryGraphStateMapperTests,QueryGraphOrchestratorTests,QueryFacadeServiceVectorTests,AdminPageControllerTests,LlmConfigCenterIntegrationTests,ReviewerAgentTests test` 通过。
+  - 验收：`mvn -q -s .codex/maven-settings.xml -Dmaven.repo.local=/Users/sxie/maven/repository -Dtest=ExecutionLlmSnapshotServiceTests,QueryFacadeServiceCacheTests,QueryControllerTests,AnthropicMessageApiLlmClientTests,OpenAiCompatibleLlmClientTests,LatticeHttpClientTests test` 通过。
+- [x] Phase 8 收尾：迁移压平为单基线 V1 并完成清库回归验证
+  - 验收：源码迁移已压平为仅保留 `V1__baseline_schema.sql`，实际使用数据库 `vector_db.ai-rag-knowledge` 已清库重建；`mvn clean test` 已在清理旧 `target/classes` 后完成全量回归。
+  - 验收：2026-04-18 基于 [`.claude/t1.md`](/Users/sxie/xbk/Lattice-java/.claude/t1.md) 中的真实模型配置，在独立实例 `18082` 上完成 Claude reviewer + Query 模型中心扩展专项复验：`compile.reviewer` 与 `query.reviewer` 均已真实路由到 `claude-sonnet-4-6`，CLI remote / standalone 与 raw HTTP MCP 也已同步补验。
+  - 验收：同轮补齐了 CLI 长任务超时、`CompileResponse` 反序列化、`application/octet-stream` 网关兼容，以及 Query 复杂问题改写质量收口；`mvn -q -s .codex/maven-settings.xml -DskipITs=false test` 最终 `214` 个测试全部通过，Phase 8 已整体收口。
+- [x] Phase 8 运维收口：query 向量配置中心化
+  - 验收：已新增 `query_vector_settings` 表、`GET/PUT /api/v1/admin/vector/config` 与 `GET /api/v1/admin/vector/status`、`POST /api/v1/admin/vector/rebuild`，后台可查看并保存 query 向量开关、embedding 模型、期望维度。
+  - 验收：已新增 `ConfiguredVectorEmbeddingService`，向量索引与向量检索会按后台配置把模型名与维度真正下发到运行时 embeddings 请求；配置变更时会返回 `rebuildRecommended` 与原因提示。
+  - 验收：`mvn -q -s .codex/maven-settings.xml -Dmaven.repo.local=/Users/sxie/maven/repository -Dtest=AdminVectorConfigControllerTests,AdminVectorIndexControllerTests,AdminPageControllerTests,ArticleVectorIndexServiceTests,VectorSearchServiceTests,CompilePipelineVectorIndexingTests test` 通过。
 
 ## 1. 文档目标
 
@@ -2127,14 +2137,14 @@ public record StepExecutionHandle(String stepExecutionId, int sequenceNo) {
 目标：
 
 - 建立 `连接配置 / 模型配置 / Agent 绑定 / 运行时快照` 四层模型
-- 后台支持受控维护编译侧 `Writer / Reviewer / Fixer` 的模型绑定
-- 让运行时模型切换不再依赖改配置重发版
+- 后台支持受控维护 `compile / query` 双场景 Agent 绑定
+- 让运行时模型切换不再依赖改配置重发版，且同一套配置中心同时服务编译与问答链路
 
-本轮范围约束：
+首轮范围约束（历史阶段说明）：
 
-- Phase 8 本轮只覆盖 `compile` 侧
-- `query` 侧模型池、Agent 绑定、快照冻结、调用链透传明确 deferred
-- 不允许在本轮实施中“顺手半做” Query 侧 Phase 8 基础设施
+- Phase 8 首轮只覆盖 `compile` 侧
+- 首轮结束时，`query` 侧模型池、Agent 绑定、快照冻结、调用链透传暂缓到扩展阶段
+- 当前状态：`query` 侧扩展已完成，已复用同一套配置中心与快照路由底座
 
 进入本阶段前的前置收口：
 
@@ -2148,10 +2158,10 @@ public record StepExecutionHandle(String stepExecutionId, int sequenceNo) {
 
 - Admin 至少支持维护连接配置、模型配置、Agent 绑定三类对象
 - `apiKey` 已实现加密存储、页面脱敏、日志不明文输出
-- 编译任务在启动时会冻结 `execution_llm_snapshots`
+- 编译任务与问答请求在启动时都会冻结 `execution_llm_snapshots`
 - 运行中任务不因后台修改绑定而漂移
-- `LlmGateway` 与 `AgentModelRouter` 已完成编译侧从固定注入到快照驱动路由的升级
-- Query 侧 Phase 8 范围已在文档中显式标注 deferred
+- `LlmGateway` 与 `AgentModelRouter` 已完成从固定注入到快照驱动路由的升级
+- `query` 侧真实 LLM 节点已按快照选路，不再保留独立一套模型配置基础设施
 
 ---
 

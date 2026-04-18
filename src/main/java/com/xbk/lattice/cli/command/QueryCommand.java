@@ -8,6 +8,8 @@ import com.xbk.lattice.query.service.QueryFacadeService;
 import org.springframework.context.ConfigurableApplicationContext;
 import picocli.CommandLine;
 
+import java.time.Duration;
+
 /**
  * query 命令
  *
@@ -38,5 +40,15 @@ public class QueryCommand extends AbstractCliCommand {
         QueryResponse queryResponse = latticeHttpClient.post("/api/v1/query", queryRequest, QueryResponse.class);
         printJson(queryResponse);
         return CliExitCodes.SUCCESS;
+    }
+
+    /**
+     * 返回 query 命令远程模式默认超时时间。
+     *
+     * @return 默认超时时间
+     */
+    @Override
+    protected Duration defaultRemoteRequestTimeout() {
+        return Duration.ofMinutes(5);
     }
 }

@@ -60,7 +60,8 @@ public class LlmModelProfileJdbcRepository {
     public List<LlmModelProfile> findAll() {
         return jdbcTemplate.query(
                 """
-                        select id, model_code, connection_id, model_name, temperature, max_tokens,
+                        select id, model_code, connection_id, model_name, model_kind, expected_dimensions,
+                               supports_dimension_override, temperature, max_tokens,
                                timeout_seconds, input_price_per_1k_tokens, output_price_per_1k_tokens,
                                extra_options_json, enabled, remarks, created_by, updated_by, created_at, updated_at
                         from llm_model_profiles
@@ -79,7 +80,8 @@ public class LlmModelProfileJdbcRepository {
     public Optional<LlmModelProfile> findById(Long id) {
         List<LlmModelProfile> items = jdbcTemplate.query(
                 """
-                        select id, model_code, connection_id, model_name, temperature, max_tokens,
+                        select id, model_code, connection_id, model_name, model_kind, expected_dimensions,
+                               supports_dimension_override, temperature, max_tokens,
                                timeout_seconds, input_price_per_1k_tokens, output_price_per_1k_tokens,
                                extra_options_json, enabled, remarks, created_by, updated_by, created_at, updated_at
                         from llm_model_profiles
@@ -103,7 +105,8 @@ public class LlmModelProfileJdbcRepository {
     public Optional<LlmModelProfile> findEnabledById(Long id) {
         List<LlmModelProfile> items = jdbcTemplate.query(
                 """
-                        select id, model_code, connection_id, model_name, temperature, max_tokens,
+                        select id, model_code, connection_id, model_name, model_kind, expected_dimensions,
+                               supports_dimension_override, temperature, max_tokens,
                                timeout_seconds, input_price_per_1k_tokens, output_price_per_1k_tokens,
                                extra_options_json, enabled, remarks, created_by, updated_by, created_at, updated_at
                         from llm_model_profiles
@@ -134,11 +137,12 @@ public class LlmModelProfileJdbcRepository {
             PreparedStatement preparedStatement = dbConnection.prepareStatement(
                     """
                             insert into llm_model_profiles (
-                                model_code, connection_id, model_name, temperature, max_tokens, timeout_seconds,
+                                model_code, connection_id, model_name, model_kind, expected_dimensions,
+                                supports_dimension_override, temperature, max_tokens, timeout_seconds,
                                 input_price_per_1k_tokens, output_price_per_1k_tokens, extra_options_json,
                                 enabled, remarks, created_by, updated_by
                             )
-                            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """,
                     Statement.RETURN_GENERATED_KEYS
             );
@@ -148,16 +152,19 @@ public class LlmModelProfileJdbcRepository {
             preparedStatement.setString(1, modelProfile.getModelCode());
             preparedStatement.setLong(2, modelProfile.getConnectionId());
             preparedStatement.setString(3, modelProfile.getModelName());
-            preparedStatement.setBigDecimal(4, modelProfile.getTemperature());
-            preparedStatement.setObject(5, modelProfile.getMaxTokens());
-            preparedStatement.setObject(6, modelProfile.getTimeoutSeconds());
-            preparedStatement.setBigDecimal(7, modelProfile.getInputPricePer1kTokens());
-            preparedStatement.setBigDecimal(8, modelProfile.getOutputPricePer1kTokens());
-            preparedStatement.setObject(9, extraOptions);
-            preparedStatement.setBoolean(10, modelProfile.isEnabled());
-            preparedStatement.setString(11, modelProfile.getRemarks());
-            preparedStatement.setString(12, modelProfile.getCreatedBy());
-            preparedStatement.setString(13, modelProfile.getUpdatedBy());
+            preparedStatement.setString(4, modelProfile.getModelKind());
+            preparedStatement.setObject(5, modelProfile.getExpectedDimensions());
+            preparedStatement.setBoolean(6, modelProfile.isSupportsDimensionOverride());
+            preparedStatement.setBigDecimal(7, modelProfile.getTemperature());
+            preparedStatement.setObject(8, modelProfile.getMaxTokens());
+            preparedStatement.setObject(9, modelProfile.getTimeoutSeconds());
+            preparedStatement.setBigDecimal(10, modelProfile.getInputPricePer1kTokens());
+            preparedStatement.setBigDecimal(11, modelProfile.getOutputPricePer1kTokens());
+            preparedStatement.setObject(12, extraOptions);
+            preparedStatement.setBoolean(13, modelProfile.isEnabled());
+            preparedStatement.setString(14, modelProfile.getRemarks());
+            preparedStatement.setString(15, modelProfile.getCreatedBy());
+            preparedStatement.setString(16, modelProfile.getUpdatedBy());
             return preparedStatement;
         }, keyHolder);
         Number key;
@@ -182,6 +189,9 @@ public class LlmModelProfileJdbcRepository {
                             set model_code = ?,
                                 connection_id = ?,
                                 model_name = ?,
+                                model_kind = ?,
+                                expected_dimensions = ?,
+                                supports_dimension_override = ?,
                                 temperature = ?,
                                 max_tokens = ?,
                                 timeout_seconds = ?,
@@ -201,16 +211,19 @@ public class LlmModelProfileJdbcRepository {
             preparedStatement.setString(1, modelProfile.getModelCode());
             preparedStatement.setLong(2, modelProfile.getConnectionId());
             preparedStatement.setString(3, modelProfile.getModelName());
-            preparedStatement.setBigDecimal(4, modelProfile.getTemperature());
-            preparedStatement.setObject(5, modelProfile.getMaxTokens());
-            preparedStatement.setObject(6, modelProfile.getTimeoutSeconds());
-            preparedStatement.setBigDecimal(7, modelProfile.getInputPricePer1kTokens());
-            preparedStatement.setBigDecimal(8, modelProfile.getOutputPricePer1kTokens());
-            preparedStatement.setObject(9, extraOptions);
-            preparedStatement.setBoolean(10, modelProfile.isEnabled());
-            preparedStatement.setString(11, modelProfile.getRemarks());
-            preparedStatement.setString(12, modelProfile.getUpdatedBy());
-            preparedStatement.setLong(13, modelProfile.getId());
+            preparedStatement.setString(4, modelProfile.getModelKind());
+            preparedStatement.setObject(5, modelProfile.getExpectedDimensions());
+            preparedStatement.setBoolean(6, modelProfile.isSupportsDimensionOverride());
+            preparedStatement.setBigDecimal(7, modelProfile.getTemperature());
+            preparedStatement.setObject(8, modelProfile.getMaxTokens());
+            preparedStatement.setObject(9, modelProfile.getTimeoutSeconds());
+            preparedStatement.setBigDecimal(10, modelProfile.getInputPricePer1kTokens());
+            preparedStatement.setBigDecimal(11, modelProfile.getOutputPricePer1kTokens());
+            preparedStatement.setObject(12, extraOptions);
+            preparedStatement.setBoolean(13, modelProfile.isEnabled());
+            preparedStatement.setString(14, modelProfile.getRemarks());
+            preparedStatement.setString(15, modelProfile.getUpdatedBy());
+            preparedStatement.setLong(16, modelProfile.getId());
             return preparedStatement;
         });
     }
@@ -221,6 +234,9 @@ public class LlmModelProfileJdbcRepository {
                 resultSet.getString("model_code"),
                 resultSet.getLong("connection_id"),
                 resultSet.getString("model_name"),
+                resultSet.getString("model_kind"),
+                resultSet.getObject("expected_dimensions", Integer.class),
+                resultSet.getBoolean("supports_dimension_override"),
                 resultSet.getBigDecimal("temperature"),
                 resultSet.getObject("max_tokens", Integer.class),
                 resultSet.getObject("timeout_seconds", Integer.class),

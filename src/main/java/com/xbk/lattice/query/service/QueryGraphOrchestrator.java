@@ -11,6 +11,8 @@ import com.xbk.lattice.query.graph.QueryGraphLifecycleListener;
 import com.xbk.lattice.query.graph.QueryGraphState;
 import com.xbk.lattice.query.graph.QueryGraphStateMapper;
 import com.xbk.lattice.query.graph.QueryWorkingSetStore;
+import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,7 @@ import java.util.UUID;
  */
 @Service
 @Profile("jdbc")
+@Slf4j
 public class QueryGraphOrchestrator {
 
     private final QueryGraphDefinitionFactory queryGraphDefinitionFactory;
@@ -39,6 +42,8 @@ public class QueryGraphOrchestrator {
 
     private final QueryReviewProperties queryReviewProperties;
 
+    private final ExecutionLlmSnapshotService executionLlmSnapshotService;
+
     private volatile CompiledGraph compiledGraph;
 
     /**
@@ -49,6 +54,7 @@ public class QueryGraphOrchestrator {
      * @param queryGraphLifecycleListener 问答图生命周期监听器
      * @param queryWorkingSetStore 问答图工作集存储
      * @param queryReviewProperties 查询审查配置
+     * @param executionLlmSnapshotService 运行时快照服务
      */
     @Autowired
     public QueryGraphOrchestrator(
@@ -56,13 +62,15 @@ public class QueryGraphOrchestrator {
             QueryGraphStateMapper queryGraphStateMapper,
             QueryGraphLifecycleListener queryGraphLifecycleListener,
             QueryWorkingSetStore queryWorkingSetStore,
-            QueryReviewProperties queryReviewProperties
+            QueryReviewProperties queryReviewProperties,
+            ExecutionLlmSnapshotService executionLlmSnapshotService
     ) {
         this.queryGraphDefinitionFactory = queryGraphDefinitionFactory;
         this.queryGraphStateMapper = queryGraphStateMapper;
         this.queryGraphLifecycleListener = queryGraphLifecycleListener;
         this.queryWorkingSetStore = queryWorkingSetStore;
         this.queryReviewProperties = queryReviewProperties;
+        this.executionLlmSnapshotService = executionLlmSnapshotService;
     }
 
     /**
@@ -99,7 +107,9 @@ public class QueryGraphOrchestrator {
                 sourceSearchService,
                 contributionSearchService,
                 vectorSearchService,
+                new ChunkVectorSearchService(),
                 rrfFusionService,
+                new QueryRetrievalSettingsService(),
                 answerGenerationService,
                 queryCacheStore,
                 reviewerAgent,
@@ -111,6 +121,7 @@ public class QueryGraphOrchestrator {
         this.queryGraphLifecycleListener = new QueryGraphLifecycleListener(inMemoryStateMapper);
         this.queryWorkingSetStore = inMemoryQueryWorkingSetStore;
         this.queryReviewProperties = queryReviewProperties;
+        this.executionLlmSnapshotService = null;
     }
 
     /**
@@ -125,8 +136,11 @@ public class QueryGraphOrchestrator {
             QueryGraphState initialState = new QueryGraphState();
             initialState.setQueryId(queryId);
             initialState.setQuestion(question);
+            initialState.setLlmScopeType(ExecutionLlmSnapshotService.QUERY_SCOPE_TYPE);
+            initialState.setLlmScopeId(queryId);
             initialState.setRewriteAttemptCount(0);
             initialState.setMaxRewriteRounds(queryReviewProperties.getMaxRewriteRounds());
+            freezeSnapshotsFailOpen(initialState);
 
             Optional<OverAllState> result = resolveCompiledGraph().invoke(queryGraphStateMapper.toMap(initialState));
             OverAllState overAllState = result.orElseThrow(() -> new IllegalStateException("query graph returned empty state"));
@@ -145,6 +159,34 @@ public class QueryGraphOrchestrator {
         }
         finally {
             queryWorkingSetStore.deleteByQueryId(queryId);
+        }
+    }
+
+    private void freezeSnapshotsFailOpen(QueryGraphState state) {
+        try {
+            if (executionLlmSnapshotService == null) {
+                return;
+            }
+            if (state.getLlmScopeId() == null || state.getLlmScopeId().isBlank()) {
+                return;
+            }
+            if (!executionLlmSnapshotService.freezeSnapshots(
+                    ExecutionLlmSnapshotService.QUERY_SCOPE_TYPE,
+                    state.getLlmScopeId(),
+                    ExecutionLlmSnapshotService.QUERY_SCENE
+            ).isEmpty()) {
+                state.setLlmBindingSnapshotRef(
+                        ExecutionLlmSnapshotService.QUERY_SCOPE_TYPE
+                                + ":"
+                                + state.getLlmScopeId()
+                                + ":"
+                                + ExecutionLlmSnapshotService.QUERY_SCENE
+                );
+            }
+        }
+        catch (RuntimeException exception) {
+            log.warn("Freeze llm snapshots failed for query {}, continue with bootstrap fallback",
+                    state.getLlmScopeId(), exception);
         }
     }
 

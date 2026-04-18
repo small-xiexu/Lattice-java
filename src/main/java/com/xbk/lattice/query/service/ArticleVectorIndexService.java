@@ -6,7 +6,6 @@ import com.xbk.lattice.infra.persistence.ArticleVectorRecord;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +15,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -36,7 +36,7 @@ public class ArticleVectorIndexService {
 
     private final ArticleVectorJdbcRepository articleVectorJdbcRepository;
 
-    private final EmbeddingModel embeddingModel;
+    private final ConfiguredVectorEmbeddingService configuredVectorEmbeddingService;
 
     /**
      * 创建文章向量索引服务。
@@ -44,21 +44,19 @@ public class ArticleVectorIndexService {
      * @param querySearchProperties 查询检索配置
      * @param searchCapabilityService 检索能力探测服务
      * @param articleVectorJdbcRepository 文章向量索引仓储
-     * @param embeddingModelProvider embedding 模型提供器
+     * @param configuredVectorEmbeddingService 可配置 embedding 服务
      */
     @Autowired
     public ArticleVectorIndexService(
             QuerySearchProperties querySearchProperties,
             SearchCapabilityService searchCapabilityService,
             ArticleVectorJdbcRepository articleVectorJdbcRepository,
-            ObjectProvider<EmbeddingModel> embeddingModelProvider
+            ConfiguredVectorEmbeddingService configuredVectorEmbeddingService
     ) {
-        this(
-                querySearchProperties,
-                searchCapabilityService,
-                articleVectorJdbcRepository,
-                embeddingModelProvider.getIfAvailable()
-        );
+        this.querySearchProperties = querySearchProperties;
+        this.searchCapabilityService = searchCapabilityService;
+        this.articleVectorJdbcRepository = articleVectorJdbcRepository;
+        this.configuredVectorEmbeddingService = configuredVectorEmbeddingService;
     }
 
     /**
@@ -75,10 +73,12 @@ public class ArticleVectorIndexService {
             ArticleVectorJdbcRepository articleVectorJdbcRepository,
             EmbeddingModel embeddingModel
     ) {
-        this.querySearchProperties = querySearchProperties;
-        this.searchCapabilityService = searchCapabilityService;
-        this.articleVectorJdbcRepository = articleVectorJdbcRepository;
-        this.embeddingModel = embeddingModel;
+        this(
+                querySearchProperties,
+                searchCapabilityService,
+                articleVectorJdbcRepository,
+                new ConfiguredVectorEmbeddingService(querySearchProperties, embeddingModel)
+        );
     }
 
     /**
@@ -99,19 +99,33 @@ public class ArticleVectorIndexService {
         }
 
         String contentHash = buildContentHash(articleRecord);
+        Long configuredProfileId = getConfiguredModelProfileId();
+        String configuredModelName = getConfiguredModelName();
+        int configuredExpectedDimensions = configuredVectorEmbeddingService.getConfiguredExpectedDimensions();
+        String configuredIndexVersion = buildIndexVersion(configuredProfileId, configuredExpectedDimensions);
         Optional<ArticleVectorRecord> existingRecord = articleVectorJdbcRepository.findByConceptId(articleRecord.getConceptId());
-        if (existingRecord.isPresent() && contentHash.equals(existingRecord.orElseThrow().getContentHash())) {
+        if (shouldSkipIndexing(
+                existingRecord,
+                contentHash,
+                configuredProfileId,
+                configuredModelName,
+                configuredExpectedDimensions,
+                configuredIndexVersion
+        )) {
             return;
         }
 
         try {
-            float[] embedding = embeddingModel.embed(buildEmbeddingText(articleRecord));
+            float[] embedding = configuredVectorEmbeddingService.embed(buildEmbeddingText(articleRecord));
             if (!hasExpectedDimensions(embedding, articleRecord.getConceptId())) {
                 return;
             }
             articleVectorJdbcRepository.upsert(new ArticleVectorRecord(
                     articleRecord.getConceptId(),
-                    querySearchProperties.getVector().getEmbeddingModel(),
+                    configuredProfileId,
+                    configuredModelName,
+                    configuredExpectedDimensions,
+                    configuredIndexVersion,
                     contentHash,
                     embedding,
                     OffsetDateTime.now()
@@ -144,9 +158,60 @@ public class ArticleVectorIndexService {
     public boolean isIndexingAvailable() {
         return querySearchProperties.getVector().isEnabled()
                 && articleVectorJdbcRepository != null
-                && embeddingModel != null
+                && configuredVectorEmbeddingService != null
+                && configuredVectorEmbeddingService.isAvailable()
                 && searchCapabilityService.supportsVectorType()
                 && searchCapabilityService.hasArticleVectorIndex();
+    }
+
+    /**
+     * 返回当前配置的 embedding 模型名称。
+     *
+     * @return embedding 模型名称
+     */
+    public String getConfiguredModelName() {
+        return configuredVectorEmbeddingService == null ? "" : configuredVectorEmbeddingService.getConfiguredModelName();
+    }
+
+    /**
+     * 返回当前配置的 embedding profile 主键。
+     *
+     * @return embedding profile 主键
+     */
+    public Long getConfiguredModelProfileId() {
+        return configuredVectorEmbeddingService == null ? null : configuredVectorEmbeddingService.getConfiguredProfileId();
+    }
+
+    /**
+     * 判断当前文章是否可直接跳过向量重建。
+     *
+     * @param existingRecord 已有向量记录
+     * @param contentHash 最新内容哈希
+     * @param configuredProfileId 当前配置模型主键
+     * @param configuredModelName 当前配置模型名
+     * @param configuredExpectedDimensions 当前配置维度
+     * @param configuredIndexVersion 当前索引版本
+     * @return 是否跳过
+     */
+    private boolean shouldSkipIndexing(
+            Optional<ArticleVectorRecord> existingRecord,
+            String contentHash,
+            Long configuredProfileId,
+            String configuredModelName,
+            int configuredExpectedDimensions,
+            String configuredIndexVersion
+    ) {
+        if (existingRecord.isEmpty()) {
+            return false;
+        }
+        ArticleVectorRecord currentRecord = existingRecord.orElseThrow();
+        boolean modelIdentityMatches = configuredProfileId == null
+                ? Objects.equals(configuredModelName, currentRecord.getModelName())
+                : Objects.equals(configuredProfileId, currentRecord.getModelProfileId());
+        return contentHash.equals(currentRecord.getContentHash())
+                && modelIdentityMatches
+                && configuredExpectedDimensions == currentRecord.getEmbeddingDimensions()
+                && configuredIndexVersion.equals(currentRecord.getIndexVersion());
     }
 
     /**
@@ -195,7 +260,7 @@ public class ArticleVectorIndexService {
      * @return 是否匹配
      */
     private boolean hasExpectedDimensions(float[] embedding, String conceptId) {
-        int expectedDimensions = querySearchProperties.getVector().getExpectedDimensions();
+        int expectedDimensions = configuredVectorEmbeddingService.getConfiguredExpectedDimensions();
         if (expectedDimensions <= 0) {
             return true;
         }
@@ -211,5 +276,21 @@ public class ArticleVectorIndexService {
                 expectedDimensions
         );
         return false;
+    }
+
+    /**
+     * 构建文章级向量索引版本。
+     *
+     * @param profileId profile 主键
+     * @param expectedDimensions 期望维度
+     * @return 索引版本
+     */
+    private String buildIndexVersion(Long profileId, int expectedDimensions) {
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append(profileId == null ? "unknown" : profileId);
+        stringBuilder.append("-");
+        stringBuilder.append(expectedDimensions);
+        stringBuilder.append("-article-v1");
+        return stringBuilder.toString();
     }
 }

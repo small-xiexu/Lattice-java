@@ -74,6 +74,46 @@ class AgentModelRouterSnapshotTests {
     }
 
     /**
+     * 验证 query 场景会使用 query_request 作用域读取快照。
+     */
+    @Test
+    void shouldResolveQuerySceneUsingQueryRequestScopeType() {
+        StubExecutionLlmSnapshotService snapshotService = new StubExecutionLlmSnapshotService();
+        LlmProperties llmProperties = new LlmProperties();
+        llmProperties.setCompileModel("openai");
+        llmProperties.setReviewEnabled(true);
+        snapshotService.route = new LlmRouteResolution(
+                "query_request",
+                "query-1",
+                "query",
+                "answer",
+                Long.valueOf(11L),
+                Long.valueOf(12L),
+                Integer.valueOf(1),
+                "query.answer.gpt54",
+                "openai",
+                "http://localhost",
+                "sk-test",
+                "gpt-5.4",
+                new BigDecimal("0.2"),
+                Integer.valueOf(4096),
+                Integer.valueOf(300),
+                "{}",
+                new BigDecimal("0.002500"),
+                new BigDecimal("0.010000"),
+                true
+        );
+        AgentModelRouter agentModelRouter = new AgentModelRouter(snapshotService, llmProperties);
+
+        String route = agentModelRouter.routeFor("query-1", "query", "answer");
+
+        assertThat(route).isEqualTo("query.answer.gpt54");
+        assertThat(snapshotService.lastScopeType).isEqualTo("query_request");
+        assertThat(snapshotService.lastScene).isEqualTo("query");
+        assertThat(snapshotService.lastAgentRole).isEqualTo("answer");
+    }
+
+    /**
      * 运行时快照服务替身。
      *
      * 职责：为路由器测试返回固定快照路由
@@ -83,6 +123,12 @@ class AgentModelRouterSnapshotTests {
     private static class StubExecutionLlmSnapshotService extends ExecutionLlmSnapshotService {
 
         private LlmRouteResolution route;
+
+        private String lastScopeType;
+
+        private String lastScene;
+
+        private String lastAgentRole;
 
         private StubExecutionLlmSnapshotService() {
             super(
@@ -102,6 +148,9 @@ class AgentModelRouterSnapshotTests {
                 String scene,
                 String agentRole
         ) {
+            lastScopeType = scopeType;
+            lastScene = scene;
+            lastAgentRole = agentRole;
             return Optional.ofNullable(route);
         }
 

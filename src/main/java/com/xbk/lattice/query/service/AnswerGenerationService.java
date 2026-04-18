@@ -1,6 +1,7 @@
 package com.xbk.lattice.query.service;
 
 import com.xbk.lattice.compiler.service.LlmGateway;
+import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -41,6 +42,18 @@ public class AnswerGenerationService {
             3. 不要简单把纠正文本直接拼接到原答案末尾
             4. 如果纠正与证据冲突，要显式说明冲突点
             5. 回答语言使用简体中文
+            """;
+
+    private static final String SYSTEM_QUERY_REWRITE_FROM_REVIEW = """
+            你是 Lattice 查询重写助手。你会收到用户问题、当前答案、审查发现的问题以及证据，请输出一份面向最终用户的 Markdown 答案。
+
+            输出要求：
+            1. 直接输出最终答案，不要复述“审查结论”“修订说明”“问题单”或缺陷列表
+            2. 对有证据支撑的内容，给出明确结论，并保留关键阈值、地址、字段名等原始值
+            3. 对证据不足或无法确认的子问题，明确写“当前证据不足”或“暂无法确认”
+            4. 不要编造，不要输出 TODO，不要把 REVIEW FINDINGS 原样粘贴到答案中
+            5. 优先综合 ARTICLE / SOURCE / CONTRIBUTION 证据，必要时可用小标题、表格或列表组织答案
+            6. 回答语言使用简体中文
             """;
 
     private final LlmGateway llmGateway;
@@ -102,6 +115,32 @@ public class AnswerGenerationService {
      * @return Markdown 答案
      */
     public String generate(String question, List<QueryArticleHit> queryArticleHits) {
+        return generate(
+                null,
+                ExecutionLlmSnapshotService.QUERY_SCENE,
+                ExecutionLlmSnapshotService.ROLE_ANSWER,
+                question,
+                queryArticleHits
+        );
+    }
+
+    /**
+     * 基于多路证据生成 Markdown 答案。
+     *
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @param question 查询问题
+     * @param queryArticleHits 融合命中
+     * @return Markdown 答案
+     */
+    public String generate(
+            String scopeId,
+            String scene,
+            String agentRole,
+            String question,
+            List<QueryArticleHit> queryArticleHits
+    ) {
         if (queryArticleHits == null || queryArticleHits.isEmpty()) {
             return "未找到相关知识";
         }
@@ -111,7 +150,10 @@ public class AnswerGenerationService {
 
         if (llmGateway != null) {
             try {
-                String llmAnswer = llmGateway.compile(
+                String llmAnswer = llmGateway.compileWithScope(
+                        scopeId,
+                        scene,
+                        agentRole,
                         "query-answer",
                         SYSTEM_QUERY_ANSWER,
                         buildAnswerPrompt(question, queryArticleHits)
@@ -142,9 +184,44 @@ public class AnswerGenerationService {
             String correction,
             List<QueryArticleHit> queryArticleHits
     ) {
+        return revise(
+                null,
+                ExecutionLlmSnapshotService.QUERY_SCENE,
+                ExecutionLlmSnapshotService.ROLE_REWRITE,
+                question,
+                currentAnswer,
+                correction,
+                queryArticleHits
+        );
+    }
+
+    /**
+     * 基于纠正信息重生成修订答案。
+     *
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @param question 查询问题
+     * @param currentAnswer 当前答案
+     * @param correction 用户纠正
+     * @param queryArticleHits 修订证据
+     * @return 修订后的 Markdown 答案
+     */
+    public String revise(
+            String scopeId,
+            String scene,
+            String agentRole,
+            String question,
+            String currentAnswer,
+            String correction,
+            List<QueryArticleHit> queryArticleHits
+    ) {
         if (llmGateway != null) {
             try {
-                String llmAnswer = llmGateway.compile(
+                String llmAnswer = llmGateway.compileWithScope(
+                        scopeId,
+                        scene,
+                        agentRole,
                         "query-revise",
                         SYSTEM_QUERY_REVISE,
                         buildRevisePrompt(question, currentAnswer, correction, queryArticleHits)
@@ -158,6 +235,68 @@ public class AnswerGenerationService {
             }
         }
         return buildFallbackRevisionMarkdown(question, currentAnswer, correction, queryArticleHits);
+    }
+
+    /**
+     * 基于审查问题重写最终答案。
+     *
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @param question 查询问题
+     * @param currentAnswer 当前答案
+     * @param reviewFindings 审查问题
+     * @param queryArticleHits 修订证据
+     * @return 面向最终用户的 Markdown 答案
+     */
+    public String rewriteFromReviewFeedback(
+            String scopeId,
+            String scene,
+            String agentRole,
+            String question,
+            String currentAnswer,
+            String reviewFindings,
+            List<QueryArticleHit> queryArticleHits
+    ) {
+        if (llmGateway != null) {
+            try {
+                String llmAnswer = llmGateway.compileWithScope(
+                        scopeId,
+                        scene,
+                        agentRole,
+                        "query-rewrite-from-review",
+                        SYSTEM_QUERY_REWRITE_FROM_REVIEW,
+                        buildReviewRewritePrompt(question, currentAnswer, reviewFindings, queryArticleHits)
+                );
+                if (llmAnswer != null && !llmAnswer.isBlank()) {
+                    return llmAnswer.trim();
+                }
+            }
+            catch (RuntimeException ex) {
+                // 审查驱动的重写失败时，降级回基于证据的结构化答案，避免把问题单直接返回给用户。
+            }
+        }
+        return buildFallbackMarkdown(question, queryArticleHits);
+    }
+
+    /**
+     * 返回当前作用域下的路由标签。
+     *
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @return 路由标签
+     */
+    public String currentRoute(String scopeId, String scene, String agentRole) {
+        if (llmGateway == null) {
+            return "fallback";
+        }
+        try {
+            return llmGateway.routeFor(scopeId, scene, agentRole);
+        }
+        catch (RuntimeException ex) {
+            return "fallback";
+        }
     }
 
     /**
@@ -278,6 +417,35 @@ public class AnswerGenerationService {
         promptBuilder.append(currentAnswer == null ? "" : currentAnswer.trim()).append("\n\n");
         promptBuilder.append("CORRECTION").append("\n");
         promptBuilder.append(correction == null ? "" : correction.trim()).append("\n\n");
+        appendEvidenceSection(promptBuilder, "CONTRIBUTION EVIDENCE", groupedHits.get(QueryEvidenceType.CONTRIBUTION));
+        appendEvidenceSection(promptBuilder, "ARTICLE EVIDENCE", groupedHits.get(QueryEvidenceType.ARTICLE));
+        appendEvidenceSection(promptBuilder, "SOURCE EVIDENCE", groupedHits.get(QueryEvidenceType.SOURCE));
+        return promptBuilder.toString().trim();
+    }
+
+    /**
+     * 构建基于审查问题的最终答案重写 Prompt。
+     *
+     * @param question 查询问题
+     * @param currentAnswer 当前答案
+     * @param reviewFindings 审查问题
+     * @param queryArticleHits 修订证据
+     * @return 用户提示词
+     */
+    private String buildReviewRewritePrompt(
+            String question,
+            String currentAnswer,
+            String reviewFindings,
+            List<QueryArticleHit> queryArticleHits
+    ) {
+        Map<QueryEvidenceType, List<QueryArticleHit>> groupedHits = groupHitsByEvidenceType(queryArticleHits);
+        StringBuilder promptBuilder = new StringBuilder();
+        promptBuilder.append("QUESTION").append("\n");
+        promptBuilder.append(question.trim()).append("\n\n");
+        promptBuilder.append("CURRENT ANSWER").append("\n");
+        promptBuilder.append(currentAnswer == null ? "" : currentAnswer.trim()).append("\n\n");
+        promptBuilder.append("REVIEW FINDINGS").append("\n");
+        promptBuilder.append(reviewFindings == null ? "" : reviewFindings.trim()).append("\n\n");
         appendEvidenceSection(promptBuilder, "CONTRIBUTION EVIDENCE", groupedHits.get(QueryEvidenceType.CONTRIBUTION));
         appendEvidenceSection(promptBuilder, "ARTICLE EVIDENCE", groupedHits.get(QueryEvidenceType.ARTICLE));
         appendEvidenceSection(promptBuilder, "SOURCE EVIDENCE", groupedHits.get(QueryEvidenceType.SOURCE));

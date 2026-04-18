@@ -332,6 +332,18 @@ public class LlmGateway {
     }
 
     /**
+     * 返回指定场景与角色的当前路由标签。
+     *
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @return 路由标签
+     */
+    public String routeFor(String scopeId, String scene, String agentRole) {
+        return resolveScopedRoute(scopeId, scene, agentRole).getRouteLabel();
+    }
+
+    /**
      * 返回是否启用真实审查。
      *
      * @return 是否启用真实审查
@@ -586,6 +598,9 @@ public class LlmGateway {
         String normalizedScene = normalizeScene(scene);
         if (ExecutionLlmSnapshotService.COMPILE_SCENE.equals(normalizedScene)) {
             return ExecutionLlmSnapshotService.COMPILE_SCOPE_TYPE;
+        }
+        if (ExecutionLlmSnapshotService.QUERY_SCENE.equals(normalizedScene)) {
+            return ExecutionLlmSnapshotService.QUERY_SCOPE_TYPE;
         }
         return normalizedScene + "_scope";
     }

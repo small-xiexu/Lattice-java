@@ -98,7 +98,13 @@ class QueryFacadeServiceVectorTests {
          * @return 固定答案
          */
         @Override
-        public String generate(String question, List<QueryArticleHit> hits) {
+        public String generate(
+                String scopeId,
+                String scene,
+                String agentRole,
+                String question,
+                List<QueryArticleHit> hits
+        ) {
             return answer;
         }
     }

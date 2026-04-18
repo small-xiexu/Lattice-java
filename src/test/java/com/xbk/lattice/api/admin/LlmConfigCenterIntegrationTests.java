@@ -146,6 +146,60 @@ class LlmConfigCenterIntegrationTests {
         assertThat(newRoute.orElseThrow().getModelName()).isEqualTo("gpt-5.4");
     }
 
+    /**
+     * 验证 query 场景也可复用同一套绑定中心并冻结问答快照。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldCreateQueryBindingsAndFreezeQuerySnapshots() throws Exception {
+        resetTables();
+        Long answerConnectionId = createConnection("query-main", "openai", "http://localhost:8888", "sk-query-123456");
+        Long reviewConnectionId = createConnection("query-review-main", "anthropic", "http://localhost:9999", "sk-claude-123456");
+        Long answerModelId = createModel("gpt54-query-answer", answerConnectionId, "gpt-5.4", "0.2", "4096", "300");
+        Long reviewerModelId = createModel("claude-query-reviewer", reviewConnectionId, "claude-3-7-sonnet", "0.0", "4096", "300");
+        Long rewriteModelId = createModel("gpt54-query-rewrite", answerConnectionId, "gpt-5.4", "0.1", "4096", "300");
+
+        createBinding("query", "answer", answerModelId, "", "query.answer.gpt54");
+        createBinding("query", "reviewer", reviewerModelId, "", "query.reviewer.claude");
+        createBinding("query", "rewrite", rewriteModelId, "", "query.rewrite.gpt54");
+
+        mockMvc.perform(get("/api/v1/admin/llm/bindings"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.scene=='query' && @.agentRole=='answer')]").exists())
+                .andExpect(jsonPath("$.items[?(@.scene=='query' && @.agentRole=='reviewer')]").exists())
+                .andExpect(jsonPath("$.items[?(@.scene=='query' && @.agentRole=='rewrite')]").exists());
+
+        assertThat(executionLlmSnapshotService.freezeSnapshots("query_request", "query-1", "query")).hasSize(3);
+
+        Optional<LlmRouteResolution> answerRoute = executionLlmSnapshotService.resolveRoute(
+                "query_request",
+                "query-1",
+                "query",
+                "answer"
+        );
+        Optional<LlmRouteResolution> reviewerRoute = executionLlmSnapshotService.resolveRoute(
+                "query_request",
+                "query-1",
+                "query",
+                "reviewer"
+        );
+        Optional<LlmRouteResolution> rewriteRoute = executionLlmSnapshotService.resolveRoute(
+                "query_request",
+                "query-1",
+                "query",
+                "rewrite"
+        );
+        assertThat(answerRoute).isPresent();
+        assertThat(reviewerRoute).isPresent();
+        assertThat(rewriteRoute).isPresent();
+        assertThat(answerRoute.orElseThrow().getRouteLabel()).isEqualTo("query.answer.gpt54");
+        assertThat(reviewerRoute.orElseThrow().getRouteLabel()).isEqualTo("query.reviewer.claude");
+        assertThat(reviewerRoute.orElseThrow().getProviderType()).isEqualTo("anthropic");
+        assertThat(reviewerRoute.orElseThrow().getModelName()).isEqualTo("claude-3-7-sonnet");
+        assertThat(rewriteRoute.orElseThrow().getRouteLabel()).isEqualTo("query.rewrite.gpt54");
+    }
+
     private Long createConnection(String code, String providerType, String baseUrl, String apiKey) throws Exception {
         String responseBody = mockMvc.perform(post("/api/v1/admin/llm/connections")
                         .contentType(APPLICATION_JSON)

@@ -35,11 +35,19 @@ public class ExecutionLlmSnapshotService {
 
     public static final String COMPILE_SCENE = "compile";
 
+    public static final String QUERY_SCOPE_TYPE = "query_request";
+
+    public static final String QUERY_SCENE = "query";
+
     public static final String ROLE_WRITER = "writer";
 
     public static final String ROLE_REVIEWER = "reviewer";
 
     public static final String ROLE_FIXER = "fixer";
+
+    public static final String ROLE_ANSWER = "answer";
+
+    public static final String ROLE_REWRITE = "rewrite";
 
     private final LlmProperties llmProperties;
 
@@ -317,6 +325,9 @@ public class ExecutionLlmSnapshotService {
     private String resolveScopeType(String scene) {
         if (COMPILE_SCENE.equals(scene)) {
             return COMPILE_SCOPE_TYPE;
+        }
+        if (QUERY_SCENE.equals(scene)) {
+            return QUERY_SCOPE_TYPE;
         }
         return scene == null ? "unknown_scope" : scene + "_scope";
     }

@@ -264,6 +264,9 @@ public class AdminLlmConfigController {
                 request.getModelCode(),
                 request.getConnectionId(),
                 request.getModelName(),
+                normalizeModelKind(request.getModelKind()),
+                request.getExpectedDimensions(),
+                request.getSupportsDimensionOverride() != null && request.getSupportsDimensionOverride().booleanValue(),
                 request.getTemperature(),
                 request.getMaxTokens(),
                 request.getTimeoutSeconds(),
@@ -323,6 +326,9 @@ public class AdminLlmConfigController {
                 modelProfile.getModelCode(),
                 modelProfile.getConnectionId(),
                 modelProfile.getModelName(),
+                modelProfile.getModelKind(),
+                modelProfile.getExpectedDimensions(),
+                modelProfile.isSupportsDimensionOverride(),
                 modelProfile.getTemperature(),
                 modelProfile.getMaxTokens(),
                 modelProfile.getTimeoutSeconds(),
@@ -391,6 +397,21 @@ public class AdminLlmConfigController {
         if (!StringUtils.hasText(request.getModelName())) {
             throw new IllegalArgumentException("modelName不能为空");
         }
+        String modelKind = normalizeModelKind(request.getModelKind());
+        if (LlmModelProfile.MODEL_KIND_EMBEDDING.equals(modelKind)
+                && (request.getExpectedDimensions() == null || request.getExpectedDimensions().intValue() <= 0)) {
+            throw new IllegalArgumentException("EMBEDDING 模型必须填写 expectedDimensions");
+        }
+        if (LlmModelProfile.MODEL_KIND_CHAT.equals(modelKind) && request.getExpectedDimensions() != null) {
+            throw new IllegalArgumentException("CHAT 模型不允许填写 expectedDimensions");
+        }
+    }
+
+    private String normalizeModelKind(String modelKind) {
+        if (!StringUtils.hasText(modelKind)) {
+            return LlmModelProfile.MODEL_KIND_CHAT;
+        }
+        return modelKind.trim().toUpperCase();
     }
 
     private void validateBindingRequest(AdminLlmBindingRequest request) {
@@ -505,6 +526,12 @@ public class AdminLlmConfigController {
 
         private String modelName;
 
+        private String modelKind;
+
+        private Integer expectedDimensions;
+
+        private Boolean supportsDimensionOverride;
+
         private BigDecimal temperature;
 
         private Integer maxTokens;
@@ -543,6 +570,12 @@ public class AdminLlmConfigController {
         private Long connectionId;
 
         private String modelName;
+
+        private String modelKind;
+
+        private Integer expectedDimensions;
+
+        private boolean supportsDimensionOverride;
 
         private BigDecimal temperature;
 

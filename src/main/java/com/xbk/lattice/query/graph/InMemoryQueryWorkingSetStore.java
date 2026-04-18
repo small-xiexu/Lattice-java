@@ -68,6 +68,37 @@ public class InMemoryQueryWorkingSetStore implements QueryWorkingSetStore {
     }
 
     /**
+     * 保存单路检索命中。
+     *
+     * @param queryId 查询标识
+     * @param channel 通道路由
+     * @param hits 命中列表
+     * @return 工作集引用
+     */
+    @Override
+    public String saveHits(String queryId, String channel, List<QueryArticleHit> hits) {
+        String ref = buildRef(queryId, "hits-" + channel);
+        store.put(ref, new ArrayList<QueryArticleHit>(hits));
+        return ref;
+    }
+
+    /**
+     * 读取单路检索命中。
+     *
+     * @param ref 工作集引用
+     * @return 命中列表
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<QueryArticleHit> loadHits(String ref) {
+        Object value = store.get(ref);
+        if (!(value instanceof List<?>)) {
+            return Collections.emptyList();
+        }
+        return new ArrayList<QueryArticleHit>((List<QueryArticleHit>) value);
+    }
+
+    /**
      * 保存融合命中结果。
      *
      * @param queryId 查询标识

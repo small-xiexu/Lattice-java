@@ -9,6 +9,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 import picocli.CommandLine;
 
 import java.nio.file.Path;
+import java.time.Duration;
 
 /**
  * vault-export 命令
@@ -40,5 +41,15 @@ public class VaultExportCommand extends AbstractCliCommand {
         VaultExportResult result = latticeHttpClient.post("/api/v1/admin/vault/export", request, VaultExportResult.class);
         printJson(result);
         return CliExitCodes.SUCCESS;
+    }
+
+    /**
+     * 返回 vault-export 命令远程模式默认超时时间。
+     *
+     * @return 默认超时时间
+     */
+    @Override
+    protected Duration defaultRemoteRequestTimeout() {
+        return Duration.ofMinutes(10);
     }
 }

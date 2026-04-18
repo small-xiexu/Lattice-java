@@ -10,6 +10,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 import picocli.CommandLine;
 
 import java.nio.file.Path;
+import java.time.Duration;
 
 /**
  * compile 命令
@@ -45,5 +46,15 @@ public class CompileCommand extends AbstractCliCommand {
         CompileResponse compileResponse = latticeHttpClient.post("/api/v1/compile", compileRequest, CompileResponse.class);
         printJson(compileResponse);
         return CliExitCodes.SUCCESS;
+    }
+
+    /**
+     * 返回 compile 命令远程模式默认超时时间。
+     *
+     * @return 默认超时时间
+     */
+    @Override
+    protected Duration defaultRemoteRequestTimeout() {
+        return Duration.ofMinutes(30);
     }
 }

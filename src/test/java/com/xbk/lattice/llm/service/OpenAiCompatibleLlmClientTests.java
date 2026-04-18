@@ -1,0 +1,147 @@
+package com.xbk.lattice.llm.service;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpServer;
+import com.xbk.lattice.compiler.service.LlmCallResult;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.web.client.RestClient;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * OpenAiCompatibleLlmClient 测试
+ *
+ * 职责：验证 OpenAI 兼容客户端能处理标准 JSON 与错误标注的 octet-stream 响应
+ *
+ * @author xiexu
+ */
+class OpenAiCompatibleLlmClientTests {
+
+    private HttpServer httpServer;
+
+    /**
+     * 关闭测试 HTTP 服务。
+     */
+    @AfterEach
+    void tearDown() {
+        if (httpServer != null) {
+            httpServer.stop(0);
+        }
+    }
+
+    /**
+     * 验证客户端能兼容错误标记为 octet-stream 的 Chat Completions 响应。
+     *
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldParseOpenAiResponseWhenGatewayReturnsOctetStream() throws IOException {
+        AtomicReference<String> requestBody = new AtomicReference<String>();
+        AtomicReference<String> authorizationHeader = new AtomicReference<String>();
+        AtomicReference<String> contentTypeHeader = new AtomicReference<String>();
+        httpServer = HttpServer.create(new InetSocketAddress(0), 0);
+        httpServer.createContext("/v1/chat/completions", new SuccessHandler(
+                requestBody,
+                authorizationHeader,
+                contentTypeHeader,
+                "application/octet-stream"
+        ));
+        httpServer.start();
+        int port = httpServer.getAddress().getPort();
+        OpenAiCompatibleLlmClient llmClient = new OpenAiCompatibleLlmClient(
+                RestClient.builder(),
+                new ObjectMapper(),
+                "http://127.0.0.1:" + port,
+                "test-openai-key",
+                "gpt-5.4",
+                0.3D,
+                96,
+                120,
+                null
+        );
+
+        LlmCallResult result = llmClient.call("query-system", "query-user");
+
+        assertThat(result.getContent()).isEqualTo("answer ok");
+        assertThat(result.getInputTokens()).isEqualTo(9);
+        assertThat(result.getOutputTokens()).isEqualTo(4);
+        assertThat(authorizationHeader.get()).isEqualTo("Bearer test-openai-key");
+        assertThat(contentTypeHeader.get()).contains("application/json");
+        assertThat(requestBody.get()).contains("\"model\":\"gpt-5.4\"");
+        assertThat(requestBody.get()).contains("\"role\":\"system\"");
+        assertThat(requestBody.get()).contains("\"content\":\"query-user\"");
+    }
+
+    /**
+     * 成功响应处理器。
+     *
+     * 职责：记录请求头与请求体，并回写 OpenAI Chat Completions JSON 响应
+     *
+     * @author xiexu
+     */
+    private static class SuccessHandler implements HttpHandler {
+
+        private final AtomicReference<String> requestBody;
+
+        private final AtomicReference<String> authorizationHeader;
+
+        private final AtomicReference<String> contentTypeHeader;
+
+        private final String responseContentType;
+
+        private SuccessHandler(
+                AtomicReference<String> requestBody,
+                AtomicReference<String> authorizationHeader,
+                AtomicReference<String> contentTypeHeader,
+                String responseContentType
+        ) {
+            this.requestBody = requestBody;
+            this.authorizationHeader = authorizationHeader;
+            this.contentTypeHeader = contentTypeHeader;
+            this.responseContentType = responseContentType;
+        }
+
+        /**
+         * 处理测试请求。
+         *
+         * @param exchange HTTP 交换对象
+         * @throws IOException IO 异常
+         */
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            authorizationHeader.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            contentTypeHeader.set(exchange.getRequestHeaders().getFirst("Content-Type"));
+            String responseBody = """
+                    {
+                      "id": "chatcmpl_test",
+                      "choices": [
+                        {
+                          "message": {
+                            "role": "assistant",
+                            "content": "answer ok"
+                          }
+                        }
+                      ],
+                      "usage": {
+                        "prompt_tokens": 9,
+                        "completion_tokens": 4
+                      }
+                    }
+                    """;
+            byte[] responseBytes = responseBody.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", responseContentType);
+            exchange.sendResponseHeaders(200, responseBytes.length);
+            exchange.getResponseBody().write(responseBytes);
+            exchange.close();
+        }
+    }
+}

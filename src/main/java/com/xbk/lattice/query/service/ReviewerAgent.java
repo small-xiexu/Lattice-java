@@ -1,5 +1,6 @@
 package com.xbk.lattice.query.service;
 
+import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -40,14 +41,55 @@ public class ReviewerAgent {
      * @return 审查结果
      */
     public ReviewResult review(String question, String answer, List<String> sourcePaths) {
+        return review(
+                null,
+                ExecutionLlmSnapshotService.QUERY_SCENE,
+                ExecutionLlmSnapshotService.ROLE_REVIEWER,
+                question,
+                answer,
+                sourcePaths
+        );
+    }
+
+    /**
+     * 在指定作用域下对答案执行单轮审查。
+     *
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @param question 问题
+     * @param answer 答案
+     * @param sourcePaths 来源路径
+     * @return 审查结果
+     */
+    public ReviewResult review(
+            String scopeId,
+            String scene,
+            String agentRole,
+            String question,
+            String answer,
+            List<String> sourcePaths
+    ) {
         String reviewPrompt = buildPrompt(question, answer, sourcePaths);
         try {
-            String rawResult = reviewerGateway.review(reviewPrompt);
+            String rawResult = reviewerGateway.review(scopeId, scene, agentRole, reviewPrompt);
             return reviewResultParser.parse(rawResult);
         }
         catch (ReviewTimeoutException ex) {
             return ReviewResult.timeoutFallback();
         }
+    }
+
+    /**
+     * 返回当前作用域下的审查路由标签。
+     *
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @return 路由标签
+     */
+    public String currentRoute(String scopeId, String scene, String agentRole) {
+        return reviewerGateway.currentRoute(scopeId, scene, agentRole);
     }
 
     /**
