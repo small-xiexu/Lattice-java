@@ -16,12 +16,32 @@ import org.springframework.web.bind.annotation.GetMapping;
 public class AdminPageController {
 
     /**
-     * 转发管理后台首页。
+     * 转发知识库管理页。
      *
      * @return 静态页面路径
      */
     @GetMapping({"/admin", "/admin/"})
     public String index() {
         return "forward:/admin/index.html";
+    }
+
+    /**
+     * 转发知识问答页。
+     *
+     * @return 静态页面路径
+     */
+    @GetMapping({"/admin/ask", "/admin/ask/"})
+    public String ask() {
+        return "forward:/admin/ask.html";
+    }
+
+    /**
+     * 转发 AI 接入页。
+     *
+     * @return 静态页面路径
+     */
+    @GetMapping({"/admin/ai", "/admin/ai/"})
+    public String ai() {
+        return "forward:/admin/ai.html";
     }
 }

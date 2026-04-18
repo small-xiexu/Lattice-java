@@ -97,6 +97,27 @@ a {
     flex-wrap: wrap;
 }
 
+.header-actions-stack {
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.health-inline {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+    max-width: 320px;
+}
+
+.health-note {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+    text-align: right;
+}
+
 .page-main {
     display: grid;
     gap: 20px;
@@ -304,6 +325,9 @@ a {
 }
 
 .tab-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 10px 14px;
     border-radius: 999px;
     background: #e9e1cf;
@@ -432,6 +456,11 @@ a {
 .toolbar {
     margin-bottom: 14px;
     flex-wrap: wrap;
+}
+
+.page-nav {
+    margin-bottom: 0;
+    justify-content: flex-end;
 }
 
 input[type="text"],
@@ -627,6 +656,12 @@ textarea {
     margin-top: 18px;
 }
 
+.helper-copy {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.7;
+}
+
 .primary-btn,
 .secondary-btn,
 .ghost-btn,
@@ -662,9 +697,49 @@ textarea {
     color: var(--text);
 }
 
+.subtle-link {
+    border-style: dashed;
+}
+
 .warn-btn {
     background: var(--warn);
     color: #fff;
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+    transform: none;
+}
+
+.answer-box {
+    padding: 18px;
+    border-radius: 16px;
+    border: 1px solid rgba(122, 103, 72, 0.12);
+    background: linear-gradient(180deg, #fff, #fbf7ef);
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.8;
+    min-height: 180px;
+}
+
+.source-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+}
+
+.source-card {
+    padding: 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(122, 103, 72, 0.12);
+    background: linear-gradient(180deg, #fff, #fcfaf5);
+}
+
+.source-snippet {
+    margin: 12px 0 0;
+    line-height: 1.7;
+    color: var(--muted);
 }
 
 .global-status {
@@ -705,6 +780,15 @@ textarea {
 
     .page-header h1 {
         font-size: 30px;
+    }
+
+    .header-actions-stack,
+    .health-inline {
+        align-items: stretch;
+    }
+
+    .health-note {
+        text-align: left;
     }
 
     .dashboard-story h3 {

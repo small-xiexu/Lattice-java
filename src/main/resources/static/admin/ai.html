@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lattice AI 接入</title>
+    <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+<div class="page-shell">
+    <header class="page-header">
+        <div>
+            <p class="eyebrow">Lattice Internal Console</p>
+            <h1>AI 接入</h1>
+            <p class="header-copy">这里只保留连接、模型和 Agent 绑定，不暴露价格、备注、操作人等非必要字段。</p>
+        </div>
+        <div class="header-actions header-actions-stack">
+            <nav class="tab-row page-nav">
+                <a class="tab-btn" href="/admin">知识库管理</a>
+                <a class="tab-btn" href="/admin/ask">知识问答</a>
+                <a class="tab-btn active" href="/admin/ai">AI 接入</a>
+            </nav>
+            <div class="header-actions">
+                <button id="refresh-ai" class="secondary-btn" type="button">刷新配置</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-main">
+        <section class="panel">
+            <div class="panel-title-row">
+                <div>
+                    <h2>新增或修改配置</h2>
+                    <p>连接负责接入平台，模型决定能力，Agent 绑定负责把不同角色路由到对应模型。</p>
+                </div>
+            </div>
+
+            <div class="compile-layout top-gap">
+                <div class="sub-panel">
+                    <h3>连接</h3>
+                    <div class="form-grid top-gap">
+                        <input id="llm-connection-id" type="hidden">
+                        <label>
+                            <span>连接名称</span>
+                            <input id="llm-connection-code" type="text" placeholder="openai-main">
+                        </label>
+                        <label>
+                            <span>Provider 类型</span>
+                            <select id="llm-provider-type">
+                                <option value="openai">openai</option>
+                                <option value="anthropic">anthropic</option>
+                                <option value="openai_compatible">openai_compatible</option>
+                                <option value="ollama">ollama</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>Base URL</span>
+                            <input id="llm-base-url" type="text" placeholder="https://api.openai.com">
+                        </label>
+                        <label>
+                            <span>API Key（更新时留空表示不修改）</span>
+                            <input id="llm-api-key" type="text" placeholder="sk-...">
+                        </label>
+                        <label class="checkbox-row">
+                            <input id="llm-connection-enabled" type="checkbox" checked>
+                            <span>启用该连接</span>
+                        </label>
+                    </div>
+                    <div class="button-row wrap top-gap">
+                        <button id="save-llm-connection" class="primary-btn" type="button">保存连接</button>
+                        <button id="reset-llm-connection" class="ghost-btn" type="button">清空</button>
+                    </div>
+                </div>
+
+                <div class="sub-panel">
+                    <h3>模型</h3>
+                    <div class="form-grid top-gap">
+                        <input id="llm-model-id" type="hidden">
+                        <label>
+                            <span>所属连接</span>
+                            <select id="llm-model-connection-id"></select>
+                        </label>
+                        <label>
+                            <span>模型名称</span>
+                            <input id="llm-model-name" type="text" placeholder="gpt-5.4">
+                        </label>
+                        <label>
+                            <span>模型类型</span>
+                            <select id="llm-model-kind">
+                                <option value="CHAT">CHAT</option>
+                                <option value="EMBEDDING">EMBEDDING</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>Embedding 维度</span>
+                            <input id="llm-model-expected-dimensions" type="text" placeholder="1536">
+                        </label>
+                        <label class="checkbox-row">
+                            <input id="llm-model-enabled" type="checkbox" checked>
+                            <span>启用该模型</span>
+                        </label>
+                    </div>
+                    <div class="button-row wrap top-gap">
+                        <button id="save-llm-model" class="primary-btn" type="button">保存模型</button>
+                        <button id="reset-llm-model" class="ghost-btn" type="button">清空</button>
+                    </div>
+                </div>
+
+                <div class="sub-panel">
+                    <h3>Agent 绑定</h3>
+                    <p class="muted">路由标签会自动生成，无需手动填写。</p>
+                    <div class="form-grid top-gap">
+                        <input id="llm-binding-id" type="hidden">
+                        <label>
+                            <span>场景</span>
+                            <select id="llm-binding-scene">
+                                <option value="compile">compile</option>
+                                <option value="query">query</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>Agent 角色</span>
+                            <select id="llm-binding-agent-role"></select>
+                        </label>
+                        <label>
+                            <span>绑定模型</span>
+                            <select id="llm-binding-primary-model-id"></select>
+                        </label>
+                        <label class="checkbox-row">
+                            <input id="llm-binding-enabled" type="checkbox" checked>
+                            <span>启用该绑定</span>
+                        </label>
+                    </div>
+                    <div class="button-row wrap top-gap">
+                        <button id="save-llm-binding" class="primary-btn" type="button">保存绑定</button>
+                        <button id="reset-llm-binding" class="ghost-btn" type="button">清空</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-title-row">
+                <div>
+                    <h2>当前配置</h2>
+                    <p>修改只影响新任务，运行中的编译和问答仍然继续使用各自冻结的快照。</p>
+                </div>
+            </div>
+
+            <div class="sub-panel top-gap">
+                <h3>连接列表</h3>
+                <div id="llm-connection-list" class="top-gap"></div>
+            </div>
+
+            <div class="sub-panel top-gap">
+                <h3>模型列表</h3>
+                <div id="llm-model-list" class="top-gap"></div>
+            </div>
+
+            <div class="sub-panel top-gap">
+                <h3>Agent 绑定列表</h3>
+                <div id="llm-binding-list" class="top-gap"></div>
+            </div>
+        </section>
+    </main>
+
+    <div id="global-status" class="global-status">准备就绪</div>
+    <pre id="global-result" class="global-result">最近配置结果会显示在这里</pre>
+</div>
+<script src="/admin/ai.js"></script>
+</body>
+</html>

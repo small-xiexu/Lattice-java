@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lattice 知识库控制台</title>
+    <title>Lattice 知识库管理</title>
     <link rel="stylesheet" href="/admin/admin.css">
 </head>
 <body>
@@ -11,658 +11,162 @@
     <header class="page-header">
         <div>
             <p class="eyebrow">Lattice Knowledge Console</p>
-            <h1>知识库控制台</h1>
-            <p class="header-copy">先看知识资产、待处理项和健康度，再进入文章、编译和治理操作。</p>
+            <h1>知识库管理</h1>
+            <p class="header-copy">上传资料、触发同步、查看处理状态，并浏览已经整理进知识库的内容。</p>
         </div>
-        <div class="header-actions">
-            <button id="refresh-all" class="secondary-btn" type="button">刷新工作台</button>
-            <a class="ghost-link" href="/actuator/health" target="_blank" rel="noreferrer">健康检查</a>
+        <div class="header-actions header-actions-stack">
+            <nav class="tab-row page-nav">
+                <a class="tab-btn active" href="/admin">知识库管理</a>
+                <a class="tab-btn" href="/admin/ask">知识问答</a>
+            </nav>
+            <div class="header-actions">
+                <button id="refresh-page" class="secondary-btn" type="button">刷新页面</button>
+                <button id="refresh-health" class="ghost-btn" type="button">刷新健康</button>
+                <div class="health-inline" aria-live="polite">
+                    <span id="health-indicator" class="badge warning">检查中</span>
+                    <span id="health-indicator-note" class="health-note">页面会直接显示服务状态</span>
+                </div>
+            </div>
         </div>
     </header>
 
     <main class="page-main">
-        <section class="panel dashboard-panel">
+        <section class="panel">
             <div class="panel-title-row">
                 <div>
-                    <h2>知识库总览</h2>
-                    <p>把首页留给资产、待办和知识健康，而不是底层运行细节。</p>
+                    <h2>当前状态</h2>
+                    <p>前期只有一个知识库，先把资料导进去，再确认处理结果是否完成。</p>
                 </div>
-                <button id="refresh-overview" class="ghost-btn" type="button">刷新</button>
+                <button id="refresh-summary" class="ghost-btn" type="button">刷新状态</button>
             </div>
-
-            <div class="dashboard-grid">
-                <div class="dashboard-stage">
-                    <div class="dashboard-story">
-                        <p class="section-kicker">当前状态</p>
-                        <h3 id="overview-story-title">知识库尚未初始化</h3>
-                        <p id="overview-story-copy" class="story-copy">导入源文件并执行编译后，这里会开始显示知识资产、待办和健康信号。</p>
-                    </div>
-                    <div id="overview-cards" class="metric-grid spotlight-grid"></div>
-                </div>
-                <div class="sub-panel focus-panel">
-                    <div class="panel-title-row compact-row">
-                        <div>
-                            <h3>当前优先处理</h3>
-                            <p>把注意力留给待处理反馈和人工复核项。</p>
-                        </div>
-                        <button class="ghost-btn jump-btn" data-jump-tab="pending" type="button">查看待处理</button>
-                    </div>
-                    <div id="overview-focus" class="focus-list"></div>
-                </div>
-            </div>
-
-            <div class="overview-lower">
-                <div class="sub-panel">
-                    <div class="panel-title-row compact-row">
-                        <div>
-                            <h3>知识健康</h3>
-                            <p>审查、覆盖和近 7 天变化。</p>
-                        </div>
-                    </div>
-                    <div id="health-cards" class="metric-grid compact"></div>
-                </div>
-
-                <div class="sub-panel">
-                    <div class="panel-title-row compact-row">
-                        <div>
-                            <h3>快速动作</h3>
-                            <p>按当前工作流直接跳转。</p>
-                        </div>
-                    </div>
-                    <div class="quick-action-grid">
-                        <button class="action-card" data-jump-tab="articles" type="button">
-                            <span class="action-kicker">知识浏览</span>
-                            <strong>管理文章</strong>
-                            <p>按标题、摘要或概念 ID 浏览和维护知识条目。</p>
-                        </button>
-                        <button class="action-card" data-jump-tab="pending" type="button">
-                            <span class="action-kicker">反馈闭环</span>
-                            <strong>处理待反馈</strong>
-                            <p>修正、确认或丢弃待处理问答，把反馈沉淀进知识库。</p>
-                        </button>
-                        <button class="action-card" data-jump-tab="compile" type="button">
-                            <span class="action-kicker">知识导入</span>
-                            <strong>编译与重建</strong>
-                            <p>从目录或上传文件进入知识库，并执行知识切片与知识仓维护。</p>
-                        </button>
-                        <button class="action-card" data-jump-tab="governance" type="button">
-                            <span class="action-kicker">质量修复</span>
-                            <strong>治理操作</strong>
-                            <p>运行规则巡检、质量检查、版本回滚和链接增强等治理工具。</p>
-                        </button>
-                    </div>
-                </div>
-            </div>
+            <div id="summary-cards" class="metric-grid top-gap"></div>
         </section>
 
-        <section class="panel workspace-panel">
-            <div class="workspace-header">
+        <section class="panel">
+            <div class="panel-title-row">
                 <div>
-                    <h2>知识运营工作区</h2>
-                    <p>围绕文章、反馈、导入和治理的日常操作区。</p>
-                </div>
-                <div class="tab-row workspace-tabs">
-                    <button class="tab-btn active" data-tab="articles" type="button">知识文章</button>
-                    <button class="tab-btn" data-tab="pending" type="button">待处理反馈</button>
-                    <button class="tab-btn" data-tab="compile" type="button">编译导入</button>
-                    <button class="tab-btn" data-tab="llm" type="button">LLM 配置</button>
-                    <button class="tab-btn" data-tab="governance" type="button">治理修复</button>
+                    <h2>资料导入</h2>
+                    <p>支持直接上传文件，也支持对一个已有目录发起同步。</p>
                 </div>
             </div>
 
-            <div id="tab-articles" class="tab-panel active">
-                <div class="toolbar">
-                    <input id="article-query" type="text" placeholder="按标题、摘要或概念 ID 搜索">
-                    <select id="article-lifecycle">
-                        <option value="">全部生命周期</option>
-                        <option value="ACTIVE">生效中（ACTIVE / active）</option>
-                        <option value="DEPRECATED">已废弃（DEPRECATED / deprecated）</option>
-                        <option value="ARCHIVED">已归档（ARCHIVED / archived）</option>
-                    </select>
-                    <button id="search-articles" class="primary-btn" type="button">查询文章</button>
-                </div>
-                <div class="two-column">
-                    <div class="list-panel">
-                        <div class="list-header">
-                            <h3>文章列表</h3>
-                            <span id="article-count" class="pill">0</span>
-                        </div>
-                        <div id="article-list" class="scroll-list"></div>
-                    </div>
-                    <div class="detail-panel">
-                        <div class="detail-header">
-                            <div>
-                                <h3 id="article-detail-title">请选择一篇文章</h3>
-                                <p id="article-detail-meta" class="muted"></p>
-                            </div>
-                            <div class="detail-actions">
-                                <button class="ghost-btn lifecycle-btn" data-action="activate" type="button">激活</button>
-                                <button class="ghost-btn lifecycle-btn" data-action="deprecate" type="button">废弃</button>
-                                <button class="ghost-btn lifecycle-btn" data-action="archive" type="button">归档</button>
-                            </div>
-                        </div>
-                        <div id="article-detail-summary" class="summary-box">暂无摘要</div>
-                        <div class="detail-meta-grid">
-                            <div>
-                                <h4>来源</h4>
-                                <div id="article-sources" class="tag-list"></div>
-                            </div>
-                            <div>
-                                <h4>关系</h4>
-                                <div id="article-relations" class="tag-list"></div>
-                            </div>
-                        </div>
-                        <div class="detail-body">
-                            <h4>正文</h4>
-                            <pre id="article-content" class="code-view">暂无内容</pre>
-                        </div>
-                        <div class="detail-body">
-                            <h4>元数据</h4>
-                            <pre id="article-metadata" class="code-view">暂无元数据</pre>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="tab-pending" class="tab-panel">
-                <div class="panel-title-row">
-                    <div>
-                        <h3>待处理反馈</h3>
-                        <p>对问答结果做修正、确认或丢弃，完成反馈闭环。</p>
-                    </div>
-                    <button id="refresh-pending" class="ghost-btn" type="button">刷新</button>
-                </div>
-                <div id="pending-list" class="pending-grid"></div>
-            </div>
-
-            <div id="tab-compile" class="tab-panel">
-                <div class="compile-layout">
-                    <div class="sub-panel">
-                        <h3>导入源目录</h3>
-                        <div class="form-grid">
-                            <label>
-                                <span>源目录</span>
-                                <input id="compile-source-dir" type="text" placeholder="/path/to/source-dir">
-                            </label>
-                            <label>
-                                <span>处理流程</span>
-                                <select id="compile-mode">
-                                    <option value="state_graph">图式流程（默认）</option>
-                                </select>
-                            </label>
-                            <label class="checkbox-row">
-                                <input id="compile-incremental" type="checkbox">
-                                <span>增量编译</span>
-                            </label>
-                            <label class="checkbox-row">
-                                <input id="compile-async" type="checkbox" checked>
-                                <span>异步执行</span>
-                            </label>
-                        </div>
-                        <div class="button-row">
-                            <button id="submit-compile-job" class="primary-btn" type="button">开始目录导入</button>
-                        </div>
-                    </div>
-
-                    <div class="sub-panel">
-                        <h3>上传资料并导入</h3>
-                        <div class="form-grid">
-                            <label class="file-picker">
-                                <span>选择文件</span>
-                                <input id="compile-files" type="file" multiple>
-                            </label>
-                            <label>
-                                <span>处理流程</span>
-                                <select id="upload-compile-mode">
-                                    <option value="state_graph">图式流程（默认）</option>
-                                </select>
-                            </label>
-                            <label class="checkbox-row">
-                                <input id="upload-incremental" type="checkbox">
-                                <span>增量编译</span>
-                            </label>
-                            <label class="checkbox-row">
-                                <input id="upload-async" type="checkbox" checked>
-                                <span>异步执行</span>
-                            </label>
-                        </div>
-                        <div class="button-row">
-                            <button id="submit-upload-job" class="primary-btn" type="button">上传并开始导入</button>
-                        </div>
-                    </div>
-
-                    <div class="sub-panel">
-                        <h3>知识切片维护</h3>
-                        <p class="muted">基于当前文章与源文件正文，重建检索所需的知识切片。</p>
-                        <div class="button-row">
-                            <button id="rebuild-chunks" class="warn-btn" type="button">重建知识切片</button>
-                        </div>
-                        <pre id="rebuild-result" class="code-view compact">尚未执行重建</pre>
-                    </div>
-
-                    <div class="sub-panel">
-                        <h3>向量索引维护</h3>
-                        <p class="muted">在后台保存 query 向量配置，查看 `article_vector_index` 当前状态，并在需要时执行全量补齐或重建。</p>
-                        <div class="form-grid">
-                            <label class="checkbox-row">
-                                <input id="vector-config-enabled" type="checkbox">
-                                <span>启用向量检索</span>
-                            </label>
-                            <label>
-                                <span>Embedding Profile</span>
-                                <select id="vector-config-profile-id">
-                                    <option value="">请先在 LLM 配置中创建 EMBEDDING 模型</option>
-                                </select>
-                            </label>
-                            <label>
-                                <span>Provider 类型</span>
-                                <input id="vector-config-provider" type="text" placeholder="自动带出" readonly>
-                            </label>
-                            <label>
-                                <span>模型名称</span>
-                                <input id="vector-config-model-name" type="text" placeholder="自动带出" readonly>
-                            </label>
-                            <label>
-                                <span>Profile 维度</span>
-                                <input id="vector-config-profile-dimensions" type="text" placeholder="自动带出" readonly>
-                            </label>
-                            <label>
-                                <span>配置操作人</span>
-                                <input id="vector-config-operator" type="text" value="admin">
-                            </label>
-                        </div>
-                        <div class="form-grid">
-                            <label>
-                                <span>操作人</span>
-                                <input id="vector-rebuild-operator" type="text" value="admin">
-                            </label>
-                            <label class="checkbox-row">
-                                <input id="vector-truncate-first" type="checkbox">
-                                <span>先清空旧向量再重建</span>
-                            </label>
-                        </div>
-                        <div class="button-row wrap">
-                            <button id="load-vector-config" class="ghost-btn" type="button">加载向量配置</button>
-                            <button id="save-vector-config" class="primary-btn" type="button">保存向量配置</button>
-                            <button id="refresh-vector-status" class="ghost-btn" type="button">刷新向量状态</button>
-                            <button id="rebuild-vector-index" class="warn-btn" type="button">重建向量索引</button>
-                        </div>
-                        <pre id="vector-config-result" class="code-view compact">尚未加载向量配置</pre>
-                        <pre id="vector-status-view" class="code-view compact">尚未加载向量索引状态</pre>
-                        <pre id="vector-rebuild-result" class="code-view compact">尚未执行向量索引重建</pre>
-                    </div>
-
-                    <div class="sub-panel">
-                        <h3>检索融合配置</h3>
-                        <p class="muted">调整并行召回和各通道权重，保存后立即影响 Query 图融合策略。</p>
-                        <div class="form-grid">
-                            <label class="checkbox-row">
-                                <input id="retrieval-config-parallel-enabled" type="checkbox" checked>
-                                <span>启用并行召回</span>
-                            </label>
-                            <label>
-                                <span>FTS 权重</span>
-                                <input id="retrieval-config-fts-weight" type="number" min="0" step="0.1" value="1.0">
-                            </label>
-                            <label>
-                                <span>Source 权重</span>
-                                <input id="retrieval-config-source-weight" type="number" min="0" step="0.1" value="1.0">
-                            </label>
-                            <label>
-                                <span>Contribution 权重</span>
-                                <input id="retrieval-config-contribution-weight" type="number" min="0" step="0.1" value="1.0">
-                            </label>
-                            <label>
-                                <span>文章向量权重</span>
-                                <input id="retrieval-config-article-vector-weight" type="number" min="0" step="0.1" value="0.6">
-                            </label>
-                            <label>
-                                <span>Chunk 向量权重</span>
-                                <input id="retrieval-config-chunk-vector-weight" type="number" min="0" step="0.1" value="1.2">
-                            </label>
-                            <label>
-                                <span>RRF K</span>
-                                <input id="retrieval-config-rrf-k" type="number" min="1" step="1" value="60">
-                            </label>
-                        </div>
-                        <div class="button-row wrap">
-                            <button id="load-retrieval-config" class="ghost-btn" type="button">加载检索配置</button>
-                            <button id="save-retrieval-config" class="primary-btn" type="button">保存检索配置</button>
-                        </div>
-                        <pre id="retrieval-config-result" class="code-view compact">尚未加载检索配置</pre>
-                    </div>
-
-                    <div class="sub-panel">
-                        <h3>知识仓同步</h3>
-                        <div class="form-grid">
-                            <label>
-                                <span>知识仓目录</span>
-                                <input id="vault-dir" type="text" placeholder="/path/to/vault">
-                            </label>
-                            <label>
-                                <span>版本快照 ID</span>
-                                <input id="repo-snapshot-id" type="text" placeholder="例如 42">
-                            </label>
-                            <label class="checkbox-row">
-                                <input id="vault-sync-force" type="checkbox">
-                                <span>强制覆盖知识仓</span>
-                            </label>
-                        </div>
-                        <div class="button-row wrap">
-                            <button id="admin-vault-export" class="primary-btn" type="button">导出知识仓</button>
-                            <button id="admin-vault-sync" class="ghost-btn" type="button">回写知识仓</button>
-                            <button id="admin-repo-diff" class="ghost-btn" type="button">查看版本差异</button>
-                            <button id="admin-repo-rollback" class="warn-btn" type="button">整库回滚</button>
-                        </div>
-                        <pre id="vault-admin-result" class="code-view compact">尚未执行知识仓 / 版本操作</pre>
-                    </div>
-                </div>
-
-                <div class="panel-title-row top-gap">
-                    <div>
-                        <h3>编译作业</h3>
-                        <p>查看任务状态、失败原因，并在必要时重试。</p>
-                    </div>
-                    <button id="refresh-jobs" class="ghost-btn" type="button">刷新</button>
-                </div>
-                <div id="job-list" class="job-list"></div>
-            </div>
-
-            <div id="tab-llm" class="tab-panel">
-                <div class="panel-title-row">
-                    <div>
-                        <h3>模型池与 Agent 绑定</h3>
-                        <p>在后台管理 Provider 连接、模型参数以及 compile / query 两侧 Agent 绑定。修改只影响新任务，运行中的任务继续使用启动时快照。</p>
-                    </div>
-                    <button id="refresh-llm" class="ghost-btn" type="button">刷新配置</button>
-                </div>
-
-                <div class="compile-layout">
-                    <div class="sub-panel">
-                        <h3>连接配置</h3>
-                        <div class="form-grid">
-                            <input id="llm-connection-id" type="hidden">
-                            <label>
-                                <span>连接编码</span>
-                                <input id="llm-connection-code" type="text" placeholder="openai-main">
-                            </label>
-                            <label>
-                                <span>Provider 类型</span>
-                                <select id="llm-provider-type">
-                                    <option value="openai">openai</option>
-                                    <option value="anthropic">anthropic</option>
-                                    <option value="openai_compatible">openai_compatible</option>
-                                    <option value="ollama">ollama</option>
-                                </select>
-                            </label>
-                            <label>
-                                <span>Base URL</span>
-                                <input id="llm-base-url" type="text" placeholder="https://api.openai.com">
-                            </label>
-                            <label>
-                                <span>API Key（更新时留空表示不改）</span>
-                                <input id="llm-api-key" type="text" placeholder="sk-...">
-                            </label>
-                            <label>
-                                <span>备注</span>
-                                <input id="llm-connection-remarks" type="text" placeholder="主生产连接">
-                            </label>
-                            <label>
-                                <span>操作人</span>
-                                <input id="llm-connection-operator" type="text" value="admin">
-                            </label>
-                            <label class="checkbox-row">
-                                <input id="llm-connection-enabled" type="checkbox" checked>
-                                <span>启用该连接</span>
-                            </label>
-                        </div>
-                        <div class="button-row wrap">
-                            <button id="save-llm-connection" class="primary-btn" type="button">保存连接</button>
-                            <button id="reset-llm-connection" class="ghost-btn" type="button">清空表单</button>
-                        </div>
-                        <div id="llm-connection-list" class="top-gap"></div>
-                    </div>
-
-                    <div class="sub-panel">
-                        <h3>模型配置</h3>
-                        <div class="form-grid">
-                            <input id="llm-model-id" type="hidden">
-                            <label>
-                                <span>模型编码</span>
-                                <input id="llm-model-code" type="text" placeholder="gpt54-compile">
-                            </label>
-                            <label>
-                                <span>关联连接</span>
-                                <select id="llm-model-connection-id"></select>
-                            </label>
-                            <label>
-                                <span>模型名称</span>
-                                <input id="llm-model-name" type="text" placeholder="gpt-5.4">
-                            </label>
-                            <label>
-                                <span>模型类型</span>
-                                <select id="llm-model-kind">
-                                    <option value="CHAT">CHAT</option>
-                                    <option value="EMBEDDING">EMBEDDING</option>
-                                </select>
-                            </label>
-                            <label>
-                                <span>Embedding 维度</span>
-                                <input id="llm-model-expected-dimensions" type="text" placeholder="1536">
-                            </label>
-                            <label>
-                                <span>Temperature</span>
-                                <input id="llm-model-temperature" type="text" placeholder="0.2">
-                            </label>
-                            <label>
-                                <span>Max Tokens</span>
-                                <input id="llm-model-max-tokens" type="text" placeholder="4096">
-                            </label>
-                            <label>
-                                <span>Timeout Seconds</span>
-                                <input id="llm-model-timeout-seconds" type="text" placeholder="300">
-                            </label>
-                            <label>
-                                <span>输入单价（美元 / 1k token）</span>
-                                <input id="llm-model-input-price" type="text" placeholder="0.002500">
-                            </label>
-                            <label>
-                                <span>输出单价（美元 / 1k token）</span>
-                                <input id="llm-model-output-price" type="text" placeholder="0.010000">
-                            </label>
-                            <label>
-                                <span>扩展参数 JSON</span>
-                                <textarea id="llm-model-extra-options" placeholder="{&quot;top_p&quot;:0.9}"></textarea>
-                            </label>
-                            <label>
-                                <span>备注</span>
-                                <input id="llm-model-remarks" type="text" placeholder="compile 主模型">
-                            </label>
-                            <label>
-                                <span>操作人</span>
-                                <input id="llm-model-operator" type="text" value="admin">
-                            </label>
-                            <label class="checkbox-row">
-                                <input id="llm-model-enabled" type="checkbox" checked>
-                                <span>启用该模型</span>
-                            </label>
-                            <label class="checkbox-row">
-                                <input id="llm-model-supports-dimension-override" type="checkbox">
-                                <span>支持维度覆盖</span>
-                            </label>
-                        </div>
-                        <div class="button-row wrap">
-                            <button id="save-llm-model" class="primary-btn" type="button">保存模型</button>
-                            <button id="reset-llm-model" class="ghost-btn" type="button">清空表单</button>
-                        </div>
-                        <div id="llm-model-list" class="top-gap"></div>
-                    </div>
-
-                    <div class="sub-panel">
-                        <h3>Agent 绑定</h3>
-                        <div class="form-grid">
-                            <input id="llm-binding-id" type="hidden">
-                            <label>
-                                <span>场景</span>
-                                <select id="llm-binding-scene">
-                                    <option value="compile">compile</option>
-                                    <option value="query">query</option>
-                                </select>
-                            </label>
-                            <label>
-                                <span>Agent 角色</span>
-                                <select id="llm-binding-agent-role">
-                                    <option value="writer">writer</option>
-                                    <option value="reviewer">reviewer</option>
-                                    <option value="fixer">fixer</option>
-                                    <option value="answer">answer</option>
-                                    <option value="rewrite">rewrite</option>
-                                </select>
-                            </label>
-                            <label>
-                                <span>主模型</span>
-                                <select id="llm-binding-primary-model-id"></select>
-                            </label>
-                            <label>
-                                <span>备用模型（V1 预留）</span>
-                                <select id="llm-binding-fallback-model-id">
-                                    <option value="">不配置</option>
-                                </select>
-                            </label>
-                            <label>
-                                <span>路由标签</span>
-                                <input id="llm-binding-route-label" type="text" placeholder="compile.writer.gpt54">
-                            </label>
-                            <label>
-                                <span>备注</span>
-                                <input id="llm-binding-remarks" type="text" placeholder="新任务生效">
-                            </label>
-                            <label>
-                                <span>操作人</span>
-                                <input id="llm-binding-operator" type="text" value="admin">
-                            </label>
-                            <label class="checkbox-row">
-                                <input id="llm-binding-enabled" type="checkbox" checked>
-                                <span>启用该绑定</span>
-                            </label>
-                        </div>
-                        <div class="button-row wrap">
-                            <button id="save-llm-binding" class="primary-btn" type="button">保存绑定</button>
-                            <button id="reset-llm-binding" class="ghost-btn" type="button">清空表单</button>
-                        </div>
-                        <div id="llm-binding-list" class="top-gap"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="tab-governance" class="tab-panel">
-                <div class="panel-title-row">
-                    <div>
-                        <h3>知识治理工具</h3>
-                        <p>围绕规则巡检、质量趋势、覆盖缺口、人工核查、版本回滚与链接增强开展治理。</p>
-                    </div>
-                    <button id="refresh-governance" class="ghost-btn" type="button">刷新治理数据</button>
-                </div>
-
-                <div class="tab-row sub-tabs">
-                    <button class="tab-btn active" data-governance-tab="lint" type="button">规则巡检</button>
-                    <button class="tab-btn" data-governance-tab="quality" type="button">质量趋势</button>
-                    <button class="tab-btn" data-governance-tab="coverage" type="button">覆盖缺口</button>
-                    <button class="tab-btn" data-governance-tab="inspect" type="button">人工核查</button>
-                    <button class="tab-btn" data-governance-tab="snapshot" type="button">版本回滚</button>
-                    <button class="tab-btn" data-governance-tab="link" type="button">链接增强</button>
-                </div>
-
-                <div id="governance-tab-lint" class="governance-panel active">
-                    <div class="sub-panel">
-                        <h3>规则巡检</h3>
-                        <div class="button-row wrap">
-                            <button id="run-lint" class="primary-btn" type="button">运行规则巡检</button>
-                            <button id="run-lint-fix" class="warn-btn" type="button">自动修复巡检项</button>
-                        </div>
-                        <pre id="governance-lint-result" class="code-view compact">尚未执行规则巡检</pre>
-                    </div>
-                </div>
-
-                <div id="governance-tab-quality" class="governance-panel">
-                    <div class="sub-panel">
-                        <h3>质量趋势</h3>
-                        <div class="button-row wrap">
-                            <button id="load-quality" class="primary-btn" type="button">加载质量趋势</button>
-                        </div>
-                        <pre id="governance-quality-result" class="code-view compact">尚未加载质量趋势</pre>
-                    </div>
-                </div>
-
-                <div id="governance-tab-coverage" class="governance-panel">
-                    <div class="sub-panel">
-                        <h3>覆盖缺口</h3>
-                        <div class="button-row wrap">
-                            <button id="load-coverage" class="primary-btn" type="button">加载覆盖率与遗漏</button>
-                        </div>
-                        <pre id="governance-coverage-result" class="code-view compact">尚未加载覆盖率 / 遗漏</pre>
-                    </div>
-                </div>
-
-                <div id="governance-tab-inspect" class="governance-panel">
-                    <div class="sub-panel">
-                        <h3>人工核查</h3>
-                        <div class="form-grid">
-                            <label>
-                                <span>核查记录 ID</span>
-                                <input id="inspection-id" type="text" placeholder="pending:queryId">
-                            </label>
-                            <label>
-                                <span>最终答案</span>
-                                <input id="inspection-answer" type="text" placeholder="输入最终答案">
-                            </label>
-                            <label>
-                                <span>确认人</span>
-                                <input id="inspection-confirmed-by" type="text" placeholder="admin">
-                            </label>
-                        </div>
-                        <div class="button-row wrap">
-                            <button id="load-inspect" class="primary-btn" type="button">加载核查项</button>
-                            <button id="import-inspection-answer" class="ghost-btn" type="button">导入最终答案</button>
-                        </div>
-                        <pre id="governance-inspect-result" class="code-view compact">尚未执行人工核查操作</pre>
-                    </div>
-                </div>
-
-                <div id="governance-tab-snapshot" class="governance-panel">
-                    <div class="sub-panel">
-                        <h3>版本 / 历史 / 回滚</h3>
-                        <div class="form-grid">
-                            <label>
-                                <span>文章概念 ID</span>
-                                <input id="article-snapshot-concept-id" type="text" placeholder="payment-timeout">
-                            </label>
-                            <label>
-                                <span>文章快照 ID</span>
-                                <input id="article-snapshot-id" type="text" placeholder="例如 12">
-                            </label>
-                        </div>
-                        <div class="button-row wrap">
-                            <button id="load-article-snapshots" class="ghost-btn" type="button">加载文章快照</button>
-                            <button id="load-article-history" class="ghost-btn" type="button">按文章加载历史</button>
-                            <button id="rollback-article" class="warn-btn" type="button">文章回滚</button>
-                            <button id="load-repo-snapshots" class="ghost-btn" type="button">加载整库快照</button>
-                        </div>
-                        <pre id="governance-snapshot-result" class="code-view compact">尚未执行版本查看或回滚操作</pre>
-                    </div>
-                </div>
-
-                <div id="governance-tab-link" class="governance-panel">
-                    <div class="sub-panel">
-                        <h3>链接增强</h3>
-                        <label class="checkbox-row">
-                            <input id="link-enhance-persist" type="checkbox">
-                            <span>持久化修复结果</span>
+            <div class="compile-layout top-gap">
+                <div class="sub-panel">
+                    <h3>上传资料</h3>
+                    <div class="form-grid top-gap">
+                        <label class="file-picker">
+                            <span>选择文件</span>
+                            <input id="compile-files" type="file" multiple>
                         </label>
-                        <div class="button-row wrap">
-                            <button id="run-link-enhance" class="primary-btn" type="button">执行链接增强</button>
+                        <label class="checkbox-row">
+                            <input id="upload-incremental" type="checkbox">
+                            <span>增量处理</span>
+                        </label>
+                        <label class="checkbox-row">
+                            <input id="upload-async" type="checkbox" checked>
+                            <span>后台执行</span>
+                        </label>
+                    </div>
+                    <div class="button-row wrap top-gap">
+                        <button id="submit-upload-job" class="primary-btn" type="button">上传并开始处理</button>
+                    </div>
+                </div>
+
+                <div class="sub-panel">
+                    <h3>目录同步</h3>
+                    <div class="form-grid top-gap">
+                        <label>
+                            <span>源目录</span>
+                            <input id="compile-source-dir" type="text" placeholder="/path/to/source-dir">
+                        </label>
+                        <label class="checkbox-row">
+                            <input id="compile-incremental" type="checkbox">
+                            <span>增量处理</span>
+                        </label>
+                        <label class="checkbox-row">
+                            <input id="compile-async" type="checkbox" checked>
+                            <span>后台执行</span>
+                        </label>
+                    </div>
+                    <div class="button-row wrap top-gap">
+                        <button id="submit-compile-job" class="primary-btn" type="button">开始目录同步</button>
+                    </div>
+                </div>
+
+                <div class="sub-panel">
+                    <h3>知识切片</h3>
+                    <p class="muted">当资料结构变化较大时，可以手动重建知识切片。</p>
+                    <div class="button-row wrap top-gap">
+                        <button id="rebuild-chunks" class="warn-btn" type="button">重建知识切片</button>
+                    </div>
+                    <pre id="rebuild-result" class="code-view compact top-gap">尚未执行重建</pre>
+                </div>
+            </div>
+
+            <div class="panel-title-row top-gap">
+                <div>
+                    <h3>处理状态</h3>
+                    <p>查看导入、同步和重建任务是否已完成。</p>
+                </div>
+                <button id="refresh-jobs" class="ghost-btn" type="button">刷新任务</button>
+            </div>
+            <div id="job-list" class="job-list top-gap"></div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-title-row">
+                <div>
+                    <h2>已入库内容</h2>
+                    <p>可以按标题、摘要或概念标识查找当前已经沉淀到知识库的条目。</p>
+                </div>
+                <a class="primary-btn" href="/admin/ask">去提问</a>
+            </div>
+
+            <div class="toolbar top-gap">
+                <input id="article-query" type="text" placeholder="按标题、摘要或概念 ID 搜索">
+                <select id="article-lifecycle">
+                    <option value="">全部状态</option>
+                    <option value="ACTIVE">生效中</option>
+                    <option value="DEPRECATED">已废弃</option>
+                    <option value="ARCHIVED">已归档</option>
+                </select>
+                <button id="search-articles" class="primary-btn" type="button">查询内容</button>
+            </div>
+
+            <div class="two-column">
+                <div class="list-panel">
+                    <div class="list-header">
+                        <h3>内容列表</h3>
+                        <span id="article-count" class="pill">0</span>
+                    </div>
+                    <div id="article-list" class="scroll-list top-gap"></div>
+                </div>
+
+                <div class="detail-panel">
+                    <div class="detail-header">
+                        <div>
+                            <h3 id="article-detail-title">请选择一条内容</h3>
+                            <p id="article-detail-meta" class="muted"></p>
                         </div>
-                        <pre id="governance-link-result" class="code-view compact">尚未执行链接增强</pre>
+                    </div>
+                    <div id="article-detail-summary" class="summary-box">暂无摘要</div>
+                    <div class="detail-meta-grid">
+                        <div>
+                            <h4>来源</h4>
+                            <div id="article-sources" class="tag-list"></div>
+                        </div>
+                        <div>
+                            <h4>关联信息</h4>
+                            <div id="article-relations" class="tag-list"></div>
+                        </div>
+                    </div>
+                    <div class="detail-body">
+                        <h4>正文</h4>
+                        <pre id="article-content" class="code-view">暂无内容</pre>
+                    </div>
+                    <div class="detail-body">
+                        <h4>元数据</h4>
+                        <pre id="article-metadata" class="code-view">暂无元数据</pre>
                     </div>
                 </div>
             </div>
@@ -672,6 +176,6 @@
     <div id="global-status" class="global-status">准备就绪</div>
     <pre id="global-result" class="global-result">最近操作结果会显示在这里</pre>
 </div>
-<script src="/admin/admin.js"></script>
+<script src="/admin/management.js"></script>
 </body>
 </html>

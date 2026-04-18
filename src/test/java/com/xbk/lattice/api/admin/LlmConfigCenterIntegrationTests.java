@@ -200,6 +200,59 @@ class LlmConfigCenterIntegrationTests {
         assertThat(rewriteRoute.orElseThrow().getRouteLabel()).isEqualTo("query.rewrite.gpt54");
     }
 
+    /**
+     * 验证精简后的内部页即使不提交 modelCode / routeLabel，也能由后台自动补齐。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldAutoGenerateModelCodeAndRouteLabelWhenUiOmitsAdvancedFields() throws Exception {
+        resetTables();
+        Long connectionId = createConnection("ask-main", "openai", "http://localhost:8888", "sk-auto-123456");
+
+        String modelResponseBody = mockMvc.perform(post("/api/v1/admin/llm/models")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"connectionId\":" + connectionId + ","
+                                + "\"modelName\":\"gpt-5.4\","
+                                + "\"modelKind\":\"CHAT\","
+                                + "\"enabled\":true"
+                                + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.modelCode").isNotEmpty())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        Long modelId = readLong(modelResponseBody, "id");
+        String modelCode = readString(modelResponseBody, "modelCode");
+
+        String bindingResponseBody = mockMvc.perform(post("/api/v1/admin/llm/bindings")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"scene\":\"query\","
+                                + "\"agentRole\":\"answer\","
+                                + "\"primaryModelProfileId\":" + modelId + ","
+                                + "\"enabled\":true"
+                                + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.routeLabel").value("query.answer." + modelCode))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        assertThat(readString(bindingResponseBody, "routeLabel")).isEqualTo("query.answer." + modelCode);
+
+        assertThat(executionLlmSnapshotService.freezeSnapshots("query_request", "query-auto", "query")).hasSize(1);
+        Optional<LlmRouteResolution> answerRoute = executionLlmSnapshotService.resolveRoute(
+                "query_request",
+                "query-auto",
+                "query",
+                "answer"
+        );
+        assertThat(answerRoute).isPresent();
+        assertThat(answerRoute.orElseThrow().getRouteLabel()).isEqualTo("query.answer." + modelCode);
+        assertThat(answerRoute.orElseThrow().getModelName()).isEqualTo("gpt-5.4");
+    }
+
     private Long createConnection(String code, String providerType, String baseUrl, String apiKey) throws Exception {
         String responseBody = mockMvc.perform(post("/api/v1/admin/llm/connections")
                         .contentType(APPLICATION_JSON)
@@ -278,6 +331,11 @@ class LlmConfigCenterIntegrationTests {
     private Long readLong(String json, String fieldName) throws Exception {
         JsonNode rootNode = objectMapper.readTree(json);
         return Long.valueOf(rootNode.path(fieldName).asLong());
+    }
+
+    private String readString(String json, String fieldName) throws Exception {
+        JsonNode rootNode = objectMapper.readTree(json);
+        return rootNode.path(fieldName).asText();
     }
 
     private void resetTables() {

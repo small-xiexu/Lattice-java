@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lattice 知识问答</title>
+    <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+<div class="page-shell">
+    <header class="page-header">
+        <div>
+            <p class="eyebrow">Lattice Knowledge Console</p>
+            <h1>知识问答</h1>
+            <p class="header-copy">直接输入问题，系统会基于当前知识库给出回答，并展示相关引用来源。</p>
+        </div>
+        <div class="header-actions header-actions-stack">
+            <nav class="tab-row page-nav">
+                <a class="tab-btn" href="/admin">知识库管理</a>
+                <a class="tab-btn active" href="/admin/ask">知识问答</a>
+            </nav>
+            <div class="header-actions">
+                <button id="refresh-qa-status" class="secondary-btn" type="button">刷新状态</button>
+                <a class="ghost-link subtle-link" href="/admin/ai">内部维护：AI 接入</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-main">
+        <section class="panel">
+            <div class="panel-title-row">
+                <div>
+                    <h2>开始提问</h2>
+                    <p>前期只有一个知识库，不需要额外选择，直接问就可以。</p>
+                </div>
+            </div>
+            <p id="ask-ready-hint" class="helper-copy top-gap">正在检查知识库状态...</p>
+            <div class="form-grid top-gap">
+                <label>
+                    <span>你的问题</span>
+                    <textarea id="ask-question" placeholder="例如：退款申请提交后多久会到账？"></textarea>
+                </label>
+            </div>
+            <div class="button-row wrap top-gap">
+                <button id="submit-question" class="primary-btn" type="button">提问</button>
+                <button id="clear-question" class="ghost-btn" type="button">清空</button>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-title-row">
+                <div>
+                    <h2>回答结果</h2>
+                    <p>这里只展示最终回答，不暴露模型、路由、token 等底层细节。</p>
+                </div>
+            </div>
+            <div id="ask-answer" class="answer-box top-gap">还没有回答，先输入一个问题。</div>
+
+            <div class="panel-title-row top-gap">
+                <div>
+                    <h3>引用来源</h3>
+                    <p>帮助判断回答的依据是否可靠。</p>
+                </div>
+            </div>
+            <div id="ask-sources" class="source-grid top-gap">
+                <div class="job-card">
+                    <p class="item-summary">还没有引用来源，先提交一个问题。</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="global-status" class="global-status">准备就绪</div>
+    <pre id="global-result" class="global-result">最近问答结果会显示在这里</pre>
+</div>
+<script src="/admin/ask.js"></script>
+</body>
+</html>

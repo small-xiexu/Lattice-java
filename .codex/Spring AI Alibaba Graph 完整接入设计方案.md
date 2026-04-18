@@ -41,6 +41,10 @@
   - 验收：已新增 `query_vector_settings` 表、`GET/PUT /api/v1/admin/vector/config` 与 `GET /api/v1/admin/vector/status`、`POST /api/v1/admin/vector/rebuild`，后台可查看并保存 query 向量开关、embedding 模型、期望维度。
   - 验收：已新增 `ConfiguredVectorEmbeddingService`，向量索引与向量检索会按后台配置把模型名与维度真正下发到运行时 embeddings 请求；配置变更时会返回 `rebuildRecommended` 与原因提示。
   - 验收：`mvn -q -s .codex/maven-settings.xml -Dmaven.repo.local=/Users/sxie/maven/repository -Dtest=AdminVectorConfigControllerTests,AdminVectorIndexControllerTests,AdminPageControllerTests,ArticleVectorIndexServiceTests,VectorSearchServiceTests,CompilePipelineVectorIndexingTests test` 通过。
+- [x] Phase 9：知识库用户页与 AI 接入页拆分收口
+  - 验收：已完成 `/admin` 用户页、`/admin/ask` 知识问答页、`/admin/ai` AI 接入页的静态资源拆分；用户页不再暴露 LLM 配置入口，AI 接入页仅保留连接、模型与 Agent 绑定 3 类能力。
+  - 验收：AI 接入页已移除价格、备注、操作人、JSON、温度、超时、fallback、route label 等表单项；后台已支持在未显式提交 `modelCode / routeLabel` 时自动补默认值，避免精简后的内部页仍被历史高级字段阻塞。
+  - 验收：`mvn -q -s .codex/maven-settings.xml -Dmaven.repo.local=/Users/sxie/maven/repository -Dtest=AdminPageControllerTests,LlmConfigCenterIntegrationTests test` 通过。
 
 ## 1. 文档目标
 

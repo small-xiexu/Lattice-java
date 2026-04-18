@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -261,7 +262,7 @@ public class AdminLlmConfigController {
         String operator = resolveOperator(request.getOperator());
         return new LlmModelProfile(
                 id,
-                request.getModelCode(),
+                resolveModelCode(request, existing),
                 request.getConnectionId(),
                 request.getModelName(),
                 normalizeModelKind(request.getModelKind()),
@@ -294,7 +295,7 @@ public class AdminLlmConfigController {
                 request.getAgentRole(),
                 request.getPrimaryModelProfileId(),
                 request.getFallbackModelProfileId(),
-                request.getRouteLabel(),
+                resolveRouteLabel(request, existing),
                 request.getEnabled() == null || request.getEnabled().booleanValue(),
                 request.getRemarks(),
                 existing.map(AgentModelBinding::getCreatedBy).orElse(operator),
@@ -369,6 +370,60 @@ public class AdminLlmConfigController {
         return StringUtils.hasText(extraOptionsJson) ? extraOptionsJson : "{}";
     }
 
+    private String resolveModelCode(
+            AdminLlmModelRequest request,
+            Optional<LlmModelProfile> existing
+    ) {
+        if (StringUtils.hasText(request.getModelCode())) {
+            return request.getModelCode().trim();
+        }
+        if (existing.isPresent() && StringUtils.hasText(existing.orElseThrow().getModelCode())) {
+            return existing.orElseThrow().getModelCode();
+        }
+        String baseCode = slugify(request.getModelName());
+        String modelKind = normalizeModelKind(request.getModelKind()).toLowerCase(Locale.ROOT);
+        String generated = baseCode + "-" + modelKind + "-" + request.getConnectionId();
+        return truncate(generated, 64);
+    }
+
+    private String resolveRouteLabel(
+            AdminLlmBindingRequest request,
+            Optional<AgentModelBinding> existing
+    ) {
+        if (StringUtils.hasText(request.getRouteLabel())) {
+            return request.getRouteLabel().trim();
+        }
+        if (existing.isPresent() && StringUtils.hasText(existing.orElseThrow().getRouteLabel())) {
+            return existing.orElseThrow().getRouteLabel();
+        }
+        String scene = request.getScene() == null ? "scene" : request.getScene().trim().toLowerCase(Locale.ROOT);
+        String agentRole = request.getAgentRole() == null
+                ? "agent"
+                : request.getAgentRole().trim().toLowerCase(Locale.ROOT);
+        String modelCode = llmConfigAdminService.findModelProfile(request.getPrimaryModelProfileId())
+                .map(LlmModelProfile::getModelCode)
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .orElse("model-" + request.getPrimaryModelProfileId());
+        return truncate(scene + "." + agentRole + "." + slugify(modelCode), 128);
+    }
+
+    private String slugify(String rawValue) {
+        if (!StringUtils.hasText(rawValue)) {
+            return "default";
+        }
+        String normalized = rawValue.trim().toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-");
+        normalized = normalized.replaceAll("^-+", "").replaceAll("-+$", "");
+        return StringUtils.hasText(normalized) ? normalized : "default";
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
+    }
+
     private void requireApiKey(String apiKey) {
         if (!StringUtils.hasText(apiKey)) {
             throw new IllegalArgumentException("apiKey不能为空");
@@ -388,9 +443,6 @@ public class AdminLlmConfigController {
     }
 
     private void validateModelRequest(AdminLlmModelRequest request) {
-        if (!StringUtils.hasText(request.getModelCode())) {
-            throw new IllegalArgumentException("modelCode不能为空");
-        }
         if (request.getConnectionId() == null) {
             throw new IllegalArgumentException("connectionId不能为空");
         }
@@ -423,9 +475,6 @@ public class AdminLlmConfigController {
         }
         if (request.getPrimaryModelProfileId() == null) {
             throw new IllegalArgumentException("primaryModelProfileId不能为空");
-        }
-        if (!StringUtils.hasText(request.getRouteLabel())) {
-            throw new IllegalArgumentException("routeLabel不能为空");
         }
     }
 
