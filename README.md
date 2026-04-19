@@ -590,17 +590,9 @@ curl http://127.0.0.1:8080/actuator/health
 
 - [`docs/项目全流程真实验收手册.md`](docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md)
 
-### 想知道 `.doc`、图片 OCR、文档解析后续怎么接
+### 想知道怎么启动并做第一轮回归
 
-- [`docs/文档解析与OCR接入技术方案.md`](docs/%E6%96%87%E6%A1%A3%E8%A7%A3%E6%9E%90%E4%B8%8EOCR%E6%8E%A5%E5%85%A5%E6%8A%80%E6%9C%AF%E6%96%B9%E6%A1%88.md)
-
-### 想知道资料源、统一上传、Git 同步和智能归并后续怎么做
-
-- [`docs/资料源管理与智能同步技术方案.md`](docs/%E8%B5%84%E6%96%99%E6%BA%90%E7%AE%A1%E7%90%86%E4%B8%8E%E6%99%BA%E8%83%BD%E5%90%8C%E6%AD%A5%E6%8A%80%E6%9C%AF%E6%96%B9%E6%A1%88.md)
-
-### 想知道为什么这样设计
-
-- [`.codex/Spring AI Alibaba Graph 完整接入设计方案.md`](.codex/Spring%20AI%20Alibaba%20Graph%20%E5%AE%8C%E6%95%B4%E6%8E%A5%E5%85%A5%E8%AE%BE%E8%AE%A1%E6%96%B9%E6%A1%88.md)
+- [`.codex/项目启动配置清单.md`](.codex/%E9%A1%B9%E7%9B%AE%E5%90%AF%E5%8A%A8%E9%85%8D%E7%BD%AE%E6%B8%85%E5%8D%95.md)
 
 ### 想知道数据库对象和实体关系
 
