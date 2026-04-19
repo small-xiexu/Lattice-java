@@ -43,12 +43,15 @@ public class ArticleJdbcRepository {
     public void upsert(ArticleRecord articleRecord) {
         String sql = """
                 insert into articles (
-                    concept_id, title, content, lifecycle, compiled_at, source_paths, metadata_json,
-                    summary, referential_keywords, depends_on, related, confidence, review_status
+                    source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
+                    source_paths, metadata_json, summary, referential_keywords, depends_on,
+                    related, confidence, review_status
                 )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                on conflict (concept_id) do update
-                set title = excluded.title,
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict (article_key) do update
+                set source_id = excluded.source_id,
+                    concept_id = excluded.concept_id,
+                    title = excluded.title,
                     content = excluded.content,
                     lifecycle = excluded.lifecycle,
                     compiled_at = excluded.compiled_at,
@@ -83,19 +86,21 @@ public class ArticleJdbcRepository {
             metadataJsonObject.setValue(articleRecord.getMetadataJson());
 
             java.sql.PreparedStatement preparedStatement = connection.prepareStatement(sql);
-            preparedStatement.setString(1, articleRecord.getConceptId());
-            preparedStatement.setString(2, articleRecord.getTitle());
-            preparedStatement.setString(3, articleRecord.getContent());
-            preparedStatement.setString(4, articleRecord.getLifecycle());
-            preparedStatement.setObject(5, articleRecord.getCompiledAt());
-            preparedStatement.setArray(6, sourcePathsArray);
-            preparedStatement.setObject(7, metadataJsonObject);
-            preparedStatement.setString(8, articleRecord.getSummary());
-            preparedStatement.setArray(9, referentialKeywordsArray);
-            preparedStatement.setArray(10, dependsOnArray);
-            preparedStatement.setArray(11, relatedArray);
-            preparedStatement.setString(12, articleRecord.getConfidence());
-            preparedStatement.setString(13, articleRecord.getReviewStatus());
+            preparedStatement.setObject(1, articleRecord.getSourceId());
+            preparedStatement.setString(2, articleRecord.getArticleKey());
+            preparedStatement.setString(3, articleRecord.getConceptId());
+            preparedStatement.setString(4, articleRecord.getTitle());
+            preparedStatement.setString(5, articleRecord.getContent());
+            preparedStatement.setString(6, articleRecord.getLifecycle());
+            preparedStatement.setObject(7, articleRecord.getCompiledAt());
+            preparedStatement.setArray(8, sourcePathsArray);
+            preparedStatement.setObject(9, metadataJsonObject);
+            preparedStatement.setString(10, articleRecord.getSummary());
+            preparedStatement.setArray(11, referentialKeywordsArray);
+            preparedStatement.setArray(12, dependsOnArray);
+            preparedStatement.setArray(13, relatedArray);
+            preparedStatement.setString(14, articleRecord.getConfidence());
+            preparedStatement.setString(15, articleRecord.getReviewStatus());
             return preparedStatement;
         });
     }
@@ -108,12 +113,59 @@ public class ArticleJdbcRepository {
      */
     public Optional<ArticleRecord> findByConceptId(String conceptId) {
         String sql = """
-                select concept_id, title, content, lifecycle, compiled_at, source_paths, metadata_json,
-                       summary, referential_keywords, depends_on, related, confidence, review_status
+                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
+                       source_paths, metadata_json, summary, referential_keywords, depends_on,
+                       related, confidence, review_status
                 from articles
                 where concept_id = ?
+                order by compiled_at desc, article_key asc
+                limit 1
                 """;
         List<ArticleRecord> articleRecords = jdbcTemplate.query(sql, this::mapArticleRecord, conceptId);
+        if (articleRecords.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(articleRecords.get(0));
+    }
+
+    /**
+     * 按文章唯一键查询文章。
+     *
+     * @param articleKey 文章唯一键
+     * @return 文章记录
+     */
+    public Optional<ArticleRecord> findByArticleKey(String articleKey) {
+        String sql = """
+                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
+                       source_paths, metadata_json, summary, referential_keywords, depends_on,
+                       related, confidence, review_status
+                from articles
+                where article_key = ?
+                """;
+        List<ArticleRecord> articleRecords = jdbcTemplate.query(sql, this::mapArticleRecord, articleKey);
+        if (articleRecords.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(articleRecords.get(0));
+    }
+
+    /**
+     * 按资料源与概念标识查询文章。
+     *
+     * @param sourceId 资料源主键
+     * @param conceptId 概念标识
+     * @return 文章记录
+     */
+    public Optional<ArticleRecord> findBySourceIdAndConceptId(Long sourceId, String conceptId) {
+        String sql = """
+                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
+                       source_paths, metadata_json, summary, referential_keywords, depends_on,
+                       related, confidence, review_status
+                from articles
+                where source_id = ?
+                  and concept_id = ?
+                """;
+        List<ArticleRecord> articleRecords = jdbcTemplate.query(sql, this::mapArticleRecord, sourceId, conceptId);
         if (articleRecords.isEmpty()) {
             return Optional.empty();
         }
@@ -153,8 +205,9 @@ public class ArticleJdbcRepository {
      */
     public List<ArticleRecord> findWithUpstreamCorrections(String fromConceptId) {
         String sql = """
-                select concept_id, title, content, lifecycle, compiled_at, source_paths, metadata_json,
-                       summary, referential_keywords, depends_on, related, confidence, review_status
+                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
+                       source_paths, metadata_json, summary, referential_keywords, depends_on,
+                       related, confidence, review_status
                 from articles
                 where exists (
                     select 1
@@ -196,10 +249,11 @@ public class ArticleJdbcRepository {
      */
     public List<ArticleRecord> findAll() {
         String sql = """
-                select concept_id, title, content, lifecycle, compiled_at, source_paths, metadata_json,
-                       summary, referential_keywords, depends_on, related, confidence, review_status
+                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
+                       source_paths, metadata_json, summary, referential_keywords, depends_on,
+                       related, confidence, review_status
                 from articles
-                order by compiled_at desc, concept_id asc
+                order by source_id asc nulls first, compiled_at desc, article_key asc
                 """;
         return jdbcTemplate.query(sql, this::mapArticleRecord);
     }
@@ -222,7 +276,10 @@ public class ArticleJdbcRepository {
     private ArticleRecord mapArticleRecord(ResultSet resultSet, int rowNum) throws SQLException {
         OffsetDateTime compiledAt = resultSet.getObject("compiled_at", OffsetDateTime.class);
         List<String> sourcePaths = readSourcePaths(resultSet);
+        Object sourceId = resultSet.getObject("source_id");
         return new ArticleRecord(
+                sourceId == null ? null : resultSet.getLong("source_id"),
+                resultSet.getString("article_key"),
                 resultSet.getString("concept_id"),
                 resultSet.getString("title"),
                 resultSet.getString("content"),

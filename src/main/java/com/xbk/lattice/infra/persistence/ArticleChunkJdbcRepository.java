@@ -45,18 +45,67 @@ public class ArticleChunkJdbcRepository {
      * @param chunkTexts chunk 文本集合
      */
     public void replaceChunks(String conceptId, List<String> chunkTexts) {
-        String deleteSql = """
-                delete from article_chunks
-                where article_id = (select id from articles where concept_id = ?)
-                """;
-        jdbcTemplate.update(deleteSql, conceptId);
+        replaceChunks(null, conceptId, chunkTexts);
+    }
 
-        String insertSql = """
+    /**
+     * 按文章唯一键或 conceptId 替换文章 chunk。
+     *
+     * @param articleKey 文章唯一键
+     * @param conceptId 概念标识
+     * @param chunkTexts chunk 文本集合
+     */
+    public void replaceChunks(String articleKey, String conceptId, List<String> chunkTexts) {
+        if (jdbcTemplate == null) {
+            return;
+        }
+        boolean useArticleKey = hasText(articleKey);
+        String deleteSql = useArticleKey
+                ? """
+                delete from article_chunks
+                where article_id = (
+                    select id
+                    from articles
+                    where article_key = ?
+                    order by compiled_at desc, id desc
+                    limit 1
+                )
+                """
+                : """
+                delete from article_chunks
+                where article_id = (
+                    select id
+                    from articles
+                    where concept_id = ?
+                    order by compiled_at desc, id desc
+                    limit 1
+                )
+                """;
+        jdbcTemplate.update(deleteSql, useArticleKey ? articleKey : conceptId);
+
+        String insertSql = useArticleKey
+                ? """
                 insert into article_chunks (article_id, chunk_text, chunk_index)
-                values ((select id from articles where concept_id = ?), ?, ?)
+                values ((
+                    select id
+                    from articles
+                    where article_key = ?
+                    order by compiled_at desc, id desc
+                    limit 1
+                ), ?, ?)
+                """
+                : """
+                insert into article_chunks (article_id, chunk_text, chunk_index)
+                values ((
+                    select id
+                    from articles
+                    where concept_id = ?
+                    order by compiled_at desc, id desc
+                    limit 1
+                ), ?, ?)
                 """;
         for (int index = 0; index < chunkTexts.size(); index++) {
-            jdbcTemplate.update(insertSql, conceptId, chunkTexts.get(index), index);
+            jdbcTemplate.update(insertSql, useArticleKey ? articleKey : conceptId, chunkTexts.get(index), index);
         }
     }
 
@@ -67,12 +116,26 @@ public class ArticleChunkJdbcRepository {
      * @param content 文章正文
      */
     public void replaceChunksFromContent(String conceptId, String content) {
+        replaceChunksFromContent(null, conceptId, content);
+    }
+
+    /**
+     * 按文章正文替换语义分块。
+     *
+     * @param articleKey 文章唯一键
+     * @param conceptId 概念标识
+     * @param content 文章正文
+     */
+    public void replaceChunksFromContent(String articleKey, String conceptId, String content) {
+        if (jdbcTemplate == null) {
+            return;
+        }
         List<TextChunk> textChunks = semanticChunker.chunk(content, DEFAULT_MAX_CHARS, DEFAULT_OVERLAP_RATIO);
         List<String> chunkTexts = new ArrayList<String>();
         for (TextChunk textChunk : textChunks) {
             chunkTexts.add(textChunk.getText());
         }
-        replaceChunks(conceptId, chunkTexts);
+        replaceChunks(articleKey, conceptId, chunkTexts);
     }
 
     /**
@@ -89,7 +152,7 @@ public class ArticleChunkJdbcRepository {
         jdbcTemplate.execute("TRUNCATE TABLE article_chunks RESTART IDENTITY CASCADE");
         int rebuiltCount = 0;
         for (ArticleRecord articleRecord : articleRecords) {
-            replaceChunksFromContent(articleRecord.getConceptId(), articleRecord.getContent());
+            replaceChunksFromContent(articleRecord.getArticleKey(), articleRecord.getConceptId(), articleRecord.getContent());
             rebuiltCount++;
         }
         return rebuiltCount;
@@ -116,6 +179,9 @@ public class ArticleChunkJdbcRepository {
      * @return chunk 文本集合
      */
     public List<String> findChunkTexts(String conceptId) {
+        if (jdbcTemplate == null) {
+            return List.of();
+        }
         String sql = """
                 select ac.chunk_text
                 from article_chunks ac
@@ -133,6 +199,9 @@ public class ArticleChunkJdbcRepository {
      * @return chunk 记录列表
      */
     public List<ArticleChunkRecord> findByConceptId(String conceptId) {
+        if (jdbcTemplate == null) {
+            return List.of();
+        }
         String sql = """
                 select ac.id, ac.article_id, a.concept_id, ac.chunk_index, ac.chunk_text
                 from article_chunks ac
@@ -149,6 +218,9 @@ public class ArticleChunkJdbcRepository {
      * @return 全部 chunk 记录
      */
     public List<ArticleChunkRecord> findAllRecords() {
+        if (jdbcTemplate == null) {
+            return List.of();
+        }
         String sql = """
                 select ac.id, ac.article_id, a.concept_id, ac.chunk_index, ac.chunk_text
                 from article_chunks ac
@@ -173,5 +245,15 @@ public class ArticleChunkJdbcRepository {
                 resultSet.getInt("chunk_index"),
                 resultSet.getString("chunk_text")
         );
+    }
+
+    /**
+     * 判断文本是否有值。
+     *
+     * @param value 文本
+     * @return 是否有值
+     */
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

@@ -1,6 +1,7 @@
 package com.xbk.lattice.compiler.service;
 
-import com.xbk.lattice.compiler.model.MergedConcept;
+import com.xbk.lattice.compiler.domain.MergedConcept;
+import com.xbk.lattice.compiler.prompt.LatticePrompts;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 

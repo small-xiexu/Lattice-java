@@ -3,6 +3,10 @@ spring:
     name: lattice-app
   profiles:
     default: jdbc
+  servlet:
+    multipart:
+      max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:20MB}
+      max-request-size: ${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE:100MB}
   ai:
     openai:
       api-key: ${SPRING_AI_OPENAI_API_KEY:any-non-empty-value}

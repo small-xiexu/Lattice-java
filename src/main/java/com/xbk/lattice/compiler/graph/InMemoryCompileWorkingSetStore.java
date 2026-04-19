@@ -1,9 +1,9 @@
 package com.xbk.lattice.compiler.graph;
 
-import com.xbk.lattice.compiler.model.AnalyzedConcept;
-import com.xbk.lattice.compiler.model.MergedConcept;
-import com.xbk.lattice.compiler.model.RawSource;
-import com.xbk.lattice.compiler.model.SourceBatch;
+import com.xbk.lattice.compiler.domain.AnalyzedConcept;
+import com.xbk.lattice.compiler.domain.MergedConcept;
+import com.xbk.lattice.compiler.domain.RawSource;
+import com.xbk.lattice.compiler.domain.SourceBatch;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;

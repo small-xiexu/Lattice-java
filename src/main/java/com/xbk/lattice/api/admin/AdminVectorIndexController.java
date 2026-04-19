@@ -1,5 +1,6 @@
 package com.xbk.lattice.api.admin;
 
+import com.xbk.lattice.admin.service.AdminVectorIndexMaintenanceService;
 import com.xbk.lattice.query.service.QueryVectorConfigService;
 import com.xbk.lattice.query.service.QueryVectorConfigState;
 import org.springframework.context.annotation.Profile;

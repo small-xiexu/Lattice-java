@@ -1,10 +1,13 @@
 package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.config.LlmProperties;
-import com.xbk.lattice.compiler.model.AnalyzedConcept;
-import com.xbk.lattice.compiler.model.ConceptSection;
-import com.xbk.lattice.compiler.model.RawSource;
-import com.xbk.lattice.compiler.model.SourceBatch;
+import com.xbk.lattice.compiler.domain.AnalyzedConcept;
+import com.xbk.lattice.compiler.domain.ConceptSection;
+import com.xbk.lattice.compiler.domain.RawSource;
+import com.xbk.lattice.compiler.domain.SourceBatch;
+import com.xbk.lattice.compiler.node.AnalyzeNode;
+import com.xbk.lattice.llm.service.LlmCallResult;
+import com.xbk.lattice.llm.service.LlmClient;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.junit.jupiter.api.Test;
 

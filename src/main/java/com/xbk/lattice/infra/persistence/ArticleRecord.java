@@ -13,6 +13,10 @@ import java.time.OffsetDateTime;
  */
 public class ArticleRecord {
 
+    private final Long sourceId;
+
+    private final String articleKey;
+
     private final String conceptId;
 
     private final String title;
@@ -60,6 +64,8 @@ public class ArticleRecord {
             String metadataJson
     ) {
         this(
+                null,
+                conceptId,
                 conceptId,
                 title,
                 content,
@@ -108,6 +114,63 @@ public class ArticleRecord {
             String confidence,
             String reviewStatus
     ) {
+        this(
+                null,
+                conceptId,
+                conceptId,
+                title,
+                content,
+                lifecycle,
+                compiledAt,
+                sourcePaths,
+                metadataJson,
+                summary,
+                referentialKeywords,
+                dependsOn,
+                related,
+                confidence,
+                reviewStatus
+        );
+    }
+
+    /**
+     * 创建文章记录。
+     *
+     * @param sourceId 资料源主键
+     * @param articleKey 文章唯一键
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param content 内容
+     * @param lifecycle 生命周期
+     * @param compiledAt 编译时间
+     * @param sourcePaths 来源路径
+     * @param metadataJson 元数据 JSON
+     * @param summary 摘要
+     * @param referentialKeywords 明确性关键词
+     * @param dependsOn 依赖概念
+     * @param related 相关概念
+     * @param confidence 置信度
+     * @param reviewStatus 审查状态
+     */
+    public ArticleRecord(
+            Long sourceId,
+            String articleKey,
+            String conceptId,
+            String title,
+            String content,
+            String lifecycle,
+            OffsetDateTime compiledAt,
+            List<String> sourcePaths,
+            String metadataJson,
+            String summary,
+            List<String> referentialKeywords,
+            List<String> dependsOn,
+            List<String> related,
+            String confidence,
+            String reviewStatus
+    ) {
+        this.sourceId = sourceId;
+        this.articleKey = articleKey;
         this.conceptId = conceptId;
         this.title = title;
         this.content = content;
@@ -134,6 +197,8 @@ public class ArticleRecord {
      */
     public ArticleRecord(String conceptId, String title, String content, String lifecycle, OffsetDateTime compiledAt) {
         this(
+                null,
+                conceptId,
                 conceptId,
                 title,
                 content,
@@ -148,6 +213,24 @@ public class ArticleRecord {
                 "medium",
                 "pending"
         );
+    }
+
+    /**
+     * 获取资料源主键。
+     *
+     * @return 资料源主键
+     */
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    /**
+     * 获取文章唯一键。
+     *
+     * @return 文章唯一键
+     */
+    public String getArticleKey() {
+        return articleKey;
     }
 
     /**

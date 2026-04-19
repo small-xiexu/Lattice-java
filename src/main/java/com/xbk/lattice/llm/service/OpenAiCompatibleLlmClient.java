@@ -3,8 +3,6 @@ package com.xbk.lattice.llm.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xbk.lattice.compiler.service.LlmCallResult;
-import com.xbk.lattice.compiler.service.LlmClient;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;

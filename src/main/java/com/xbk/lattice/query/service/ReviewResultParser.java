@@ -2,6 +2,8 @@ package com.xbk.lattice.query.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xbk.lattice.query.domain.ReviewIssue;
+import com.xbk.lattice.query.domain.ReviewResult;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 

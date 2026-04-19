@@ -1,7 +1,8 @@
 package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.config.CompilerProperties;
-import com.xbk.lattice.compiler.model.RawSource;
+import com.xbk.lattice.compiler.domain.RawSource;
+import com.xbk.lattice.compiler.node.IngestNode;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -10,6 +11,10 @@ import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.xslf.usermodel.XMLSlideShow;
+import org.apache.poi.xslf.usermodel.XSLFSlide;
+import org.apache.poi.xslf.usermodel.XSLFTextBox;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -131,8 +136,12 @@ class IngestNodeTests {
         Path docsDir = Files.createDirectories(tempDir.resolve("docs"));
         Path pdfPath = docsDir.resolve("timeout.pdf");
         Path excelPath = docsDir.resolve("codes.xlsx");
+        Path wordPath = docsDir.resolve("brief.docx");
+        Path pptPath = docsDir.resolve("briefing.pptx");
         writeSimplePdf(pdfPath, "Payment timeout retry = 3");
         writeSimpleWorkbook(excelPath);
+        writeSimpleWord(wordPath);
+        writeSimplePresentation(pptPath);
 
         CompilerProperties properties = new CompilerProperties();
         properties.setIngestMaxChars(4000);
@@ -140,13 +149,21 @@ class IngestNodeTests {
         IngestNode ingestNode = new IngestNode(properties);
         List<RawSource> rawSources = ingestNode.ingest(tempDir);
 
-        assertThat(rawSources).hasSize(2);
+        assertThat(rawSources).hasSize(4);
         RawSource pdfSource = rawSources.stream()
                 .filter(rawSource -> "pdf".equals(rawSource.getFormat()))
                 .findFirst()
                 .orElseThrow();
         RawSource excelSource = rawSources.stream()
                 .filter(rawSource -> "xlsx".equals(rawSource.getFormat()))
+                .findFirst()
+                .orElseThrow();
+        RawSource wordSource = rawSources.stream()
+                .filter(rawSource -> "docx".equals(rawSource.getFormat()))
+                .findFirst()
+                .orElseThrow();
+        RawSource pptSource = rawSources.stream()
+                .filter(rawSource -> "pptx".equals(rawSource.getFormat()))
                 .findFirst()
                 .orElseThrow();
         assertThat(pdfSource.getRelativePath()).isEqualTo("docs/timeout.pdf");
@@ -160,6 +177,14 @@ class IngestNodeTests {
         assertThat(excelSource.getContent()).contains("businessSubTypeCode,meaning");
         assertThat(excelSource.getContent()).contains("1210,refund");
         assertThat(excelSource.getContent()).contains("=== Sheet: Settings ===");
+        assertThat(wordSource.getRelativePath()).isEqualTo("docs/brief.docx");
+        assertThat(wordSource.getMetadataJson()).contains("paragraphCount");
+        assertThat(wordSource.getContent()).contains("Payment timeout recovery");
+        assertThat(wordSource.getContent()).contains("retry=3");
+        assertThat(pptSource.getRelativePath()).isEqualTo("docs/briefing.pptx");
+        assertThat(pptSource.getMetadataJson()).contains("slideCount");
+        assertThat(pptSource.getContent()).contains("=== Slide: 1 ===");
+        assertThat(pptSource.getContent()).contains("Timeout review");
     }
 
     /**
@@ -210,6 +235,40 @@ class IngestNodeTests {
 
             try (OutputStream outputStream = Files.newOutputStream(excelPath)) {
                 workbook.write(outputStream);
+            }
+        }
+    }
+
+    /**
+     * 写入简单 Word 测试文件。
+     *
+     * @param wordPath Word 路径
+     * @throws IOException IO 异常
+     */
+    private void writeSimpleWord(Path wordPath) throws IOException {
+        try (XWPFDocument document = new XWPFDocument()) {
+            document.createParagraph().createRun().setText("Payment timeout recovery");
+            document.createParagraph().createRun().setText("retry=3");
+            try (OutputStream outputStream = Files.newOutputStream(wordPath)) {
+                document.write(outputStream);
+            }
+        }
+    }
+
+    /**
+     * 写入简单 PPT 测试文件。
+     *
+     * @param pptPath PPT 路径
+     * @throws IOException IO 异常
+     */
+    private void writeSimplePresentation(Path pptPath) throws IOException {
+        try (XMLSlideShow slideShow = new XMLSlideShow()) {
+            XSLFSlide slide = slideShow.createSlide();
+            XSLFTextBox textBox = slide.createTextBox();
+            textBox.setText("Timeout review");
+            textBox.addNewTextParagraph().addNewTextRun().setText("Escalation path");
+            try (OutputStream outputStream = Files.newOutputStream(pptPath)) {
+                slideShow.write(outputStream);
             }
         }
     }

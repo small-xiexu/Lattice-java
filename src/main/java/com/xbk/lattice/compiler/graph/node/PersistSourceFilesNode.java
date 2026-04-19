@@ -47,7 +47,11 @@ public class PersistSourceFilesNode extends AbstractCompileGraphNode {
      */
     public Map<String, Object> execute(OverAllState overAllState) {
         CompileGraphState state = state(overAllState);
-        sourceIngestSupport.persistSourceFiles(workingSetStore().loadRawSources(state.getRawSourcesRef()));
+        state.setSourceFileIdsByPath(sourceIngestSupport.persistSourceFiles(
+                workingSetStore().loadRawSources(state.getRawSourcesRef()),
+                state.getSourceId(),
+                state.getSourceSyncRunId()
+        ));
         return delta(state);
     }
 }

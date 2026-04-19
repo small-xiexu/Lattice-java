@@ -1,8 +1,8 @@
 package com.xbk.lattice.query.graph;
 
 import com.xbk.lattice.api.query.QueryResponse;
+import com.xbk.lattice.query.domain.ReviewResult;
 import com.xbk.lattice.query.service.QueryArticleHit;
-import com.xbk.lattice.query.service.ReviewResult;
 
 import java.util.List;
 

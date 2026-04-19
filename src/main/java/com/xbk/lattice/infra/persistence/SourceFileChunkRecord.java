@@ -9,6 +9,8 @@ package com.xbk.lattice.infra.persistence;
  */
 public class SourceFileChunkRecord {
 
+    private final Long sourceFileId;
+
     private final String filePath;
 
     private final int chunkIndex;
@@ -26,10 +28,33 @@ public class SourceFileChunkRecord {
      * @param verbatim 是否按原文保留
      */
     public SourceFileChunkRecord(String filePath, int chunkIndex, String chunkText, boolean verbatim) {
+        this(null, filePath, chunkIndex, chunkText, verbatim);
+    }
+
+    /**
+     * 创建源文件分块记录。
+     *
+     * @param sourceFileId 源文件主键
+     * @param filePath 文件路径
+     * @param chunkIndex 分块序号
+     * @param chunkText 分块文本
+     * @param verbatim 是否按原文保留
+     */
+    public SourceFileChunkRecord(Long sourceFileId, String filePath, int chunkIndex, String chunkText, boolean verbatim) {
+        this.sourceFileId = sourceFileId;
         this.filePath = filePath;
         this.chunkIndex = chunkIndex;
         this.chunkText = chunkText;
         this.verbatim = verbatim;
+    }
+
+    /**
+     * 获取源文件主键。
+     *
+     * @return 源文件主键
+     */
+    public Long getSourceFileId() {
+        return sourceFileId;
     }
 
     /**

@@ -11,6 +11,10 @@ import java.util.List;
  */
 public class AdminArticleDetailResponse {
 
+    private final Long sourceId;
+
+    private final String articleKey;
+
     private final String conceptId;
 
     private final String title;
@@ -40,6 +44,8 @@ public class AdminArticleDetailResponse {
     /**
      * 创建管理侧文章详情响应。
      *
+     * @param sourceId 资料源主键
+     * @param articleKey 文章唯一键
      * @param conceptId 概念标识
      * @param title 标题
      * @param content 正文
@@ -55,6 +61,8 @@ public class AdminArticleDetailResponse {
      * @param metadataJson 元数据 JSON
      */
     public AdminArticleDetailResponse(
+            Long sourceId,
+            String articleKey,
             String conceptId,
             String title,
             String content,
@@ -69,6 +77,8 @@ public class AdminArticleDetailResponse {
             List<String> related,
             String metadataJson
     ) {
+        this.sourceId = sourceId;
+        this.articleKey = articleKey;
         this.conceptId = conceptId;
         this.title = title;
         this.content = content;
@@ -82,6 +92,24 @@ public class AdminArticleDetailResponse {
         this.dependsOn = dependsOn;
         this.related = related;
         this.metadataJson = metadataJson;
+    }
+
+    /**
+     * 获取资料源主键。
+     *
+     * @return 资料源主键
+     */
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    /**
+     * 获取文章唯一键。
+     *
+     * @return 文章唯一键
+     */
+    public String getArticleKey() {
+        return articleKey;
     }
 
     /**

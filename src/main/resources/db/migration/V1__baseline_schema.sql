@@ -1,6 +1,8 @@
 CREATE TABLE IF NOT EXISTS articles (
     id BIGSERIAL PRIMARY KEY,
-    concept_id VARCHAR(128) NOT NULL UNIQUE,
+    source_id BIGINT,
+    article_key VARCHAR(256) NOT NULL,
+    concept_id VARCHAR(128) NOT NULL,
     title VARCHAR(255) NOT NULL,
     content TEXT NOT NULL,
     lifecycle VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
@@ -19,7 +21,9 @@ CREATE TABLE IF NOT EXISTS articles (
 
 COMMENT ON TABLE articles IS '知识文章主表';
 COMMENT ON COLUMN articles.id IS '文章主键 ID';
-COMMENT ON COLUMN articles.concept_id IS '概念唯一标识（concept slug）';
+COMMENT ON COLUMN articles.source_id IS '所属资料源主键 ID';
+COMMENT ON COLUMN articles.article_key IS 'source-aware 文章唯一键';
+COMMENT ON COLUMN articles.concept_id IS '概念标识（concept slug）';
 COMMENT ON COLUMN articles.title IS '文章标题';
 COMMENT ON COLUMN articles.content IS '文章 Markdown 正文';
 COMMENT ON COLUMN articles.lifecycle IS '文章生命周期状态';
@@ -35,9 +39,21 @@ COMMENT ON COLUMN articles.related IS '文章关联概念 ID 数组';
 COMMENT ON COLUMN articles.confidence IS '内容置信度等级';
 COMMENT ON COLUMN articles.review_status IS '审查状态';
 
+CREATE UNIQUE INDEX IF NOT EXISTS uk_articles_article_key
+    ON articles (article_key);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_articles_source_concept
+    ON articles (source_id, concept_id);
+
+CREATE INDEX IF NOT EXISTS idx_articles_concept_id
+    ON articles (concept_id);
+
 CREATE TABLE IF NOT EXISTS source_files (
     id BIGSERIAL PRIMARY KEY,
-    file_path VARCHAR(512) NOT NULL UNIQUE,
+    source_id BIGINT,
+    file_path VARCHAR(512) NOT NULL,
+    relative_path VARCHAR(512) NOT NULL,
+    source_sync_run_id BIGINT,
     content_preview TEXT NOT NULL,
     format VARCHAR(32) NOT NULL,
     file_size BIGINT NOT NULL,
@@ -50,7 +66,10 @@ CREATE TABLE IF NOT EXISTS source_files (
 
 COMMENT ON TABLE source_files IS '源文件主表';
 COMMENT ON COLUMN source_files.id IS '源文件主键 ID';
-COMMENT ON COLUMN source_files.file_path IS '源文件相对路径';
+COMMENT ON COLUMN source_files.source_id IS '所属资料源主键 ID';
+COMMENT ON COLUMN source_files.file_path IS '兼容文件路径';
+COMMENT ON COLUMN source_files.relative_path IS '资料源内相对路径';
+COMMENT ON COLUMN source_files.source_sync_run_id IS '最近一次写入该记录的同步运行主键';
 COMMENT ON COLUMN source_files.content_preview IS '源文件内容预览';
 COMMENT ON COLUMN source_files.format IS '源文件格式';
 COMMENT ON COLUMN source_files.file_size IS '源文件大小（字节）';
@@ -59,6 +78,15 @@ COMMENT ON COLUMN source_files.content_text IS '源文件全文文本';
 COMMENT ON COLUMN source_files.metadata_json IS '源文件扩展元数据 JSON';
 COMMENT ON COLUMN source_files.is_verbatim IS '是否为逐字提取内容';
 COMMENT ON COLUMN source_files.raw_path IS '源文件原始路径';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_source_files_source_relative_path
+    ON source_files (source_id, relative_path);
+
+CREATE INDEX IF NOT EXISTS idx_source_files_file_path
+    ON source_files (file_path);
+
+CREATE INDEX IF NOT EXISTS idx_source_files_relative_path
+    ON source_files (relative_path);
 
 CREATE TABLE IF NOT EXISTS article_chunks (
     id BIGSERIAL PRIMARY KEY,
@@ -80,6 +108,7 @@ CREATE TABLE IF NOT EXISTS pending_queries (
     question TEXT NOT NULL,
     answer TEXT NOT NULL,
     selected_concept_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    selected_article_keys TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     source_file_paths TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     corrections JSONB NOT NULL DEFAULT '[]'::JSONB,
     review_status VARCHAR(32) NOT NULL,
@@ -92,6 +121,7 @@ COMMENT ON COLUMN pending_queries.query_id IS '待确认查询唯一标识';
 COMMENT ON COLUMN pending_queries.question IS '用户问题';
 COMMENT ON COLUMN pending_queries.answer IS '待确认答案';
 COMMENT ON COLUMN pending_queries.selected_concept_ids IS '命中的概念 ID 数组';
+COMMENT ON COLUMN pending_queries.selected_article_keys IS '命中的文章唯一键数组';
 COMMENT ON COLUMN pending_queries.source_file_paths IS '引用的源文件路径数组';
 COMMENT ON COLUMN pending_queries.corrections IS '审查修正记录 JSON 数组';
 COMMENT ON COLUMN pending_queries.review_status IS '答案审查状态';
@@ -132,16 +162,17 @@ COMMENT ON COLUMN synthesis_artifacts.compiled_at IS '产物编译时间';
 
 CREATE TABLE IF NOT EXISTS source_file_chunks (
     id BIGSERIAL PRIMARY KEY,
-    file_path VARCHAR(512) NOT NULL REFERENCES source_files (file_path) ON DELETE CASCADE,
+    source_file_id BIGINT REFERENCES source_files (id) ON DELETE CASCADE,
+    file_path VARCHAR(512) NOT NULL,
     chunk_index INTEGER NOT NULL,
     chunk_text TEXT NOT NULL,
     is_verbatim BOOLEAN NOT NULL DEFAULT FALSE,
-    indexed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uk_source_file_chunks_file_path_chunk_index UNIQUE (file_path, chunk_index)
+    indexed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE source_file_chunks IS '源文件分块表';
 COMMENT ON COLUMN source_file_chunks.id IS '源文件分块主键 ID';
+COMMENT ON COLUMN source_file_chunks.source_file_id IS '关联源文件主键 ID';
 COMMENT ON COLUMN source_file_chunks.file_path IS '关联源文件路径';
 COMMENT ON COLUMN source_file_chunks.chunk_index IS '分块顺序号';
 COMMENT ON COLUMN source_file_chunks.chunk_text IS '源文件分块文本';
@@ -151,8 +182,16 @@ COMMENT ON COLUMN source_file_chunks.indexed_at IS '分块索引时间';
 CREATE INDEX IF NOT EXISTS idx_source_file_chunks_file_path
     ON source_file_chunks (file_path);
 
+CREATE INDEX IF NOT EXISTS idx_source_file_chunks_source_file_id
+    ON source_file_chunks (source_file_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_source_file_chunks_source_file_chunk
+    ON source_file_chunks (source_file_id, chunk_index);
+
 CREATE TABLE IF NOT EXISTS article_snapshots (
     snapshot_id BIGSERIAL PRIMARY KEY,
+    source_id BIGINT,
+    article_key VARCHAR(256),
     concept_id VARCHAR(255) NOT NULL,
     title VARCHAR(255) NOT NULL,
     content TEXT NOT NULL,
@@ -172,6 +211,8 @@ CREATE TABLE IF NOT EXISTS article_snapshots (
 
 COMMENT ON TABLE article_snapshots IS '文章快照历史表';
 COMMENT ON COLUMN article_snapshots.snapshot_id IS '快照主键 ID';
+COMMENT ON COLUMN article_snapshots.source_id IS '所属资料源主键 ID';
+COMMENT ON COLUMN article_snapshots.article_key IS 'source-aware 文章唯一键';
 COMMENT ON COLUMN article_snapshots.concept_id IS '文章概念唯一标识';
 COMMENT ON COLUMN article_snapshots.title IS '快照标题';
 COMMENT ON COLUMN article_snapshots.content IS '快照正文';
@@ -191,6 +232,9 @@ COMMENT ON COLUMN article_snapshots.captured_at IS '快照采集时间';
 CREATE INDEX IF NOT EXISTS idx_article_snapshots_concept_id_captured_at
     ON article_snapshots (concept_id, captured_at DESC, snapshot_id DESC);
 
+CREATE INDEX IF NOT EXISTS idx_article_snapshots_article_key_captured_at
+    ON article_snapshots (article_key, captured_at DESC, snapshot_id DESC);
+
 CREATE INDEX IF NOT EXISTS idx_article_snapshots_captured_at
     ON article_snapshots (captured_at DESC, snapshot_id DESC);
 
@@ -198,6 +242,8 @@ CREATE OR REPLACE FUNCTION capture_article_snapshot()
 RETURNS TRIGGER AS $$
 BEGIN
     INSERT INTO article_snapshots (
+        source_id,
+        article_key,
         concept_id,
         title,
         content,
@@ -215,6 +261,8 @@ BEGIN
         captured_at
     )
     VALUES (
+        NEW.source_id,
+        NEW.article_key,
         NEW.concept_id,
         NEW.title,
         NEW.content,
@@ -249,6 +297,8 @@ COMMENT ON TRIGGER trg_capture_article_snapshot ON articles IS '文章插入或�
 CREATE TABLE IF NOT EXISTS compile_jobs (
     job_id VARCHAR(64) PRIMARY KEY,
     source_dir VARCHAR(1024) NOT NULL,
+    source_id BIGINT,
+    source_sync_run_id BIGINT,
     incremental BOOLEAN NOT NULL DEFAULT FALSE,
     orchestration_mode VARCHAR(32) NOT NULL DEFAULT 'state_graph',
     status VARCHAR(32) NOT NULL,
@@ -263,6 +313,8 @@ CREATE TABLE IF NOT EXISTS compile_jobs (
 COMMENT ON TABLE compile_jobs IS '编译任务表';
 COMMENT ON COLUMN compile_jobs.job_id IS '编译任务唯一标识';
 COMMENT ON COLUMN compile_jobs.source_dir IS '编译输入目录';
+COMMENT ON COLUMN compile_jobs.source_id IS '所属资料源主键 ID';
+COMMENT ON COLUMN compile_jobs.source_sync_run_id IS '触发该编译的资料源同步运行主键';
 COMMENT ON COLUMN compile_jobs.incremental IS '是否为增量编译';
 COMMENT ON COLUMN compile_jobs.orchestration_mode IS '编排模式';
 COMMENT ON COLUMN compile_jobs.status IS '任务状态';
@@ -400,6 +452,221 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_llm_model_profiles_model_code
 CREATE INDEX IF NOT EXISTS idx_llm_model_profiles_connection_enabled
     ON llm_model_profiles (connection_id, enabled, id DESC);
 
+CREATE TABLE IF NOT EXISTS document_parse_provider_connections (
+    id BIGSERIAL PRIMARY KEY,
+    connection_code VARCHAR(64) NOT NULL,
+    provider_type VARCHAR(64) NOT NULL,
+    base_url VARCHAR(512) NOT NULL,
+    endpoint_path VARCHAR(256) NOT NULL,
+    credential_ciphertext TEXT NOT NULL DEFAULT '',
+    credential_mask VARCHAR(128) NOT NULL DEFAULT '',
+    extra_config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by VARCHAR(64) NOT NULL DEFAULT 'system',
+    updated_by VARCHAR(64) NOT NULL DEFAULT 'system',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE document_parse_provider_connections IS '文档解析供应商连接配置表';
+COMMENT ON COLUMN document_parse_provider_connections.connection_code IS '连接编码';
+COMMENT ON COLUMN document_parse_provider_connections.provider_type IS '供应商类型';
+COMMENT ON COLUMN document_parse_provider_connections.base_url IS '基础地址';
+COMMENT ON COLUMN document_parse_provider_connections.endpoint_path IS '接口路径';
+COMMENT ON COLUMN document_parse_provider_connections.credential_ciphertext IS '加密后的访问凭证';
+COMMENT ON COLUMN document_parse_provider_connections.credential_mask IS '脱敏展示值';
+COMMENT ON COLUMN document_parse_provider_connections.extra_config_json IS '供应商扩展配置';
+COMMENT ON COLUMN document_parse_provider_connections.enabled IS '是否启用';
+COMMENT ON COLUMN document_parse_provider_connections.created_by IS '创建人';
+COMMENT ON COLUMN document_parse_provider_connections.updated_by IS '更新人';
+COMMENT ON COLUMN document_parse_provider_connections.created_at IS '创建时间';
+COMMENT ON COLUMN document_parse_provider_connections.updated_at IS '更新时间';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_document_parse_provider_connections_connection_code
+    ON document_parse_provider_connections (connection_code);
+
+CREATE INDEX IF NOT EXISTS idx_document_parse_provider_connections_enabled
+    ON document_parse_provider_connections (enabled, id DESC);
+
+CREATE TABLE IF NOT EXISTS document_parse_settings (
+    id BIGSERIAL PRIMARY KEY,
+    config_scope VARCHAR(32) NOT NULL,
+    default_connection_id BIGINT REFERENCES document_parse_provider_connections (id),
+    image_ocr_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    scanned_pdf_ocr_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    cleanup_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    cleanup_model_profile_id BIGINT REFERENCES llm_model_profiles (id),
+    created_by VARCHAR(64) NOT NULL DEFAULT 'system',
+    updated_by VARCHAR(64) NOT NULL DEFAULT 'system',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE document_parse_settings IS '文档解析全局设置表';
+COMMENT ON COLUMN document_parse_settings.config_scope IS '配置范围，V1 固定 default';
+COMMENT ON COLUMN document_parse_settings.default_connection_id IS '默认文档解析连接';
+COMMENT ON COLUMN document_parse_settings.image_ocr_enabled IS '是否启用图片 OCR';
+COMMENT ON COLUMN document_parse_settings.scanned_pdf_ocr_enabled IS '是否启用扫描 PDF OCR';
+COMMENT ON COLUMN document_parse_settings.cleanup_enabled IS '是否启用 OCR 后整理';
+COMMENT ON COLUMN document_parse_settings.cleanup_model_profile_id IS '后整理模型档案';
+COMMENT ON COLUMN document_parse_settings.created_by IS '创建人';
+COMMENT ON COLUMN document_parse_settings.updated_by IS '更新人';
+COMMENT ON COLUMN document_parse_settings.created_at IS '创建时间';
+COMMENT ON COLUMN document_parse_settings.updated_at IS '更新时间';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_document_parse_settings_scope
+    ON document_parse_settings (config_scope);
+
+CREATE TABLE IF NOT EXISTS source_credentials (
+    id BIGSERIAL PRIMARY KEY,
+    credential_code VARCHAR(64) NOT NULL,
+    credential_type VARCHAR(32) NOT NULL,
+    secret_ciphertext TEXT NOT NULL DEFAULT '',
+    secret_mask VARCHAR(128) NOT NULL DEFAULT '',
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by VARCHAR(64) NOT NULL DEFAULT 'system',
+    updated_by VARCHAR(64) NOT NULL DEFAULT 'system',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_source_credentials_credential_code
+    ON source_credentials (credential_code);
+
+CREATE TABLE IF NOT EXISTS knowledge_sources (
+    id BIGSERIAL PRIMARY KEY,
+    source_code VARCHAR(32) NOT NULL,
+    name VARCHAR(128) NOT NULL,
+    source_type VARCHAR(32) NOT NULL,
+    content_profile VARCHAR(32) NOT NULL DEFAULT 'DOCUMENT',
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    visibility VARCHAR(32) NOT NULL DEFAULT 'NORMAL',
+    default_sync_mode VARCHAR(32) NOT NULL DEFAULT 'AUTO',
+    config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    latest_manifest_hash VARCHAR(128),
+    last_sync_run_id BIGINT,
+    last_sync_status VARCHAR(32),
+    last_sync_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_knowledge_sources_source_code
+    ON knowledge_sources (source_code);
+
+CREATE TABLE IF NOT EXISTS source_sync_runs (
+    id BIGSERIAL PRIMARY KEY,
+    source_id BIGINT REFERENCES knowledge_sources (id),
+    source_type VARCHAR(32) NOT NULL DEFAULT 'UPLOAD',
+    manifest_hash VARCHAR(128),
+    trigger_type VARCHAR(32) NOT NULL DEFAULT 'MANUAL',
+    resolver_mode VARCHAR(32) NOT NULL DEFAULT 'RULE_ONLY',
+    resolver_decision VARCHAR(32),
+    sync_action VARCHAR(32),
+    status VARCHAR(32) NOT NULL DEFAULT 'QUEUED',
+    matched_source_id BIGINT REFERENCES knowledge_sources (id),
+    compile_job_id VARCHAR(64) REFERENCES compile_jobs (job_id),
+    evidence_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    error_message TEXT,
+    requested_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at TIMESTAMPTZ,
+    finished_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_source_sync_runs_source_status
+    ON source_sync_runs (source_id, status, requested_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_source_sync_runs_manifest_hash
+    ON source_sync_runs (manifest_hash, requested_at DESC, id DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_source_sync_runs_manifest_hash_prelock
+    ON source_sync_runs (manifest_hash)
+    WHERE source_id IS NULL
+      AND manifest_hash IS NOT NULL
+      AND status IN ('QUEUED', 'MATCHING', 'MATERIALIZING', 'COMPILE_QUEUED', 'RUNNING');
+
+CREATE TABLE IF NOT EXISTS source_snapshots (
+    id BIGSERIAL PRIMARY KEY,
+    source_id BIGINT NOT NULL REFERENCES knowledge_sources (id) ON DELETE CASCADE,
+    sync_run_id BIGINT REFERENCES source_sync_runs (id) ON DELETE SET NULL,
+    manifest_hash VARCHAR(128) NOT NULL,
+    summary_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_source_snapshots_source_created_at
+    ON source_snapshots (source_id, created_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS article_source_refs (
+    id BIGSERIAL PRIMARY KEY,
+    article_key VARCHAR(256) NOT NULL,
+    source_id BIGINT NOT NULL REFERENCES knowledge_sources (id) ON DELETE CASCADE,
+    source_file_id BIGINT NOT NULL REFERENCES source_files (id) ON DELETE CASCADE,
+    ref_type VARCHAR(32) NOT NULL,
+    ref_label VARCHAR(255),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_article_source_refs_article_key
+    ON article_source_refs (article_key, created_at DESC, id DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_article_source_refs_article_source_file_ref_type
+    ON article_source_refs (article_key, source_file_id, ref_type);
+
+INSERT INTO knowledge_sources (
+    source_code,
+    name,
+    source_type,
+    content_profile,
+    status,
+    visibility,
+    default_sync_mode,
+    config_json,
+    metadata_json
+)
+VALUES (
+    'legacy-default',
+    'Legacy Default Source',
+    'UPLOAD',
+    'DOCUMENT',
+    'ACTIVE',
+    'NORMAL',
+    'FULL',
+    '{}'::jsonb,
+    '{"legacyDefault":true}'::jsonb
+)
+ON CONFLICT (source_code) DO NOTHING;
+
+ALTER TABLE source_files
+    ADD CONSTRAINT fk_source_files_source
+    FOREIGN KEY (source_id) REFERENCES knowledge_sources (id);
+
+ALTER TABLE source_files
+    ADD CONSTRAINT fk_source_files_source_sync_run
+    FOREIGN KEY (source_sync_run_id) REFERENCES source_sync_runs (id);
+
+ALTER TABLE articles
+    ADD CONSTRAINT fk_articles_source
+    FOREIGN KEY (source_id) REFERENCES knowledge_sources (id);
+
+ALTER TABLE article_snapshots
+    ADD CONSTRAINT fk_article_snapshots_source
+    FOREIGN KEY (source_id) REFERENCES knowledge_sources (id);
+
+ALTER TABLE compile_jobs
+    ADD CONSTRAINT fk_compile_jobs_source
+    FOREIGN KEY (source_id) REFERENCES knowledge_sources (id);
+
+ALTER TABLE compile_jobs
+    ADD CONSTRAINT fk_compile_jobs_source_sync_run
+    FOREIGN KEY (source_sync_run_id) REFERENCES source_sync_runs (id);
+
+ALTER TABLE knowledge_sources
+    ADD CONSTRAINT fk_knowledge_sources_last_sync_run
+    FOREIGN KEY (last_sync_run_id) REFERENCES source_sync_runs (id);
+
 CREATE TABLE IF NOT EXISTS query_vector_settings (
     config_scope VARCHAR(32) PRIMARY KEY,
     vector_enabled BOOLEAN NOT NULL DEFAULT FALSE,
@@ -534,7 +801,7 @@ BEGIN
     IF vector_type_name IS NOT NULL THEN
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS article_vector_index (
-                concept_id VARCHAR(128) PRIMARY KEY REFERENCES articles (concept_id) ON DELETE CASCADE,
+                concept_id VARCHAR(128) PRIMARY KEY,
                 model_profile_id BIGINT NOT NULL REFERENCES llm_model_profiles (id),
                 embedding_dimensions INTEGER NOT NULL,
                 index_version VARCHAR(64) NOT NULL,

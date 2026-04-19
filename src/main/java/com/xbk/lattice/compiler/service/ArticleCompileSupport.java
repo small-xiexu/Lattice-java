@@ -16,11 +16,13 @@ import com.xbk.lattice.compiler.agent.WriterTask;
 import com.xbk.lattice.compiler.config.LlmProperties;
 import com.xbk.lattice.compiler.config.CompilerProperties;
 import com.xbk.lattice.compiler.graph.ArticleReviewEnvelope;
-import com.xbk.lattice.compiler.model.MergedConcept;
+import com.xbk.lattice.compiler.domain.MergedConcept;
+import com.xbk.lattice.compiler.node.CompileArticleNode;
+import com.xbk.lattice.compiler.prompt.SchemaAwarePrompts;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
-import com.xbk.lattice.query.service.ReviewResult;
+import com.xbk.lattice.query.domain.ReviewResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -135,7 +137,7 @@ public class ArticleCompileSupport {
      * @return 草稿文章集合
      */
     public List<ArticleRecord> compileDraftArticles(List<MergedConcept> mergedConcepts, Path sourceDir) {
-        return compileDraftArticles(mergedConcepts, sourceDir, null, null);
+        return compileDraftArticles(mergedConcepts, sourceDir, null, null, null, null);
     }
 
     /**
@@ -153,11 +155,41 @@ public class ArticleCompileSupport {
             String scopeId,
             String scene
     ) {
+        return compileDraftArticles(mergedConcepts, sourceDir, null, null, scopeId, scene);
+    }
+
+    /**
+     * 编译新文章草稿。
+     *
+     * @param mergedConcepts 合并概念
+     * @param sourceDir 源目录
+     * @param sourceId 资料源主键
+     * @param sourceCode 资料源编码
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @return 草稿文章集合
+     */
+    public List<ArticleRecord> compileDraftArticles(
+            List<MergedConcept> mergedConcepts,
+            Path sourceDir,
+            Long sourceId,
+            String sourceCode,
+            String scopeId,
+            String scene
+    ) {
         List<ArticleRecord> draftArticles = new ArrayList<ArticleRecord>();
         for (MergedConcept mergedConcept : mergedConcepts) {
-            WriterResult writerResult = writerAgent.write(new WriterTask(mergedConcept, sourceDir, scopeId, scene));
-            if (writerResult.getArticleRecord() != null) {
-                draftArticles.add(writerResult.getArticleRecord());
+            WriterResult writerResult = writerAgent.write(new WriterTask(
+                    mergedConcept,
+                    sourceDir,
+                    sourceId,
+                    sourceCode,
+                    scopeId,
+                    scene
+            ));
+            ArticleRecord writerArticleRecord = writerResult.getArticleRecord();
+            if (writerArticleRecord != null) {
+                draftArticles.add(writerArticleRecord);
             }
         }
         return draftArticles;
@@ -188,7 +220,10 @@ public class ArticleCompileSupport {
     ) {
         List<ArticleReviewEnvelope> reviewedArticles = new ArrayList<ArticleReviewEnvelope>();
         for (ArticleRecord draftArticle : draftArticles) {
-            String sourceContents = compileArticleNode.buildSourceContents(draftArticle.getSourcePaths());
+            String sourceContents = compileArticleNode.buildSourceContents(
+                    draftArticle.getSourcePaths(),
+                    draftArticle.getSourceId()
+            );
             ReviewerResult reviewerResult = reviewerAgent.review(new ReviewTask(
                     draftArticle,
                     sourceContents,
@@ -245,7 +280,10 @@ public class ArticleCompileSupport {
                 fixedArticles.add(reviewEnvelope);
                 continue;
             }
-            String sourceContents = compileArticleNode.buildSourceContents(reviewEnvelope.getArticle().getSourcePaths());
+            String sourceContents = compileArticleNode.buildSourceContents(
+                    reviewEnvelope.getArticle().getSourcePaths(),
+                    reviewEnvelope.getArticle().getSourceId()
+            );
             FixerResult fixerResult = fixerAgent.fix(new FixTask(
                     reviewEnvelope.getArticle(),
                     reviewEnvelope.getReviewResult().getIssues(),

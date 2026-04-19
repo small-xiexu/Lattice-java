@@ -1,7 +1,8 @@
 package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.config.CompilerProperties;
-import com.xbk.lattice.compiler.model.RawSource;
+import com.xbk.lattice.compiler.domain.RawSource;
+import com.xbk.lattice.compiler.node.GroupNode;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -13,14 +14,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * GroupNode 测试
  *
- * 职责：验证显式规则、顶层目录回退与默认分组
+ * 职责：验证显式规则、顶层目录回退与根目录文件分组
  *
  * @author xiexu
  */
 class GroupNodeTests {
 
     /**
-     * 验证显式规则优先，其次顶层目录回退，最后落入默认分组。
+     * 验证显式规则优先，其次顶层目录回退，根目录文件按文件名分组。
      */
     @Test
     void shouldGroupSourcesByConfiguredRulesThenFallbacks() {
@@ -40,9 +41,9 @@ class GroupNodeTests {
 
         Map<String, List<RawSource>> grouped = groupNode.group(rawSources);
 
-        assertThat(grouped).containsKeys("knowledge-docs", "payment", "defaultGroup");
+        assertThat(grouped).containsKeys("knowledge-docs", "payment", "README");
         assertThat(grouped.get("knowledge-docs")).hasSize(1);
         assertThat(grouped.get("payment")).hasSize(1);
-        assertThat(grouped.get("defaultGroup")).hasSize(1);
+        assertThat(grouped.get("README")).hasSize(1);
     }
 }

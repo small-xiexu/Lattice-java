@@ -60,7 +60,13 @@ public class PersistArticlesNode extends AbstractCompileGraphNode {
         }
         int persistedCount = articlesToPersist.isEmpty()
                 ? 0
-                : articlePersistSupport.persistArticles(state.getJobId(), articlesToPersist);
+                : articlePersistSupport.persistArticles(
+                        state.getJobId(),
+                        articlesToPersist,
+                        state.getSourceId(),
+                        state.getSourceCode(),
+                        state.getSourceFileIdsByPath()
+                );
         state.setPersistedCount(persistedCount);
         state.setPendingReviewCount(0);
         state.setPersistedArticleIds(extractArticleIds(articlesToPersist));

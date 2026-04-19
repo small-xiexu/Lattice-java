@@ -9,7 +9,15 @@ package com.xbk.lattice.infra.persistence;
  */
 public class SourceFileRecord {
 
+    private final Long id;
+
+    private final Long sourceId;
+
     private final String filePath;
+
+    private final String relativePath;
+
+    private final Long sourceSyncRunId;
 
     private final String contentPreview;
 
@@ -34,7 +42,7 @@ public class SourceFileRecord {
      * @param fileSize 文件大小
      */
     public SourceFileRecord(String filePath, String contentPreview, String format, long fileSize) {
-        this(filePath, contentPreview, format, fileSize, contentPreview, "{}", false, filePath);
+        this(null, null, filePath, filePath, null, contentPreview, format, fileSize, contentPreview, "{}", false, filePath);
     }
 
     /**
@@ -59,7 +67,44 @@ public class SourceFileRecord {
             boolean verbatim,
             String rawPath
     ) {
+        this(null, null, filePath, filePath, null, contentPreview, format, fileSize, contentText, metadataJson, verbatim, rawPath);
+    }
+
+    /**
+     * 创建源文件记录。
+     *
+     * @param id 主键
+     * @param sourceId 资料源主键
+     * @param filePath 兼容文件路径
+     * @param relativePath 资料源内相对路径
+     * @param sourceSyncRunId 资料源同步运行主键
+     * @param contentPreview 内容预览
+     * @param format 文件格式
+     * @param fileSize 文件大小
+     * @param contentText 全量正文
+     * @param metadataJson 元数据 JSON
+     * @param verbatim 是否按原文保留
+     * @param rawPath 原始文件路径
+     */
+    public SourceFileRecord(
+            Long id,
+            Long sourceId,
+            String filePath,
+            String relativePath,
+            Long sourceSyncRunId,
+            String contentPreview,
+            String format,
+            long fileSize,
+            String contentText,
+            String metadataJson,
+            boolean verbatim,
+            String rawPath
+    ) {
+        this.id = id;
+        this.sourceId = sourceId;
         this.filePath = filePath;
+        this.relativePath = relativePath;
+        this.sourceSyncRunId = sourceSyncRunId;
         this.contentPreview = contentPreview;
         this.format = format;
         this.fileSize = fileSize;
@@ -70,12 +115,48 @@ public class SourceFileRecord {
     }
 
     /**
+     * 获取主键。
+     *
+     * @return 主键
+     */
+    public Long getId() {
+        return id;
+    }
+
+    /**
+     * 获取资料源主键。
+     *
+     * @return 资料源主键
+     */
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    /**
      * 获取文件路径。
      *
      * @return 文件路径
      */
     public String getFilePath() {
         return filePath;
+    }
+
+    /**
+     * 获取资料源内相对路径。
+     *
+     * @return 资料源内相对路径
+     */
+    public String getRelativePath() {
+        return relativePath;
+    }
+
+    /**
+     * 获取资料源同步运行主键。
+     *
+     * @return 资料源同步运行主键
+     */
+    public Long getSourceSyncRunId() {
+        return sourceSyncRunId;
     }
 
     /**

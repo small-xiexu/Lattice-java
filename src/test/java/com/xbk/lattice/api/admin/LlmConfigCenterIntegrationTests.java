@@ -2,8 +2,12 @@ package com.xbk.lattice.api.admin;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpServer;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import com.xbk.lattice.llm.service.LlmRouteResolution;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -11,11 +15,16 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -45,6 +54,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class LlmConfigCenterIntegrationTests {
 
+    private HttpServer httpServer;
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -56,6 +67,17 @@ class LlmConfigCenterIntegrationTests {
 
     @Autowired
     private ExecutionLlmSnapshotService executionLlmSnapshotService;
+
+    /**
+     * 关闭探测测试使用的本地 HTTP 服务。
+     */
+    @AfterEach
+    void tearDown() {
+        if (httpServer != null) {
+            httpServer.stop(0);
+            httpServer = null;
+        }
+    }
 
     /**
      * 验证后台可创建连接、模型与绑定，并冻结 compile 快照。
@@ -75,6 +97,13 @@ class LlmConfigCenterIntegrationTests {
                 .andExpect(jsonPath("$.count").value(1))
                 .andExpect(jsonPath("$.items[0].apiKeyMask").isNotEmpty());
 
+        mockMvc.perform(get("/api/v1/admin/llm/bindings"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(1))
+                .andExpect(jsonPath("$.items[0].scene").value("compile"))
+                .andExpect(jsonPath("$.items[0].agentRole").value("writer"))
+                .andExpect(jsonPath("$.items[0].primaryModelProfileId").value(modelId));
+
         String storedCiphertext = jdbcTemplate.queryForObject(
                 "select api_key_ciphertext from llm_provider_connections where id = ?",
                 String.class,
@@ -84,16 +113,16 @@ class LlmConfigCenterIntegrationTests {
         assertThat(storedCiphertext).doesNotContain(rawApiKey);
 
         assertThat(executionLlmSnapshotService.freezeSnapshots("compile_job", "job-1", "compile")).hasSize(1);
-        Optional<LlmRouteResolution> route = executionLlmSnapshotService.resolveRoute(
+        Optional<LlmRouteResolution> writerRoute = executionLlmSnapshotService.resolveRoute(
                 "compile_job",
                 "job-1",
                 "compile",
                 "writer"
         );
-        assertThat(route).isPresent();
-        assertThat(route.orElseThrow().getRouteLabel()).isEqualTo("compile.writer.gpt54");
-        assertThat(route.orElseThrow().getModelName()).isEqualTo("gpt-5.4");
-        assertThat(route.orElseThrow().getApiKey()).isEqualTo(rawApiKey);
+        assertThat(writerRoute).isPresent();
+        assertThat(writerRoute.orElseThrow().getRouteLabel()).isEqualTo("compile.writer.gpt54");
+        assertThat(writerRoute.orElseThrow().getModelName()).isEqualTo("gpt-5.4");
+        assertThat(writerRoute.orElseThrow().getApiKey()).isEqualTo(rawApiKey);
     }
 
     /**
@@ -253,6 +282,166 @@ class LlmConfigCenterIntegrationTests {
         assertThat(answerRoute.orElseThrow().getModelName()).isEqualTo("gpt-5.4");
     }
 
+    /**
+     * 验证 AI 接入页可直接测试未保存的 OpenAI 连接。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldProbeUnsavedOpenAiConnection() throws Exception {
+        AtomicReference<String> authorizationHeader = new AtomicReference<String>();
+        int port = startJsonServer(
+                "/v1/models",
+                new FixedJsonHandler("{\"data\":[{\"id\":\"gpt-5.4\"}]}", "Authorization", authorizationHeader)
+        );
+
+        mockMvc.perform(post("/api/v1/admin/llm/connections/test")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"providerType\":\"openai\","
+                                + "\"baseUrl\":\"http://127.0.0.1:" + port + "\","
+                                + "\"apiKey\":\"sk-probe-123456\""
+                                + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.providerType").value("openai"))
+                .andExpect(jsonPath("$.endpoint").value("/v1/models"))
+                .andExpect(jsonPath("$.message").value(containsString("OpenAI 连接成功")));
+
+        assertThat(authorizationHeader.get()).isEqualTo("Bearer sk-probe-123456");
+    }
+
+    /**
+     * 验证测试连接时，编辑已有连接可复用已保存密钥而不要求重新输入。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldProbeSavedConnectionWithoutReEnteringApiKey() throws Exception {
+        resetTables();
+        AtomicReference<String> authorizationHeader = new AtomicReference<String>();
+        int port = startJsonServer(
+                "/v1/models",
+                new FixedJsonHandler("{\"data\":[{\"id\":\"gpt-5.4\"},{\"id\":\"gpt-4.1\"}]}", "Authorization", authorizationHeader)
+        );
+        Long connectionId = createConnection(
+                "probe-saved",
+                "openai_compatible",
+                "http://127.0.0.1:" + port,
+                "sk-saved-123456"
+        );
+
+        mockMvc.perform(post("/api/v1/admin/llm/connections/test")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"connectionId\":" + connectionId
+                                + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.providerType").value("openai"))
+                .andExpect(jsonPath("$.message").value(containsString("可访问 2 个模型")));
+
+        assertThat(authorizationHeader.get()).isEqualTo("Bearer sk-saved-123456");
+    }
+
+    /**
+     * 验证 AI 接入页可直接测试未保存的对话模型。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldProbeUnsavedChatModel() throws Exception {
+        resetTables();
+        AtomicReference<String> authorizationHeader = new AtomicReference<String>();
+        int port = startJsonServer(
+                "/v1/chat/completions",
+                new FixedJsonHandler(
+                        "{"
+                                + "\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"OK\"}}],"
+                                + "\"usage\":{\"prompt_tokens\":8,\"completion_tokens\":1}"
+                                + "}",
+                        "Authorization",
+                        authorizationHeader
+                )
+        );
+        Long connectionId = createConnection(
+                "model-probe-openai",
+                "openai",
+                "http://127.0.0.1:" + port,
+                "sk-model-123456"
+        );
+
+        mockMvc.perform(post("/api/v1/admin/llm/models/test")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"connectionId\":" + connectionId + ","
+                                + "\"modelName\":\"gpt-5.4\","
+                                + "\"modelKind\":\"CHAT\""
+                                + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.providerType").value("openai"))
+                .andExpect(jsonPath("$.modelKind").value("CHAT"))
+                .andExpect(jsonPath("$.message").value(containsString("已返回对话结果")));
+
+        assertThat(authorizationHeader.get()).isEqualTo("Bearer sk-model-123456");
+    }
+
+    /**
+     * 验证 AI 接入页可测试已保存的向量模型，并检查返回维度。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldProbeSavedEmbeddingModel() throws Exception {
+        resetTables();
+        AtomicReference<String> authorizationHeader = new AtomicReference<String>();
+        int port = startJsonServer(
+                "/v1/embeddings",
+                new FixedJsonHandler(
+                        "{"
+                                + "\"data\":[{\"index\":0,\"embedding\":[0.11,0.22,0.33]}],"
+                                + "\"usage\":{\"prompt_tokens\":1,\"total_tokens\":1}"
+                                + "}",
+                        "Authorization",
+                        authorizationHeader
+                )
+        );
+        Long connectionId = createConnection(
+                "embedding-probe-openai",
+                "openai",
+                "http://127.0.0.1:" + port,
+                "sk-embed-123456"
+        );
+        String responseBody = mockMvc.perform(post("/api/v1/admin/llm/models")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"connectionId\":" + connectionId + ","
+                                + "\"modelName\":\"text-embedding-3-small\","
+                                + "\"modelKind\":\"EMBEDDING\","
+                                + "\"expectedDimensions\":3,"
+                                + "\"enabled\":true"
+                                + "}"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        Long modelId = readLong(responseBody, "id");
+
+        mockMvc.perform(post("/api/v1/admin/llm/models/test")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"modelId\":" + modelId
+                                + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.providerType").value("openai"))
+                .andExpect(jsonPath("$.modelKind").value("EMBEDDING"))
+                .andExpect(jsonPath("$.message").value(containsString("已返回 3 维向量")));
+
+        assertThat(authorizationHeader.get()).isEqualTo("Bearer sk-embed-123456");
+    }
+
     private Long createConnection(String code, String providerType, String baseUrl, String apiKey) throws Exception {
         String responseBody = mockMvc.perform(post("/api/v1/admin/llm/connections")
                         .contentType(APPLICATION_JSON)
@@ -338,10 +527,67 @@ class LlmConfigCenterIntegrationTests {
         return rootNode.path(fieldName).asText();
     }
 
+    /**
+     * 启动返回固定 JSON 的本地 HTTP 服务。
+     *
+     * @param path 监听路径
+     * @param handler 处理器
+     * @return 随机端口
+     * @throws IOException IO 异常
+     */
+    private int startJsonServer(String path, HttpHandler handler) throws IOException {
+        httpServer = HttpServer.create(new InetSocketAddress(0), 0);
+        httpServer.createContext(path, handler);
+        httpServer.start();
+        return httpServer.getAddress().getPort();
+    }
+
     private void resetTables() {
         jdbcTemplate.execute("TRUNCATE TABLE execution_llm_snapshots RESTART IDENTITY CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE agent_model_bindings RESTART IDENTITY CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE llm_model_profiles RESTART IDENTITY CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE llm_provider_connections RESTART IDENTITY CASCADE");
+    }
+
+    /**
+     * 固定 JSON 响应处理器
+     *
+     * 职责：记录指定请求头，并返回固定 JSON 内容
+     *
+     * @author xiexu
+     */
+    private static class FixedJsonHandler implements HttpHandler {
+
+        private final String responseBody;
+
+        private final String headerName;
+
+        private final AtomicReference<String> capturedHeader;
+
+        private FixedJsonHandler(
+                String responseBody,
+                String headerName,
+                AtomicReference<String> capturedHeader
+        ) {
+            this.responseBody = responseBody;
+            this.headerName = headerName;
+            this.capturedHeader = capturedHeader;
+        }
+
+        /**
+         * 处理测试请求并返回固定 JSON。
+         *
+         * @param exchange HTTP 交换对象
+         * @throws IOException IO 异常
+         */
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            capturedHeader.set(exchange.getRequestHeaders().getFirst(headerName));
+            byte[] responseBytes = responseBody.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", APPLICATION_JSON_VALUE);
+            exchange.sendResponseHeaders(200, responseBytes.length);
+            exchange.getResponseBody().write(responseBytes);
+            exchange.close();
+        }
     }
 }

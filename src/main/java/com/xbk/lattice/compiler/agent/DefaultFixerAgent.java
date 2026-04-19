@@ -1,7 +1,7 @@
 package com.xbk.lattice.compiler.agent;
 
 import com.xbk.lattice.compiler.service.ReviewFixService;
-import com.xbk.lattice.query.service.ReviewIssue;
+import com.xbk.lattice.query.domain.ReviewIssue;
 
 import java.util.List;
 

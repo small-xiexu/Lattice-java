@@ -1,8 +1,8 @@
 package com.xbk.lattice.compiler.graph;
 
 import com.xbk.lattice.infra.persistence.ArticleRecord;
-import com.xbk.lattice.query.service.ReviewIssue;
-import com.xbk.lattice.query.service.ReviewResult;
+import com.xbk.lattice.query.domain.ReviewIssue;
+import com.xbk.lattice.query.domain.ReviewResult;
 import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;

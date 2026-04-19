@@ -4,178 +4,241 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lattice 知识库管理</title>
-    <link rel="stylesheet" href="/admin/admin.css">
+    <link rel="stylesheet" href="/admin/admin.css?v=20260419-upload-tracking-2">
 </head>
 <body>
-<div class="page-shell">
-    <header class="page-header">
-        <div>
-            <p class="eyebrow">Lattice Knowledge Console</p>
-            <h1>知识库管理</h1>
-            <p class="header-copy">上传资料、触发同步、查看处理状态，并浏览已经整理进知识库的内容。</p>
-        </div>
-        <div class="header-actions header-actions-stack">
-            <nav class="tab-row page-nav">
-                <a class="tab-btn active" href="/admin">知识库管理</a>
-                <a class="tab-btn" href="/admin/ask">知识问答</a>
+<div class="app-shell">
+    <div class="app-window">
+        <aside class="sidebar">
+            <div class="mac-controls" aria-hidden="true">
+                <span class="mac-dot red"></span>
+                <span class="mac-dot yellow"></span>
+                <span class="mac-dot green"></span>
+            </div>
+
+            <section class="sidebar-section">
+                <p class="sidebar-kicker">Navigation</p>
+                <h1 class="sidebar-title">知识库后台</h1>
+                <p class="sidebar-copy">把复杂参数收起来，让用户只处理导入资料、查看状态和发起提问这些核心动作。</p>
+            </section>
+
+            <nav class="nav-stack">
+                <a class="nav-card active" href="/admin">
+                    <span class="nav-card-title">知识库管理</span>
+                    <span class="nav-card-copy">导入资料、同步目录、查看任务与入库内容。</span>
+                </a>
+                <a class="nav-card" href="/admin/ask">
+                    <span class="nav-card-title">知识问答</span>
+                    <span class="nav-card-copy">直接提问，查看最终回答和引用来源。</span>
+                </a>
+                <a class="nav-card" href="/admin/ai">
+                    <span class="nav-card-title">AI 接入</span>
+                    <span class="nav-card-copy">内部维护连接、模型和 Agent 绑定。</span>
+                </a>
             </nav>
-            <div class="header-actions">
-                <button id="refresh-page" class="secondary-btn" type="button">刷新页面</button>
-                <button id="refresh-health" class="ghost-btn" type="button">刷新健康</button>
-                <div class="health-inline" aria-live="polite">
-                    <span id="health-indicator" class="badge warning">检查中</span>
-                    <span id="health-indicator-note" class="health-note">页面会直接显示服务状态</span>
+
+        </aside>
+
+        <div class="workspace">
+            <header class="workspace-topbar">
+                <div class="brand-copy">
+                    <p class="brand-kicker">Lattice Knowledge Console</p>
                 </div>
-            </div>
+                <div class="topbar-actions">
+                    <button id="refresh-page" class="secondary-btn" type="button">刷新页面</button>
+                    <button id="refresh-health" class="ghost-btn" type="button">刷新健康</button>
+                </div>
+            </header>
+
+            <main class="workspace-main">
+                <section id="page-notice" class="page-notice" hidden aria-live="polite"></section>
+
+                <section class="hero-panel">
+                    <div class="hero-grid">
+                        <div class="hero-copy">
+                            <p class="hero-eyebrow">Knowledge Workspace</p>
+                            <h2 class="hero-title">导入资料后即可开始问答</h2>
+                            <p class="hero-description">这个页面只保留上传、同步、查看状态和浏览内容这些关键动作，不再让用户面对温度、超时、路由标签这类配置噪音。</p>
+                            <div class="hero-actions">
+                                <button id="refresh-summary" class="primary-btn" type="button">刷新状态</button>
+                                <a class="ghost-link" href="/admin/ask">直接去提问</a>
+                            </div>
+                        </div>
+
+                        <div class="hero-side">
+                            <div class="hero-metric" aria-live="polite">
+                                <span class="hero-metric-label">服务健康</span>
+                                <div class="health-inline">
+                                    <span id="health-indicator" class="badge warning">检查中</span>
+                                </div>
+                                <p id="health-indicator-note" class="health-note">页面会直接显示服务状态</p>
+                            </div>
+
+                            <div class="hero-metric">
+                                <span class="hero-metric-label">当前工作方式</span>
+                                <p class="hero-metric-value">导入后即可问答</p>
+                                <p class="hero-metric-copy">先把资料导入知识库，再进入问答页直接使用。</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-title-row">
+                        <div>
+                            <h2>当前状态</h2>
+                            <p>前期只有一个知识库，先把资料导进去，再确认处理结果是否完成。</p>
+                        </div>
+                    </div>
+                    <div id="summary-cards" class="metric-grid top-gap"></div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-title-row">
+                        <div>
+                            <h2>资料导入</h2>
+                            <p>支持直接上传文件，也支持对一个已有目录发起同步，尽量减少非必要配置。</p>
+                        </div>
+                    </div>
+
+                    <div class="compile-layout top-gap">
+                        <div class="sub-panel">
+                            <h3>上传资料</h3>
+                            <p class="muted">支持 Word、PPT、PDF、Excel 和常见文本资料直接入库。</p>
+                            <div class="form-grid top-gap">
+                                <label class="file-picker">
+                                    <span>选择文件</span>
+                                    <input id="compile-files" type="file" multiple accept=".docx,.pptx,.pdf,.xlsx,.xls,.md,.markdown,.txt,.json,.html,.xml,.yml,.yaml,.properties,.js,.css,.java,.sh,.py">
+                                </label>
+                                <label class="checkbox-row">
+                                    <input id="upload-incremental" type="checkbox">
+                                    <span>增量处理</span>
+                                </label>
+                                <label class="checkbox-row">
+                                    <input id="upload-async" type="checkbox" checked>
+                                    <span>后台执行</span>
+                                </label>
+                            </div>
+                            <div class="button-row wrap top-gap">
+                                <button id="submit-upload-job" class="primary-btn" type="button">上传并开始处理</button>
+                            </div>
+                        </div>
+
+                        <div class="sub-panel">
+                            <h3>目录同步</h3>
+                            <p class="muted">适合已有文档目录持续同步到知识库。</p>
+                            <div class="form-grid top-gap">
+                                <label>
+                                    <span>源目录</span>
+                                    <input id="compile-source-dir" type="text" placeholder="/path/to/source-dir">
+                                </label>
+                                <label class="checkbox-row">
+                                    <input id="compile-incremental" type="checkbox">
+                                    <span>增量处理</span>
+                                </label>
+                                <label class="checkbox-row">
+                                    <input id="compile-async" type="checkbox" checked>
+                                    <span>后台执行</span>
+                                </label>
+                            </div>
+                            <div class="button-row wrap top-gap">
+                                <button id="submit-compile-job" class="primary-btn" type="button">开始目录同步</button>
+                            </div>
+                        </div>
+
+                        <div class="sub-panel">
+                            <h3>知识切片</h3>
+                            <p class="muted">只有在资料结构变化明显时，才需要人工触发重建。</p>
+                            <div class="button-row wrap top-gap">
+                                <button id="rebuild-chunks" class="warn-btn" type="button">重建知识切片</button>
+                            </div>
+                            <pre id="rebuild-result" class="code-view compact top-gap">尚未执行重建</pre>
+                        </div>
+                    </div>
+
+                </section>
+
+                <section class="panel">
+                    <div class="panel-title-row">
+                        <div>
+                            <h2>最近 5 条处理记录</h2>
+                            <p>这里只保留最近的上传和目录同步结果。用户能直接看到刚刚处理的是哪个文件、是否入库成功，以及失败原因。</p>
+                        </div>
+                        <button id="refresh-jobs" class="ghost-btn" type="button">刷新记录</button>
+                    </div>
+                    <div id="job-list" class="job-list top-gap"></div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-title-row">
+                        <div>
+                            <h2>已入库内容</h2>
+                            <p>可以按标题、摘要或概念标识查找当前已经沉淀到知识库的条目。</p>
+                        </div>
+                        <a class="primary-btn" href="/admin/ask">去提问</a>
+                    </div>
+
+                    <div class="toolbar article-toolbar top-gap">
+                        <input id="article-query" type="text" placeholder="按标题、摘要或概念 ID 搜索">
+                        <select id="article-lifecycle">
+                            <option value="">全部状态</option>
+                            <option value="ACTIVE">生效中</option>
+                            <option value="DEPRECATED">已废弃</option>
+                            <option value="ARCHIVED">已归档</option>
+                        </select>
+                        <button id="search-articles" class="primary-btn" type="button">查询内容</button>
+                    </div>
+
+                    <div class="two-column content-workspace top-gap">
+                        <div class="list-panel">
+                            <div class="list-header">
+                                <h3>内容列表</h3>
+                                <span id="article-count" class="pill">0</span>
+                            </div>
+                            <div id="article-list" class="scroll-list top-gap"></div>
+                        </div>
+
+                        <div class="detail-panel">
+                            <div class="detail-header">
+                                <div>
+                                    <h3 id="article-detail-title">请选择一条内容</h3>
+                                    <p id="article-detail-meta" class="muted"></p>
+                                </div>
+                            </div>
+                            <div class="detail-stack">
+                                <section class="detail-section">
+                                    <h4>摘要</h4>
+                                    <div id="article-detail-summary" class="summary-box">暂无摘要</div>
+                                </section>
+
+                                <section class="detail-section detail-section-grid">
+                                    <div>
+                                        <h4>来源</h4>
+                                        <div id="article-sources" class="tag-list"></div>
+                                    </div>
+                                    <div>
+                                        <h4>关联信息</h4>
+                                        <div id="article-relations" class="tag-list"></div>
+                                    </div>
+                                </section>
+
+                                <section class="detail-section">
+                                    <h4>正文</h4>
+                                    <pre id="article-content" class="code-view">暂无内容</pre>
+                                </section>
+
+                                <section class="detail-section">
+                                    <h4>元数据</h4>
+                                    <pre id="article-metadata" class="code-view">暂无元数据</pre>
+                                </section>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </main>
         </div>
-    </header>
-
-    <main class="page-main">
-        <section class="panel">
-            <div class="panel-title-row">
-                <div>
-                    <h2>当前状态</h2>
-                    <p>前期只有一个知识库，先把资料导进去，再确认处理结果是否完成。</p>
-                </div>
-                <button id="refresh-summary" class="ghost-btn" type="button">刷新状态</button>
-            </div>
-            <div id="summary-cards" class="metric-grid top-gap"></div>
-        </section>
-
-        <section class="panel">
-            <div class="panel-title-row">
-                <div>
-                    <h2>资料导入</h2>
-                    <p>支持直接上传文件，也支持对一个已有目录发起同步。</p>
-                </div>
-            </div>
-
-            <div class="compile-layout top-gap">
-                <div class="sub-panel">
-                    <h3>上传资料</h3>
-                    <div class="form-grid top-gap">
-                        <label class="file-picker">
-                            <span>选择文件</span>
-                            <input id="compile-files" type="file" multiple>
-                        </label>
-                        <label class="checkbox-row">
-                            <input id="upload-incremental" type="checkbox">
-                            <span>增量处理</span>
-                        </label>
-                        <label class="checkbox-row">
-                            <input id="upload-async" type="checkbox" checked>
-                            <span>后台执行</span>
-                        </label>
-                    </div>
-                    <div class="button-row wrap top-gap">
-                        <button id="submit-upload-job" class="primary-btn" type="button">上传并开始处理</button>
-                    </div>
-                </div>
-
-                <div class="sub-panel">
-                    <h3>目录同步</h3>
-                    <div class="form-grid top-gap">
-                        <label>
-                            <span>源目录</span>
-                            <input id="compile-source-dir" type="text" placeholder="/path/to/source-dir">
-                        </label>
-                        <label class="checkbox-row">
-                            <input id="compile-incremental" type="checkbox">
-                            <span>增量处理</span>
-                        </label>
-                        <label class="checkbox-row">
-                            <input id="compile-async" type="checkbox" checked>
-                            <span>后台执行</span>
-                        </label>
-                    </div>
-                    <div class="button-row wrap top-gap">
-                        <button id="submit-compile-job" class="primary-btn" type="button">开始目录同步</button>
-                    </div>
-                </div>
-
-                <div class="sub-panel">
-                    <h3>知识切片</h3>
-                    <p class="muted">当资料结构变化较大时，可以手动重建知识切片。</p>
-                    <div class="button-row wrap top-gap">
-                        <button id="rebuild-chunks" class="warn-btn" type="button">重建知识切片</button>
-                    </div>
-                    <pre id="rebuild-result" class="code-view compact top-gap">尚未执行重建</pre>
-                </div>
-            </div>
-
-            <div class="panel-title-row top-gap">
-                <div>
-                    <h3>处理状态</h3>
-                    <p>查看导入、同步和重建任务是否已完成。</p>
-                </div>
-                <button id="refresh-jobs" class="ghost-btn" type="button">刷新任务</button>
-            </div>
-            <div id="job-list" class="job-list top-gap"></div>
-        </section>
-
-        <section class="panel">
-            <div class="panel-title-row">
-                <div>
-                    <h2>已入库内容</h2>
-                    <p>可以按标题、摘要或概念标识查找当前已经沉淀到知识库的条目。</p>
-                </div>
-                <a class="primary-btn" href="/admin/ask">去提问</a>
-            </div>
-
-            <div class="toolbar top-gap">
-                <input id="article-query" type="text" placeholder="按标题、摘要或概念 ID 搜索">
-                <select id="article-lifecycle">
-                    <option value="">全部状态</option>
-                    <option value="ACTIVE">生效中</option>
-                    <option value="DEPRECATED">已废弃</option>
-                    <option value="ARCHIVED">已归档</option>
-                </select>
-                <button id="search-articles" class="primary-btn" type="button">查询内容</button>
-            </div>
-
-            <div class="two-column">
-                <div class="list-panel">
-                    <div class="list-header">
-                        <h3>内容列表</h3>
-                        <span id="article-count" class="pill">0</span>
-                    </div>
-                    <div id="article-list" class="scroll-list top-gap"></div>
-                </div>
-
-                <div class="detail-panel">
-                    <div class="detail-header">
-                        <div>
-                            <h3 id="article-detail-title">请选择一条内容</h3>
-                            <p id="article-detail-meta" class="muted"></p>
-                        </div>
-                    </div>
-                    <div id="article-detail-summary" class="summary-box">暂无摘要</div>
-                    <div class="detail-meta-grid">
-                        <div>
-                            <h4>来源</h4>
-                            <div id="article-sources" class="tag-list"></div>
-                        </div>
-                        <div>
-                            <h4>关联信息</h4>
-                            <div id="article-relations" class="tag-list"></div>
-                        </div>
-                    </div>
-                    <div class="detail-body">
-                        <h4>正文</h4>
-                        <pre id="article-content" class="code-view">暂无内容</pre>
-                    </div>
-                    <div class="detail-body">
-                        <h4>元数据</h4>
-                        <pre id="article-metadata" class="code-view">暂无元数据</pre>
-                    </div>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <div id="global-status" class="global-status">准备就绪</div>
-    <pre id="global-result" class="global-result">最近操作结果会显示在这里</pre>
-</div>
-<script src="/admin/management.js"></script>
+    </div>
+ </div>
+<script src="/admin/management.js?v=20260419-upload-tracking-2"></script>
 </body>
 </html>

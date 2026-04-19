@@ -2,8 +2,11 @@
     const state = {
         selectedConceptId: null,
         overview: null,
-        health: null
+        health: null,
+        activeJobId: null
     };
+    let pageNoticeTimer = null;
+    let jobPollingTimer = null;
 
     document.addEventListener("DOMContentLoaded", function () {
         bindEvents();
@@ -15,20 +18,26 @@
         document.getElementById("refresh-summary").addEventListener("click", refreshSummary);
         document.getElementById("refresh-health").addEventListener("click", refreshHealth);
         document.getElementById("search-articles").addEventListener("click", loadArticles);
-        document.getElementById("refresh-jobs").addEventListener("click", loadJobs);
+        document.getElementById("refresh-jobs").addEventListener("click", refreshKnowledgeState);
         document.getElementById("submit-compile-job").addEventListener("click", submitCompileJob);
         document.getElementById("submit-upload-job").addEventListener("click", uploadAndCompile);
         document.getElementById("rebuild-chunks").addEventListener("click", rebuildChunks);
     }
 
     async function refreshPage() {
-        setStatus("正在刷新知识库页面...");
         await Promise.all([
             refreshSummary(),
             loadArticles(),
             loadJobs()
         ]);
-        setStatus("知识库页面已刷新");
+    }
+
+    async function refreshKnowledgeState() {
+        await Promise.all([
+            refreshSummary(),
+            loadArticles(),
+            loadJobs()
+        ]);
     }
 
     async function refreshSummary() {
@@ -93,7 +102,7 @@
     async function submitCompileJob() {
         const sourceDir = document.getElementById("compile-source-dir").value.trim();
         if (!sourceDir) {
-            setStatus("请输入源目录");
+            setStatus("请输入源目录", "warning");
             return;
         }
         try {
@@ -107,8 +116,7 @@
                 })
             });
             renderGlobalResult(response);
-            setStatus("目录同步任务已提交");
-            await loadJobs();
+            await handleSubmittedJob(response, "目录同步任务已提交");
         }
         catch (error) {
             renderGlobalResultError("提交目录同步失败", error);
@@ -119,7 +127,7 @@
     async function uploadAndCompile() {
         const filesInput = document.getElementById("compile-files");
         if (!filesInput.files || filesInput.files.length === 0) {
-            setStatus("请先选择文件");
+            setStatus("请先选择文件", "warning");
             return;
         }
         const formData = new FormData();
@@ -137,9 +145,8 @@
                 isFormData: true
             });
             renderGlobalResult(response);
-            setStatus("上传处理任务已提交");
             filesInput.value = "";
-            await loadJobs();
+            await handleSubmittedJob(response, "上传处理任务已提交");
         }
         catch (error) {
             renderGlobalResultError("上传资料失败", error);
@@ -158,8 +165,8 @@
             });
             document.getElementById("rebuild-result").textContent = JSON.stringify(result, null, 2);
             renderGlobalResult(result);
-            setStatus("知识切片重建已完成");
-            await Promise.all([refreshSummary(), loadJobs()]);
+            setStatus("知识切片重建已完成", "success");
+            await refreshKnowledgeState();
         }
         catch (error) {
             renderGlobalResultError("重建知识切片失败", error);
@@ -187,12 +194,61 @@
                 method: "POST"
             });
             renderGlobalResult(result);
-            setStatus("任务已重新提交");
-            await loadJobs();
+            await handleSubmittedJob(result, "任务已重新提交");
         }
         catch (error) {
             renderGlobalResultError("重试任务失败", error);
             showError("重试任务失败", error);
+        }
+    }
+
+    async function handleSubmittedJob(job, submittedMessage) {
+        if (!job || !job.jobId) {
+            setStatus(submittedMessage, "success");
+            await refreshKnowledgeState();
+            return;
+        }
+        state.activeJobId = job.jobId;
+        await refreshKnowledgeState();
+        const status = String(job.status || "").toUpperCase();
+        if (status === "QUEUED" || status === "RUNNING") {
+            setStatus(submittedMessage + "，系统会自动刷新处理结果。", "info");
+            startJobPolling(job.jobId);
+            return;
+        }
+        setStatus(buildJobCompletionMessage(job), resolveJobNoticeTone(job), status === "FAILED");
+    }
+
+    function startJobPolling(jobId) {
+        stopJobPolling();
+        state.activeJobId = jobId;
+        jobPollingTimer = window.setTimeout(function () {
+            pollJobStatus(jobId);
+        }, 1800);
+    }
+
+    function stopJobPolling() {
+        if (jobPollingTimer) {
+            window.clearTimeout(jobPollingTimer);
+            jobPollingTimer = null;
+        }
+    }
+
+    async function pollJobStatus(jobId) {
+        try {
+            const job = await fetchJson("/api/v1/admin/jobs/" + encodeURIComponent(jobId));
+            await refreshKnowledgeState();
+            const status = String(job.status || "").toUpperCase();
+            if (status === "QUEUED" || status === "RUNNING") {
+                startJobPolling(jobId);
+                return;
+            }
+            stopJobPolling();
+            setStatus(buildJobCompletionMessage(job), resolveJobNoticeTone(job), status === "FAILED");
+        }
+        catch (error) {
+            stopJobPolling();
+            showError("刷新任务状态失败", error);
         }
     }
 
@@ -255,18 +311,23 @@
         document.getElementById("article-count").textContent = String(response.count || 0);
         const list = document.getElementById("article-list");
         if (items.length === 0) {
-            list.innerHTML = "<div class='list-item'><p class='item-summary'>当前还没有入库内容，请先上传资料并等待处理完成。</p></div>";
+            list.innerHTML = "<div class='list-item'><p class='item-summary'>当前还没有入库内容。上传资料后，页面会在处理完成时自动刷新到这里。</p></div>";
             clearArticleDetail();
             return;
         }
         list.innerHTML = items.map(function (item) {
+            const displayTitle = resolveArticleDisplayTitle(item);
+            const sourceLine = buildArticleSourceLine(item);
             return "<button class='list-item' data-concept-id='" + escapeHtml(item.conceptId) + "' type='button'>"
                     + "<div class='meta-row'>"
                     + renderBadge(item.lifecycle)
                     + renderBadge(item.reviewStatus)
                     + "</div>"
-                    + "<h4>" + escapeHtml(item.title) + "</h4>"
-                    + "<p class='item-summary'>" + escapeHtml(item.summary || "暂无摘要") + "</p>"
+                    + "<h4>" + escapeHtml(displayTitle) + "</h4>"
+                    + (sourceLine
+                    ? "<p class='item-meta'>来源文件：" + escapeHtml(sourceLine) + "</p>"
+                    : "")
+                    + "<p class='item-summary'>" + escapeHtml(resolveArticleSummary(item)) + "</p>"
                     + "<div class='meta-row'><span class='pill'>" + escapeHtml(item.conceptId)
                     + "</span><span class='pill'>来源 " + escapeHtml(String(item.sourceCount)) + "</span></div>"
                     + "</button>";
@@ -280,9 +341,11 @@
     }
 
     function renderArticleDetail(detail) {
-        document.getElementById("article-detail-title").textContent = detail.title || "未命名内容";
+        const displayTitle = resolveArticleDisplayTitle(detail);
+        document.getElementById("article-detail-title").textContent = displayTitle || "未命名内容";
         document.getElementById("article-detail-meta").textContent = [
             detail.conceptId,
+            buildArticleSourceMeta(detail),
             detail.lifecycle ? "状态：" + getBadgeLabel(detail.lifecycle) : "",
             detail.reviewStatus ? "审查：" + getBadgeLabel(detail.reviewStatus) : "",
             detail.compiledAt ? "入库时间：" + formatDateTime(detail.compiledAt) : ""
@@ -317,24 +380,33 @@
     function renderJobs(items) {
         const container = document.getElementById("job-list");
         if (!items || items.length === 0) {
-            container.innerHTML = "<div class='job-card'><p class='item-summary'>当前没有处理中的任务。上传新资料或发起目录同步后，这里会显示最新状态。</p></div>";
+            container.innerHTML = "<div class='job-card'><h4>暂时没有处理记录</h4><p class='item-summary'>上传资料或发起目录同步后，这里会直接告诉你是否处理成功。</p></div>";
             return;
         }
-        container.innerHTML = items.map(function (item) {
+        const visibleItems = items.slice()
+                .sort(compareJobsByRequestedAtDesc)
+                .slice(0, 5);
+        container.innerHTML = visibleItems.map(function (item) {
             const retryButton = item.status === "FAILED"
                     ? "<button class='ghost-btn' data-retry-job='" + escapeHtml(item.jobId) + "' type='button'>重试</button>"
                     : "";
+            const errorBlock = item.status === "FAILED" && item.errorMessage
+                    ? "<div class='job-error'>"
+                    + "<strong>失败原因</strong>"
+                    + "<p>" + escapeHtml(item.errorMessage) + "</p>"
+                    + "</div>"
+                    : "";
             return "<div class='job-card'>"
                     + "<div class='meta-row'>"
-                    + "<span class='pill'>" + escapeHtml(item.jobId) + "</span>"
-                    + renderBadge(item.status)
-                    + "<span class='pill'>" + escapeHtml(formatOrchestrationMode(item.orchestrationMode)) + "</span>"
+                    + "<span class='pill'>" + escapeHtml(getJobTypeLabel(item)) + "</span>"
+                    + renderJobStatusBadge(item)
+                    + renderJobRetryTag(item)
                     + "</div>"
-                    + "<h4>" + escapeHtml(item.sourceDir || "-") + "</h4>"
-                    + "<p class='item-summary'>已持久化 " + escapeHtml(String(item.persistedCount || 0))
-                    + " 条，尝试 " + escapeHtml(String(item.attemptCount || 0))
-                    + " 次，增量处理：" + escapeHtml(item.incremental ? "是" : "否") + "</p>"
-                    + "<p class='item-summary'>" + escapeHtml(item.errorMessage || "当前没有错误信息") + "</p>"
+                    + "<h4>" + escapeHtml(getJobTitle(item)) + "</h4>"
+                    + "<p class='item-summary'>" + escapeHtml(getJobSummary(item)) + "</p>"
+                    + "<p class='job-meta-line'>" + escapeHtml(getJobSourceLabel(item)) + "</p>"
+                    + "<p class='job-meta-line'>" + escapeHtml(getJobMetaLine(item)) + "</p>"
+                    + errorBlock
                     + (retryButton
                     ? "<div class='card-actions'>" + retryButton + "</div>"
                     : "")
@@ -345,6 +417,253 @@
                 retryJob(button.dataset.retryJob);
             });
         });
+    }
+
+    function getJobTypeLabel(item) {
+        return isUploadJob(item) ? "上传资料" : "目录同步";
+    }
+
+    function getJobTitle(item) {
+        if (isUploadJob(item)) {
+            return formatUploadTitle(item);
+        }
+        const tail = extractPathTail(item.sourceDir);
+        return tail ? "同步目录：" + tail : "目录同步任务";
+    }
+
+    function getJobSourceLabel(item) {
+        if (isUploadJob(item)) {
+            return "来源：" + formatUploadSourceLabel(item);
+        }
+        if (!item.sourceDir) {
+            return "来源目录：未记录";
+        }
+        return "来源目录：" + shortenMiddle(String(item.sourceDir), 54);
+    }
+
+    function getJobSummary(item) {
+        const normalized = String(item.status || "").toUpperCase();
+        if (normalized === "SUCCEEDED") {
+            if ((item.persistedCount || 0) > 0) {
+                return "处理完成，已更新 " + String(item.persistedCount || 0) + " 条知识内容。";
+            }
+            return "文件已处理完成，但这次还没有生成可展示的知识条目。";
+        }
+        if (normalized === "FAILED") {
+            return "处理失败，可以检查资料后重新重试。";
+        }
+        if (normalized === "RUNNING") {
+            return "系统正在处理这批资料，请稍等片刻。";
+        }
+        if (normalized === "QUEUED") {
+            return "任务已提交，正在等待系统开始处理。";
+        }
+        return "任务状态已更新。";
+    }
+
+    function getJobMetaLine(item) {
+        const parts = [
+            "处理方式：" + (item.incremental ? "增量更新" : "完整处理"),
+            getJobTimeLabel(item)
+        ];
+        return parts.join(" · ");
+    }
+
+    function getJobTimeLabel(item) {
+        if (item.finishedAt) {
+            return "完成于 " + formatDateTime(item.finishedAt);
+        }
+        if (item.startedAt) {
+            return "开始于 " + formatDateTime(item.startedAt);
+        }
+        if (item.requestedAt) {
+            return "提交于 " + formatDateTime(item.requestedAt);
+        }
+        return "时间未记录";
+    }
+
+    function renderJobRetryTag(item) {
+        const retryCount = Math.max((item.attemptCount || 0) - 1, 0);
+        if (retryCount <= 0) {
+            return "";
+        }
+        return "<span class='pill'>已重试 " + escapeHtml(String(retryCount)) + " 次</span>";
+    }
+
+    function isUploadJob(item) {
+        const sourceDir = String(item && item.sourceDir ? item.sourceDir : "");
+        return sourceDir.indexOf("lattice-admin-uploads") >= 0;
+    }
+
+    function formatUploadTitle(item) {
+        const sourceNames = getSourceNames(item);
+        if (sourceNames.length === 0) {
+            return "本次上传资料";
+        }
+        if (sourceNames.length === 1) {
+            return sourceNames[0];
+        }
+        return sourceNames[0] + " 等 " + String(sourceNames.length) + " 个文件";
+    }
+
+    function formatUploadSourceLabel(item) {
+        const sourceNames = getSourceNames(item);
+        if (sourceNames.length === 0) {
+            return "本次上传的文件";
+        }
+        if (sourceNames.length <= 2) {
+            return sourceNames.join("、");
+        }
+        return sourceNames.slice(0, 2).join("、") + " 等 " + String(sourceNames.length) + " 个文件";
+    }
+
+    function getSourceNames(item) {
+        if (!item || !Array.isArray(item.sourceNames)) {
+            return [];
+        }
+        return item.sourceNames.filter(function (sourceName) {
+            return !!sourceName;
+        });
+    }
+
+    function renderJobStatusBadge(item) {
+        const normalized = String(item && item.status ? item.status : "").toUpperCase();
+        if (normalized === "SUCCEEDED" && Number(item.persistedCount || 0) <= 0) {
+            return "<span class='badge warning'>未生成内容</span>";
+        }
+        return renderBadge(item.status);
+    }
+
+    function resolveJobNoticeTone(job) {
+        const normalized = String(job && job.status ? job.status : "").toUpperCase();
+        if (normalized === "FAILED") {
+            return "warning";
+        }
+        if (normalized === "SUCCEEDED" && Number(job.persistedCount || 0) <= 0) {
+            return "warning";
+        }
+        return "success";
+    }
+
+    function buildJobCompletionMessage(job) {
+        const normalized = String(job && job.status ? job.status : "").toUpperCase();
+        if (normalized === "FAILED") {
+            return getJobTitle(job) + " 处理失败，请检查后重试。";
+        }
+        if (Number(job && job.persistedCount ? job.persistedCount : 0) > 0) {
+            return getJobTitle(job) + " 已处理完成，并已更新到内容列表。";
+        }
+        return getJobTitle(job) + " 已处理完成，但暂时没有生成可展示内容。";
+    }
+
+    function compareJobsByRequestedAtDesc(left, right) {
+        return toTimestamp(right && right.requestedAt) - toTimestamp(left && left.requestedAt);
+    }
+
+    function resolveArticleDisplayTitle(item) {
+        if (!item) {
+            return "未命名内容";
+        }
+        const primarySourceName = getPrimaryArticleSourceName(item);
+        if (isGenericArticleTitle(item.title, item.conceptId) && primarySourceName) {
+            return formatArticleSourceTitle(primarySourceName);
+        }
+        return item.title || formatArticleSourceTitle(primarySourceName) || item.conceptId || "未命名内容";
+    }
+
+    function resolveArticleSummary(item) {
+        const summary = String(item && item.summary ? item.summary : "").trim();
+        if (summary && !isGenericArticleTitle(summary, item && item.conceptId ? item.conceptId : "")) {
+            return summary;
+        }
+        const primarySourceName = getPrimaryArticleSourceName(item);
+        if (primarySourceName) {
+            return "这条内容来自 " + primarySourceName + "。";
+        }
+        return summary || "暂无摘要";
+    }
+
+    function buildArticleSourceLine(item) {
+        const primarySourceName = getPrimaryArticleSourceName(item);
+        if (!primarySourceName) {
+            return "";
+        }
+        if (Number(item && item.sourceCount ? item.sourceCount : 0) <= 1) {
+            return primarySourceName;
+        }
+        return primarySourceName + " 等 " + String(item.sourceCount) + " 个来源";
+    }
+
+    function buildArticleSourceMeta(item) {
+        const sourceLine = buildArticleSourceLine(item);
+        return sourceLine ? "来源：" + sourceLine : "";
+    }
+
+    function getPrimaryArticleSourceName(item) {
+        return item && item.primarySourceName
+                ? String(item.primarySourceName)
+                : Array.isArray(item && item.sourcePaths) && item.sourcePaths.length > 0
+                ? String(item.sourcePaths[0])
+                : "";
+    }
+
+    function isGenericArticleTitle(title, conceptId) {
+        const normalizedTitle = normalizeComparableLabel(title);
+        if (!normalizedTitle) {
+            return true;
+        }
+        const normalizedConceptId = normalizeComparableLabel(conceptId);
+        return normalizedTitle === "defaultgroup"
+                || normalizedTitle === "default"
+                || (normalizedConceptId && normalizedTitle === normalizedConceptId);
+    }
+
+    function normalizeComparableLabel(value) {
+        return String(value || "")
+                .toLowerCase()
+                .replace(/[^\p{L}\p{N}]+/gu, "");
+    }
+
+    function formatArticleSourceTitle(sourceName) {
+        const normalized = String(sourceName || "").trim().replaceAll("\\", "/");
+        if (!normalized) {
+            return "";
+        }
+        const segments = normalized.split("/").filter(function (segment) {
+            return segment;
+        });
+        const fileName = segments.length === 0 ? normalized : segments[segments.length - 1];
+        const extensionIndex = fileName.lastIndexOf(".");
+        if (extensionIndex > 0) {
+            return fileName.slice(0, extensionIndex);
+        }
+        return fileName;
+    }
+
+    function toTimestamp(value) {
+        const date = new Date(value || "");
+        return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+    }
+
+    function extractPathTail(path) {
+        const normalized = String(path || "").trim().replaceAll("\\", "/");
+        if (!normalized) {
+            return "";
+        }
+        const segments = normalized.split("/").filter(function (segment) {
+            return segment;
+        });
+        return segments.length === 0 ? normalized : segments[segments.length - 1];
+    }
+
+    function shortenMiddle(value, maxLength) {
+        const text = String(value || "");
+        if (text.length <= maxLength) {
+            return text;
+        }
+        const prefixLength = Math.max(16, Math.floor((maxLength - 1) / 2));
+        const suffixLength = Math.max(12, maxLength - prefixLength - 1);
+        return text.slice(0, prefixLength) + "…" + text.slice(text.length - suffixLength);
     }
 
     function renderMetricCard(item) {
@@ -366,12 +685,11 @@
     }
 
     function renderGlobalResult(result) {
-        document.getElementById("global-result").textContent = JSON.stringify(result, null, 2);
+        return result;
     }
 
     function renderGlobalResultError(prefix, error) {
-        const message = error && error.message ? error.message : String(error);
-        document.getElementById("global-result").textContent = prefix + "：\n" + message;
+        return {prefix: prefix, error: error};
     }
 
     function renderBadge(value) {
@@ -398,14 +716,31 @@
             body: requestOptions.body
         });
         if (!response.ok) {
-            const text = await response.text();
-            throw new Error(text || ("HTTP " + response.status));
+            throw await buildHttpError(response);
         }
         const contentType = response.headers.get("content-type") || "";
         if (contentType.indexOf("application/json") >= 0) {
             return response.json();
         }
         return response.text();
+    }
+
+    async function buildHttpError(response) {
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.indexOf("application/json") >= 0) {
+            const payload = await response.json();
+            const message = payload && payload.message
+                    ? payload.message
+                    : JSON.stringify(payload);
+            const error = new Error(message || ("HTTP " + response.status));
+            error.status = response.status;
+            error.payload = payload;
+            return error;
+        }
+        const text = await response.text();
+        const error = new Error(text || ("HTTP " + response.status));
+        error.status = response.status;
+        return error;
     }
 
     async function fetchHealthStatus() {
@@ -503,13 +838,39 @@
         return normalized.length > 60 ? normalized.slice(0, 57) + "..." : normalized;
     }
 
-    function setStatus(message) {
-        document.getElementById("global-status").textContent = message;
+    function setStatus(message, tone, persist) {
+        const resolvedTone = tone || "info";
+        const resolvedPersist = typeof persist === "boolean"
+                ? persist
+                : (resolvedTone === "danger" || resolvedTone === "warning");
+        renderPageNotice(message, resolvedTone, resolvedPersist);
     }
 
     function showError(prefix, error) {
         const message = error && error.message ? error.message : String(error);
-        setStatus(prefix + "：" + message);
+        setStatus(prefix + "：" + message, "danger");
+    }
+
+    function renderPageNotice(message, tone, persist) {
+        const notice = document.getElementById("page-notice");
+        if (!notice) {
+            return;
+        }
+        if (pageNoticeTimer) {
+            window.clearTimeout(pageNoticeTimer);
+            pageNoticeTimer = null;
+        }
+        notice.hidden = false;
+        notice.className = "page-notice" + (tone ? " " + tone : "");
+        notice.textContent = message;
+        if (!persist) {
+            pageNoticeTimer = window.setTimeout(function () {
+                notice.hidden = true;
+                notice.className = "page-notice";
+                notice.textContent = "";
+                pageNoticeTimer = null;
+            }, 3200);
+        }
     }
 
     function formatOrchestrationMode(value) {

@@ -4,7 +4,6 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,17 +37,16 @@ public class CompileOrchestratorRegistry {
      * 执行编译。
      *
      * @param orchestrationMode 编排模式
-     * @param sourceDir 源目录
-     * @param incremental 是否增量编译
+     * @param executionRequest 执行请求
      * @return 编译结果
      * @throws IOException IO 异常
      */
-    public CompileResult execute(String orchestrationMode, Path sourceDir, boolean incremental) throws IOException {
-        String normalizedMode = CompileOrchestrationModes.normalize(orchestrationMode);
+    public CompileResult execute(CompileExecutionRequest executionRequest) throws IOException {
+        String normalizedMode = CompileOrchestrationModes.normalize(executionRequest.getOrchestrationMode());
         CompileOrchestrator compileOrchestrator = compileOrchestratorMap.get(normalizedMode);
         if (compileOrchestrator == null) {
-            throw new IllegalArgumentException("unsupported orchestration mode: " + orchestrationMode);
+            throw new IllegalArgumentException("unsupported orchestration mode: " + executionRequest.getOrchestrationMode());
         }
-        return compileOrchestrator.execute(sourceDir, incremental);
+        return compileOrchestrator.execute(executionRequest);
     }
 }

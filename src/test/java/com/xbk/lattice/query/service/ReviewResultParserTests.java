@@ -1,5 +1,7 @@
 package com.xbk.lattice.query.service;
 
+import com.xbk.lattice.query.domain.ReviewResult;
+import com.xbk.lattice.query.domain.ReviewStatus;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

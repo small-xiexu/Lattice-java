@@ -1,7 +1,7 @@
 package com.xbk.lattice.query.graph;
 
 import com.xbk.lattice.query.service.QueryReviewProperties;
-import com.xbk.lattice.query.service.ReviewResult;
+import com.xbk.lattice.query.domain.ReviewResult;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 

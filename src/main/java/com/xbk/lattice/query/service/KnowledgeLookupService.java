@@ -13,7 +13,7 @@ import java.util.Optional;
 /**
  * 知识详情查询服务
  *
- * 职责：按概念标识或源文件路径读取知识详情，供 MCP `lattice_get` 使用
+ * 职责：按文章唯一键、概念标识或源文件路径读取知识详情，供 MCP `lattice_get` 使用
  *
  * @author xiexu
  */
@@ -42,11 +42,14 @@ public class KnowledgeLookupService {
     /**
      * 查询知识详情。
      *
-     * @param id 概念标识或源文件路径
+     * @param id 文章唯一键、概念标识或源文件路径
      * @return 知识详情结果
      */
     public KnowledgeLookupResult get(String id) {
-        Optional<ArticleRecord> articleRecord = articleJdbcRepository.findByConceptId(id);
+        Optional<ArticleRecord> articleRecord = articleJdbcRepository.findByArticleKey(id);
+        if (articleRecord.isEmpty()) {
+            articleRecord = articleJdbcRepository.findByConceptId(id);
+        }
         if (articleRecord.isPresent()) {
             ArticleRecord record = articleRecord.get();
             return new KnowledgeLookupResult(

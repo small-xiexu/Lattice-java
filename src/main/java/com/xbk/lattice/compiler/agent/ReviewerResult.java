@@ -1,6 +1,6 @@
 package com.xbk.lattice.compiler.agent;
 
-import com.xbk.lattice.query.service.ReviewResult;
+import com.xbk.lattice.query.domain.ReviewResult;
 
 /**
  * ReviewerAgent 输出结果

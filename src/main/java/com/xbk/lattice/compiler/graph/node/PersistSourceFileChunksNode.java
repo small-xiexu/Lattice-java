@@ -47,7 +47,10 @@ public class PersistSourceFileChunksNode extends AbstractCompileGraphNode {
      */
     public Map<String, Object> execute(OverAllState overAllState) {
         CompileGraphState state = state(overAllState);
-        sourceIngestSupport.persistSourceFileChunks(workingSetStore().loadRawSources(state.getRawSourcesRef()));
+        sourceIngestSupport.persistSourceFileChunks(
+                workingSetStore().loadRawSources(state.getRawSourcesRef()),
+                state.getSourceFileIdsByPath()
+        );
         return delta(state);
     }
 }

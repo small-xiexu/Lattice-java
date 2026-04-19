@@ -1,6 +1,7 @@
 package com.xbk.lattice.query.service;
 
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
+import com.xbk.lattice.query.domain.ReviewResult;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 

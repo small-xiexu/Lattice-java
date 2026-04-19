@@ -1,10 +1,15 @@
 package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.config.CompilerProperties;
-import com.xbk.lattice.compiler.model.AnalyzedConcept;
-import com.xbk.lattice.compiler.model.MergedConcept;
-import com.xbk.lattice.compiler.model.RawSource;
-import com.xbk.lattice.compiler.model.SourceBatch;
+import com.xbk.lattice.compiler.domain.AnalyzedConcept;
+import com.xbk.lattice.compiler.domain.MergedConcept;
+import com.xbk.lattice.compiler.domain.RawSource;
+import com.xbk.lattice.compiler.domain.SourceBatch;
+import com.xbk.lattice.compiler.node.AnalyzeNode;
+import com.xbk.lattice.compiler.node.BatchSplitNode;
+import com.xbk.lattice.compiler.node.CrossGroupMergeNode;
+import com.xbk.lattice.compiler.node.GroupNode;
+import com.xbk.lattice.compiler.node.IngestNode;
 import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
@@ -115,6 +120,37 @@ public class SourceIngestSupport {
     }
 
     /**
+     * 摄入源目录并绑定资料源上下文。
+     *
+     * @param sourceDir 源目录
+     * @param sourceId 资料源主键
+     * @return 原始源文件集合
+     * @throws IOException IO 异常
+     */
+    public List<RawSource> ingest(Path sourceDir, Long sourceId) throws IOException {
+        List<RawSource> rawSources = ingest(sourceDir);
+        if (sourceId == null) {
+            return rawSources;
+        }
+        List<RawSource> boundSources = new ArrayList<RawSource>();
+        for (RawSource rawSource : rawSources) {
+            boundSources.add(RawSource.parsed(
+                    sourceId,
+                    rawSource.getRelativePath(),
+                    rawSource.getExtractedText(),
+                    rawSource.getFormat(),
+                    rawSource.getFileSize(),
+                    rawSource.getMetadataJson(),
+                    rawSource.isVerbatim(),
+                    rawSource.getRawPath(),
+                    rawSource.getParseMode(),
+                    rawSource.getParseProvider()
+            ));
+        }
+        return boundSources;
+    }
+
+    /**
      * 对源文件集合进行分组。
      *
      * @param rawSources 原始源文件集合
@@ -212,9 +248,28 @@ public class SourceIngestSupport {
      */
     @Transactional(rollbackFor = Exception.class)
     public void persistSourceFiles(List<RawSource> rawSources) {
+        persistSourceFiles(rawSources, null, null);
+    }
+
+    /**
+     * 落盘源文件预览。
+     *
+     * @param rawSources 原始源文件集合
+     * @param sourceId 资料源主键
+     * @param sourceSyncRunId 同步运行主键
+     * @return 相对路径到源文件主键的映射
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Long> persistSourceFiles(List<RawSource> rawSources, Long sourceId, Long sourceSyncRunId) {
+        Map<String, Long> sourceFileIdsByPath = new java.util.LinkedHashMap<String, Long>();
         for (RawSource rawSource : rawSources) {
-            sourceFileJdbcRepository.upsert(new SourceFileRecord(
+            Long effectiveSourceId = rawSource.getSourceId() == null ? sourceId : rawSource.getSourceId();
+            SourceFileRecord persistedRecord = sourceFileJdbcRepository.upsert(new SourceFileRecord(
+                    null,
+                    effectiveSourceId,
                     rawSource.getRelativePath(),
+                    rawSource.getRelativePath(),
+                    sourceSyncRunId,
                     buildContentPreview(rawSource.getContent()),
                     rawSource.getFormat(),
                     rawSource.getFileSize(),
@@ -223,7 +278,9 @@ public class SourceIngestSupport {
                     rawSource.isVerbatim(),
                     rawSource.getRawPath()
             ));
+            sourceFileIdsByPath.put(rawSource.getRelativePath(), persistedRecord.getId());
         }
+        return sourceFileIdsByPath;
     }
 
     /**
@@ -233,16 +290,51 @@ public class SourceIngestSupport {
      */
     @Transactional(rollbackFor = Exception.class)
     public void persistSourceFileChunks(List<RawSource> rawSources) {
+        persistSourceFileChunks(rawSources, Map.of());
+    }
+
+    /**
+     * 落盘源文件分块。
+     *
+     * @param rawSources 原始源文件集合
+     * @param sourceFileIdsByPath 相对路径到源文件主键映射
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void persistSourceFileChunks(List<RawSource> rawSources, Map<String, Long> sourceFileIdsByPath) {
         if (sourceFileChunkJdbcRepository == null) {
             return;
         }
         for (RawSource rawSource : rawSources) {
+            Long sourceFileId = sourceFileIdsByPath.get(rawSource.getRelativePath());
+            if (sourceFileId == null) {
+                sourceFileId = resolveSourceFileId(rawSource);
+            }
+            if (sourceFileId == null) {
+                throw new IllegalStateException("source file id missing for path: " + rawSource.getRelativePath());
+            }
             sourceFileChunkJdbcRepository.replaceChunksFromContent(
+                    sourceFileId,
                     rawSource.getRelativePath(),
                     rawSource.getContent(),
                     rawSource.isVerbatim()
             );
         }
+    }
+
+    private Long resolveSourceFileId(RawSource rawSource) {
+        Long sourceId = rawSource.getSourceId();
+        if (sourceId != null) {
+            java.util.Optional<SourceFileRecord> sourceFileRecord = sourceFileJdbcRepository.findBySourceIdAndRelativePath(
+                    sourceId,
+                    rawSource.getRelativePath()
+            );
+            if (sourceFileRecord.isPresent()) {
+                return sourceFileRecord.orElseThrow().getId();
+            }
+        }
+        return sourceFileJdbcRepository.findByPath(rawSource.getRelativePath())
+                .map(SourceFileRecord::getId)
+                .orElse(null);
     }
 
     /**

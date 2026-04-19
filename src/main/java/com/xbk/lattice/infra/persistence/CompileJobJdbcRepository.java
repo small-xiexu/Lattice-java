@@ -41,12 +41,15 @@ public class CompileJobJdbcRepository {
         jdbcTemplate.update(
                 """
                         insert into compile_jobs (
-                            job_id, source_dir, incremental, orchestration_mode, status, persisted_count,
-                            error_message, attempt_count, requested_at, started_at, finished_at
+                            job_id, source_dir, source_id, source_sync_run_id, incremental,
+                            orchestration_mode, status, persisted_count, error_message,
+                            attempt_count, requested_at, started_at, finished_at
                         )
-                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         on conflict (job_id) do update
                         set source_dir = excluded.source_dir,
+                            source_id = excluded.source_id,
+                            source_sync_run_id = excluded.source_sync_run_id,
                             incremental = excluded.incremental,
                             orchestration_mode = excluded.orchestration_mode,
                             status = excluded.status,
@@ -59,6 +62,8 @@ public class CompileJobJdbcRepository {
                         """,
                 compileJobRecord.getJobId(),
                 compileJobRecord.getSourceDir(),
+                compileJobRecord.getSourceId(),
+                compileJobRecord.getSourceSyncRunId(),
                 compileJobRecord.isIncremental(),
                 compileJobRecord.getOrchestrationMode(),
                 compileJobRecord.getStatus(),
@@ -79,8 +84,9 @@ public class CompileJobJdbcRepository {
     public List<CompileJobRecord> findAll() {
         return jdbcTemplate.query(
                 """
-                        select job_id, source_dir, incremental, orchestration_mode, status, persisted_count,
-                               error_message, attempt_count, requested_at, started_at, finished_at
+                        select job_id, source_dir, source_id, source_sync_run_id, incremental,
+                               orchestration_mode, status, persisted_count, error_message,
+                               attempt_count, requested_at, started_at, finished_at
                         from compile_jobs
                         order by requested_at desc, job_id desc
                         """,
@@ -97,8 +103,9 @@ public class CompileJobJdbcRepository {
     public Optional<CompileJobRecord> findByJobId(String jobId) {
         List<CompileJobRecord> records = jdbcTemplate.query(
                 """
-                        select job_id, source_dir, incremental, orchestration_mode, status, persisted_count,
-                               error_message, attempt_count, requested_at, started_at, finished_at
+                        select job_id, source_dir, source_id, source_sync_run_id, incremental,
+                               orchestration_mode, status, persisted_count, error_message,
+                               attempt_count, requested_at, started_at, finished_at
                         from compile_jobs
                         where job_id = ?
                         """,
@@ -119,8 +126,9 @@ public class CompileJobJdbcRepository {
     public Optional<CompileJobRecord> findNextQueued() {
         List<CompileJobRecord> records = jdbcTemplate.query(
                 """
-                        select job_id, source_dir, incremental, orchestration_mode, status, persisted_count,
-                               error_message, attempt_count, requested_at, started_at, finished_at
+                        select job_id, source_dir, source_id, source_sync_run_id, incremental,
+                               orchestration_mode, status, persisted_count, error_message,
+                               attempt_count, requested_at, started_at, finished_at
                         from compile_jobs
                         where status = 'QUEUED'
                         order by requested_at asc, job_id asc
@@ -236,6 +244,8 @@ public class CompileJobJdbcRepository {
         return new CompileJobRecord(
                 resultSet.getString("job_id"),
                 resultSet.getString("source_dir"),
+                readLong(resultSet, "source_id"),
+                readLong(resultSet, "source_sync_run_id"),
                 resultSet.getBoolean("incremental"),
                 resultSet.getString("orchestration_mode"),
                 resultSet.getString("status"),
@@ -246,5 +256,10 @@ public class CompileJobJdbcRepository {
                 resultSet.getObject("started_at", OffsetDateTime.class),
                 resultSet.getObject("finished_at", OffsetDateTime.class)
         );
+    }
+
+    private Long readLong(ResultSet resultSet, String columnName) throws SQLException {
+        Object value = resultSet.getObject(columnName);
+        return value == null ? null : resultSet.getLong(columnName);
     }
 }

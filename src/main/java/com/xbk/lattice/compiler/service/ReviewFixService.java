@@ -1,6 +1,7 @@
 package com.xbk.lattice.compiler.service;
 
-import com.xbk.lattice.query.service.ReviewIssue;
+import com.xbk.lattice.compiler.prompt.LatticePrompts;
+import com.xbk.lattice.query.domain.ReviewIssue;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 

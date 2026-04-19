@@ -1,6 +1,6 @@
 package com.xbk.lattice.compiler.agent;
 
-import com.xbk.lattice.compiler.model.MergedConcept;
+import com.xbk.lattice.compiler.domain.MergedConcept;
 
 import java.nio.file.Path;
 
@@ -17,6 +17,10 @@ public class WriterTask {
 
     private final Path sourceDir;
 
+    private final Long sourceId;
+
+    private final String sourceCode;
+
     private final String scopeId;
 
     private final String scene;
@@ -28,7 +32,7 @@ public class WriterTask {
      * @param sourceDir 源目录
      */
     public WriterTask(MergedConcept mergedConcept, Path sourceDir) {
-        this(mergedConcept, sourceDir, null, null);
+        this(mergedConcept, sourceDir, null, null, null, null);
     }
 
     /**
@@ -40,8 +44,31 @@ public class WriterTask {
      * @param scene 场景
      */
     public WriterTask(MergedConcept mergedConcept, Path sourceDir, String scopeId, String scene) {
+        this(mergedConcept, sourceDir, null, null, scopeId, scene);
+    }
+
+    /**
+     * 创建 WriterAgent 输入任务。
+     *
+     * @param mergedConcept 合并概念
+     * @param sourceDir 源目录
+     * @param sourceId 资料源主键
+     * @param sourceCode 资料源编码
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     */
+    public WriterTask(
+            MergedConcept mergedConcept,
+            Path sourceDir,
+            Long sourceId,
+            String sourceCode,
+            String scopeId,
+            String scene
+    ) {
         this.mergedConcept = mergedConcept;
         this.sourceDir = sourceDir;
+        this.sourceId = sourceId;
+        this.sourceCode = sourceCode;
         this.scopeId = scopeId;
         this.scene = scene;
     }
@@ -62,6 +89,24 @@ public class WriterTask {
      */
     public Path getSourceDir() {
         return sourceDir;
+    }
+
+    /**
+     * 返回资料源主键。
+     *
+     * @return 资料源主键
+     */
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    /**
+     * 返回资料源编码。
+     *
+     * @return 资料源编码
+     */
+    public String getSourceCode() {
+        return sourceCode;
     }
 
     /**

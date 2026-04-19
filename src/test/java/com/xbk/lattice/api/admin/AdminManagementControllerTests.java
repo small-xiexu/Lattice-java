@@ -68,12 +68,15 @@ class AdminManagementControllerTests {
 
         mockMvc.perform(get("/api/v1/admin/articles"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].articleKey").value("legacy-default--payment-timeout"))
                 .andExpect(jsonPath("$.items[0].conceptId").value("payment-timeout"))
                 .andExpect(jsonPath("$.items[0].title").value("Payment Timeout"))
+                .andExpect(jsonPath("$.items[0].primarySourceName").value("payment/analyze.json"))
                 .andExpect(jsonPath("$.items[0].lifecycle").value("ACTIVE"));
 
         mockMvc.perform(get("/api/v1/admin/articles/payment-timeout"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articleKey").value("legacy-default--payment-timeout"))
                 .andExpect(jsonPath("$.conceptId").value("payment-timeout"))
                 .andExpect(jsonPath("$.summary").value("Handles payment timeout recovery"))
                 .andExpect(jsonPath("$.sourcePaths[0]").value("payment/analyze.json"));

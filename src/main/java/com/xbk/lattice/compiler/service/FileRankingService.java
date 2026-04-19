@@ -1,7 +1,7 @@
 package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.config.CompilerProperties;
-import com.xbk.lattice.compiler.model.RawSource;
+import com.xbk.lattice.compiler.domain.RawSource;
 
 import java.util.ArrayList;
 import java.util.Comparator;

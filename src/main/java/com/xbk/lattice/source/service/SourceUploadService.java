@@ -1,0 +1,780 @@
+package com.xbk.lattice.source.service;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.xbk.lattice.compiler.service.CompileJobService;
+import com.xbk.lattice.compiler.service.CompileJobStatuses;
+import com.xbk.lattice.compiler.service.CompileOrchestrationModes;
+import com.xbk.lattice.infra.persistence.CompileJobRecord;
+import com.xbk.lattice.source.domain.BundleSummary;
+import com.xbk.lattice.source.domain.KnowledgeSource;
+import com.xbk.lattice.source.domain.SourceDecisionResult;
+import com.xbk.lattice.source.domain.SourceSyncRun;
+import com.xbk.lattice.source.domain.SourceSyncRunDetail;
+import com.xbk.lattice.source.infra.SourceSnapshotJdbcRepository;
+import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * 统一上传与自动归并服务。
+ *
+ * 职责：承载 uploads -> SourceSyncRun -> compile 的 Phase E 主闭环
+ *
+ * @author xiexu
+ */
+@Service
+@Profile("jdbc")
+public class SourceUploadService {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    private static final Duration WAIT_CONFIRM_TIMEOUT = Duration.ofDays(7);
+
+    private final BundleFeatureExtractor bundleFeatureExtractor;
+
+    private final SourceDecisionPolicy sourceDecisionPolicy;
+
+    private final SourceService sourceService;
+
+    private final SourceSyncService sourceSyncService;
+
+    private final CompileJobService compileJobService;
+
+    private final SourceSnapshotJdbcRepository sourceSnapshotJdbcRepository;
+
+    /**
+     * 创建统一上传服务。
+     *
+     * @param bundleFeatureExtractor bundle 特征提取器
+     * @param sourceDecisionPolicy 自动识别策略
+     * @param sourceService 资料源服务
+     * @param sourceSyncService 同步运行服务
+     * @param compileJobService 编译作业服务
+     * @param sourceSnapshotJdbcRepository 资料源快照仓储
+     */
+    public SourceUploadService(
+            BundleFeatureExtractor bundleFeatureExtractor,
+            SourceDecisionPolicy sourceDecisionPolicy,
+            SourceService sourceService,
+            SourceSyncService sourceSyncService,
+            CompileJobService compileJobService,
+            SourceSnapshotJdbcRepository sourceSnapshotJdbcRepository
+    ) {
+        this.bundleFeatureExtractor = bundleFeatureExtractor;
+        this.sourceDecisionPolicy = sourceDecisionPolicy;
+        this.sourceService = sourceService;
+        this.sourceSyncService = sourceSyncService;
+        this.compileJobService = compileJobService;
+        this.sourceSnapshotJdbcRepository = sourceSnapshotJdbcRepository;
+    }
+
+    /**
+     * 接收新的上传资料包。
+     *
+     * @param stagingDir staging 目录
+     * @param requestedSourceId 可选的目标资料源主键
+     * @return 同步运行详情
+     * @throws IOException IO 异常
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public SourceSyncRunDetail acceptUpload(Path stagingDir, Long requestedSourceId) throws IOException {
+        BundleFeatureExtractor.UploadBundleSnapshot bundleSnapshot = bundleFeatureExtractor.extract(stagingDir);
+        KnowledgeSource requestedSource = requestedSourceId == null ? null : sourceService.findById(requestedSourceId)
+                .orElseThrow(() -> new IllegalArgumentException("source not found: " + requestedSourceId));
+        if (requestedSource != null) {
+            rejectWhenSourceStatusBlocksSync(requestedSource);
+            rejectWhenSourceHasActiveRun(requestedSource.getId(), null);
+        }
+        if (requestedSource == null) {
+            java.util.Optional<SourceSyncRun> activeRun = sourceSyncService.findActivePrelockByManifestHash(bundleSnapshot.getManifestHash());
+            if (activeRun.isPresent()) {
+                return getRunDetail(activeRun.orElseThrow().getId());
+            }
+        }
+
+        SourceSyncRun run = createInitialRun(bundleSnapshot, requestedSourceId);
+        SourceSyncRun acceptedRun = requestedSource == null
+                ? routeAutomaticDecision(run, bundleSnapshot)
+                : routeExplicitSource(run, requestedSource, bundleSnapshot, "RULE_ONLY");
+        return getRunDetail(acceptedRun.getId());
+    }
+
+    /**
+     * 返回同步运行详情。
+     *
+     * @param runId 运行主键
+     * @return 运行详情
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public SourceSyncRunDetail getRunDetail(Long runId) {
+        SourceSyncRun run = sourceSyncService.findById(runId).orElseThrow(() -> new IllegalArgumentException("run not found: " + runId));
+        SourceSyncRun refreshedRun = refreshRunFromCompileJob(run);
+        return toDetail(refreshedRun);
+    }
+
+    /**
+     * 列出资料源的同步历史。
+     *
+     * @param sourceId 资料源主键
+     * @return 同步历史
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public List<SourceSyncRunDetail> listRunDetails(Long sourceId) {
+        List<SourceSyncRunDetail> details = new ArrayList<SourceSyncRunDetail>();
+        for (SourceSyncRun run : sourceSyncService.listRuns(sourceId)) {
+            details.add(getRunDetail(run.getId()));
+        }
+        return details;
+    }
+
+    /**
+     * 对 WAIT_CONFIRM 运行执行人工确认。
+     *
+     * @param runId 运行主键
+     * @param resolverDecision 人工确认决策
+     * @param sourceId 目标资料源主键
+     * @return 运行详情
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public SourceSyncRunDetail confirmRun(Long runId, String resolverDecision, Long sourceId) {
+        SourceSyncRun existingRun = sourceSyncService.findById(runId).orElseThrow(() -> new IllegalArgumentException("run not found: " + runId));
+        SourceSyncRun currentRun = refreshRunFromCompileJob(existingRun);
+        if (!"WAIT_CONFIRM".equals(currentRun.getStatus())) {
+            throw new IllegalStateException("run is not waiting for confirmation: " + runId);
+        }
+
+        BundleFeatureExtractor.UploadBundleSnapshot bundleSnapshot = loadBundleSnapshot(currentRun);
+        String normalizedDecision = normalizeDecision(resolverDecision);
+        if ("NEW_SOURCE".equals(normalizedDecision)) {
+            KnowledgeSource createdSource = createUploadSource(bundleSnapshot.getBundleSummary());
+            SourceSyncRun requeuedRun = submitCompile(
+                    currentRun,
+                    createdSource,
+                    bundleSnapshot,
+                    "MANUAL_OVERRIDE",
+                    normalizedDecision,
+                    "CREATE"
+            );
+            return getRunDetail(requeuedRun.getId());
+        }
+
+        if (!"EXISTING_SOURCE_UPDATE".equals(normalizedDecision) && !"EXISTING_SOURCE_APPEND".equals(normalizedDecision)) {
+            throw new IllegalArgumentException("unsupported decision: " + resolverDecision);
+        }
+        if (sourceId == null) {
+            throw new IllegalArgumentException("sourceId is required for existing-source confirmation");
+        }
+
+        KnowledgeSource targetSource = sourceService.findById(sourceId)
+                .orElseThrow(() -> new IllegalArgumentException("source not found: " + sourceId));
+        SourceSyncRun acceptedRun = routeExplicitSource(currentRun, targetSource, bundleSnapshot, "MANUAL_OVERRIDE", normalizedDecision);
+        return getRunDetail(acceptedRun.getId());
+    }
+
+    private SourceSyncRun createInitialRun(
+            BundleFeatureExtractor.UploadBundleSnapshot bundleSnapshot,
+            Long requestedSourceId
+    ) {
+        OffsetDateTime now = OffsetDateTime.now();
+        String evidenceJson = buildEvidenceJson(bundleSnapshot, null, null, "资料包已进入 staging，等待识别");
+        SourceSyncRun run = new SourceSyncRun(
+                null,
+                requestedSourceId,
+                "UPLOAD",
+                bundleSnapshot.getManifestHash(),
+                "MANUAL",
+                "RULE_ONLY",
+                null,
+                null,
+                "MATCHING",
+                null,
+                null,
+                evidenceJson,
+                null,
+                now,
+                now,
+                null,
+                null
+        );
+        try {
+            return sourceSyncService.requestRun(run);
+        }
+        catch (DataIntegrityViolationException ex) {
+            if (requestedSourceId == null) {
+                return sourceSyncService.findActivePrelockByManifestHash(bundleSnapshot.getManifestHash())
+                        .orElseThrow(() -> ex);
+            }
+            throw ex;
+        }
+    }
+
+    private SourceSyncRun routeAutomaticDecision(
+            SourceSyncRun run,
+            BundleFeatureExtractor.UploadBundleSnapshot bundleSnapshot
+    ) {
+        SourceDecisionResult decisionResult = sourceDecisionPolicy.decide(
+                bundleSnapshot.getBundleSummary(),
+                bundleSnapshot.getManifestHash(),
+                sourceService.listSources()
+        );
+        if (decisionResult.isSkippedNoChange()) {
+            KnowledgeSource matchedSource = sourceService.findById(decisionResult.getMatchedSourceId()).orElseThrow();
+            return markSkippedNoChange(run, matchedSource, bundleSnapshot, decisionResult.getResolverMode(), decisionResult.getResolverDecision(), decisionResult.getSyncAction(), decisionResult.getMessage());
+        }
+        if (decisionResult.isWaitConfirm()) {
+            return sourceSyncService.saveRun(replaceRun(
+                    run,
+                    null,
+                    decisionResult.getResolverMode(),
+                    decisionResult.getResolverDecision(),
+                    null,
+                    "WAIT_CONFIRM",
+                    decisionResult.getMatchedSourceId(),
+                    null,
+                    buildEvidenceJson(bundleSnapshot, decisionResult.getResolverDecision(), null, decisionResult.getMessage()),
+                    null,
+                    null,
+                    null
+            ));
+        }
+        if ("NEW_SOURCE".equals(decisionResult.getResolverDecision())) {
+            KnowledgeSource createdSource = createUploadSource(bundleSnapshot.getBundleSummary());
+            return submitCompile(
+                    run,
+                    createdSource,
+                    bundleSnapshot,
+                    decisionResult.getResolverMode(),
+                    decisionResult.getResolverDecision(),
+                    decisionResult.getSyncAction()
+            );
+        }
+        KnowledgeSource matchedSource = sourceService.findById(decisionResult.getMatchedSourceId()).orElseThrow();
+        return routeExplicitSource(
+                run,
+                matchedSource,
+                bundleSnapshot,
+                decisionResult.getResolverMode(),
+                decisionResult.getResolverDecision()
+        );
+    }
+
+    private SourceSyncRun routeExplicitSource(
+            SourceSyncRun run,
+            KnowledgeSource targetSource,
+            BundleFeatureExtractor.UploadBundleSnapshot bundleSnapshot,
+            String resolverMode
+    ) {
+        boolean updateLike = isUpdateLike(targetSource, bundleSnapshot.getBundleSummary());
+        String resolverDecision = updateLike ? "EXISTING_SOURCE_UPDATE" : "EXISTING_SOURCE_APPEND";
+        return routeExplicitSource(run, targetSource, bundleSnapshot, resolverMode, resolverDecision);
+    }
+
+    private SourceSyncRun routeExplicitSource(
+            SourceSyncRun run,
+            KnowledgeSource targetSource,
+            BundleFeatureExtractor.UploadBundleSnapshot bundleSnapshot,
+            String resolverMode,
+            String resolverDecision
+    ) {
+        rejectWhenSourceStatusBlocksSync(targetSource);
+        rejectWhenSourceHasActiveRun(targetSource.getId(), run.getId());
+        String syncAction = "EXISTING_SOURCE_UPDATE".equals(resolverDecision) ? "UPDATE" : "APPEND";
+        if (bundleSnapshot.getManifestHash().equals(targetSource.getLatestManifestHash())) {
+            return markSkippedNoChange(
+                    run,
+                    targetSource,
+                    bundleSnapshot,
+                    resolverMode,
+                    resolverDecision,
+                    syncAction,
+                    "资料包与最近一次成功快照一致，跳过本次同步"
+            );
+        }
+        return submitCompile(run, targetSource, bundleSnapshot, resolverMode, resolverDecision, syncAction);
+    }
+
+    private SourceSyncRun markSkippedNoChange(
+            SourceSyncRun run,
+            KnowledgeSource targetSource,
+            BundleFeatureExtractor.UploadBundleSnapshot bundleSnapshot,
+            String resolverMode,
+            String resolverDecision,
+            String syncAction,
+            String message
+    ) {
+        SourceSyncRun skippedRun = sourceSyncService.saveRun(replaceRun(
+                run,
+                targetSource.getId(),
+                resolverMode,
+                resolverDecision,
+                syncAction,
+                "SKIPPED_NO_CHANGE",
+                targetSource.getId(),
+                null,
+                buildEvidenceJson(bundleSnapshot, resolverDecision, null, message),
+                null,
+                null,
+                OffsetDateTime.now()
+        ));
+        updateSourceAfterSuccess(targetSource, bundleSnapshot, skippedRun);
+        return skippedRun;
+    }
+
+    private SourceSyncRun submitCompile(
+            SourceSyncRun run,
+            KnowledgeSource targetSource,
+            BundleFeatureExtractor.UploadBundleSnapshot bundleSnapshot,
+            String resolverMode,
+            String resolverDecision,
+            String syncAction
+    ) {
+        CompileJobRecord compileJobRecord = compileJobService.submit(
+                bundleSnapshot.getStagingDir().toString(),
+                false,
+                true,
+                CompileOrchestrationModes.STATE_GRAPH,
+                targetSource.getId(),
+                run.getId()
+        );
+        return sourceSyncService.saveRun(replaceRun(
+                run,
+                targetSource.getId(),
+                resolverMode,
+                resolverDecision,
+                syncAction,
+                "COMPILE_QUEUED",
+                targetSource.getId(),
+                compileJobRecord.getJobId(),
+                buildEvidenceJson(bundleSnapshot, resolverDecision, compileJobRecord.getJobId(), "已提交编译任务，等待后台执行"),
+                null,
+                null,
+                null
+        ));
+    }
+
+    private SourceSyncRun refreshRunFromCompileJob(SourceSyncRun run) {
+        SourceSyncRun expiredWaitConfirmRun = expireWaitConfirmRunIfNecessary(run);
+        if (expiredWaitConfirmRun != run) {
+            return expiredWaitConfirmRun;
+        }
+        if (run.getCompileJobId() == null || isTerminal(run.getStatus())) {
+            return run;
+        }
+        CompileJobRecord compileJobRecord = compileJobService.getJob(run.getCompileJobId());
+        if (CompileJobStatuses.RUNNING.equals(compileJobRecord.getStatus()) && !"RUNNING".equals(run.getStatus())) {
+            return sourceSyncService.saveRun(replaceRun(
+                    run,
+                    run.getSourceId(),
+                    run.getResolverMode(),
+                    run.getResolverDecision(),
+                    run.getSyncAction(),
+                    "RUNNING",
+                    run.getMatchedSourceId(),
+                    run.getCompileJobId(),
+                    run.getEvidenceJson(),
+                    null,
+                    compileJobRecord.getStartedAt(),
+                    null
+            ));
+        }
+        if (CompileJobStatuses.SUCCEEDED.equals(compileJobRecord.getStatus())) {
+            SourceSyncRun succeededRun = sourceSyncService.saveRun(replaceRun(
+                    run,
+                    run.getSourceId(),
+                    run.getResolverMode(),
+                    run.getResolverDecision(),
+                    run.getSyncAction(),
+                    "SUCCEEDED",
+                    run.getMatchedSourceId(),
+                    run.getCompileJobId(),
+                    updateEvidenceMessage(run.getEvidenceJson(), "编译成功，资料已完成入库"),
+                    null,
+                    compileJobRecord.getStartedAt(),
+                    compileJobRecord.getFinishedAt()
+            ));
+            if (succeededRun.getSourceId() != null) {
+                KnowledgeSource source = sourceService.findById(succeededRun.getSourceId()).orElseThrow();
+                updateSourceAfterSuccess(source, loadBundleSnapshot(succeededRun), succeededRun);
+            }
+            return succeededRun;
+        }
+        if (CompileJobStatuses.FAILED.equals(compileJobRecord.getStatus())) {
+            return sourceSyncService.saveRun(replaceRun(
+                    run,
+                    run.getSourceId(),
+                    run.getResolverMode(),
+                    run.getResolverDecision(),
+                    run.getSyncAction(),
+                    "FAILED",
+                    run.getMatchedSourceId(),
+                    run.getCompileJobId(),
+                    updateEvidenceMessage(run.getEvidenceJson(), "编译失败"),
+                    compileJobRecord.getErrorMessage(),
+                    compileJobRecord.getStartedAt(),
+                    compileJobRecord.getFinishedAt()
+            ));
+        }
+        return run;
+    }
+
+    private SourceSyncRun expireWaitConfirmRunIfNecessary(SourceSyncRun run) {
+        if (!"WAIT_CONFIRM".equals(run.getStatus())) {
+            return run;
+        }
+        OffsetDateTime requestedAt = run.getRequestedAt();
+        if (requestedAt == null) {
+            return run;
+        }
+        OffsetDateTime deadline = requestedAt.plus(WAIT_CONFIRM_TIMEOUT);
+        OffsetDateTime now = OffsetDateTime.now();
+        if (deadline.isAfter(now)) {
+            return run;
+        }
+        return sourceSyncService.saveRun(replaceRun(
+                run,
+                run.getSourceId(),
+                run.getResolverMode(),
+                run.getResolverDecision(),
+                run.getSyncAction(),
+                "FAILED",
+                run.getMatchedSourceId(),
+                run.getCompileJobId(),
+                updateEvidenceMessage(run.getEvidenceJson(), "WAIT_CONFIRM 超时，已自动关闭"),
+                "WAIT_CONFIRM timed out after 7 days",
+                run.getStartedAt(),
+                now
+        ));
+    }
+
+    private SourceSyncRunDetail toDetail(SourceSyncRun run) {
+        JsonNode evidenceNode = readEvidence(run.getEvidenceJson());
+        List<String> sourceNames = readStringArray(evidenceNode.path("sourceNames"));
+        KnowledgeSource source = run.getSourceId() == null ? null : sourceService.findById(run.getSourceId()).orElse(null);
+        CompileJobRecord compileJobRecord = run.getCompileJobId() == null ? null : compileJobService.getJob(run.getCompileJobId());
+        return new SourceSyncRunDetail(
+                run.getId(),
+                run.getSourceId(),
+                source == null ? null : source.getName(),
+                run.getSourceType(),
+                run.getStatus(),
+                run.getResolverMode(),
+                run.getResolverDecision(),
+                run.getSyncAction(),
+                run.getMatchedSourceId(),
+                run.getCompileJobId(),
+                compileJobRecord == null ? null : compileJobRecord.getStatus(),
+                run.getManifestHash(),
+                evidenceNode.path("message").asText(defaultMessage(run)),
+                run.getErrorMessage(),
+                sourceNames,
+                run.getEvidenceJson(),
+                formatTime(run.getRequestedAt()),
+                formatTime(run.getUpdatedAt()),
+                formatTime(run.getStartedAt()),
+                formatTime(run.getFinishedAt())
+        );
+    }
+
+    private String defaultMessage(SourceSyncRun run) {
+        if ("WAIT_CONFIRM".equals(run.getStatus())) {
+            return "检测到可能重复，等待人工确认";
+        }
+        if ("SKIPPED_NO_CHANGE".equals(run.getStatus())) {
+            return "资料包无变化，已跳过同步";
+        }
+        if ("FAILED".equals(run.getStatus())) {
+            return "同步失败";
+        }
+        if ("SUCCEEDED".equals(run.getStatus())) {
+            return "资料同步成功";
+        }
+        return "上传已受理";
+    }
+
+    private BundleFeatureExtractor.UploadBundleSnapshot loadBundleSnapshot(SourceSyncRun run) {
+        JsonNode evidenceNode = readEvidence(run.getEvidenceJson());
+        String stagingDir = evidenceNode.path("stagingDir").asText();
+        if (stagingDir.isBlank()) {
+            throw new IllegalStateException("stagingDir missing in evidence");
+        }
+        List<String> sourceNames = readStringArray(evidenceNode.path("sourceNames"));
+        BundleSummary bundleSummary = readBundleSummary(evidenceNode.path("bundleSummary"));
+        return new BundleFeatureExtractor.UploadBundleSnapshot(
+                Path.of(stagingDir),
+                run.getManifestHash(),
+                sourceNames,
+                bundleSummary
+        );
+    }
+
+    private BundleSummary readBundleSummary(JsonNode bundleNode) {
+        return new BundleSummary(
+                bundleNode.path("displayName").asText(),
+                bundleNode.path("fileCount").asInt(),
+                bundleNode.path("dirCount").asInt(),
+                readStringArray(bundleNode.path("topLevelNames")),
+                readIntegerMap(bundleNode.path("extensionDistribution")),
+                readStringArray(bundleNode.path("relativePathsSample")),
+                readStringArray(bundleNode.path("signatureFiles")),
+                bundleNode.path("contentProfile").asText("DOCUMENT"),
+                readStringArray(bundleNode.path("keywords")),
+                readStringArray(bundleNode.path("titleHints")),
+                bundleNode.path("pathFingerprint").asText(),
+                bundleNode.path("contentFingerprint").asText(),
+                bundleNode.path("summaryText").asText()
+        );
+    }
+
+    private List<String> readStringArray(JsonNode arrayNode) {
+        List<String> values = new ArrayList<String>();
+        if (!arrayNode.isArray()) {
+            return values;
+        }
+        for (JsonNode itemNode : arrayNode) {
+            values.add(itemNode.asText());
+        }
+        return values;
+    }
+
+    private java.util.Map<String, Integer> readIntegerMap(JsonNode objectNode) {
+        java.util.Map<String, Integer> values = new java.util.LinkedHashMap<String, Integer>();
+        if (!objectNode.isObject()) {
+            return values;
+        }
+        java.util.Iterator<String> fieldNames = objectNode.fieldNames();
+        while (fieldNames.hasNext()) {
+            String fieldName = fieldNames.next();
+            values.put(fieldName, objectNode.path(fieldName).asInt());
+        }
+        return values;
+    }
+
+    private String buildEvidenceJson(
+            BundleFeatureExtractor.UploadBundleSnapshot bundleSnapshot,
+            String acceptedDecision,
+            String compileJobId,
+            String message
+    ) {
+        ObjectNode rootNode = OBJECT_MAPPER.createObjectNode();
+        rootNode.put("stagingDir", bundleSnapshot.getStagingDir().toString());
+        rootNode.put("message", message);
+        if (acceptedDecision != null) {
+            rootNode.put("acceptedDecision", acceptedDecision);
+        }
+        if (compileJobId != null) {
+            rootNode.put("compileJobId", compileJobId);
+        }
+        ArrayNode sourceNamesNode = rootNode.putArray("sourceNames");
+        for (String sourceName : bundleSnapshot.getSourceNames()) {
+            sourceNamesNode.add(sourceName);
+        }
+        rootNode.set("bundleSummary", OBJECT_MAPPER.valueToTree(bundleSnapshot.getBundleSummary()));
+        return rootNode.toString();
+    }
+
+    private String updateEvidenceMessage(String evidenceJson, String message) {
+        JsonNode evidenceNode = readEvidence(evidenceJson);
+        ObjectNode objectNode = evidenceNode.isObject() ? (ObjectNode) evidenceNode : OBJECT_MAPPER.createObjectNode();
+        objectNode.put("message", message);
+        return objectNode.toString();
+    }
+
+    private JsonNode readEvidence(String evidenceJson) {
+        if (evidenceJson == null || evidenceJson.isBlank()) {
+            return OBJECT_MAPPER.createObjectNode();
+        }
+        try {
+            return OBJECT_MAPPER.readTree(evidenceJson);
+        }
+        catch (Exception ex) {
+            return OBJECT_MAPPER.createObjectNode();
+        }
+    }
+
+    private KnowledgeSource createUploadSource(BundleSummary bundleSummary) {
+        String sourceCode = nextSourceCode(bundleSummary.getDisplayName());
+        ObjectNode metadataNode = OBJECT_MAPPER.createObjectNode();
+        metadataNode.set("bundleSummary", OBJECT_MAPPER.valueToTree(bundleSummary));
+        return sourceService.save(new KnowledgeSource(
+                null,
+                sourceCode,
+                bundleSummary.getDisplayName(),
+                "UPLOAD",
+                bundleSummary.getContentProfile(),
+                "ACTIVE",
+                "NORMAL",
+                "AUTO",
+                "{}",
+                metadataNode.toString(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+    }
+
+    private String nextSourceCode(String displayName) {
+        String baseCode = normalizeSourceCode(displayName);
+        List<KnowledgeSource> existingSources = sourceService.listSources();
+        String candidate = baseCode;
+        int index = 2;
+        while (containsSourceCode(existingSources, candidate)) {
+            candidate = baseCode + "-" + index;
+            index++;
+        }
+        return candidate;
+    }
+
+    private boolean containsSourceCode(List<KnowledgeSource> existingSources, String sourceCode) {
+        for (KnowledgeSource source : existingSources) {
+            if (sourceCode.equals(source.getSourceCode())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String normalizeSourceCode(String value) {
+        String normalized = value == null ? "" : value.trim()
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("(^-+|-+$)", "");
+        if (normalized.isBlank()) {
+            return "upload-source";
+        }
+        return normalized;
+    }
+
+    private boolean isUpdateLike(KnowledgeSource source, BundleSummary bundleSummary) {
+        JsonNode metadataNode = readEvidence(source.getMetadataJson());
+        JsonNode storedBundleNode = metadataNode.path("bundleSummary");
+        String storedPathFingerprint = storedBundleNode.path("pathFingerprint").asText("");
+        if (!storedPathFingerprint.isBlank() && storedPathFingerprint.equals(bundleSummary.getPathFingerprint())) {
+            return true;
+        }
+        List<String> storedTopLevels = readStringArray(storedBundleNode.path("topLevelNames"));
+        return !storedTopLevels.isEmpty() && storedTopLevels.equals(bundleSummary.getTopLevelNames());
+    }
+
+    private void updateSourceAfterSuccess(
+            KnowledgeSource source,
+            BundleFeatureExtractor.UploadBundleSnapshot bundleSnapshot,
+            SourceSyncRun run
+    ) {
+        ObjectNode metadataNode = readEvidence(source.getMetadataJson()).isObject()
+                ? (ObjectNode) readEvidence(source.getMetadataJson())
+                : OBJECT_MAPPER.createObjectNode();
+        metadataNode.set("bundleSummary", OBJECT_MAPPER.valueToTree(bundleSnapshot.getBundleSummary()));
+        metadataNode.put("lastManifestHash", bundleSnapshot.getManifestHash());
+        KnowledgeSource updatedSource = new KnowledgeSource(
+                source.getId(),
+                source.getSourceCode(),
+                source.getName(),
+                source.getSourceType(),
+                source.getContentProfile(),
+                source.getStatus(),
+                source.getVisibility(),
+                source.getDefaultSyncMode(),
+                source.getConfigJson(),
+                metadataNode.toString(),
+                bundleSnapshot.getManifestHash(),
+                run.getId(),
+                run.getStatus(),
+                OffsetDateTime.now(),
+                source.getCreatedAt(),
+                source.getUpdatedAt()
+        );
+        sourceService.save(updatedSource);
+        sourceSnapshotJdbcRepository.save(
+                source.getId(),
+                run.getId(),
+                bundleSnapshot.getManifestHash(),
+                metadataNode.toString()
+        );
+    }
+
+    private void rejectWhenSourceHasActiveRun(Long sourceId, Long currentRunId) {
+        List<SourceSyncRun> activeRuns = sourceSyncService.listActiveRuns(sourceId);
+        for (SourceSyncRun activeRun : activeRuns) {
+            if (currentRunId != null && currentRunId.equals(activeRun.getId())) {
+                continue;
+            }
+            throw new SourceSyncConflictException("active source sync run already exists: " + activeRun.getId());
+        }
+    }
+
+    private void rejectWhenSourceStatusBlocksSync(KnowledgeSource source) {
+        if ("DISABLED".equals(source.getStatus())) {
+            throw new IllegalStateException("source is disabled: " + source.getId());
+        }
+        if ("ARCHIVED".equals(source.getStatus())) {
+            throw new IllegalStateException("source is archived: " + source.getId());
+        }
+    }
+
+    private SourceSyncRun replaceRun(
+            SourceSyncRun existingRun,
+            Long sourceId,
+            String resolverMode,
+            String resolverDecision,
+            String syncAction,
+            String status,
+            Long matchedSourceId,
+            String compileJobId,
+            String evidenceJson,
+            String errorMessage,
+            OffsetDateTime startedAt,
+            OffsetDateTime finishedAt
+    ) {
+        return new SourceSyncRun(
+                existingRun.getId(),
+                sourceId,
+                existingRun.getSourceType(),
+                existingRun.getManifestHash(),
+                existingRun.getTriggerType(),
+                resolverMode,
+                resolverDecision,
+                syncAction,
+                status,
+                matchedSourceId,
+                compileJobId,
+                evidenceJson,
+                errorMessage,
+                existingRun.getRequestedAt(),
+                OffsetDateTime.now(),
+                startedAt == null ? existingRun.getStartedAt() : startedAt,
+                finishedAt == null ? existingRun.getFinishedAt() : finishedAt
+        );
+    }
+
+    private boolean isTerminal(String status) {
+        return "SUCCEEDED".equals(status)
+                || "FAILED".equals(status)
+                || "SKIPPED_NO_CHANGE".equals(status);
+    }
+
+    private String normalizeDecision(String resolverDecision) {
+        if (resolverDecision == null || resolverDecision.isBlank()) {
+            throw new IllegalArgumentException("decision is required");
+        }
+        return resolverDecision.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String formatTime(OffsetDateTime value) {
+        return value == null ? null : value.toString();
+    }
+}

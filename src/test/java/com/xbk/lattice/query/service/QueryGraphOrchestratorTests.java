@@ -1,6 +1,7 @@
 package com.xbk.lattice.query.service;
 
 import com.xbk.lattice.api.query.QueryResponse;
+import com.xbk.lattice.query.domain.ReviewResult;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayDeque;

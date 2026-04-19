@@ -15,6 +15,10 @@ public class CompileJobRecord {
 
     private final String sourceDir;
 
+    private final Long sourceId;
+
+    private final Long sourceSyncRunId;
+
     private final boolean incremental;
 
     private final String orchestrationMode;
@@ -61,8 +65,59 @@ public class CompileJobRecord {
             OffsetDateTime startedAt,
             OffsetDateTime finishedAt
     ) {
+        this(
+                jobId,
+                sourceDir,
+                null,
+                null,
+                incremental,
+                orchestrationMode,
+                status,
+                persistedCount,
+                errorMessage,
+                attemptCount,
+                requestedAt,
+                startedAt,
+                finishedAt
+        );
+    }
+
+    /**
+     * 创建编译作业记录。
+     *
+     * @param jobId 作业标识
+     * @param sourceDir 源目录
+     * @param sourceId 资料源主键
+     * @param sourceSyncRunId 资料源同步运行主键
+     * @param incremental 是否增量编译
+     * @param orchestrationMode 编排模式
+     * @param status 状态
+     * @param persistedCount 持久化数量
+     * @param errorMessage 错误信息
+     * @param attemptCount 尝试次数
+     * @param requestedAt 提交时间
+     * @param startedAt 开始时间
+     * @param finishedAt 完成时间
+     */
+    public CompileJobRecord(
+            String jobId,
+            String sourceDir,
+            Long sourceId,
+            Long sourceSyncRunId,
+            boolean incremental,
+            String orchestrationMode,
+            String status,
+            int persistedCount,
+            String errorMessage,
+            int attemptCount,
+            OffsetDateTime requestedAt,
+            OffsetDateTime startedAt,
+            OffsetDateTime finishedAt
+    ) {
         this.jobId = jobId;
         this.sourceDir = sourceDir;
+        this.sourceId = sourceId;
+        this.sourceSyncRunId = sourceSyncRunId;
         this.incremental = incremental;
         this.orchestrationMode = orchestrationMode;
         this.status = status;
@@ -90,6 +145,24 @@ public class CompileJobRecord {
      */
     public String getSourceDir() {
         return sourceDir;
+    }
+
+    /**
+     * 获取资料源主键。
+     *
+     * @return 资料源主键
+     */
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    /**
+     * 获取资料源同步运行主键。
+     *
+     * @return 资料源同步运行主键
+     */
+    public Long getSourceSyncRunId() {
+        return sourceSyncRunId;
     }
 
     /**

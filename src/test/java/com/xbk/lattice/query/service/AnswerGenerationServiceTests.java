@@ -1,9 +1,9 @@
 package com.xbk.lattice.query.service;
 
 import com.xbk.lattice.compiler.config.LlmProperties;
-import com.xbk.lattice.compiler.service.LlmCallResult;
-import com.xbk.lattice.compiler.service.LlmClient;
 import com.xbk.lattice.compiler.service.LlmGateway;
+import com.xbk.lattice.llm.service.LlmCallResult;
+import com.xbk.lattice.llm.service.LlmClient;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;

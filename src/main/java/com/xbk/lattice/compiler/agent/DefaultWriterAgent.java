@@ -1,6 +1,6 @@
 package com.xbk.lattice.compiler.agent;
 
-import com.xbk.lattice.compiler.service.CompileArticleNode;
+import com.xbk.lattice.compiler.node.CompileArticleNode;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 
 /**
@@ -44,6 +44,8 @@ public class DefaultWriterAgent implements WriterAgent {
             articleRecord = compileArticleNode.compileDraft(
                     writerTask.getMergedConcept(),
                     writerTask.getSourceDir(),
+                    writerTask.getSourceId(),
+                    writerTask.getSourceCode(),
                     writerTask.getScopeId(),
                     writerTask.getScene()
             );

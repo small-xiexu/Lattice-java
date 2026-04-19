@@ -2,7 +2,8 @@ package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.config.CompilerProperties;
 import com.xbk.lattice.compiler.config.LlmProperties;
-import com.xbk.lattice.compiler.model.MergedConcept;
+import com.xbk.lattice.compiler.domain.MergedConcept;
+import com.xbk.lattice.compiler.prompt.LatticePrompts;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
@@ -10,6 +11,8 @@ import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.RepoSnapshotRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
+import com.xbk.lattice.llm.service.LlmCallResult;
+import com.xbk.lattice.llm.service.LlmClient;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -459,6 +462,21 @@ class IncrementalCompileServiceTests {
         }
 
         @Override
+        public void replaceChunks(String articleKey, String conceptId, List<String> chunkTexts) {
+            chunks.put(conceptId, new ArrayList<String>(chunkTexts));
+        }
+
+        @Override
+        public void replaceChunksFromContent(String conceptId, String content) {
+            chunks.put(conceptId, List.of(content));
+        }
+
+        @Override
+        public void replaceChunksFromContent(String articleKey, String conceptId, String content) {
+            chunks.put(conceptId, List.of(content));
+        }
+
+        @Override
         public List<String> findChunkTexts(String conceptId) {
             return chunks.getOrDefault(conceptId, List.of());
         }
@@ -478,8 +496,9 @@ class IncrementalCompileServiceTests {
         }
 
         @Override
-        public void upsert(SourceFileRecord sourceFileRecord) {
+        public SourceFileRecord upsert(SourceFileRecord sourceFileRecord) {
             records.put(sourceFileRecord.getFilePath(), sourceFileRecord);
+            return sourceFileRecord;
         }
 
         @Override

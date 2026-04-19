@@ -62,13 +62,12 @@ public class StateGraphCompileOrchestrator implements CompileOrchestrator {
     /**
      * 执行编译。
      *
-     * @param sourceDir 源目录
-     * @param incremental 是否增量编译
+     * @param executionRequest 执行请求
      * @return 编译结果
      * @throws IOException IO 异常
      */
     @Override
-    public CompileResult execute(Path sourceDir, boolean incremental) throws IOException {
+    public CompileResult execute(CompileExecutionRequest executionRequest) throws IOException {
         try {
             CompiledGraph compiledGraph = compileGraphDefinitionFactory.build().compile(
                     CompileConfig.builder()
@@ -76,9 +75,12 @@ public class StateGraphCompileOrchestrator implements CompileOrchestrator {
                             .build()
             );
             CompileGraphState initialState = new CompileGraphState();
-            initialState.setJobId(UUID.randomUUID().toString());
-            initialState.setSourceDir(sourceDir.toString());
-            initialState.setCompileMode(incremental ? "incremental" : "full");
+            initialState.setJobId(executionRequest.getJobId());
+            initialState.setSourceDir(executionRequest.getSourceDir().toString());
+            initialState.setCompileMode(executionRequest.isIncremental() ? "incremental" : "full");
+            initialState.setSourceId(executionRequest.getSourceId());
+            initialState.setSourceCode(executionRequest.getSourceCode());
+            initialState.setSourceSyncRunId(executionRequest.getSourceSyncRunId());
 
             Optional<OverAllState> result = compiledGraph.invoke(compileGraphStateMapper.toMap(initialState));
             OverAllState overAllState = result.orElseThrow(() -> new IllegalStateException("state graph compile returned empty state"));
@@ -91,5 +93,25 @@ public class StateGraphCompileOrchestrator implements CompileOrchestrator {
         catch (Exception ex) {
             throw new IOException("state graph compile failed", ex);
         }
+    }
+
+    /**
+     * 兼容旧测试入口执行编译。
+     *
+     * @param sourceDir 源目录
+     * @param incremental 是否增量编译
+     * @return 编译结果
+     * @throws IOException IO 异常
+     */
+    public CompileResult execute(Path sourceDir, boolean incremental) throws IOException {
+        return execute(new CompileExecutionRequest(
+                UUID.randomUUID().toString(),
+                sourceDir,
+                incremental,
+                CompileOrchestrationModes.STATE_GRAPH,
+                null,
+                null,
+                null
+        ));
     }
 }

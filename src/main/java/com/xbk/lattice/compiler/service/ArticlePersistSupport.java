@@ -5,6 +5,8 @@ import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
+import com.xbk.lattice.infra.persistence.ArticleSourceRefJdbcRepository;
+import com.xbk.lattice.infra.persistence.ArticleSourceRefRecord;
 import com.xbk.lattice.query.service.ArticleChunkVectorIndexService;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +42,8 @@ public class ArticlePersistSupport {
 
     private final SourceIngestSupport sourceIngestSupport;
 
+    private final ArticleSourceRefJdbcRepository articleSourceRefJdbcRepository;
+
     private RepoSnapshotService repoSnapshotService;
 
     /**
@@ -61,6 +65,41 @@ public class ArticlePersistSupport {
             ArticleChunkVectorIndexService articleChunkVectorIndexService,
             SourceIngestSupport sourceIngestSupport
     ) {
+        this(
+                articleCompileSupport,
+                articleJdbcRepository,
+                articleChunkJdbcRepository,
+                compilationWalStore,
+                articleVectorIndexService,
+                articleChunkVectorIndexService,
+                sourceIngestSupport,
+                null
+        );
+    }
+
+    /**
+     * 创建编译文章落库支撑服务。
+     *
+     * @param articleCompileSupport 编译文章认知支撑服务
+     * @param articleJdbcRepository 文章仓储
+     * @param articleChunkJdbcRepository 文章 chunk 仓储
+     * @param compilationWalStore 编译 WAL 存储
+     * @param articleVectorIndexService 文章向量索引服务
+     * @param articleChunkVectorIndexService 文章分块向量索引服务
+     * @param sourceIngestSupport 编译源数据支撑服务
+     * @param articleSourceRefJdbcRepository 来源关联仓储
+     */
+    @Autowired
+    public ArticlePersistSupport(
+            ArticleCompileSupport articleCompileSupport,
+            ArticleJdbcRepository articleJdbcRepository,
+            ArticleChunkJdbcRepository articleChunkJdbcRepository,
+            CompilationWalStore compilationWalStore,
+            ArticleVectorIndexService articleVectorIndexService,
+            ArticleChunkVectorIndexService articleChunkVectorIndexService,
+            SourceIngestSupport sourceIngestSupport,
+            ArticleSourceRefJdbcRepository articleSourceRefJdbcRepository
+    ) {
         this.articleCompileSupport = articleCompileSupport;
         this.articleJdbcRepository = articleJdbcRepository;
         this.articleChunkJdbcRepository = articleChunkJdbcRepository;
@@ -68,6 +107,7 @@ public class ArticlePersistSupport {
         this.articleVectorIndexService = articleVectorIndexService;
         this.articleChunkVectorIndexService = articleChunkVectorIndexService;
         this.sourceIngestSupport = sourceIngestSupport;
+        this.articleSourceRefJdbcRepository = articleSourceRefJdbcRepository;
     }
 
     /**
@@ -89,10 +129,33 @@ public class ArticlePersistSupport {
      */
     @Transactional(rollbackFor = Exception.class)
     public int persistArticles(String jobId, List<ArticleReviewEnvelope> reviewedArticles) {
+        return persistArticles(jobId, reviewedArticles, null, null, java.util.Collections.<String, Long>emptyMap());
+    }
+
+    /**
+     * 正式落库文章。
+     *
+     * @param jobId 作业标识
+     * @param reviewedArticles 审查后文章集合
+     * @param sourceId 资料源主键
+     * @param sourceCode 资料源编码
+     * @param sourceFileIdsByPath 源文件主键映射
+     * @return 已落库文章数
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public int persistArticles(
+            String jobId,
+            List<ArticleReviewEnvelope> reviewedArticles,
+            Long sourceId,
+            String sourceCode,
+            java.util.Map<String, Long> sourceFileIdsByPath
+    ) {
         int persistedCount = 0;
         for (ArticleReviewEnvelope reviewEnvelope : reviewedArticles) {
             ArticleRecord articleRecord = finalizeArticleForPersist(reviewEnvelope);
+            articleRecord = ensureSourceAwareIdentifiers(articleRecord, sourceId, sourceCode);
             articleJdbcRepository.upsert(articleRecord);
+            replaceArticleSourceRefs(articleRecord, sourceId, sourceFileIdsByPath);
             if (compilationWalStore != null) {
                 compilationWalStore.markCommitted(jobId, articleRecord.getConceptId());
             }
@@ -110,7 +173,11 @@ public class ArticlePersistSupport {
     public void rebuildArticleChunks(List<ArticleReviewEnvelope> reviewedArticles) {
         for (ArticleReviewEnvelope reviewEnvelope : reviewedArticles) {
             ArticleRecord articleRecord = finalizeArticleForPersist(reviewEnvelope);
-            articleChunkJdbcRepository.replaceChunksFromContent(articleRecord.getConceptId(), articleRecord.getContent());
+            articleChunkJdbcRepository.replaceChunksFromContent(
+                    articleRecord.getArticleKey(),
+                    articleRecord.getConceptId(),
+                    articleRecord.getContent()
+            );
         }
     }
 
@@ -138,6 +205,64 @@ public class ArticlePersistSupport {
      */
     public ArticleRecord finalizeArticleForPersist(ArticleReviewEnvelope reviewEnvelope) {
         return articleCompileSupport.finalizeArticleForPersist(reviewEnvelope);
+    }
+
+    private ArticleRecord ensureSourceAwareIdentifiers(ArticleRecord articleRecord, Long sourceId, String sourceCode) {
+        Long effectiveSourceId = articleRecord.getSourceId() == null ? sourceId : articleRecord.getSourceId();
+        String effectiveArticleKey = articleRecord.getArticleKey();
+        if (effectiveArticleKey == null || effectiveArticleKey.isBlank()) {
+            if (sourceCode == null || sourceCode.isBlank()) {
+                effectiveArticleKey = articleRecord.getConceptId();
+            }
+            else {
+                effectiveArticleKey = sourceCode + "--" + articleRecord.getConceptId();
+            }
+        }
+        return new ArticleRecord(
+                effectiveSourceId,
+                effectiveArticleKey,
+                articleRecord.getConceptId(),
+                articleRecord.getTitle(),
+                articleRecord.getContent(),
+                articleRecord.getLifecycle(),
+                articleRecord.getCompiledAt(),
+                articleRecord.getSourcePaths(),
+                articleRecord.getMetadataJson(),
+                articleRecord.getSummary(),
+                articleRecord.getReferentialKeywords(),
+                articleRecord.getDependsOn(),
+                articleRecord.getRelated(),
+                articleRecord.getConfidence(),
+                articleRecord.getReviewStatus()
+        );
+    }
+
+    private void replaceArticleSourceRefs(
+            ArticleRecord articleRecord,
+            Long sourceId,
+            java.util.Map<String, Long> sourceFileIdsByPath
+    ) {
+        if (articleSourceRefJdbcRepository == null
+                || articleRecord.getArticleKey() == null
+                || articleRecord.getArticleKey().isBlank()
+                || sourceId == null) {
+            return;
+        }
+        java.util.List<ArticleSourceRefRecord> refRecords = new java.util.ArrayList<ArticleSourceRefRecord>();
+        for (String sourcePath : articleRecord.getSourcePaths()) {
+            Long sourceFileId = sourceFileIdsByPath.get(sourcePath);
+            if (sourceFileId == null) {
+                throw new IllegalStateException("source file id missing for article path: " + sourcePath);
+            }
+            refRecords.add(new ArticleSourceRefRecord(
+                    articleRecord.getArticleKey(),
+                    sourceId,
+                    sourceFileId,
+                    "PRIMARY",
+                    sourcePath
+            ));
+        }
+        articleSourceRefJdbcRepository.replaceRefs(articleRecord.getArticleKey(), refRecords);
     }
 
     /**

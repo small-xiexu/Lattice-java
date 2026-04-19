@@ -50,6 +50,41 @@ class KnowledgeLookupServiceTests {
     }
 
     /**
+     * 验证会优先按 articleKey 返回文章详情。
+     */
+    @Test
+    void shouldPreferArticleKeyBeforeConceptId() {
+        KnowledgeLookupService knowledgeLookupService = new KnowledgeLookupService(
+                new FakeArticleJdbcRepository(
+                        new ArticleRecord(
+                                9L,
+                                "payments-docs--payment-timeout",
+                                "payment-timeout",
+                                "Payment Timeout",
+                                "# Payment Timeout",
+                                "active",
+                                OffsetDateTime.now(),
+                                List.of("payment/a.md"),
+                                "{}",
+                                "",
+                                List.of(),
+                                List.of(),
+                                List.of(),
+                                "medium",
+                                "pending"
+                        )
+                ),
+                new FakeSourceFileJdbcRepository(null)
+        );
+
+        KnowledgeLookupResult result = knowledgeLookupService.get("payments-docs--payment-timeout");
+
+        assertThat(result.isFound()).isTrue();
+        assertThat(result.getType()).isEqualTo("article");
+        assertThat(result.getId()).isEqualTo("payment-timeout");
+    }
+
+    /**
      * 验证 conceptId 未命中时会回退到源文件路径查询。
      */
     @Test
@@ -89,6 +124,14 @@ class KnowledgeLookupServiceTests {
         @Override
         public Optional<ArticleRecord> findByConceptId(String conceptId) {
             if (record != null && record.getConceptId().equals(conceptId)) {
+                return Optional.of(record);
+            }
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<ArticleRecord> findByArticleKey(String articleKey) {
+            if (record != null && record.getArticleKey().equals(articleKey)) {
                 return Optional.of(record);
             }
             return Optional.empty();

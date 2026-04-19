@@ -1,5 +1,8 @@
 package com.xbk.lattice.governance;
 
+import com.xbk.lattice.governance.domain.LifecycleItem;
+import com.xbk.lattice.governance.domain.LifecycleReport;
+import com.xbk.lattice.governance.domain.LifecycleTransitionResult;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import org.junit.jupiter.api.Test;

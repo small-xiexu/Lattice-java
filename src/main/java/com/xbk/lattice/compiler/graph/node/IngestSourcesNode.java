@@ -4,7 +4,7 @@ import com.alibaba.cloud.ai.graph.OverAllState;
 import com.xbk.lattice.compiler.graph.CompileGraphState;
 import com.xbk.lattice.compiler.graph.CompileGraphStateMapper;
 import com.xbk.lattice.compiler.graph.CompileWorkingSetStore;
-import com.xbk.lattice.compiler.model.RawSource;
+import com.xbk.lattice.compiler.domain.RawSource;
 import com.xbk.lattice.compiler.service.SourceIngestSupport;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -51,7 +51,10 @@ public class IngestSourcesNode extends AbstractCompileGraphNode {
      */
     public Map<String, Object> execute(OverAllState overAllState) throws Exception {
         CompileGraphState state = state(overAllState);
-        List<RawSource> rawSources = sourceIngestSupport.ingest(Path.of(state.getSourceDir()));
+        List<RawSource> rawSources = sourceIngestSupport.ingest(
+                Path.of(state.getSourceDir()),
+                state.getSourceId()
+        );
         state.setRawSourcesRef(workingSetStore().saveRawSources(state.getJobId(), rawSources));
         state.setConceptCount(rawSources.size());
         return delta(state);

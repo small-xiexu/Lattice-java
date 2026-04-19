@@ -1,8 +1,9 @@
 package com.xbk.lattice.compiler.service;
 
-import com.xbk.lattice.compiler.model.AnalyzedConcept;
-import com.xbk.lattice.compiler.model.ConceptSection;
-import com.xbk.lattice.compiler.model.MergedConcept;
+import com.xbk.lattice.compiler.domain.AnalyzedConcept;
+import com.xbk.lattice.compiler.domain.ConceptSection;
+import com.xbk.lattice.compiler.domain.MergedConcept;
+import com.xbk.lattice.compiler.node.CrossGroupMergeNode;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;

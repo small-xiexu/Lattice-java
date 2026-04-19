@@ -19,6 +19,12 @@ public class CompileGraphState {
 
     private String sourceDir;
 
+    private Long sourceId;
+
+    private String sourceCode;
+
+    private Long sourceSyncRunId;
+
     private String compileMode;
 
     private String orchestrationMode;
@@ -46,6 +52,8 @@ public class CompileGraphState {
     private String acceptedArticlesRef;
 
     private String needsHumanReviewArticlesRef;
+
+    private java.util.Map<String, Long> sourceFileIdsByPath = new java.util.LinkedHashMap<String, Long>();
 
     private List<String> persistedArticleIds = new ArrayList<String>();
 

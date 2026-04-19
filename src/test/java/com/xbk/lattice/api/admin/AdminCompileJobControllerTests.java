@@ -10,8 +10,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -131,9 +133,42 @@ class AdminCompileJobControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SUCCEEDED"))
                 .andExpect(jsonPath("$.persistedCount").value(1))
-                .andExpect(jsonPath("$.orchestrationMode").value("state_graph"));
+                .andExpect(jsonPath("$.orchestrationMode").value("state_graph"))
+                .andExpect(jsonPath("$.sourceNames[0]").value("payment/analyze.json"));
 
         assertThat(articleJdbcRepository.findByConceptId("payment-timeout")).isPresent();
+    }
+
+    /**
+     * 验证管理侧可上传 Word 文件并同步触发编译。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldUploadWordDocumentAndCompileSynchronouslyViaAdminApi() throws Exception {
+        resetTables();
+        MockMultipartFile sourceFile = new MockMultipartFile(
+                "files",
+                "docs/payment-brief.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                buildSimpleWordBytes()
+        );
+
+        mockMvc.perform(multipart("/api/v1/admin/compile/upload")
+                        .file(sourceFile)
+                        .param("async", "false")
+                        .param("orchestrationMode", "state_graph"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.persistedCount").value(1))
+                .andExpect(jsonPath("$.sourceNames[0]").value("docs/payment-brief.docx"));
+
+        Integer articleCount = jdbcTemplate.queryForObject(
+                "select count(*) from lattice_b8_compile_job_test.articles",
+                Integer.class
+        );
+        assertThat(articleCount).isNotNull();
+        assertThat(articleCount.intValue()).isGreaterThan(0);
     }
 
     /**
@@ -204,9 +239,33 @@ class AdminCompileJobControllerTests {
     private void resetTables() {
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_compile_job_test.pending_queries");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_compile_job_test.contributions");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_compile_job_test.compile_jobs");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_compile_job_test.source_files CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_compile_job_test.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_compile_job_test.knowledge_sources RESTART IDENTITY CASCADE");
+        jdbcTemplate.update(
+                """
+                        insert into lattice_b8_compile_job_test.knowledge_sources (
+                            source_code,
+                            name,
+                            source_type,
+                            content_profile,
+                            status,
+                            visibility,
+                            default_sync_mode,
+                            config_json,
+                            metadata_json
+                        )
+                        values (
+                            'legacy-default',
+                            'Legacy Default Source',
+                            'UPLOAD',
+                            'DOCUMENT',
+                            'ACTIVE',
+                            'NORMAL',
+                            'FULL',
+                            '{}'::jsonb,
+                            '{"legacyDefault":true}'::jsonb
+                        )
+                        """
+        );
     }
 
     /**
@@ -238,5 +297,21 @@ class AdminCompileJobControllerTests {
             throw new IllegalStateException("field value not closed: " + fieldName);
         }
         return json.substring(valueStartIndex, valueEndIndex);
+    }
+
+    /**
+     * 构建简单 Word 文件字节数组。
+     *
+     * @return Word 文件字节数组
+     * @throws Exception 测试异常
+     */
+    private byte[] buildSimpleWordBytes() throws Exception {
+        try (XWPFDocument document = new XWPFDocument();
+             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            document.createParagraph().createRun().setText("Payment timeout recovery guide");
+            document.createParagraph().createRun().setText("retry=3");
+            document.write(outputStream);
+            return outputStream.toByteArray();
+        }
     }
 }

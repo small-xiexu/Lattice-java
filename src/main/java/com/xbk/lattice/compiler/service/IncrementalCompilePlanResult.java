@@ -1,6 +1,6 @@
 package com.xbk.lattice.compiler.service;
 
-import com.xbk.lattice.compiler.model.MergedConcept;
+import com.xbk.lattice.compiler.domain.MergedConcept;
 import lombok.Data;
 
 import java.util.LinkedHashMap;

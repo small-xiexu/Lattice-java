@@ -1,9 +1,10 @@
 package com.xbk.lattice.api.admin;
 
+import com.xbk.lattice.admin.service.AdminArticleQueryService;
 import com.xbk.lattice.governance.ArticleCorrectionResult;
 import com.xbk.lattice.governance.ArticleCorrectionService;
 import com.xbk.lattice.governance.LifecycleService;
-import com.xbk.lattice.governance.LifecycleTransitionResult;
+import com.xbk.lattice.governance.domain.LifecycleTransitionResult;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -63,19 +64,23 @@ public class AdminArticleController {
     @GetMapping
     public AdminArticleListResponse list(
             @RequestParam(required = false) String query,
-            @RequestParam(required = false) String lifecycle
+            @RequestParam(required = false) String lifecycle,
+            @RequestParam(required = false) Long sourceId
     ) {
-        List<ArticleRecord> articleRecords = adminArticleQueryService.list(query, lifecycle);
+        List<ArticleRecord> articleRecords = adminArticleQueryService.list(query, lifecycle, sourceId);
         List<AdminArticleSummaryResponse> items = new ArrayList<AdminArticleSummaryResponse>();
         for (ArticleRecord articleRecord : articleRecords) {
             items.add(new AdminArticleSummaryResponse(
+                    articleRecord.getSourceId(),
+                    articleRecord.getArticleKey(),
                     articleRecord.getConceptId(),
                     articleRecord.getTitle(),
                     articleRecord.getLifecycle(),
                     articleRecord.getReviewStatus(),
                     articleRecord.getCompiledAt() == null ? null : articleRecord.getCompiledAt().toString(),
                     articleRecord.getSummary(),
-                    articleRecord.getSourcePaths().size()
+                    articleRecord.getSourcePaths().size(),
+                    articleRecord.getSourcePaths().isEmpty() ? null : articleRecord.getSourcePaths().get(0)
             ));
         }
         return new AdminArticleListResponse(items.size(), items);
@@ -84,13 +89,19 @@ public class AdminArticleController {
     /**
      * 返回单篇文章详情。
      *
-     * @param conceptId 概念标识
+     * @param articleId 文章唯一键或概念标识
+     * @param sourceId 可选资料源主键
      * @return 文章详情
      */
-    @GetMapping("/{conceptId}")
-    public AdminArticleDetailResponse detail(@PathVariable String conceptId) {
-        ArticleRecord articleRecord = adminArticleQueryService.get(conceptId);
+    @GetMapping("/{articleId}")
+    public AdminArticleDetailResponse detail(
+            @PathVariable String articleId,
+            @RequestParam(required = false) Long sourceId
+    ) {
+        ArticleRecord articleRecord = adminArticleQueryService.get(articleId, sourceId);
         return new AdminArticleDetailResponse(
+                articleRecord.getSourceId(),
+                articleRecord.getArticleKey(),
                 articleRecord.getConceptId(),
                 articleRecord.getTitle(),
                 articleRecord.getContent(),

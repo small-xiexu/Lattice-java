@@ -13,6 +13,7 @@ import com.xbk.lattice.infra.persistence.PendingQueryJdbcRepository;
 import com.xbk.lattice.infra.persistence.PendingQueryRecord;
 import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileChunkRecord;
+import com.xbk.lattice.query.domain.ReviewStatus;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 

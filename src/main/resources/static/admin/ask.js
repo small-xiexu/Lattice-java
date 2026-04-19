@@ -1,5 +1,6 @@
 (function () {
     let canAsk = true;
+    let pageNoticeTimer = null;
 
     document.addEventListener("DOMContentLoaded", function () {
         bindEvents();
@@ -28,11 +29,11 @@
     async function submitQuestion() {
         const question = document.getElementById("ask-question").value.trim();
         if (!question) {
-            setStatus("请输入问题");
+            setStatus("请输入问题", "warning");
             return;
         }
         if (!canAsk) {
-            setStatus("当前知识库还没有可用资料，请先上传并处理文档");
+            setStatus("当前知识库还没有可用资料，请先上传并处理文档", "warning");
             return;
         }
         document.getElementById("ask-answer").textContent = "正在生成回答...";
@@ -50,7 +51,7 @@
             renderAnswer(results[0]);
             renderSources(results[1].items || [], results[0].sources || []);
             renderGlobalResult(results[0]);
-            setStatus("回答已生成");
+            setStatus("回答已生成", "success");
         }
         catch (error) {
             document.getElementById("ask-answer").textContent = "暂时无法生成回答，请稍后再试。";
@@ -64,7 +65,7 @@
         document.getElementById("ask-question").value = "";
         document.getElementById("ask-answer").textContent = "还没有回答，先输入一个问题。";
         document.getElementById("ask-sources").innerHTML = "<div class='job-card'><p class='item-summary'>还没有引用来源，先提交一个问题。</p></div>";
-        setStatus("已清空问题");
+        setStatus("已清空问题", "success");
     }
 
     function renderReadiness(overview, jobs) {
@@ -176,8 +177,7 @@
             body: requestOptions.body
         });
         if (!response.ok) {
-            const text = await response.text();
-            throw new Error(text || ("HTTP " + response.status));
+            throw await buildHttpError(response);
         }
         const contentType = response.headers.get("content-type") || "";
         if (contentType.indexOf("application/json") >= 0) {
@@ -186,22 +186,63 @@
         return response.text();
     }
 
+    async function buildHttpError(response) {
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.indexOf("application/json") >= 0) {
+            const payload = await response.json();
+            const message = payload && payload.message
+                    ? payload.message
+                    : JSON.stringify(payload);
+            const error = new Error(message || ("HTTP " + response.status));
+            error.status = response.status;
+            error.payload = payload;
+            return error;
+        }
+        const text = await response.text();
+        const error = new Error(text || ("HTTP " + response.status));
+        error.status = response.status;
+        return error;
+    }
+
     function renderGlobalResult(result) {
-        document.getElementById("global-result").textContent = JSON.stringify(result, null, 2);
+        return result;
     }
 
     function renderGlobalResultError(prefix, error) {
-        const message = error && error.message ? error.message : String(error);
-        document.getElementById("global-result").textContent = prefix + "：\n" + message;
+        return {prefix: prefix, error: error};
     }
 
-    function setStatus(message) {
-        document.getElementById("global-status").textContent = message;
+    function setStatus(message, tone) {
+        const resolvedTone = tone || "info";
+        const persist = resolvedTone === "danger" || resolvedTone === "warning";
+        renderPageNotice(message, resolvedTone, persist);
     }
 
     function showError(prefix, error) {
         const message = error && error.message ? error.message : String(error);
-        setStatus(prefix + "：" + message);
+        setStatus(prefix + "：" + message, "danger");
+    }
+
+    function renderPageNotice(message, tone, persist) {
+        const notice = document.getElementById("page-notice");
+        if (!notice) {
+            return;
+        }
+        if (pageNoticeTimer) {
+            window.clearTimeout(pageNoticeTimer);
+            pageNoticeTimer = null;
+        }
+        notice.hidden = false;
+        notice.className = "page-notice" + (tone ? " " + tone : "");
+        notice.textContent = message;
+        if (!persist) {
+            pageNoticeTimer = window.setTimeout(function () {
+                notice.hidden = true;
+                notice.className = "page-notice";
+                notice.textContent = "";
+                pageNoticeTimer = null;
+            }, 3200);
+        }
     }
 
     function escapeHtml(value) {

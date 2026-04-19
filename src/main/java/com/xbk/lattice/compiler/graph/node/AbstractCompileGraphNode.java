@@ -6,7 +6,7 @@ import com.xbk.lattice.compiler.graph.CompileGraphState;
 import com.xbk.lattice.compiler.graph.CompileGraphStateMapper;
 import com.xbk.lattice.compiler.graph.CompileWorkingSetStore;
 import com.xbk.lattice.compiler.graph.ReviewPartition;
-import com.xbk.lattice.compiler.model.MergedConcept;
+import com.xbk.lattice.compiler.domain.MergedConcept;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 
 import java.util.ArrayList;

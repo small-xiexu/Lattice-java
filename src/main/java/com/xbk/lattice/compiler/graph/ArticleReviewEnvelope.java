@@ -1,7 +1,7 @@
 package com.xbk.lattice.compiler.graph;
 
 import com.xbk.lattice.infra.persistence.ArticleRecord;
-import com.xbk.lattice.query.service.ReviewResult;
+import com.xbk.lattice.query.domain.ReviewResult;
 import lombok.Data;
 
 /**

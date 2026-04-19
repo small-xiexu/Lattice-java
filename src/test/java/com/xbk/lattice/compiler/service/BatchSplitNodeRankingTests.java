@@ -1,8 +1,9 @@
 package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.config.CompilerProperties;
-import com.xbk.lattice.compiler.model.RawSource;
-import com.xbk.lattice.compiler.model.SourceBatch;
+import com.xbk.lattice.compiler.domain.RawSource;
+import com.xbk.lattice.compiler.domain.SourceBatch;
+import com.xbk.lattice.compiler.node.BatchSplitNode;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

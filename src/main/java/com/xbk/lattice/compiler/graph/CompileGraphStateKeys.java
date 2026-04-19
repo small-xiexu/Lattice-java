@@ -13,6 +13,12 @@ public final class CompileGraphStateKeys {
 
     public static final String SOURCE_DIR = "sourceDir";
 
+    public static final String SOURCE_ID = "sourceId";
+
+    public static final String SOURCE_CODE = "sourceCode";
+
+    public static final String SOURCE_SYNC_RUN_ID = "sourceSyncRunId";
+
     public static final String COMPILE_MODE = "compileMode";
 
     public static final String ORCHESTRATION_MODE = "orchestrationMode";
@@ -40,6 +46,8 @@ public final class CompileGraphStateKeys {
     public static final String ACCEPTED_ARTICLES_REF = "acceptedArticlesRef";
 
     public static final String NEEDS_HUMAN_REVIEW_ARTICLES_REF = "needsHumanReviewArticlesRef";
+
+    public static final String SOURCE_FILE_IDS_BY_PATH = "sourceFileIdsByPath";
 
     public static final String PERSISTED_ARTICLE_IDS = "persistedArticleIds";
 

@@ -21,8 +21,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -36,6 +38,8 @@ import java.util.Optional;
 @Profile("jdbc")
 @RequestMapping("/api/v1/admin/llm")
 public class AdminLlmConfigController {
+
+    private static final Map<String, List<String>> SCENE_ROLE_OPTIONS = createSceneRoleOptions();
 
     private final LlmConfigAdminService llmConfigAdminService;
 
@@ -289,13 +293,15 @@ public class AdminLlmConfigController {
             Optional<AgentModelBinding> existing
     ) {
         String operator = resolveOperator(request.getOperator());
+        String scene = normalizeScene(request.getScene());
+        String agentRole = normalizeAgentRole(request.getAgentRole());
         return new AgentModelBinding(
                 id,
-                request.getScene(),
-                request.getAgentRole(),
+                scene,
+                agentRole,
                 request.getPrimaryModelProfileId(),
                 request.getFallbackModelProfileId(),
-                resolveRouteLabel(request, existing),
+                resolveRouteLabel(request.getRouteLabel(), scene, agentRole, request.getPrimaryModelProfileId()),
                 request.getEnabled() == null || request.getEnabled().booleanValue(),
                 request.getRemarks(),
                 existing.map(AgentModelBinding::getCreatedBy).orElse(operator),
@@ -387,24 +393,19 @@ public class AdminLlmConfigController {
     }
 
     private String resolveRouteLabel(
-            AdminLlmBindingRequest request,
-            Optional<AgentModelBinding> existing
+            String routeLabel,
+            String scene,
+            String agentRole,
+            Long primaryModelProfileId
     ) {
-        if (StringUtils.hasText(request.getRouteLabel())) {
-            return request.getRouteLabel().trim();
+        if (StringUtils.hasText(routeLabel)) {
+            return routeLabel.trim();
         }
-        if (existing.isPresent() && StringUtils.hasText(existing.orElseThrow().getRouteLabel())) {
-            return existing.orElseThrow().getRouteLabel();
-        }
-        String scene = request.getScene() == null ? "scene" : request.getScene().trim().toLowerCase(Locale.ROOT);
-        String agentRole = request.getAgentRole() == null
-                ? "agent"
-                : request.getAgentRole().trim().toLowerCase(Locale.ROOT);
-        String modelCode = llmConfigAdminService.findModelProfile(request.getPrimaryModelProfileId())
+        String modelCode = llmConfigAdminService.findModelProfile(primaryModelProfileId)
                 .map(LlmModelProfile::getModelCode)
                 .filter(StringUtils::hasText)
                 .map(String::trim)
-                .orElse("model-" + request.getPrimaryModelProfileId());
+                .orElse("model-" + primaryModelProfileId);
         return truncate(scene + "." + agentRole + "." + slugify(modelCode), 128);
     }
 
@@ -473,9 +474,37 @@ public class AdminLlmConfigController {
         if (!StringUtils.hasText(request.getAgentRole())) {
             throw new IllegalArgumentException("agentRole不能为空");
         }
+        String scene = normalizeScene(request.getScene());
+        List<String> sceneRoles = resolveSceneRoles(scene);
+        if (!sceneRoles.contains(normalizeAgentRole(request.getAgentRole()))) {
+            throw new IllegalArgumentException("agentRole与scene不匹配");
+        }
         if (request.getPrimaryModelProfileId() == null) {
             throw new IllegalArgumentException("primaryModelProfileId不能为空");
         }
+    }
+
+    private String normalizeScene(String scene) {
+        return StringUtils.hasText(scene) ? scene.trim().toLowerCase(Locale.ROOT) : "";
+    }
+
+    private String normalizeAgentRole(String agentRole) {
+        return StringUtils.hasText(agentRole) ? agentRole.trim().toLowerCase(Locale.ROOT) : "";
+    }
+
+    private List<String> resolveSceneRoles(String scene) {
+        List<String> roles = SCENE_ROLE_OPTIONS.get(normalizeScene(scene));
+        if (roles == null || roles.isEmpty()) {
+            throw new IllegalArgumentException("scene不支持");
+        }
+        return roles;
+    }
+
+    private static Map<String, List<String>> createSceneRoleOptions() {
+        Map<String, List<String>> options = new LinkedHashMap<String, List<String>>();
+        options.put("compile", List.of("writer", "reviewer", "fixer"));
+        options.put("query", List.of("answer", "reviewer", "rewrite"));
+        return options;
     }
 
     /**

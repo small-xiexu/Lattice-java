@@ -2,10 +2,12 @@ package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.config.CompilerProperties;
 import com.xbk.lattice.compiler.graph.ArticleReviewEnvelope;
-import com.xbk.lattice.compiler.model.AnalyzedConcept;
-import com.xbk.lattice.compiler.model.MergedConcept;
-import com.xbk.lattice.compiler.model.RawSource;
-import com.xbk.lattice.compiler.model.SourceBatch;
+import com.xbk.lattice.compiler.domain.AnalyzedConcept;
+import com.xbk.lattice.compiler.domain.MergedConcept;
+import com.xbk.lattice.compiler.domain.RawSource;
+import com.xbk.lattice.compiler.domain.SourceBatch;
+import com.xbk.lattice.compiler.node.CompileArticleNode;
+import com.xbk.lattice.compiler.prompt.SchemaAwarePrompts;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;

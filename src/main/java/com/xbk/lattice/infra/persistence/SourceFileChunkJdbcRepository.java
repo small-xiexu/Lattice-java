@@ -47,18 +47,35 @@ public class SourceFileChunkJdbcRepository {
      * @param sourceFileChunkRecords 分块记录
      */
     public void replaceChunks(String filePath, List<SourceFileChunkRecord> sourceFileChunkRecords) {
+        replaceChunks(null, filePath, sourceFileChunkRecords);
+    }
+
+    /**
+     * 替换指定文件的全部分块。
+     *
+     * @param sourceFileId 源文件主键
+     * @param filePath 文件路径
+     * @param sourceFileChunkRecords 分块记录
+     */
+    public void replaceChunks(Long sourceFileId, String filePath, List<SourceFileChunkRecord> sourceFileChunkRecords) {
         if (jdbcTemplate == null) {
             return;
         }
 
-        jdbcTemplate.update("delete from source_file_chunks where file_path = ?", filePath);
+        if (sourceFileId == null) {
+            jdbcTemplate.update("delete from source_file_chunks where file_path = ?", filePath);
+        }
+        else {
+            jdbcTemplate.update("delete from source_file_chunks where source_file_id = ?", sourceFileId);
+        }
         String sql = """
-                insert into source_file_chunks (file_path, chunk_index, chunk_text, is_verbatim)
-                values (?, ?, ?, ?)
+                insert into source_file_chunks (source_file_id, file_path, chunk_index, chunk_text, is_verbatim)
+                values (?, ?, ?, ?, ?)
                 """;
         for (SourceFileChunkRecord sourceFileChunkRecord : sourceFileChunkRecords) {
             jdbcTemplate.update(
                     sql,
+                    sourceFileChunkRecord.getSourceFileId(),
                     sourceFileChunkRecord.getFilePath(),
                     sourceFileChunkRecord.getChunkIndex(),
                     sourceFileChunkRecord.getChunkText(),
@@ -75,17 +92,30 @@ public class SourceFileChunkJdbcRepository {
      * @param verbatim 是否按原文保留
      */
     public void replaceChunksFromContent(String filePath, String content, boolean verbatim) {
+        replaceChunksFromContent(null, filePath, content, verbatim);
+    }
+
+    /**
+     * 按原始正文替换语义分块。
+     *
+     * @param sourceFileId 源文件主键
+     * @param filePath 文件路径
+     * @param content 原始正文
+     * @param verbatim 是否按原文保留
+     */
+    public void replaceChunksFromContent(Long sourceFileId, String filePath, String content, boolean verbatim) {
         List<TextChunk> textChunks = semanticChunker.chunk(content, DEFAULT_MAX_CHARS, DEFAULT_OVERLAP_RATIO);
         List<SourceFileChunkRecord> records = new ArrayList<SourceFileChunkRecord>();
         for (TextChunk textChunk : textChunks) {
             records.add(new SourceFileChunkRecord(
+                    sourceFileId,
                     filePath,
                     textChunk.getChunkIndex(),
                     textChunk.getText(),
                     verbatim
             ));
         }
-        replaceChunks(filePath, records);
+        replaceChunks(sourceFileId, filePath, records);
     }
 
     /**
@@ -103,6 +133,7 @@ public class SourceFileChunkJdbcRepository {
         int rebuiltCount = 0;
         for (SourceFileRecord sourceFileRecord : sourceFileRecords) {
             replaceChunksFromContent(
+                    sourceFileRecord.getId(),
                     sourceFileRecord.getFilePath(),
                     sourceFileRecord.getContentText(),
                     sourceFileRecord.isVerbatim()
@@ -137,7 +168,7 @@ public class SourceFileChunkJdbcRepository {
         }
 
         String sql = """
-                select file_path, chunk_index, chunk_text, is_verbatim
+                select source_file_id, file_path, chunk_index, chunk_text, is_verbatim
                 from source_file_chunks
                 order by file_path, chunk_index
                 """;
@@ -157,7 +188,7 @@ public class SourceFileChunkJdbcRepository {
 
         String placeholders = String.join(", ", java.util.Collections.nCopies(filePaths.size(), "?"));
         String sql = """
-                select file_path, chunk_index, chunk_text, is_verbatim
+                select source_file_id, file_path, chunk_index, chunk_text, is_verbatim
                 from source_file_chunks
                 where file_path in (%s)
                 order by file_path, chunk_index
@@ -175,10 +206,16 @@ public class SourceFileChunkJdbcRepository {
      */
     private SourceFileChunkRecord mapSourceFileChunkRecord(ResultSet resultSet, int rowNum) throws SQLException {
         return new SourceFileChunkRecord(
+                readLong(resultSet, "source_file_id"),
                 resultSet.getString("file_path"),
                 resultSet.getInt("chunk_index"),
                 resultSet.getString("chunk_text"),
                 resultSet.getBoolean("is_verbatim")
         );
+    }
+
+    private Long readLong(ResultSet resultSet, String columnName) throws SQLException {
+        Object value = resultSet.getObject(columnName);
+        return value == null ? null : resultSet.getLong(columnName);
     }
 }

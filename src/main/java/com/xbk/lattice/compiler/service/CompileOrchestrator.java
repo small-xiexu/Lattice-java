@@ -1,7 +1,6 @@
 package com.xbk.lattice.compiler.service;
 
 import java.io.IOException;
-import java.nio.file.Path;
 
 /**
  * 编译编排器
@@ -22,10 +21,9 @@ public interface CompileOrchestrator {
     /**
      * 执行编译。
      *
-     * @param sourceDir 源目录
-     * @param incremental 是否增量编译
+     * @param executionRequest 执行请求
      * @return 编译结果
      * @throws IOException IO 异常
      */
-    CompileResult execute(Path sourceDir, boolean incremental) throws IOException;
+    CompileResult execute(CompileExecutionRequest executionRequest) throws IOException;
 }

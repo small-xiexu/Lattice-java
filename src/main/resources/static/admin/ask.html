@@ -4,75 +4,126 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lattice 知识问答</title>
-    <link rel="stylesheet" href="/admin/admin.css">
+    <link rel="stylesheet" href="/admin/admin.css?v=20260419-upload-feedback-1">
 </head>
 <body>
-<div class="page-shell">
-    <header class="page-header">
-        <div>
-            <p class="eyebrow">Lattice Knowledge Console</p>
-            <h1>知识问答</h1>
-            <p class="header-copy">直接输入问题，系统会基于当前知识库给出回答，并展示相关引用来源。</p>
-        </div>
-        <div class="header-actions header-actions-stack">
-            <nav class="tab-row page-nav">
-                <a class="tab-btn" href="/admin">知识库管理</a>
-                <a class="tab-btn active" href="/admin/ask">知识问答</a>
+<div class="app-shell">
+    <div class="app-window">
+        <aside class="sidebar">
+            <div class="mac-controls" aria-hidden="true">
+                <span class="mac-dot red"></span>
+                <span class="mac-dot yellow"></span>
+                <span class="mac-dot green"></span>
+            </div>
+
+            <section class="sidebar-section">
+                <p class="sidebar-kicker">Navigation</p>
+                <h1 class="sidebar-title">知识问答</h1>
+                <p class="sidebar-copy">用户只需要把问题说清楚，系统返回回答与引用来源，不再关心模型路由和 token 配额。</p>
+            </section>
+
+            <nav class="nav-stack">
+                <a class="nav-card" href="/admin">
+                    <span class="nav-card-title">知识库管理</span>
+                    <span class="nav-card-copy">上传资料、目录同步、查看入库状态。</span>
+                </a>
+                <a class="nav-card active" href="/admin/ask">
+                    <span class="nav-card-title">知识问答</span>
+                    <span class="nav-card-copy">直接提问，获得面向用户的最终回答。</span>
+                </a>
+                <a class="nav-card" href="/admin/ai">
+                    <span class="nav-card-title">AI 接入</span>
+                    <span class="nav-card-copy">内部页，仅维护连接、模型与 Agent 绑定。</span>
+                </a>
             </nav>
-            <div class="header-actions">
-                <button id="refresh-qa-status" class="secondary-btn" type="button">刷新状态</button>
-                <a class="ghost-link subtle-link" href="/admin/ai">内部维护：AI 接入</a>
-            </div>
+
+        </aside>
+
+        <div class="workspace">
+            <header class="workspace-topbar">
+                <div class="brand-copy">
+                    <p class="brand-kicker">Lattice Ask Console</p>
+                </div>
+                <div class="topbar-actions">
+                    <button id="refresh-qa-status" class="secondary-btn" type="button">刷新状态</button>
+                    <a class="ghost-link subtle-link" href="/admin/ai">内部维护：AI 接入</a>
+                </div>
+            </header>
+
+            <main class="workspace-main">
+                <section id="page-notice" class="page-notice" hidden aria-live="polite"></section>
+
+                <section class="hero-panel">
+                    <div class="hero-grid">
+                        <div class="hero-copy">
+                            <p class="hero-eyebrow">Knowledge Ask</p>
+                            <h2 class="hero-title">直接提问，基于知识库返回答案</h2>
+                            <p class="hero-description">这个页面只做一件事：把问题变成回答，并把依据来源展示出来。界面会尽量轻，不让用户感觉自己在操作配置中心。</p>
+                        </div>
+
+                        <div class="hero-side">
+                            <div class="hero-metric">
+                                <span class="hero-metric-label">可提问状态</span>
+                                <p id="ask-ready-hint" class="hero-metric-copy">正在检查知识库状态...</p>
+                            </div>
+
+                            <div class="hero-metric">
+                                <span class="hero-metric-label">当前体验目标</span>
+                                <p class="hero-metric-value">问完就有结果</p>
+                                <p class="hero-metric-copy">不让普通用户思考模型、Agent 或知识库选择器。</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel panel-grid panel-grid-two">
+                    <div class="sub-panel">
+                        <div class="panel-title-row">
+                            <div>
+                                <h2>开始提问</h2>
+                                <p>前期只有一个知识库，不需要额外选择，直接问就可以。</p>
+                            </div>
+                        </div>
+                        <div class="form-grid top-gap">
+                            <label>
+                                <span>你的问题</span>
+                                <textarea id="ask-question" placeholder="例如：退款申请提交后多久会到账？"></textarea>
+                            </label>
+                        </div>
+                        <div class="button-row wrap top-gap">
+                            <button id="submit-question" class="primary-btn" type="button">提问</button>
+                            <button id="clear-question" class="ghost-btn" type="button">清空</button>
+                        </div>
+                    </div>
+
+                    <div class="sub-panel">
+                        <div class="panel-title-row">
+                            <div>
+                                <h2>回答结果</h2>
+                                <p>这里只展示最终回答，不暴露模型、路由、token 等底层细节。</p>
+                            </div>
+                        </div>
+                        <div id="ask-answer" class="answer-box top-gap">还没有回答，先输入一个问题。</div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-title-row">
+                        <div>
+                            <h2>引用来源</h2>
+                            <p>帮助判断回答的依据是否可靠，也方便继续回溯原始资料。</p>
+                        </div>
+                    </div>
+                    <div id="ask-sources" class="source-grid top-gap">
+                        <div class="job-card">
+                            <p class="item-summary">还没有引用来源，先提交一个问题。</p>
+                        </div>
+                    </div>
+                </section>
+            </main>
         </div>
-    </header>
-
-    <main class="page-main">
-        <section class="panel">
-            <div class="panel-title-row">
-                <div>
-                    <h2>开始提问</h2>
-                    <p>前期只有一个知识库，不需要额外选择，直接问就可以。</p>
-                </div>
-            </div>
-            <p id="ask-ready-hint" class="helper-copy top-gap">正在检查知识库状态...</p>
-            <div class="form-grid top-gap">
-                <label>
-                    <span>你的问题</span>
-                    <textarea id="ask-question" placeholder="例如：退款申请提交后多久会到账？"></textarea>
-                </label>
-            </div>
-            <div class="button-row wrap top-gap">
-                <button id="submit-question" class="primary-btn" type="button">提问</button>
-                <button id="clear-question" class="ghost-btn" type="button">清空</button>
-            </div>
-        </section>
-
-        <section class="panel">
-            <div class="panel-title-row">
-                <div>
-                    <h2>回答结果</h2>
-                    <p>这里只展示最终回答，不暴露模型、路由、token 等底层细节。</p>
-                </div>
-            </div>
-            <div id="ask-answer" class="answer-box top-gap">还没有回答，先输入一个问题。</div>
-
-            <div class="panel-title-row top-gap">
-                <div>
-                    <h3>引用来源</h3>
-                    <p>帮助判断回答的依据是否可靠。</p>
-                </div>
-            </div>
-            <div id="ask-sources" class="source-grid top-gap">
-                <div class="job-card">
-                    <p class="item-summary">还没有引用来源，先提交一个问题。</p>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <div id="global-status" class="global-status">准备就绪</div>
-    <pre id="global-result" class="global-result">最近问答结果会显示在这里</pre>
+    </div>
 </div>
-<script src="/admin/ask.js"></script>
+<script src="/admin/ask.js?v=20260419-upload-feedback-1"></script>
 </body>
 </html>

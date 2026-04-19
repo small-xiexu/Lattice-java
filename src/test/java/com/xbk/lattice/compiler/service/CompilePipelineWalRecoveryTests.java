@@ -161,7 +161,8 @@ class CompilePipelineWalRecoveryTests {
          * @param sourceFileRecord 源文件记录
          */
         @Override
-        public void upsert(SourceFileRecord sourceFileRecord) {
+        public SourceFileRecord upsert(SourceFileRecord sourceFileRecord) {
+            return sourceFileRecord;
         }
     }
 
@@ -186,10 +187,10 @@ class CompilePipelineWalRecoveryTests {
          * @param mergedConcepts 合并概念列表
          */
         @Override
-        public void stage(String jobId, List<com.xbk.lattice.compiler.model.MergedConcept> mergedConcepts) {
+        public void stage(String jobId, List<com.xbk.lattice.compiler.domain.MergedConcept> mergedConcepts) {
             java.util.Map<String, WalEntry> walEntries =
                     new java.util.LinkedHashMap<String, WalEntry>();
-            for (com.xbk.lattice.compiler.model.MergedConcept mergedConcept : mergedConcepts) {
+            for (com.xbk.lattice.compiler.domain.MergedConcept mergedConcept : mergedConcepts) {
                 walEntries.put(mergedConcept.getConceptId(), new WalEntry(mergedConcept));
             }
             stagedJobs.put(jobId, walEntries);
@@ -203,10 +204,10 @@ class CompilePipelineWalRecoveryTests {
          * @return 尚未提交的概念
          */
         @Override
-        public List<com.xbk.lattice.compiler.model.MergedConcept> loadPendingConcepts(String jobId) {
+        public List<com.xbk.lattice.compiler.domain.MergedConcept> loadPendingConcepts(String jobId) {
             java.util.Map<String, WalEntry> walEntries = stagedJobs.getOrDefault(jobId, java.util.Map.of());
-            List<com.xbk.lattice.compiler.model.MergedConcept> pendingConcepts =
-                    new ArrayList<com.xbk.lattice.compiler.model.MergedConcept>();
+            List<com.xbk.lattice.compiler.domain.MergedConcept> pendingConcepts =
+                    new ArrayList<com.xbk.lattice.compiler.domain.MergedConcept>();
             for (WalEntry walEntry : walEntries.values()) {
                 if (!walEntry.isCommitted()) {
                     pendingConcepts.add(walEntry.getMergedConcept());
@@ -251,7 +252,7 @@ class CompilePipelineWalRecoveryTests {
          */
         private static class WalEntry {
 
-            private final com.xbk.lattice.compiler.model.MergedConcept mergedConcept;
+            private final com.xbk.lattice.compiler.domain.MergedConcept mergedConcept;
 
             private boolean committed;
 
@@ -260,7 +261,7 @@ class CompilePipelineWalRecoveryTests {
              *
              * @param mergedConcept 合并概念
              */
-            private WalEntry(com.xbk.lattice.compiler.model.MergedConcept mergedConcept) {
+            private WalEntry(com.xbk.lattice.compiler.domain.MergedConcept mergedConcept) {
                 this.mergedConcept = mergedConcept;
             }
 
@@ -269,7 +270,7 @@ class CompilePipelineWalRecoveryTests {
              *
              * @return 合并概念
              */
-            private com.xbk.lattice.compiler.model.MergedConcept getMergedConcept() {
+            private com.xbk.lattice.compiler.domain.MergedConcept getMergedConcept() {
                 return mergedConcept;
             }
 

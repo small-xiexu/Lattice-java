@@ -1,5 +1,6 @@
 package com.xbk.lattice.api.admin;
 
+import com.xbk.lattice.admin.service.AdminUploadWorkspaceService;
 import com.xbk.lattice.compiler.service.ChunkRebuildResult;
 import com.xbk.lattice.compiler.service.ChunkRebuildService;
 import com.xbk.lattice.compiler.service.CompileJobService;
@@ -155,6 +156,7 @@ public class AdminCompileController {
         return new AdminCompileJobResponse(
                 compileJobRecord.getJobId(),
                 compileJobRecord.getSourceDir(),
+                adminUploadWorkspaceService.listRelativeFileNames(compileJobRecord.getSourceDir()),
                 compileJobRecord.isIncremental(),
                 compileJobRecord.getOrchestrationMode(),
                 compileJobRecord.getStatus(),

@@ -4,7 +4,7 @@ import com.alibaba.cloud.ai.graph.OverAllState;
 import com.xbk.lattice.compiler.graph.CompileGraphState;
 import com.xbk.lattice.compiler.graph.CompileGraphStateMapper;
 import com.xbk.lattice.compiler.graph.CompileWorkingSetStore;
-import com.xbk.lattice.compiler.model.MergedConcept;
+import com.xbk.lattice.compiler.domain.MergedConcept;
 import com.xbk.lattice.compiler.service.ArticleCompileSupport;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
@@ -58,6 +58,8 @@ public class CompileNewArticlesNode extends AbstractCompileGraphNode {
             currentDrafts.addAll(articleCompileSupport.compileDraftArticles(
                     conceptsToCompile,
                     Path.of(state.getSourceDir()),
+                    state.getSourceId(),
+                    state.getSourceCode(),
                     state.getJobId(),
                     ExecutionLlmSnapshotService.COMPILE_SCENE
             ));

@@ -2,8 +2,8 @@ package com.xbk.lattice.compiler.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.config.CompilationWalProperties;
-import com.xbk.lattice.compiler.model.ConceptSection;
-import com.xbk.lattice.compiler.model.MergedConcept;
+import com.xbk.lattice.compiler.domain.ConceptSection;
+import com.xbk.lattice.compiler.domain.MergedConcept;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

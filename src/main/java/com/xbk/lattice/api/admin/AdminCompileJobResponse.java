@@ -1,5 +1,7 @@
 package com.xbk.lattice.api.admin;
 
+import java.util.List;
+
 /**
  * 管理侧编译作业响应
  *
@@ -12,6 +14,8 @@ public class AdminCompileJobResponse {
     private final String jobId;
 
     private final String sourceDir;
+
+    private final List<String> sourceNames;
 
     private final boolean incremental;
 
@@ -36,6 +40,7 @@ public class AdminCompileJobResponse {
      *
      * @param jobId 作业标识
      * @param sourceDir 源目录
+     * @param sourceNames 来源文件名列表
      * @param incremental 是否增量编译
      * @param orchestrationMode 编排模式
      * @param status 状态
@@ -49,6 +54,7 @@ public class AdminCompileJobResponse {
     public AdminCompileJobResponse(
             String jobId,
             String sourceDir,
+            List<String> sourceNames,
             boolean incremental,
             String orchestrationMode,
             String status,
@@ -61,6 +67,7 @@ public class AdminCompileJobResponse {
     ) {
         this.jobId = jobId;
         this.sourceDir = sourceDir;
+        this.sourceNames = sourceNames;
         this.incremental = incremental;
         this.orchestrationMode = orchestrationMode;
         this.status = status;
@@ -88,6 +95,15 @@ public class AdminCompileJobResponse {
      */
     public String getSourceDir() {
         return sourceDir;
+    }
+
+    /**
+     * 获取来源文件名列表。
+     *
+     * @return 来源文件名列表
+     */
+    public List<String> getSourceNames() {
+        return sourceNames;
     }
 
     /**

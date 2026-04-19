@@ -1,8 +1,6 @@
 package com.xbk.lattice.governance;
 
 import com.xbk.lattice.compiler.config.LlmProperties;
-import com.xbk.lattice.compiler.service.LlmCallResult;
-import com.xbk.lattice.compiler.service.LlmClient;
 import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
@@ -12,6 +10,8 @@ import com.xbk.lattice.infra.persistence.ArticleSnapshotJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
+import com.xbk.lattice.llm.service.LlmCallResult;
+import com.xbk.lattice.llm.service.LlmClient;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;

@@ -2,6 +2,9 @@ package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.infra.persistence.CompileJobJdbcRepository;
 import com.xbk.lattice.infra.persistence.CompileJobRecord;
+import com.xbk.lattice.source.domain.KnowledgeSource;
+import com.xbk.lattice.source.infra.KnowledgeSourceJdbcRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -21,11 +24,16 @@ import java.util.UUID;
  */
 @Service
 @Profile("jdbc")
+@Slf4j
 public class CompileJobService {
+
+    private static final String LEGACY_DEFAULT_SOURCE_CODE = "legacy-default";
 
     private final CompileJobJdbcRepository compileJobJdbcRepository;
 
     private final CompileOrchestratorRegistry compileOrchestratorRegistry;
+
+    private final KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository;
 
     /**
      * 创建编译作业服务。
@@ -35,10 +43,12 @@ public class CompileJobService {
      */
     public CompileJobService(
             CompileJobJdbcRepository compileJobJdbcRepository,
-            CompileOrchestratorRegistry compileOrchestratorRegistry
+            CompileOrchestratorRegistry compileOrchestratorRegistry,
+            KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository
     ) {
         this.compileJobJdbcRepository = compileJobJdbcRepository;
         this.compileOrchestratorRegistry = compileOrchestratorRegistry;
+        this.knowledgeSourceJdbcRepository = knowledgeSourceJdbcRepository;
     }
 
     /**
@@ -56,10 +66,35 @@ public class CompileJobService {
             boolean async,
             String orchestrationMode
     ) {
+        return submit(sourceDir, incremental, async, orchestrationMode, null, null);
+    }
+
+    /**
+     * 提交编译作业。
+     *
+     * @param sourceDir 源目录
+     * @param incremental 是否增量编译
+     * @param async 是否异步执行
+     * @param orchestrationMode 编排模式
+     * @param sourceId 资料源主键
+     * @param sourceSyncRunId 资料源同步运行主键
+     * @return 编译作业记录
+     */
+    public CompileJobRecord submit(
+            String sourceDir,
+            boolean incremental,
+            boolean async,
+            String orchestrationMode,
+            Long sourceId,
+            Long sourceSyncRunId
+    ) {
         OffsetDateTime requestedAt = OffsetDateTime.now();
+        Long effectiveSourceId = resolveEffectiveSourceId(sourceId);
         CompileJobRecord compileJobRecord = new CompileJobRecord(
                 UUID.randomUUID().toString(),
                 sourceDir,
+                effectiveSourceId,
+                sourceSyncRunId,
                 incremental,
                 CompileOrchestrationModes.normalize(orchestrationMode),
                 CompileJobStatuses.QUEUED,
@@ -163,17 +198,43 @@ public class CompileJobService {
     private CompileJobRecord executeRunningJob(String jobId) {
         CompileJobRecord compileJobRecord = getRequiredJob(jobId);
         try {
-            CompileResult compileResult = compileOrchestratorRegistry.execute(
-                    compileJobRecord.getOrchestrationMode(),
+            KnowledgeSource knowledgeSource = resolveKnowledgeSource(compileJobRecord.getSourceId());
+            CompileExecutionRequest executionRequest = new CompileExecutionRequest(
+                    compileJobRecord.getJobId(),
                     Path.of(compileJobRecord.getSourceDir()),
-                    compileJobRecord.isIncremental()
+                    compileJobRecord.isIncremental(),
+                    compileJobRecord.getOrchestrationMode(),
+                    compileJobRecord.getSourceId(),
+                    knowledgeSource == null ? null : knowledgeSource.getSourceCode(),
+                    compileJobRecord.getSourceSyncRunId()
             );
+            CompileResult compileResult = compileOrchestratorRegistry.execute(executionRequest);
             compileJobJdbcRepository.markSucceeded(jobId, compileResult.getPersistedCount(), OffsetDateTime.now());
         }
         catch (IOException | RuntimeException ex) {
+            log.error("Compile job execution failed jobId: {}, sourceDir: {}", jobId, compileJobRecord.getSourceDir(), ex);
             compileJobJdbcRepository.markFailed(jobId, ex.getMessage(), OffsetDateTime.now());
         }
         return getRequiredJob(jobId);
+    }
+
+    private Long resolveEffectiveSourceId(Long sourceId) {
+        if (sourceId != null) {
+            return sourceId;
+        }
+        KnowledgeSource legacyDefault = resolveKnowledgeSourceByCode(LEGACY_DEFAULT_SOURCE_CODE);
+        return legacyDefault == null ? null : legacyDefault.getId();
+    }
+
+    private KnowledgeSource resolveKnowledgeSource(Long sourceId) {
+        if (sourceId == null) {
+            return resolveKnowledgeSourceByCode(LEGACY_DEFAULT_SOURCE_CODE);
+        }
+        return knowledgeSourceJdbcRepository.findById(sourceId).orElse(null);
+    }
+
+    private KnowledgeSource resolveKnowledgeSourceByCode(String sourceCode) {
+        return knowledgeSourceJdbcRepository.findBySourceCode(sourceCode).orElse(null);
     }
 
     /**

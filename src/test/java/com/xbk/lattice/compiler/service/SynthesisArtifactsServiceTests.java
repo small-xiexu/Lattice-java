@@ -1,7 +1,9 @@
 package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.config.LlmProperties;
-import com.xbk.lattice.compiler.model.MergedConcept;
+import com.xbk.lattice.compiler.domain.MergedConcept;
+import com.xbk.lattice.llm.service.LlmCallResult;
+import com.xbk.lattice.llm.service.LlmClient;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.junit.jupiter.api.Test;
 

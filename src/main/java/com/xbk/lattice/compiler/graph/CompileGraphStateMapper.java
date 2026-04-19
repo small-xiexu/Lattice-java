@@ -29,6 +29,9 @@ public class CompileGraphStateMapper {
         CompileGraphState state = new CompileGraphState();
         state.setJobId(readString(stateMap, CompileGraphStateKeys.JOB_ID));
         state.setSourceDir(readString(stateMap, CompileGraphStateKeys.SOURCE_DIR));
+        state.setSourceId(readLong(stateMap, CompileGraphStateKeys.SOURCE_ID));
+        state.setSourceCode(readString(stateMap, CompileGraphStateKeys.SOURCE_CODE));
+        state.setSourceSyncRunId(readLong(stateMap, CompileGraphStateKeys.SOURCE_SYNC_RUN_ID));
         state.setCompileMode(readString(stateMap, CompileGraphStateKeys.COMPILE_MODE));
         state.setOrchestrationMode(readString(stateMap, CompileGraphStateKeys.ORCHESTRATION_MODE));
         state.setRawSourcesRef(readString(stateMap, CompileGraphStateKeys.RAW_SOURCES_REF));
@@ -43,6 +46,7 @@ public class CompileGraphStateMapper {
         state.setReviewPartitionRef(readString(stateMap, CompileGraphStateKeys.REVIEW_PARTITION_REF));
         state.setAcceptedArticlesRef(readString(stateMap, CompileGraphStateKeys.ACCEPTED_ARTICLES_REF));
         state.setNeedsHumanReviewArticlesRef(readString(stateMap, CompileGraphStateKeys.NEEDS_HUMAN_REVIEW_ARTICLES_REF));
+        state.setSourceFileIdsByPath(readLongMap(stateMap, CompileGraphStateKeys.SOURCE_FILE_IDS_BY_PATH));
         state.setPersistedArticleIds(readStringList(stateMap, CompileGraphStateKeys.PERSISTED_ARTICLE_IDS));
         state.setConceptCount(readInt(stateMap, CompileGraphStateKeys.CONCEPT_COUNT));
         state.setPendingReviewCount(readInt(stateMap, CompileGraphStateKeys.PENDING_REVIEW_COUNT));
@@ -78,6 +82,9 @@ public class CompileGraphStateMapper {
         Map<String, Object> values = new LinkedHashMap<String, Object>();
         values.put(CompileGraphStateKeys.JOB_ID, state.getJobId());
         values.put(CompileGraphStateKeys.SOURCE_DIR, state.getSourceDir());
+        values.put(CompileGraphStateKeys.SOURCE_ID, state.getSourceId());
+        values.put(CompileGraphStateKeys.SOURCE_CODE, state.getSourceCode());
+        values.put(CompileGraphStateKeys.SOURCE_SYNC_RUN_ID, state.getSourceSyncRunId());
         values.put(CompileGraphStateKeys.COMPILE_MODE, state.getCompileMode());
         values.put(CompileGraphStateKeys.ORCHESTRATION_MODE, state.getOrchestrationMode());
         values.put(CompileGraphStateKeys.RAW_SOURCES_REF, state.getRawSourcesRef());
@@ -92,6 +99,7 @@ public class CompileGraphStateMapper {
         values.put(CompileGraphStateKeys.REVIEW_PARTITION_REF, state.getReviewPartitionRef());
         values.put(CompileGraphStateKeys.ACCEPTED_ARTICLES_REF, state.getAcceptedArticlesRef());
         values.put(CompileGraphStateKeys.NEEDS_HUMAN_REVIEW_ARTICLES_REF, state.getNeedsHumanReviewArticlesRef());
+        values.put(CompileGraphStateKeys.SOURCE_FILE_IDS_BY_PATH, state.getSourceFileIdsByPath());
         values.put(CompileGraphStateKeys.PERSISTED_ARTICLE_IDS, state.getPersistedArticleIds());
         values.put(CompileGraphStateKeys.CONCEPT_COUNT, state.getConceptCount());
         values.put(CompileGraphStateKeys.PENDING_REVIEW_COUNT, state.getPendingReviewCount());
@@ -147,6 +155,21 @@ public class CompileGraphStateMapper {
         return 0;
     }
 
+    private Long readLong(Map<String, Object> stateMap, String key) {
+        Object value = stateMap.get(key);
+        if (value instanceof Number) {
+            Number number = (Number) value;
+            return number.longValue();
+        }
+        if (value instanceof String) {
+            String stringValue = (String) value;
+            if (!stringValue.isBlank()) {
+                return Long.parseLong(stringValue);
+            }
+        }
+        return null;
+    }
+
     private boolean readBoolean(Map<String, Object> stateMap, String key) {
         Object value = stateMap.get(key);
         if (value instanceof Boolean) {
@@ -172,6 +195,23 @@ public class CompileGraphStateMapper {
             if (item != null) {
                 values.add(String.valueOf(item));
             }
+        }
+        return values;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Long> readLongMap(Map<String, Object> stateMap, String key) {
+        Object value = stateMap.get(key);
+        if (!(value instanceof Map<?, ?>)) {
+            return new LinkedHashMap<String, Long>();
+        }
+        Map<String, Long> values = new LinkedHashMap<String, Long>();
+        Map<?, ?> rawMap = (Map<?, ?>) value;
+        for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null) {
+                continue;
+            }
+            values.put(String.valueOf(entry.getKey()), Long.valueOf(String.valueOf(entry.getValue())));
         }
         return values;
     }
