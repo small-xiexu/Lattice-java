@@ -185,6 +185,11 @@ class PropagateExecutionServiceTests {
         }
 
         @Override
+        public List<ArticleRecord> findWithUpstreamCorrections(ArticleRecord upstreamArticle) {
+            return findWithUpstreamCorrections(upstreamArticle.getConceptId());
+        }
+
+        @Override
         public void upsert(ArticleRecord articleRecord) {
             records.put(articleRecord.getConceptId(), articleRecord);
             lastUpserted = articleRecord;
@@ -209,8 +214,13 @@ class PropagateExecutionServiceTests {
                     current.getDependsOn(),
                     current.getRelated(),
                     current.getConfidence(),
-                    current.getReviewStatus()
+                current.getReviewStatus()
             ));
+        }
+
+        @Override
+        public void clearUpstreamCorrection(ArticleRecord downstreamArticle, ArticleRecord upstreamArticle) {
+            clearUpstreamCorrection(downstreamArticle.getConceptId(), upstreamArticle.getConceptId());
         }
 
         private ArticleRecord getLastUpserted() {

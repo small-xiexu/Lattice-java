@@ -107,7 +107,8 @@ public class VaultExportService {
 
         Map<String, Map<String, String>> articleEntries = new LinkedHashMap<String, Map<String, String>>();
         for (ArticleRecord articleRecord : articleJdbcRepository.findAll()) {
-            String relativePath = "concepts/" + articleRecord.getConceptId() + ".md";
+            String articleManifestKey = resolveArticleManifestKey(articleRecord);
+            String relativePath = "concepts/" + managedArticleFileName(articleRecord) + ".md";
             Path outputPath = vaultDir.resolve(relativePath);
             String content = articleRecord.getContent();
             String contentHash = hash(content);
@@ -119,7 +120,7 @@ public class VaultExportService {
                 skippedFiles++;
             }
             managedPaths.add(relativePath);
-            articleEntries.put(articleRecord.getConceptId(), manifestEntry(relativePath, contentHash));
+            articleEntries.put(articleManifestKey, manifestEntry(relativePath, contentHash));
         }
         nextManifest.put("articles", articleEntries);
 
@@ -251,6 +252,17 @@ public class VaultExportService {
         entry.put("path", path);
         entry.put("contentHash", contentHash);
         return entry;
+    }
+
+    private String resolveArticleManifestKey(ArticleRecord articleRecord) {
+        if (articleRecord.getArticleKey() != null && !articleRecord.getArticleKey().isBlank()) {
+            return articleRecord.getArticleKey();
+        }
+        return articleRecord.getConceptId();
+    }
+
+    private String managedArticleFileName(ArticleRecord articleRecord) {
+        return resolveArticleManifestKey(articleRecord).replace("/", "__");
     }
 
     private String artifactFileName(String artifactType) {

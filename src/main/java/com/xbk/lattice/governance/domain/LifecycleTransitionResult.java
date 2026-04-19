@@ -9,6 +9,10 @@ package com.xbk.lattice.governance.domain;
  */
 public class LifecycleTransitionResult {
 
+    private final Long sourceId;
+
+    private final String articleKey;
+
     private final String conceptId;
 
     private final String title;
@@ -32,6 +36,8 @@ public class LifecycleTransitionResult {
      * @param updatedAt 更新时间
      */
     public LifecycleTransitionResult(
+            Long sourceId,
+            String articleKey,
             String conceptId,
             String title,
             String lifecycle,
@@ -39,12 +45,43 @@ public class LifecycleTransitionResult {
             String updatedBy,
             String updatedAt
     ) {
+        this.sourceId = sourceId;
+        this.articleKey = articleKey;
         this.conceptId = conceptId;
         this.title = title;
         this.lifecycle = lifecycle;
         this.reason = reason;
         this.updatedBy = updatedBy;
         this.updatedAt = updatedAt;
+    }
+
+    /**
+     * 创建兼容旧调用的生命周期切换结果。
+     *
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param lifecycle 生命周期
+     * @param reason 原因
+     * @param updatedBy 更新人
+     * @param updatedAt 更新时间
+     */
+    public LifecycleTransitionResult(
+            String conceptId,
+            String title,
+            String lifecycle,
+            String reason,
+            String updatedBy,
+            String updatedAt
+    ) {
+        this(null, conceptId, conceptId, title, lifecycle, reason, updatedBy, updatedAt);
+    }
+
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    public String getArticleKey() {
+        return articleKey;
     }
 
     /**

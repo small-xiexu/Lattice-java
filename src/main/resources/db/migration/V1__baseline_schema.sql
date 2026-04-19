@@ -801,7 +801,8 @@ BEGIN
     IF vector_type_name IS NOT NULL THEN
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS article_vector_index (
-                concept_id VARCHAR(128) PRIMARY KEY,
+                article_key VARCHAR(256) PRIMARY KEY REFERENCES articles (article_key) ON DELETE CASCADE,
+                concept_id VARCHAR(128) NOT NULL,
                 model_profile_id BIGINT NOT NULL REFERENCES llm_model_profiles (id),
                 embedding_dimensions INTEGER NOT NULL,
                 index_version VARCHAR(64) NOT NULL,
@@ -814,6 +815,9 @@ BEGIN
 
         CREATE INDEX IF NOT EXISTS idx_article_vector_index_updated_at
             ON article_vector_index (updated_at DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_article_vector_index_concept_id
+            ON article_vector_index (concept_id);
 
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS article_chunk_vector_index (
@@ -839,7 +843,8 @@ DO $$
 BEGIN
     IF to_regclass(current_schema() || '.article_vector_index') IS NOT NULL THEN
         EXECUTE 'COMMENT ON TABLE article_vector_index IS ''文章向量索引表''';
-        EXECUTE 'COMMENT ON COLUMN article_vector_index.concept_id IS ''关联文章概念唯一标识''';
+        EXECUTE 'COMMENT ON COLUMN article_vector_index.article_key IS ''关联文章唯一键''';
+        EXECUTE 'COMMENT ON COLUMN article_vector_index.concept_id IS ''关联文章概念标识''';
         EXECUTE 'COMMENT ON COLUMN article_vector_index.model_profile_id IS ''Embedding profile 主键''';
         EXECUTE 'COMMENT ON COLUMN article_vector_index.embedding_dimensions IS ''向量维度''';
         EXECUTE 'COMMENT ON COLUMN article_vector_index.index_version IS ''索引版本''';

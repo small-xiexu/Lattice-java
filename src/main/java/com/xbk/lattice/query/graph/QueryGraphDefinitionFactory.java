@@ -490,11 +490,17 @@ public class QueryGraphDefinitionFactory {
             if (fusedHit.getEvidenceType() != queryEvidenceType) {
                 continue;
             }
-            String responseKey = fusedHit.getEvidenceType().name() + ":" + fusedHit.getConceptId();
+            String responseIdentity = fusedHit.getArticleKey();
+            if (responseIdentity == null || responseIdentity.isBlank()) {
+                responseIdentity = fusedHit.getConceptId();
+            }
+            String responseKey = fusedHit.getEvidenceType().name() + ":" + responseIdentity;
             if (!responseKeys.add(responseKey)) {
                 continue;
             }
             sourceResponses.add(new QuerySourceResponse(
+                    fusedHit.getSourceId(),
+                    fusedHit.getArticleKey(),
                     fusedHit.getConceptId(),
                     fusedHit.getTitle(),
                     fusedHit.getSourcePaths()
@@ -509,6 +515,8 @@ public class QueryGraphDefinitionFactory {
                 continue;
             }
             articleResponses.add(new QueryArticleResponse(
+                    fusedHit.getSourceId(),
+                    fusedHit.getArticleKey(),
                     fusedHit.getConceptId(),
                     fusedHit.getTitle()
             ));

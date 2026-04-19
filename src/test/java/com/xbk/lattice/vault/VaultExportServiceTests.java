@@ -6,6 +6,8 @@ import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.ContributionJdbcRepository;
 import com.xbk.lattice.infra.persistence.ContributionRecord;
+import com.xbk.lattice.source.domain.KnowledgeSource;
+import com.xbk.lattice.source.service.SourceService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +58,9 @@ class VaultExportServiceTests {
     @Autowired
     private VaultExportService vaultExportService;
 
+    @Autowired
+    private SourceService sourceService;
+
     /**
      * 验证 Vault 导出会写出文章、合成产物、贡献与 manifest。
      *
@@ -65,7 +70,10 @@ class VaultExportServiceTests {
     @Test
     void shouldExportManagedVault(@TempDir Path tempDir) throws Exception {
         resetTables();
+        Long sourceId = createManagedSourceId();
         articleJdbcRepository.upsert(new ArticleRecord(
+                sourceId,
+                "payments-docs--payment-timeout",
                 "payment-timeout",
                 "Payment Timeout",
                 """
@@ -105,8 +113,8 @@ class VaultExportServiceTests {
         VaultExportResult result = vaultExportService.export(tempDir);
 
         assertThat(result.getWrittenFiles()).isGreaterThanOrEqualTo(3);
-        assertThat(Files.exists(tempDir.resolve("concepts/payment-timeout.md"))).isTrue();
-        assertThat(Files.readString(tempDir.resolve("concepts/payment-timeout.md"), StandardCharsets.UTF_8))
+        assertThat(Files.exists(tempDir.resolve("concepts/payments-docs--payment-timeout.md"))).isTrue();
+        assertThat(Files.readString(tempDir.resolve("concepts/payments-docs--payment-timeout.md"), StandardCharsets.UTF_8))
                 .contains("# Payment Timeout");
         assertThat(Files.exists(tempDir.resolve("index.md"))).isTrue();
         assertThat(Files.readString(tempDir.resolve("index.md"), StandardCharsets.UTF_8)).contains("# Index");
@@ -120,5 +128,28 @@ class VaultExportServiceTests {
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_export_test.contributions");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_export_test.synthesis_artifacts");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_export_test.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_export_test.knowledge_sources RESTART IDENTITY CASCADE");
+    }
+
+    private Long createManagedSourceId() {
+        KnowledgeSource source = sourceService.save(new KnowledgeSource(
+                null,
+                "payments-docs",
+                "Payments Docs",
+                "UPLOAD",
+                "DOCUMENT",
+                "ACTIVE",
+                "NORMAL",
+                "AUTO",
+                "{}",
+                "{}",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+        return source.getId();
     }
 }

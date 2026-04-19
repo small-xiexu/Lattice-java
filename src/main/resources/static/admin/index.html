@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lattice 知识库管理</title>
-    <link rel="stylesheet" href="/admin/admin.css?v=20260419-upload-tracking-2">
+    <link rel="stylesheet" href="/admin/admin.css?v=20260419-source-console-1">
 </head>
 <body>
 <div class="app-shell">
@@ -97,26 +97,24 @@
                     <div class="panel-title-row">
                         <div>
                             <h2>资料导入</h2>
-                            <p>支持直接上传文件，也支持对一个已有目录发起同步，尽量减少非必要配置。</p>
+                            <p>支持直接上传资料自动归并，也支持创建服务器目录资料源并持续同步，尽量不让用户理解内部编排细节。</p>
                         </div>
                     </div>
 
                     <div class="compile-layout top-gap">
                         <div class="sub-panel">
                             <h3>上传资料</h3>
-                            <p class="muted">支持 Word、PPT、PDF、Excel 和常见文本资料直接入库。</p>
+                            <p class="muted">支持 Word、PPT、PDF、Excel、图片和常见文本资料。留空时系统会自动判断是新建资料源还是更新已有资料源。</p>
                             <div class="form-grid top-gap">
                                 <label class="file-picker">
                                     <span>选择文件</span>
                                     <input id="compile-files" type="file" multiple accept=".docx,.pptx,.pdf,.xlsx,.xls,.md,.markdown,.txt,.json,.html,.xml,.yml,.yaml,.properties,.js,.css,.java,.sh,.py">
                                 </label>
-                                <label class="checkbox-row">
-                                    <input id="upload-incremental" type="checkbox">
-                                    <span>增量处理</span>
-                                </label>
-                                <label class="checkbox-row">
-                                    <input id="upload-async" type="checkbox" checked>
-                                    <span>后台执行</span>
+                                <label>
+                                    <span>目标资料源（可选）</span>
+                                    <select id="upload-target-source">
+                                        <option value="">自动识别 / 自动归并</option>
+                                    </select>
                                 </label>
                             </div>
                             <div class="button-row wrap top-gap">
@@ -125,24 +123,24 @@
                         </div>
 
                         <div class="sub-panel">
-                            <h3>目录同步</h3>
-                            <p class="muted">适合已有文档目录持续同步到知识库。</p>
+                            <h3>服务器目录资料源</h3>
+                            <p class="muted">适合管理员把一个固定目录注册为资料源，并反复同步。目录必须命中后台白名单。</p>
                             <div class="form-grid top-gap">
                                 <label>
-                                    <span>源目录</span>
-                                    <input id="compile-source-dir" type="text" placeholder="/path/to/source-dir">
+                                    <span>资料源名称</span>
+                                    <input id="server-source-name" type="text" placeholder="Payments Docs">
                                 </label>
-                                <label class="checkbox-row">
-                                    <input id="compile-incremental" type="checkbox">
-                                    <span>增量处理</span>
+                                <label>
+                                    <span>资料源编码（可选）</span>
+                                    <input id="server-source-code" type="text" placeholder="payments-docs">
                                 </label>
-                                <label class="checkbox-row">
-                                    <input id="compile-async" type="checkbox" checked>
-                                    <span>后台执行</span>
+                                <label class="field-span-2">
+                                    <span>服务器目录</span>
+                                    <input id="server-source-dir" type="text" placeholder="/path/to/source-dir">
                                 </label>
                             </div>
                             <div class="button-row wrap top-gap">
-                                <button id="submit-compile-job" class="primary-btn" type="button">开始目录同步</button>
+                                <button id="create-server-source" class="primary-btn" type="button">创建并立即同步</button>
                             </div>
                         </div>
 
@@ -161,12 +159,60 @@
                 <section class="panel">
                     <div class="panel-title-row">
                         <div>
-                            <h2>最近 5 条处理记录</h2>
-                            <p>这里只保留最近的上传和目录同步结果。用户能直接看到刚刚处理的是哪个文件、是否入库成功，以及失败原因。</p>
+                            <h2>最近同步运行</h2>
+                            <p>这里展示上传归并、资料源同步、待人工确认和最终入库状态。用户能直接看到当前卡在识别、编译还是已经完成。</p>
                         </div>
                         <button id="refresh-jobs" class="ghost-btn" type="button">刷新记录</button>
                     </div>
                     <div id="job-list" class="job-list top-gap"></div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-title-row">
+                        <div>
+                            <h2>资料源与文件</h2>
+                            <p>左侧查看资料源列表，右侧查看同步历史、文件解析方式和最近一次状态，便于排查 OCR、扫描 PDF 或 Git / 目录同步问题。</p>
+                        </div>
+                        <div class="button-row wrap">
+                            <button id="refresh-sources" class="ghost-btn" type="button">刷新资料源</button>
+                            <button id="sync-selected-source" class="secondary-btn" type="button">同步当前资料源</button>
+                        </div>
+                    </div>
+
+                    <div class="two-column content-workspace top-gap">
+                        <div class="list-panel">
+                            <div class="list-header">
+                                <h3>资料源列表</h3>
+                                <span id="source-count" class="pill">0</span>
+                            </div>
+                            <div id="source-list" class="scroll-list top-gap"></div>
+                        </div>
+
+                        <div class="detail-panel">
+                            <div class="detail-header">
+                                <div>
+                                    <h3 id="source-detail-title">请选择一个资料源</h3>
+                                    <p id="source-detail-meta" class="muted"></p>
+                                </div>
+                            </div>
+                            <div class="detail-stack">
+                                <section class="detail-section">
+                                    <h4>同步历史</h4>
+                                    <div id="source-run-list" class="job-list top-gap"></div>
+                                </section>
+
+                                <section class="detail-section">
+                                    <h4>文件解析方式</h4>
+                                    <div id="source-file-list" class="job-list top-gap"></div>
+                                </section>
+
+                                <section class="detail-section">
+                                    <h4>资料源配置</h4>
+                                    <pre id="source-detail-config" class="code-view">暂无配置</pre>
+                                </section>
+                            </div>
+                        </div>
+                    </div>
                 </section>
 
                 <section class="panel">
@@ -180,6 +226,9 @@
 
                     <div class="toolbar article-toolbar top-gap">
                         <input id="article-query" type="text" placeholder="按标题、摘要或概念 ID 搜索">
+                        <select id="article-source-filter">
+                            <option value="">全部资料源</option>
+                        </select>
                         <select id="article-lifecycle">
                             <option value="">全部状态</option>
                             <option value="ACTIVE">生效中</option>
@@ -239,6 +288,6 @@
         </div>
     </div>
  </div>
-<script src="/admin/management.js?v=20260419-upload-tracking-2"></script>
+<script src="/admin/management.js?v=20260419-source-console-1"></script>
 </body>
 </html>

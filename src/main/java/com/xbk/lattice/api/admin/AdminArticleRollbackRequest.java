@@ -9,9 +9,24 @@ package com.xbk.lattice.api.admin;
  */
 public class AdminArticleRollbackRequest {
 
+    private String articleId;
+
     private String conceptId;
 
+    private Long sourceId;
+
     private long snapshotId;
+
+    public String getArticleId() {
+        if (articleId != null && !articleId.isBlank()) {
+            return articleId;
+        }
+        return conceptId;
+    }
+
+    public void setArticleId(String articleId) {
+        this.articleId = articleId;
+    }
 
     public String getConceptId() {
         return conceptId;
@@ -19,6 +34,14 @@ public class AdminArticleRollbackRequest {
 
     public void setConceptId(String conceptId) {
         this.conceptId = conceptId;
+    }
+
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    public void setSourceId(Long sourceId) {
+        this.sourceId = sourceId;
     }
 
     public long getSnapshotId() {

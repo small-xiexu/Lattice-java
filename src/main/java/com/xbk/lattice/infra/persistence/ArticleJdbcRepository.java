@@ -1,5 +1,9 @@
 package com.xbk.lattice.infra.persistence;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.postgresql.util.PGobject;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.context.annotation.Profile;
@@ -23,6 +27,8 @@ import java.util.Optional;
 @Repository
 @Profile("jdbc")
 public class ArticleJdbcRepository {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -193,8 +199,52 @@ public class ArticleJdbcRepository {
                         ))
                 )
                 where concept_id = ?
-                """;
+        """;
         jdbcTemplate.update(sql, fromConceptId, correctionSummary, conceptId);
+    }
+
+    /**
+     * 追加 source-aware 上游纠错标记。
+     *
+     * @param downstreamArticle 下游文章
+     * @param upstreamArticle 上游文章
+     * @param correctionSummary 纠错摘要
+     */
+    public void appendUpstreamCorrection(
+            ArticleRecord downstreamArticle,
+            ArticleRecord upstreamArticle,
+            String correctionSummary
+    ) {
+        if (downstreamArticle == null || upstreamArticle == null) {
+            return;
+        }
+        ObjectNode metadataNode = readMetadata(downstreamArticle.getMetadataJson());
+        ArrayNode correctionsNode = ensureCorrectionsNode(metadataNode);
+        ObjectNode correctionNode = OBJECT_MAPPER.createObjectNode();
+        correctionNode.put("from", upstreamArticle.getConceptId());
+        correctionNode.put("summary", correctionSummary);
+        correctionNode.put("marked_at", OffsetDateTime.now().toString());
+        if (upstreamArticle.getArticleKey() != null && !upstreamArticle.getArticleKey().isBlank()) {
+            correctionNode.put("fromArticleKey", upstreamArticle.getArticleKey());
+        }
+        if (upstreamArticle.getSourceId() != null) {
+            correctionNode.put("fromSourceId", upstreamArticle.getSourceId().longValue());
+        }
+        correctionsNode.add(correctionNode);
+        upsert(downstreamArticle.copy(
+                downstreamArticle.getTitle(),
+                downstreamArticle.getContent(),
+                downstreamArticle.getLifecycle(),
+                downstreamArticle.getCompiledAt(),
+                downstreamArticle.getSourcePaths(),
+                metadataNode.toString(),
+                downstreamArticle.getSummary(),
+                downstreamArticle.getReferentialKeywords(),
+                downstreamArticle.getDependsOn(),
+                downstreamArticle.getRelated(),
+                downstreamArticle.getConfidence(),
+                downstreamArticle.getReviewStatus()
+        ));
     }
 
     /**
@@ -215,8 +265,36 @@ public class ArticleJdbcRepository {
                     where elem->>'from' = ?
                 )
                 order by concept_id asc
-                """;
+        """;
         return jdbcTemplate.query(sql, this::mapArticleRecord, fromConceptId);
+    }
+
+    /**
+     * 查询带有指定上游纠错标记的下游文章。
+     *
+     * @param upstreamArticle 上游文章
+     * @return 下游文章列表
+     */
+    public List<ArticleRecord> findWithUpstreamCorrections(ArticleRecord upstreamArticle) {
+        if (upstreamArticle == null) {
+            return List.of();
+        }
+        String sql = """
+                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
+                       source_paths, metadata_json, summary, referential_keywords, depends_on,
+                       related, confidence, review_status
+                from articles
+                where metadata_json::text like '%upstream_corrections%'
+                order by source_id asc nulls first, article_key asc
+                """;
+        List<ArticleRecord> candidates = jdbcTemplate.query(sql, this::mapArticleRecord);
+        List<ArticleRecord> matchedRecords = new ArrayList<ArticleRecord>();
+        for (ArticleRecord candidate : candidates) {
+            if (containsUpstreamCorrection(candidate.getMetadataJson(), upstreamArticle)) {
+                matchedRecords.add(candidate);
+            }
+        }
+        return matchedRecords;
     }
 
     /**
@@ -238,8 +316,44 @@ public class ArticleJdbcRepository {
                     )
                 )
                 where concept_id = ?
-                """;
+        """;
         jdbcTemplate.update(sql, fromConceptId, downstreamConceptId);
+    }
+
+    /**
+     * 清理指定下游文章中来自特定上游的 source-aware 纠错标记。
+     *
+     * @param downstreamArticle 下游文章
+     * @param upstreamArticle 上游文章
+     */
+    public void clearUpstreamCorrection(ArticleRecord downstreamArticle, ArticleRecord upstreamArticle) {
+        if (downstreamArticle == null || upstreamArticle == null) {
+            return;
+        }
+        ObjectNode metadataNode = readMetadata(downstreamArticle.getMetadataJson());
+        ArrayNode correctionsNode = ensureCorrectionsNode(metadataNode);
+        ArrayNode filteredNode = OBJECT_MAPPER.createArrayNode();
+        for (JsonNode correctionNode : correctionsNode) {
+            if (matchesUpstreamCorrection(correctionNode, upstreamArticle)) {
+                continue;
+            }
+            filteredNode.add(correctionNode);
+        }
+        metadataNode.set("upstream_corrections", filteredNode);
+        upsert(downstreamArticle.copy(
+                downstreamArticle.getTitle(),
+                downstreamArticle.getContent(),
+                downstreamArticle.getLifecycle(),
+                downstreamArticle.getCompiledAt(),
+                downstreamArticle.getSourcePaths(),
+                metadataNode.toString(),
+                downstreamArticle.getSummary(),
+                downstreamArticle.getReferentialKeywords(),
+                downstreamArticle.getDependsOn(),
+                downstreamArticle.getRelated(),
+                downstreamArticle.getConfidence(),
+                downstreamArticle.getReviewStatus()
+        ));
     }
 
     /**
@@ -327,5 +441,70 @@ public class ArticleJdbcRepository {
             sourcePaths.add(String.valueOf(value));
         }
         return sourcePaths;
+    }
+
+    private ObjectNode readMetadata(String metadataJson) {
+        if (metadataJson == null || metadataJson.isBlank()) {
+            return OBJECT_MAPPER.createObjectNode();
+        }
+        try {
+            JsonNode rootNode = OBJECT_MAPPER.readTree(metadataJson);
+            if (rootNode instanceof ObjectNode objectNode) {
+                return objectNode;
+            }
+        }
+        catch (Exception ignored) {
+            // 回退为空对象
+        }
+        return OBJECT_MAPPER.createObjectNode();
+    }
+
+    private ArrayNode ensureCorrectionsNode(ObjectNode metadataNode) {
+        JsonNode correctionsNode = metadataNode.path("upstream_corrections");
+        if (correctionsNode instanceof ArrayNode arrayNode) {
+            return arrayNode;
+        }
+        ArrayNode arrayNode = OBJECT_MAPPER.createArrayNode();
+        metadataNode.set("upstream_corrections", arrayNode);
+        return arrayNode;
+    }
+
+    private boolean containsUpstreamCorrection(String metadataJson, ArticleRecord upstreamArticle) {
+        if (metadataJson == null || metadataJson.isBlank()) {
+            return false;
+        }
+        try {
+            JsonNode correctionsNode = OBJECT_MAPPER.readTree(metadataJson).path("upstream_corrections");
+            if (!correctionsNode.isArray()) {
+                return false;
+            }
+            for (JsonNode correctionNode : correctionsNode) {
+                if (matchesUpstreamCorrection(correctionNode, upstreamArticle)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private boolean matchesUpstreamCorrection(JsonNode correctionNode, ArticleRecord upstreamArticle) {
+        String fromArticleKey = correctionNode.path("fromArticleKey").asText("");
+        if (!fromArticleKey.isBlank()
+                && upstreamArticle.getArticleKey() != null
+                && upstreamArticle.getArticleKey().equals(fromArticleKey)) {
+            return true;
+        }
+        String fromConceptId = correctionNode.path("from").asText("");
+        if (!upstreamArticle.getConceptId().equals(fromConceptId)) {
+            return false;
+        }
+        JsonNode fromSourceIdNode = correctionNode.get("fromSourceId");
+        if (fromSourceIdNode == null || fromSourceIdNode.isNull() || upstreamArticle.getSourceId() == null) {
+            return true;
+        }
+        return fromSourceIdNode.asLong() == upstreamArticle.getSourceId().longValue();
     }
 }

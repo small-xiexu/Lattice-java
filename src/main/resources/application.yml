@@ -88,3 +88,8 @@ lattice:
         enabled: ${LATTICE_QUERY_SEARCH_VECTOR_ENABLED:false}
         embedding-model: ${LATTICE_QUERY_SEARCH_VECTOR_MODEL:text-embedding-3-small}
         expected-dimensions: ${LATTICE_QUERY_SEARCH_VECTOR_DIMENSIONS:1536}
+  source:
+    admin:
+      staging-root-dir: ${LATTICE_SOURCE_ADMIN_STAGING_ROOT_DIR:${java.io.tmpdir}/lattice-source-sync}
+      allowed-server-dirs:
+        - ${LATTICE_SOURCE_ADMIN_ALLOWED_SERVER_DIR_1:${java.io.tmpdir}}

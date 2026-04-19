@@ -11,6 +11,10 @@ import java.time.OffsetDateTime;
  */
 public class RollbackResult {
 
+    private final Long sourceId;
+
+    private final String articleKey;
+
     private final String conceptId;
 
     private final long restoredSnapshotId;
@@ -24,10 +28,37 @@ public class RollbackResult {
      * @param restoredSnapshotId 恢复来源快照标识
      * @param restoredAt 恢复时间
      */
-    public RollbackResult(String conceptId, long restoredSnapshotId, OffsetDateTime restoredAt) {
+    public RollbackResult(
+            Long sourceId,
+            String articleKey,
+            String conceptId,
+            long restoredSnapshotId,
+            OffsetDateTime restoredAt
+    ) {
+        this.sourceId = sourceId;
+        this.articleKey = articleKey;
         this.conceptId = conceptId;
         this.restoredSnapshotId = restoredSnapshotId;
         this.restoredAt = restoredAt;
+    }
+
+    /**
+     * 创建兼容旧调用的回滚结果。
+     *
+     * @param conceptId 概念标识
+     * @param restoredSnapshotId 恢复来源快照标识
+     * @param restoredAt 恢复时间
+     */
+    public RollbackResult(String conceptId, long restoredSnapshotId, OffsetDateTime restoredAt) {
+        this(null, conceptId, conceptId, restoredSnapshotId, restoredAt);
+    }
+
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    public String getArticleKey() {
+        return articleKey;
     }
 
     public String getConceptId() {

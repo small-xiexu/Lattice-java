@@ -52,11 +52,12 @@ public class ArticleVectorJdbcRepository {
 
         String sql = """
                 insert into article_vector_index (
-                    concept_id, model_profile_id, embedding_dimensions, index_version, content_hash, embedding, updated_at
+                    article_key, concept_id, model_profile_id, embedding_dimensions, index_version, content_hash, embedding, updated_at
                 )
-                values (?, ?, ?, ?, ?, cast(? as %s), ?)
-                on conflict (concept_id) do update
-                set model_profile_id = excluded.model_profile_id,
+                values (?, ?, ?, ?, ?, ?, cast(? as %s), ?)
+                on conflict (article_key) do update
+                set concept_id = excluded.concept_id,
+                    model_profile_id = excluded.model_profile_id,
                     embedding_dimensions = excluded.embedding_dimensions,
                     index_version = excluded.index_version,
                     content_hash = excluded.content_hash,
@@ -65,6 +66,7 @@ public class ArticleVectorJdbcRepository {
                 """.formatted(vectorTypeName);
         jdbcTemplate.update(
                 sql,
+                articleVectorRecord.getArticleKey(),
                 articleVectorRecord.getConceptId(),
                 articleVectorRecord.getModelProfileId(),
                 articleVectorRecord.getEmbeddingDimensions(),
@@ -76,25 +78,25 @@ public class ArticleVectorJdbcRepository {
     }
 
     /**
-     * 按概念标识查询向量索引。
+     * 按文章唯一键查询向量索引。
      *
-     * @param conceptId 概念标识
+     * @param articleKey 文章唯一键
      * @return 向量索引
      */
-    public Optional<ArticleVectorRecord> findByConceptId(String conceptId) {
-        if (jdbcTemplate == null) {
+    public Optional<ArticleVectorRecord> findByArticleKey(String articleKey) {
+        if (jdbcTemplate == null || articleKey == null || articleKey.isBlank()) {
             return Optional.empty();
         }
 
         List<ArticleVectorRecord> records = jdbcTemplate.query(
                 """
-                        select concept_id, model_profile_id, embedding_dimensions, index_version,
+                        select article_key, concept_id, model_profile_id, embedding_dimensions, index_version,
                                content_hash, embedding::text as embedding, updated_at
                         from article_vector_index
-                        where concept_id = ?
+                        where article_key = ?
                         """,
                 this::mapArticleVectorRecord,
-                conceptId
+                articleKey
         );
         if (records.isEmpty()) {
             return Optional.empty();
@@ -248,14 +250,16 @@ public class ArticleVectorJdbcRepository {
         String vectorLiteral = formatVector(embedding);
         return jdbcTemplate.query(
                 """
-                        select a.concept_id,
+                        select a.source_id,
+                               a.article_key,
+                               a.concept_id,
                                a.title,
                                a.content,
                                a.metadata_json::text as metadata_json,
                                a.source_paths,
                                1 - (v.embedding %s cast(? as %s)) as score
                         from article_vector_index v
-                        join articles a on a.concept_id = v.concept_id
+                        join articles a on a.article_key = v.article_key
                         order by v.embedding %s cast(? as %s), a.compiled_at desc
                         limit ?
                         """.formatted(distanceOperator, vectorTypeName, distanceOperator, vectorTypeName),
@@ -276,6 +280,7 @@ public class ArticleVectorJdbcRepository {
      */
     private ArticleVectorRecord mapArticleVectorRecord(ResultSet resultSet, int rowNum) throws SQLException {
         return new ArticleVectorRecord(
+                resultSet.getString("article_key"),
                 resultSet.getString("concept_id"),
                 resultSet.getObject("model_profile_id", Long.class),
                 resultSet.getInt("embedding_dimensions"),
@@ -296,6 +301,8 @@ public class ArticleVectorJdbcRepository {
      */
     private QueryArticleHit mapQueryArticleHit(ResultSet resultSet, int rowNum) throws SQLException {
         return new QueryArticleHit(
+                readLong(resultSet, "source_id"),
+                resultSet.getString("article_key"),
                 resultSet.getString("concept_id"),
                 resultSet.getString("title"),
                 resultSet.getString("content"),
@@ -324,6 +331,11 @@ public class ArticleVectorJdbcRepository {
             sourcePaths.add(String.valueOf(value));
         }
         return sourcePaths;
+    }
+
+    private Long readLong(ResultSet resultSet, String columnName) throws SQLException {
+        Object value = resultSet.getObject(columnName);
+        return value == null ? null : resultSet.getLong(columnName);
     }
 
     /**

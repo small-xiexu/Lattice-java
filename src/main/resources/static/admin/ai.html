@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lattice AI 接入</title>
-    <link rel="stylesheet" href="/admin/admin.css?v=20260419-ui-refresh-4">
+    <link rel="stylesheet" href="/admin/admin.css?v=20260419-source-console-1">
 </head>
 <body>
 <div class="app-shell">
@@ -256,7 +256,47 @@
                                 <button id="save-document-parse-settings" class="primary-btn" type="button">保存设置</button>
                             </div>
                         </div>
+
+                        <div class="sub-panel">
+                            <h3>资料源凭据</h3>
+                            <p class="muted">用于 Git 私仓或其他受控资料源的 credentialRef。凭据只会加密保存，资料源 config_json 中不会回写明文。</p>
+                            <div class="form-grid top-gap">
+                                <label>
+                                    <span>凭据编码</span>
+                                    <input id="source-credential-code" type="text" placeholder="git-main-token">
+                                </label>
+                                <label>
+                                    <span>凭据类型</span>
+                                    <select id="source-credential-type">
+                                        <option value="GIT_TOKEN">Git Token</option>
+                                        <option value="GIT_HTTP_BASIC">Git HTTP Basic</option>
+                                    </select>
+                                </label>
+                                <label class="field-span-2">
+                                    <span>凭据明文</span>
+                                    <input id="source-credential-secret" type="text" placeholder="token 或 username:password">
+                                </label>
+                                <label>
+                                    <span>更新人</span>
+                                    <input id="source-credential-updated-by" type="text" placeholder="admin">
+                                </label>
+                            </div>
+                            <div class="button-row wrap top-gap">
+                                <button id="save-source-credential" class="primary-btn" type="button">保存凭据</button>
+                                <button id="reset-source-credential" class="ghost-btn" type="button">清空</button>
+                            </div>
+                        </div>
                     </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-title-row">
+                        <div>
+                            <h2>资料源凭据列表</h2>
+                            <p>这里只展示脱敏后的 credential code、类型和更新时间，方便给 Git 资料源配置 credentialRef。</p>
+                        </div>
+                    </div>
+                    <div id="source-credential-list" class="job-list top-gap"></div>
                 </section>
 
                 <section class="panel">
@@ -297,6 +337,6 @@
     </div>
 
 </div>
-<script src="/admin/ai.js?v=20260419-ui-refresh-2"></script>
+<script src="/admin/ai.js?v=20260419-source-console-1"></script>
 </body>
 </html>

@@ -117,6 +117,8 @@ public class RrfFusionService {
         for (Map.Entry<String, QueryArticleHit> entry : articleHitMap.entrySet()) {
             fusedHits.add(new QueryArticleHit(
                     entry.getValue().getEvidenceType(),
+                    entry.getValue().getSourceId(),
+                    entry.getValue().getArticleKey(),
                     entry.getValue().getConceptId(),
                     entry.getValue().getTitle(),
                     entry.getValue().getContent(),
@@ -150,6 +152,10 @@ public class RrfFusionService {
     }
 
     private String buildHitKey(QueryArticleHit queryArticleHit) {
-        return queryArticleHit.getEvidenceType().name() + ":" + queryArticleHit.getConceptId();
+        String identity = queryArticleHit.getArticleKey();
+        if (identity == null || identity.isBlank()) {
+            identity = queryArticleHit.getConceptId();
+        }
+        return queryArticleHit.getEvidenceType().name() + ":" + identity;
     }
 }

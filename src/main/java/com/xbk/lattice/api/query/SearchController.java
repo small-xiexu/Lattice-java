@@ -54,6 +54,8 @@ public class SearchController {
         for (QueryArticleHit hit : hits) {
             items.add(new SearchHitResponse(
                     hit.getEvidenceType().name(),
+                    hit.getSourceId(),
+                    hit.getArticleKey(),
                     hit.getConceptId(),
                     hit.getTitle(),
                     hit.getContent(),

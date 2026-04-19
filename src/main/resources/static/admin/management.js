@@ -1,12 +1,18 @@
 (function () {
+    const RUN_POLLING_STATUSES = ["MATCHING", "MATERIALIZING", "COMPILE_QUEUED", "QUEUED", "RUNNING"];
+
     const state = {
-        selectedConceptId: null,
+        selectedArticleId: null,
+        selectedArticleSourceId: null,
+        selectedSourceId: null,
         overview: null,
         health: null,
-        activeJobId: null
+        sources: [],
+        activeRunId: null
     };
+
     let pageNoticeTimer = null;
-    let jobPollingTimer = null;
+    let runPollingTimer = null;
 
     document.addEventListener("DOMContentLoaded", function () {
         bindEvents();
@@ -17,26 +23,22 @@
         document.getElementById("refresh-page").addEventListener("click", refreshPage);
         document.getElementById("refresh-summary").addEventListener("click", refreshSummary);
         document.getElementById("refresh-health").addEventListener("click", refreshHealth);
+        document.getElementById("refresh-jobs").addEventListener("click", loadRecentRuns);
+        document.getElementById("refresh-sources").addEventListener("click", loadSources);
         document.getElementById("search-articles").addEventListener("click", loadArticles);
-        document.getElementById("refresh-jobs").addEventListener("click", refreshKnowledgeState);
-        document.getElementById("submit-compile-job").addEventListener("click", submitCompileJob);
+        document.getElementById("article-source-filter").addEventListener("change", loadArticles);
         document.getElementById("submit-upload-job").addEventListener("click", uploadAndCompile);
+        document.getElementById("create-server-source").addEventListener("click", createServerSourceAndSync);
+        document.getElementById("sync-selected-source").addEventListener("click", syncSelectedSource);
         document.getElementById("rebuild-chunks").addEventListener("click", rebuildChunks);
     }
 
     async function refreshPage() {
+        await refreshSummary();
+        await loadSources();
         await Promise.all([
-            refreshSummary(),
-            loadArticles(),
-            loadJobs()
-        ]);
-    }
-
-    async function refreshKnowledgeState() {
-        await Promise.all([
-            refreshSummary(),
-            loadArticles(),
-            loadJobs()
+            loadRecentRuns(),
+            loadArticles()
         ]);
     }
 
@@ -63,23 +65,88 @@
         if (state.overview) {
             renderSummary(state.overview, health);
         }
-        setStatus("服务健康状态：" + health.label);
+        setStatus("服务健康状态：" + health.label, health.tone === "danger" ? "warning" : "success");
+    }
+
+    async function loadSources() {
+        try {
+            const response = await fetchJson("/api/v1/admin/sources?page=1&size=50");
+            const items = response.items || [];
+            state.sources = items;
+            if (state.overview) {
+                renderSummary(state.overview, state.health);
+            }
+            renderSourceSelects(items);
+            renderSourceList(items);
+            document.getElementById("source-count").textContent = String(response.total || items.length || 0);
+            if (items.length === 0) {
+                state.selectedSourceId = null;
+                clearSourceDetail();
+                return;
+            }
+            if (!containsSource(items, state.selectedSourceId)) {
+                state.selectedSourceId = items[0].id;
+            }
+            highlightSource(state.selectedSourceId);
+            await loadSourceDetail(state.selectedSourceId);
+        }
+        catch (error) {
+            showError("加载资料源失败", error);
+        }
+    }
+
+    async function loadSourceDetail(sourceId) {
+        if (!sourceId) {
+            clearSourceDetail();
+            return;
+        }
+        try {
+            state.selectedSourceId = sourceId;
+            const results = await Promise.all([
+                fetchJson("/api/v1/admin/sources/" + encodeURIComponent(sourceId)),
+                fetchJson("/api/v1/admin/sources/" + encodeURIComponent(sourceId) + "/runs"),
+                fetchJson("/api/v1/admin/sources/" + encodeURIComponent(sourceId) + "/files")
+            ]);
+            renderSourceDetail(results[0], results[1] || [], results[2] || []);
+            highlightSource(sourceId);
+        }
+        catch (error) {
+            showError("加载资料源详情失败", error);
+        }
+    }
+
+    async function loadRecentRuns() {
+        try {
+            const response = await fetchJson("/api/v1/admin/source-runs?limit=10");
+            renderRunCollection("job-list", response || [], "暂时没有同步记录");
+        }
+        catch (error) {
+            showError("加载同步记录失败", error);
+        }
     }
 
     async function loadArticles() {
         try {
             const query = encodeURIComponent(document.getElementById("article-query").value.trim());
             const lifecycle = encodeURIComponent(document.getElementById("article-lifecycle").value.trim());
-            const response = await fetchJson("/api/v1/admin/articles?query=" + query + "&lifecycle=" + lifecycle);
+            const sourceId = document.getElementById("article-source-filter").value.trim();
+            const sourceIdQuery = sourceId ? "&sourceId=" + encodeURIComponent(sourceId) : "";
+            const response = await fetchJson(
+                    "/api/v1/admin/articles?query=" + query + "&lifecycle=" + lifecycle + sourceIdQuery
+            );
             renderArticleList(response);
-            if (!state.selectedConceptId && response.items && response.items.length > 0) {
-                await loadArticleDetail(response.items[0].conceptId);
-            }
-            if (state.selectedConceptId && (!response.items || response.items.every(function (item) {
-                return item.conceptId !== state.selectedConceptId;
-            }))) {
-                state.selectedConceptId = null;
+            const items = response.items || [];
+            if (items.length === 0) {
                 clearArticleDetail();
+                state.selectedArticleId = null;
+                state.selectedArticleSourceId = null;
+                return;
+            }
+            if (!containsArticle(items, state.selectedArticleId, state.selectedArticleSourceId)) {
+                await loadArticleDetail(items[0].articleKey || items[0].conceptId, items[0].sourceId);
+            }
+            else {
+                highlightArticle(state.selectedArticleId, state.selectedArticleSourceId);
             }
         }
         catch (error) {
@@ -87,40 +154,17 @@
         }
     }
 
-    async function loadArticleDetail(conceptId) {
+    async function loadArticleDetail(articleId, sourceId) {
         try {
-            state.selectedConceptId = conceptId;
-            const detail = await fetchJson("/api/v1/admin/articles/" + encodeURIComponent(conceptId));
+            state.selectedArticleId = articleId;
+            state.selectedArticleSourceId = sourceId || null;
+            const query = sourceId ? "?sourceId=" + encodeURIComponent(String(sourceId)) : "";
+            const detail = await fetchJson("/api/v1/admin/articles/" + encodeURIComponent(articleId) + query);
             renderArticleDetail(detail);
-            highlightArticle(conceptId);
+            highlightArticle(articleId, sourceId);
         }
         catch (error) {
             showError("加载内容详情失败", error);
-        }
-    }
-
-    async function submitCompileJob() {
-        const sourceDir = document.getElementById("compile-source-dir").value.trim();
-        if (!sourceDir) {
-            setStatus("请输入源目录", "warning");
-            return;
-        }
-        try {
-            const response = await fetchJson("/api/v1/admin/compile/jobs", {
-                method: "POST",
-                body: JSON.stringify({
-                    sourceDir: sourceDir,
-                    incremental: document.getElementById("compile-incremental").checked,
-                    async: document.getElementById("compile-async").checked,
-                    orchestrationMode: "state_graph"
-                })
-            });
-            renderGlobalResult(response);
-            await handleSubmittedJob(response, "目录同步任务已提交");
-        }
-        catch (error) {
-            renderGlobalResultError("提交目录同步失败", error);
-            showError("提交目录同步失败", error);
         }
     }
 
@@ -134,24 +178,72 @@
         Array.from(filesInput.files).forEach(function (file) {
             formData.append("files", file);
         });
-        formData.append("incremental", String(document.getElementById("upload-incremental").checked));
-        formData.append("async", String(document.getElementById("upload-async").checked));
-        formData.append("orchestrationMode", "state_graph");
+        const sourceId = document.getElementById("upload-target-source").value.trim();
+        if (sourceId) {
+            formData.append("sourceId", sourceId);
+        }
 
         try {
-            const response = await fetchJson("/api/v1/admin/compile/upload", {
+            const response = await fetchJson("/api/v1/admin/uploads", {
                 method: "POST",
                 body: formData,
                 isFormData: true
             });
-            renderGlobalResult(response);
             filesInput.value = "";
-            await handleSubmittedJob(response, "上传处理任务已提交");
+            await handleSubmittedRun(response, "资料已接收，正在进入识别与编译流程");
         }
         catch (error) {
-            renderGlobalResultError("上传资料失败", error);
             showError("上传资料失败", error);
         }
+    }
+
+    async function createServerSourceAndSync() {
+        const name = document.getElementById("server-source-name").value.trim();
+        const sourceCode = document.getElementById("server-source-code").value.trim();
+        const serverDir = document.getElementById("server-source-dir").value.trim();
+        if (!name || !serverDir) {
+            setStatus("请先填写资料源名称和服务器目录", "warning");
+            return;
+        }
+        try {
+            const source = await fetchJson("/api/v1/admin/sources/server-dir", {
+                method: "POST",
+                body: JSON.stringify({
+                    sourceCode: sourceCode || null,
+                    name: name,
+                    contentProfile: "DOCUMENT",
+                    serverDir: serverDir
+                })
+            });
+            clearServerSourceForm();
+            state.selectedSourceId = source.id;
+            await loadSources();
+            const run = await requestSourceSync(source.id);
+            await handleSubmittedRun(run, "服务器目录资料源已创建，正在开始同步");
+        }
+        catch (error) {
+            showError("创建服务器目录资料源失败", error);
+        }
+    }
+
+    async function syncSelectedSource() {
+        if (!state.selectedSourceId) {
+            setStatus("请先选择一个资料源", "warning");
+            return;
+        }
+        try {
+            const run = await requestSourceSync(state.selectedSourceId);
+            await handleSubmittedRun(run, "资料源同步已提交");
+        }
+        catch (error) {
+            showError("发起资料源同步失败", error);
+        }
+    }
+
+    async function requestSourceSync(sourceId) {
+        return fetchJson("/api/v1/admin/sources/" + encodeURIComponent(sourceId) + "/sync", {
+            method: "POST"
+        });
     }
 
     async function rebuildChunks() {
@@ -164,91 +256,83 @@
                 method: "POST"
             });
             document.getElementById("rebuild-result").textContent = JSON.stringify(result, null, 2);
-            renderGlobalResult(result);
             setStatus("知识切片重建已完成", "success");
-            await refreshKnowledgeState();
+            await refreshPage();
         }
         catch (error) {
-            renderGlobalResultError("重建知识切片失败", error);
             showError("重建知识切片失败", error);
         }
     }
 
-    async function loadJobs() {
+    async function confirmRun(runId, decision, sourceId) {
         try {
-            const response = await fetchJson("/api/v1/admin/jobs");
-            renderJobs(response.items || []);
-        }
-        catch (error) {
-            showError("加载处理状态失败", error);
-        }
-    }
-
-    async function retryJob(jobId) {
-        const confirmed = window.confirm("将重试失败任务 " + jobId + "，确认继续吗？");
-        if (!confirmed) {
-            return;
-        }
-        try {
-            const result = await fetchJson("/api/v1/admin/jobs/" + encodeURIComponent(jobId) + "/retry", {
-                method: "POST"
+            const response = await fetchJson("/api/v1/admin/source-runs/" + encodeURIComponent(runId) + "/confirm", {
+                method: "POST",
+                body: JSON.stringify({
+                    decision: decision,
+                    sourceId: sourceId || null
+                })
             });
-            renderGlobalResult(result);
-            await handleSubmittedJob(result, "任务已重新提交");
+            await handleSubmittedRun(response, "人工确认已提交，系统继续处理这批资料");
         }
         catch (error) {
-            renderGlobalResultError("重试任务失败", error);
-            showError("重试任务失败", error);
+            showError("提交人工确认失败", error);
         }
     }
 
-    async function handleSubmittedJob(job, submittedMessage) {
-        if (!job || !job.jobId) {
+    async function handleSubmittedRun(run, submittedMessage) {
+        if (!run || !run.runId) {
             setStatus(submittedMessage, "success");
-            await refreshKnowledgeState();
+            await refreshPage();
             return;
         }
-        state.activeJobId = job.jobId;
-        await refreshKnowledgeState();
-        const status = String(job.status || "").toUpperCase();
-        if (status === "QUEUED" || status === "RUNNING") {
-            setStatus(submittedMessage + "，系统会自动刷新处理结果。", "info");
-            startJobPolling(job.jobId);
+        state.activeRunId = run.runId;
+        await refreshPage();
+        if (isPollingStatus(run.status)) {
+            setStatus(submittedMessage + "，页面会自动刷新结果。", "info", false);
+            startRunPolling(run.runId);
             return;
         }
-        setStatus(buildJobCompletionMessage(job), resolveJobNoticeTone(job), status === "FAILED");
+        if (normalizeStatus(run.status) === "WAIT_CONFIRM") {
+            setStatus("资料包需要人工确认归并方式，请在“最近同步运行”卡片中处理。", "warning", true);
+            return;
+        }
+        setStatus(buildRunCompletionMessage(run), resolveRunNoticeTone(run), run.status === "FAILED");
     }
 
-    function startJobPolling(jobId) {
-        stopJobPolling();
-        state.activeJobId = jobId;
-        jobPollingTimer = window.setTimeout(function () {
-            pollJobStatus(jobId);
+    function startRunPolling(runId) {
+        stopRunPolling();
+        state.activeRunId = runId;
+        runPollingTimer = window.setTimeout(function () {
+            pollRunStatus(runId);
         }, 1800);
     }
 
-    function stopJobPolling() {
-        if (jobPollingTimer) {
-            window.clearTimeout(jobPollingTimer);
-            jobPollingTimer = null;
+    function stopRunPolling() {
+        if (runPollingTimer) {
+            window.clearTimeout(runPollingTimer);
+            runPollingTimer = null;
         }
     }
 
-    async function pollJobStatus(jobId) {
+    async function pollRunStatus(runId) {
         try {
-            const job = await fetchJson("/api/v1/admin/jobs/" + encodeURIComponent(jobId));
-            await refreshKnowledgeState();
-            const status = String(job.status || "").toUpperCase();
-            if (status === "QUEUED" || status === "RUNNING") {
-                startJobPolling(jobId);
+            const run = await fetchJson("/api/v1/admin/source-runs/" + encodeURIComponent(runId));
+            await refreshPage();
+            if (isPollingStatus(run.status)) {
+                startRunPolling(runId);
                 return;
             }
-            stopJobPolling();
-            setStatus(buildJobCompletionMessage(job), resolveJobNoticeTone(job), status === "FAILED");
+            stopRunPolling();
+            if (normalizeStatus(run.status) === "WAIT_CONFIRM") {
+                setStatus("资料包需要人工确认归并方式，请在“最近同步运行”卡片中处理。", "warning", true);
+                return;
+            }
+            setStatus(buildRunCompletionMessage(run), resolveRunNoticeTone(run), normalizeStatus(run.status) === "FAILED");
         }
         catch (error) {
-            stopJobPolling();
-            showError("刷新任务状态失败", error);
+            stopRunPolling();
+            showError("刷新同步状态失败", error);
         }
     }
 
@@ -268,6 +352,12 @@
                 tone: status.sourceFileCount > 0 ? "success" : ""
             },
             {
+                label: "资料源",
+                value: state.sources.length,
+                note: state.sources.length > 0 ? "支持上传、目录与 Git 多资料源" : "还没有建立资料源",
+                tone: state.sources.length > 0 ? "success" : "warning"
+            },
+            {
                 label: "反馈沉淀",
                 value: status.contributionCount || 0,
                 note: "已确认并回写的问答反馈",
@@ -278,12 +368,6 @@
                 value: status.pendingQueryCount || 0,
                 note: (status.pendingQueryCount || 0) > 0 ? "后续可由内部继续处理" : "当前没有积压",
                 tone: (status.pendingQueryCount || 0) > 0 ? "warning" : "success"
-            },
-            {
-                label: "待人工复核",
-                value: status.reviewPendingArticleCount || 0,
-                note: (status.reviewPendingArticleCount || 0) > 0 ? "说明仍有内容需要人工确认" : "当前没有人工复核积压",
-                tone: (status.reviewPendingArticleCount || 0) > 0 ? "warning" : "success"
             },
             {
                 label: "服务健康",
@@ -306,45 +390,140 @@
         note.textContent = health ? health.note : "点击按钮后会在页面显示服务状态";
     }
 
+    function renderSourceSelects(items) {
+        const uploadSelect = document.getElementById("upload-target-source");
+        const articleSelect = document.getElementById("article-source-filter");
+        const previousUploadValue = uploadSelect.value;
+        const previousArticleValue = articleSelect.value;
+        const options = items.map(function (item) {
+            return "<option value='" + escapeHtml(String(item.id)) + "'>"
+                    + escapeHtml(item.name + "（" + item.sourceCode + "）")
+                    + "</option>";
+        }).join("");
+        uploadSelect.innerHTML = "<option value=''>自动识别 / 自动归并</option>" + options;
+        articleSelect.innerHTML = "<option value=''>全部资料源</option>" + options;
+        if (containsSource(items, parseOptionalInteger(previousUploadValue))) {
+            uploadSelect.value = previousUploadValue;
+        }
+        if (containsSource(items, parseOptionalInteger(previousArticleValue))) {
+            articleSelect.value = previousArticleValue;
+        }
+    }
+
+    function renderSourceList(items) {
+        const container = document.getElementById("source-list");
+        if (!items || items.length === 0) {
+            container.innerHTML = "<div class='list-item'><p class='item-summary'>还没有资料源。你可以直接上传资料自动归并，或先创建一个服务器目录资料源。</p></div>";
+            return;
+        }
+        container.innerHTML = items.map(function (item) {
+            return "<button class='list-item' data-source-id='" + escapeHtml(String(item.id)) + "' type='button'>"
+                    + "<div class='meta-row'>"
+                    + renderBadge(item.status)
+                    + renderBadge(item.sourceType)
+                    + "</div>"
+                    + "<h4>" + escapeHtml(item.name || item.sourceCode || "未命名资料源") + "</h4>"
+                    + "<p class='item-meta'>"
+                    + escapeHtml(item.sourceCode || "-")
+                    + " · "
+                    + escapeHtml(item.contentProfile || "-")
+                    + "</p>"
+                    + "<p class='item-summary'>" + escapeHtml(getSourceSummary(item)) + "</p>"
+                    + "<div class='meta-row'>"
+                    + "<span class='pill'>默认：" + escapeHtml(getBadgeLabel(item.defaultSyncMode)) + "</span>"
+                    + "<span class='pill'>最近：" + escapeHtml(item.lastSyncStatus ? getBadgeLabel(item.lastSyncStatus) : "未同步") + "</span>"
+                    + "</div>"
+                    + "</button>";
+        }).join("");
+        container.querySelectorAll("[data-source-id]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                loadSourceDetail(parseOptionalInteger(button.dataset.sourceId));
+            });
+        });
+        highlightSource(state.selectedSourceId);
+    }
+
+    function renderSourceDetail(source, runs, files) {
+        document.getElementById("source-detail-title").textContent = source.name || source.sourceCode || "未命名资料源";
+        document.getElementById("source-detail-meta").textContent = [
+            source.sourceCode,
+            "类型：" + getBadgeLabel(source.sourceType),
+            "画像：" + getBadgeLabel(source.contentProfile),
+            "状态：" + getBadgeLabel(source.status),
+            source.lastSyncAt ? "最近同步：" + formatDateTime(source.lastSyncAt) : "最近同步：未执行"
+        ].join(" | ");
+        document.getElementById("source-detail-config").textContent = prettyJson(source.configJson);
+        renderRunCollection("source-run-list", runs, "当前资料源还没有同步历史");
+        renderSourceFileList(files);
+    }
+
+    function renderSourceFileList(files) {
+        const container = document.getElementById("source-file-list");
+        if (!files || files.length === 0) {
+            container.innerHTML = "<div class='job-card'><p class='item-summary'>当前资料源还没有已物化文件。完成一次同步后，这里会展示解析方式与文件格式。</p></div>";
+            return;
+        }
+        const sortedFiles = files.slice().sort(function (left, right) {
+            return String(left.relativePath || "").localeCompare(String(right.relativePath || ""));
+        });
+        container.innerHTML = sortedFiles.map(function (item) {
+            return "<div class='job-card'>"
+                    + "<div class='meta-row'>"
+                    + renderBadge(item.format)
+                    + renderBadge(item.parseMode || "UNKNOWN")
+                    + "</div>"
+                    + "<h4>" + escapeHtml(item.relativePath || "-") + "</h4>"
+                    + "<p class='item-summary'>"
+                    + escapeHtml(buildSourceFileSummary(item))
+                    + "</p>"
+                    + "<p class='job-meta-line'>"
+                    + escapeHtml(buildSourceFileMeta(item))
+                    + "</p>"
+                    + "</div>";
+        }).join("");
+    }
+
     function renderArticleList(response) {
         const items = response.items || [];
         document.getElementById("article-count").textContent = String(response.count || 0);
         const list = document.getElementById("article-list");
         if (items.length === 0) {
-            list.innerHTML = "<div class='list-item'><p class='item-summary'>当前还没有入库内容。上传资料后，页面会在处理完成时自动刷新到这里。</p></div>";
-            clearArticleDetail();
+            list.innerHTML = "<div class='list-item'><p class='item-summary'>当前还没有入库内容。上传资料或同步资料源后，页面会在处理完成时自动刷新到这里。</p></div>";
             return;
         }
         list.innerHTML = items.map(function (item) {
-            const displayTitle = resolveArticleDisplayTitle(item);
-            const sourceLine = buildArticleSourceLine(item);
-            return "<button class='list-item' data-concept-id='" + escapeHtml(item.conceptId) + "' type='button'>"
+            const articleId = item.articleKey || item.conceptId;
+            return "<button class='list-item' data-article-id='" + escapeHtml(articleId) + "' data-source-id='"
+                    + escapeHtml(item.sourceId == null ? "" : String(item.sourceId))
+                    + "' type='button'>"
                     + "<div class='meta-row'>"
                     + renderBadge(item.lifecycle)
                     + renderBadge(item.reviewStatus)
                     + "</div>"
-                    + "<h4>" + escapeHtml(displayTitle) + "</h4>"
-                    + (sourceLine
-                    ? "<p class='item-meta'>来源文件：" + escapeHtml(sourceLine) + "</p>"
-                    : "")
+                    + "<h4>" + escapeHtml(resolveArticleDisplayTitle(item)) + "</h4>"
+                    + "<p class='item-meta'>" + escapeHtml(buildArticleSourceLine(item)) + "</p>"
                     + "<p class='item-summary'>" + escapeHtml(resolveArticleSummary(item)) + "</p>"
-                    + "<div class='meta-row'><span class='pill'>" + escapeHtml(item.conceptId)
-                    + "</span><span class='pill'>来源 " + escapeHtml(String(item.sourceCount)) + "</span></div>"
+                    + "<div class='meta-row'>"
+                    + "<span class='pill'>" + escapeHtml(articleId) + "</span>"
+                    + "<span class='pill'>来源 " + escapeHtml(String(item.sourceCount || 0)) + "</span>"
+                    + "</div>"
                     + "</button>";
         }).join("");
-        list.querySelectorAll("[data-concept-id]").forEach(function (button) {
+        list.querySelectorAll("[data-article-id]").forEach(function (button) {
             button.addEventListener("click", function () {
-                loadArticleDetail(button.dataset.conceptId);
+                loadArticleDetail(
+                        button.dataset.articleId,
+                        parseOptionalInteger(button.dataset.sourceId)
+                );
             });
         });
-        highlightArticle(state.selectedConceptId);
+        highlightArticle(state.selectedArticleId, state.selectedArticleSourceId);
     }
 
     function renderArticleDetail(detail) {
-        const displayTitle = resolveArticleDisplayTitle(detail);
-        document.getElementById("article-detail-title").textContent = displayTitle || "未命名内容";
+        document.getElementById("article-detail-title").textContent = resolveArticleDisplayTitle(detail);
         document.getElementById("article-detail-meta").textContent = [
-            detail.conceptId,
+            detail.articleKey || detail.conceptId,
             buildArticleSourceMeta(detail),
             detail.lifecycle ? "状态：" + getBadgeLabel(detail.lifecycle) : "",
             detail.reviewStatus ? "审查：" + getBadgeLabel(detail.reviewStatus) : "",
@@ -352,13 +531,21 @@
         ].filter(Boolean).join(" | ");
         document.getElementById("article-detail-summary").textContent = detail.summary || "暂无摘要";
         document.getElementById("article-content").textContent = detail.content || "";
-        document.getElementById("article-metadata").textContent = detail.metadataJson || "{}";
+        document.getElementById("article-metadata").textContent = prettyJson(detail.metadataJson);
         document.getElementById("article-sources").innerHTML = renderTagGroup(detail.sourcePaths || []);
         const relations = []
                 .concat((detail.referentialKeywords || []).map(function (item) { return "关键词: " + item; }))
                 .concat((detail.dependsOn || []).map(function (item) { return "依赖: " + item; }))
                 .concat((detail.related || []).map(function (item) { return "相关: " + item; }));
         document.getElementById("article-relations").innerHTML = renderTagGroup(relations);
+    }
+
+    function clearSourceDetail() {
+        document.getElementById("source-detail-title").textContent = "请选择一个资料源";
+        document.getElementById("source-detail-meta").textContent = "";
+        document.getElementById("source-run-list").innerHTML = "<div class='job-card'><p class='item-summary'>暂无同步历史</p></div>";
+        document.getElementById("source-file-list").innerHTML = "<div class='job-card'><p class='item-summary'>暂无文件</p></div>";
+        document.getElementById("source-detail-config").textContent = "暂无配置";
     }
 
     function clearArticleDetail() {
@@ -371,192 +558,187 @@
         document.getElementById("article-relations").innerHTML = "";
     }
 
-    function highlightArticle(conceptId) {
-        document.querySelectorAll("#article-list .list-item").forEach(function (item) {
-            item.classList.toggle("active", item.dataset.conceptId === conceptId);
-        });
-    }
-
-    function renderJobs(items) {
-        const container = document.getElementById("job-list");
+    function renderRunCollection(containerId, items, emptyMessage) {
+        const container = document.getElementById(containerId);
         if (!items || items.length === 0) {
-            container.innerHTML = "<div class='job-card'><h4>暂时没有处理记录</h4><p class='item-summary'>上传资料或发起目录同步后，这里会直接告诉你是否处理成功。</p></div>";
+            container.innerHTML = "<div class='job-card'><p class='item-summary'>" + escapeHtml(emptyMessage) + "</p></div>";
             return;
         }
         const visibleItems = items.slice()
-                .sort(compareJobsByRequestedAtDesc)
-                .slice(0, 5);
+                .sort(compareRunsByRequestedAtDesc)
+                .slice(0, 6);
         container.innerHTML = visibleItems.map(function (item) {
-            const retryButton = item.status === "FAILED"
-                    ? "<button class='ghost-btn' data-retry-job='" + escapeHtml(item.jobId) + "' type='button'>重试</button>"
-                    : "";
-            const errorBlock = item.status === "FAILED" && item.errorMessage
-                    ? "<div class='job-error'>"
-                    + "<strong>失败原因</strong>"
-                    + "<p>" + escapeHtml(item.errorMessage) + "</p>"
-                    + "</div>"
-                    : "";
             return "<div class='job-card'>"
                     + "<div class='meta-row'>"
-                    + "<span class='pill'>" + escapeHtml(getJobTypeLabel(item)) + "</span>"
-                    + renderJobStatusBadge(item)
-                    + renderJobRetryTag(item)
+                    + renderBadge(item.status)
+                    + renderBadge(item.syncAction || item.resolverDecision || "AUTO")
+                    + renderBadge(item.sourceType || "UPLOAD")
                     + "</div>"
-                    + "<h4>" + escapeHtml(getJobTitle(item)) + "</h4>"
-                    + "<p class='item-summary'>" + escapeHtml(getJobSummary(item)) + "</p>"
-                    + "<p class='job-meta-line'>" + escapeHtml(getJobSourceLabel(item)) + "</p>"
-                    + "<p class='job-meta-line'>" + escapeHtml(getJobMetaLine(item)) + "</p>"
-                    + errorBlock
-                    + (retryButton
-                    ? "<div class='card-actions'>" + retryButton + "</div>"
+                    + "<h4>" + escapeHtml(getRunTitle(item)) + "</h4>"
+                    + "<p class='item-summary'>" + escapeHtml(getRunSummary(item)) + "</p>"
+                    + "<p class='job-meta-line'>" + escapeHtml(getRunMetaLine(item)) + "</p>"
+                    + (item.errorMessage
+                    ? "<div class='job-error'><strong>错误信息</strong><p>" + escapeHtml(item.errorMessage) + "</p></div>"
                     : "")
+                    + buildRunActions(item)
                     + "</div>";
         }).join("");
-        container.querySelectorAll("[data-retry-job]").forEach(function (button) {
+        bindRunActions(container);
+    }
+
+    function bindRunActions(container) {
+        container.querySelectorAll("[data-confirm-run]").forEach(function (button) {
             button.addEventListener("click", function () {
-                retryJob(button.dataset.retryJob);
+                confirmRun(
+                        parseOptionalInteger(button.dataset.confirmRun),
+                        button.dataset.confirmDecision,
+                        parseOptionalInteger(button.dataset.confirmSourceId)
+                );
             });
         });
     }
 
-    function getJobTypeLabel(item) {
-        return isUploadJob(item) ? "上传资料" : "目录同步";
-    }
-
-    function getJobTitle(item) {
-        if (isUploadJob(item)) {
-            return formatUploadTitle(item);
-        }
-        const tail = extractPathTail(item.sourceDir);
-        return tail ? "同步目录：" + tail : "目录同步任务";
-    }
-
-    function getJobSourceLabel(item) {
-        if (isUploadJob(item)) {
-            return "来源：" + formatUploadSourceLabel(item);
-        }
-        if (!item.sourceDir) {
-            return "来源目录：未记录";
-        }
-        return "来源目录：" + shortenMiddle(String(item.sourceDir), 54);
-    }
-
-    function getJobSummary(item) {
-        const normalized = String(item.status || "").toUpperCase();
-        if (normalized === "SUCCEEDED") {
-            if ((item.persistedCount || 0) > 0) {
-                return "处理完成，已更新 " + String(item.persistedCount || 0) + " 条知识内容。";
-            }
-            return "文件已处理完成，但这次还没有生成可展示的知识条目。";
-        }
-        if (normalized === "FAILED") {
-            return "处理失败，可以检查资料后重新重试。";
-        }
-        if (normalized === "RUNNING") {
-            return "系统正在处理这批资料，请稍等片刻。";
-        }
-        if (normalized === "QUEUED") {
-            return "任务已提交，正在等待系统开始处理。";
-        }
-        return "任务状态已更新。";
-    }
-
-    function getJobMetaLine(item) {
-        const parts = [
-            "处理方式：" + (item.incremental ? "增量更新" : "完整处理"),
-            getJobTimeLabel(item)
-        ];
-        return parts.join(" · ");
-    }
-
-    function getJobTimeLabel(item) {
-        if (item.finishedAt) {
-            return "完成于 " + formatDateTime(item.finishedAt);
-        }
-        if (item.startedAt) {
-            return "开始于 " + formatDateTime(item.startedAt);
-        }
-        if (item.requestedAt) {
-            return "提交于 " + formatDateTime(item.requestedAt);
-        }
-        return "时间未记录";
-    }
-
-    function renderJobRetryTag(item) {
-        const retryCount = Math.max((item.attemptCount || 0) - 1, 0);
-        if (retryCount <= 0) {
+    function buildRunActions(item) {
+        if (normalizeStatus(item.status) !== "WAIT_CONFIRM") {
             return "";
         }
-        return "<span class='pill'>已重试 " + escapeHtml(String(retryCount)) + " 次</span>";
+        const buttons = [
+            "<button class='ghost-btn' data-confirm-run='" + escapeHtml(String(item.runId))
+                    + "' data-confirm-decision='NEW_SOURCE' type='button'>确认为新资料源</button>"
+        ];
+        if (item.matchedSourceId) {
+            buttons.push(
+                    "<button class='secondary-btn' data-confirm-run='" + escapeHtml(String(item.runId))
+                    + "' data-confirm-decision='EXISTING_SOURCE_APPEND' data-confirm-source-id='"
+                    + escapeHtml(String(item.matchedSourceId))
+                    + "' type='button'>追加到候选资料源</button>"
+            );
+            buttons.push(
+                    "<button class='ghost-btn' data-confirm-run='" + escapeHtml(String(item.runId))
+                    + "' data-confirm-decision='EXISTING_SOURCE_UPDATE' data-confirm-source-id='"
+                    + escapeHtml(String(item.matchedSourceId))
+                    + "' type='button'>按更新覆盖候选资料源</button>"
+            );
+        }
+        return "<div class='card-actions'>" + buttons.join("") + "</div>";
     }
 
-    function isUploadJob(item) {
-        const sourceDir = String(item && item.sourceDir ? item.sourceDir : "");
-        return sourceDir.indexOf("lattice-admin-uploads") >= 0;
-    }
-
-    function formatUploadTitle(item) {
-        const sourceNames = getSourceNames(item);
-        if (sourceNames.length === 0) {
-            return "本次上传资料";
-        }
-        if (sourceNames.length === 1) {
-            return sourceNames[0];
-        }
-        return sourceNames[0] + " 等 " + String(sourceNames.length) + " 个文件";
-    }
-
-    function formatUploadSourceLabel(item) {
-        const sourceNames = getSourceNames(item);
-        if (sourceNames.length === 0) {
-            return "本次上传的文件";
-        }
-        if (sourceNames.length <= 2) {
-            return sourceNames.join("、");
-        }
-        return sourceNames.slice(0, 2).join("、") + " 等 " + String(sourceNames.length) + " 个文件";
-    }
-
-    function getSourceNames(item) {
-        if (!item || !Array.isArray(item.sourceNames)) {
-            return [];
-        }
-        return item.sourceNames.filter(function (sourceName) {
-            return !!sourceName;
+    function highlightSource(sourceId) {
+        document.querySelectorAll("#source-list .list-item").forEach(function (item) {
+            item.classList.toggle("active", item.dataset.sourceId === String(sourceId || ""));
         });
     }
 
-    function renderJobStatusBadge(item) {
-        const normalized = String(item && item.status ? item.status : "").toUpperCase();
-        if (normalized === "SUCCEEDED" && Number(item.persistedCount || 0) <= 0) {
-            return "<span class='badge warning'>未生成内容</span>";
-        }
-        return renderBadge(item.status);
+    function highlightArticle(articleId, sourceId) {
+        document.querySelectorAll("#article-list .list-item").forEach(function (item) {
+            const sameArticle = item.dataset.articleId === String(articleId || "");
+            const sameSource = item.dataset.sourceId === String(sourceId == null ? "" : sourceId);
+            item.classList.toggle("active", sameArticle && sameSource);
+        });
     }
 
-    function resolveJobNoticeTone(job) {
-        const normalized = String(job && job.status ? job.status : "").toUpperCase();
+    function buildSourceFileSummary(item) {
+        const mode = item.parseMode ? getBadgeLabel(item.parseMode) : "未记录";
+        const provider = item.parseProvider ? item.parseProvider : "默认解析链";
+        return "解析方式：" + mode + "；解析提供方：" + provider + "。";
+    }
+
+    function buildSourceFileMeta(item) {
+        return [
+            "格式：" + (item.format || "-"),
+            "大小：" + formatBytes(item.fileSize)
+        ].join(" · ");
+    }
+
+    function getSourceSummary(item) {
+        if (item.lastSyncStatus) {
+            return "最近同步状态：" + getBadgeLabel(item.lastSyncStatus)
+                    + (item.lastSyncAt ? "，完成于 " + formatDateTime(item.lastSyncAt) : "");
+        }
+        return "还没有执行过同步，可以先选中后手动发起一次。";
+    }
+
+    function getRunTitle(item) {
+        if (item.sourceName) {
+            return item.sourceName;
+        }
+        if (item.sourceNames && item.sourceNames.length > 0) {
+            if (item.sourceNames.length === 1) {
+                return item.sourceNames[0];
+            }
+            return item.sourceNames[0] + " 等 " + String(item.sourceNames.length) + " 个文件";
+        }
+        return "资料同步运行 #" + String(item.runId);
+    }
+
+    function getRunSummary(item) {
+        const normalized = normalizeStatus(item.status);
+        if (normalized === "WAIT_CONFIRM") {
+            return item.message || "系统无法自动判断该资料包应新建还是合并，需要人工确认。";
+        }
+        if (normalized === "SKIPPED_NO_CHANGE") {
+            return "资料内容与最近一次成功快照一致，本次跳过编译。";
+        }
         if (normalized === "FAILED") {
+            return item.errorMessage || "同步运行失败，请根据错误信息检查资料源配置。";
+        }
+        if (normalized === "SUCCEEDED") {
+            return item.message || "同步成功，资料已经完成解析并写入知识库。";
+        }
+        if (normalized === "COMPILE_QUEUED") {
+            return "识别与物化已完成，正在等待编译任务执行。";
+        }
+        if (normalized === "RUNNING") {
+            return "编译任务执行中，入库完成后页面会自动刷新。";
+        }
+        if (normalized === "MATERIALIZING") {
+            return "正在拉取 Git / 复制服务器目录并准备标准化源文件。";
+        }
+        if (normalized === "MATCHING") {
+            return "正在做资料包特征提取、规则召回和自动归并判断。";
+        }
+        return item.message || "同步状态已更新。";
+    }
+
+    function getRunMetaLine(item) {
+        return [
+            item.sourceType ? "类型：" + getBadgeLabel(item.sourceType) : "",
+            item.resolverDecision ? "决策：" + getBadgeLabel(item.resolverDecision) : "",
+            item.syncAction ? "动作：" + getBadgeLabel(item.syncAction) : "",
+            item.requestedAt ? "提交于 " + formatDateTime(item.requestedAt) : ""
+        ].filter(Boolean).join(" · ");
+    }
+
+    function buildRunCompletionMessage(run) {
+        const normalized = normalizeStatus(run.status);
+        if (normalized === "SKIPPED_NO_CHANGE") {
+            return getRunTitle(run) + " 已检查完成，本次没有发现变化。";
+        }
+        if (normalized === "WAIT_CONFIRM") {
+            return getRunTitle(run) + " 需要人工确认归并方式。";
+        }
+        if (normalized === "FAILED") {
+            return getRunTitle(run) + " 处理失败，请检查资料源或上传内容。";
+        }
+        return getRunTitle(run) + " 已处理完成，并已更新页面状态。";
+    }
+
+    function resolveRunNoticeTone(run) {
+        const normalized = normalizeStatus(run.status);
+        if (normalized === "FAILED" || normalized === "WAIT_CONFIRM") {
             return "warning";
         }
-        if (normalized === "SUCCEEDED" && Number(job.persistedCount || 0) <= 0) {
-            return "warning";
+        if (normalized === "SKIPPED_NO_CHANGE") {
+            return "info";
         }
         return "success";
     }
 
-    function buildJobCompletionMessage(job) {
-        const normalized = String(job && job.status ? job.status : "").toUpperCase();
-        if (normalized === "FAILED") {
-            return getJobTitle(job) + " 处理失败，请检查后重试。";
-        }
-        if (Number(job && job.persistedCount ? job.persistedCount : 0) > 0) {
-            return getJobTitle(job) + " 已处理完成，并已更新到内容列表。";
-        }
-        return getJobTitle(job) + " 已处理完成，但暂时没有生成可展示内容。";
+    function isPollingStatus(status) {
+        return RUN_POLLING_STATUSES.indexOf(normalizeStatus(status)) >= 0;
     }
 
-    function compareJobsByRequestedAtDesc(left, right) {
+    function compareRunsByRequestedAtDesc(left, right) {
         return toTimestamp(right && right.requestedAt) - toTimestamp(left && left.requestedAt);
     }
 
@@ -568,7 +750,7 @@
         if (isGenericArticleTitle(item.title, item.conceptId) && primarySourceName) {
             return formatArticleSourceTitle(primarySourceName);
         }
-        return item.title || formatArticleSourceTitle(primarySourceName) || item.conceptId || "未命名内容";
+        return item.title || formatArticleSourceTitle(primarySourceName) || item.articleKey || item.conceptId || "未命名内容";
     }
 
     function resolveArticleSummary(item) {
@@ -585,18 +767,25 @@
 
     function buildArticleSourceLine(item) {
         const primarySourceName = getPrimaryArticleSourceName(item);
+        const articleId = item.articleKey || item.conceptId || "-";
         if (!primarySourceName) {
-            return "";
+            return articleId;
         }
-        if (Number(item && item.sourceCount ? item.sourceCount : 0) <= 1) {
-            return primarySourceName;
-        }
-        return primarySourceName + " 等 " + String(item.sourceCount) + " 个来源";
+        return primarySourceName + " · " + articleId;
     }
 
     function buildArticleSourceMeta(item) {
-        const sourceLine = buildArticleSourceLine(item);
-        return sourceLine ? "来源：" + sourceLine : "";
+        const parts = [];
+        if (item.sourceId != null) {
+            parts.push("资料源：" + String(item.sourceId));
+        }
+        if (item.articleKey) {
+            parts.push("文章键：" + item.articleKey);
+        }
+        if (item.sourcePaths && item.sourcePaths.length > 0) {
+            parts.push("来源：" + item.sourcePaths[0]);
+        }
+        return parts.join(" | ");
     }
 
     function getPrimaryArticleSourceName(item) {
@@ -605,6 +794,51 @@
                 : Array.isArray(item && item.sourcePaths) && item.sourcePaths.length > 0
                 ? String(item.sourcePaths[0])
                 : "";
+    }
+
+    function containsSource(items, sourceId) {
+        return items.some(function (item) {
+            return item.id === sourceId;
+        });
+    }
+
+    function containsArticle(items, articleId, sourceId) {
+        return items.some(function (item) {
+            const currentArticleId = item.articleKey || item.conceptId;
+            return currentArticleId === articleId && (item.sourceId || null) === (sourceId || null);
+        });
+    }
+
+    function clearServerSourceForm() {
+        document.getElementById("server-source-name").value = "";
+        document.getElementById("server-source-code").value = "";
+        document.getElementById("server-source-dir").value = "";
+    }
+
+    function formatBytes(value) {
+        const size = Number(value || 0);
+        if (!Number.isFinite(size) || size <= 0) {
+            return "0 B";
+        }
+        if (size < 1024) {
+            return String(size) + " B";
+        }
+        if (size < 1024 * 1024) {
+            return (size / 1024).toFixed(1) + " KB";
+        }
+        return (size / (1024 * 1024)).toFixed(1) + " MB";
+    }
+
+    function prettyJson(value) {
+        if (!value) {
+            return "暂无配置";
+        }
+        try {
+            return JSON.stringify(JSON.parse(value), null, 2);
+        }
+        catch (error) {
+            return String(value);
+        }
     }
 
     function isGenericArticleTitle(title, conceptId) {
@@ -645,27 +879,6 @@
         return Number.isNaN(date.getTime()) ? 0 : date.getTime();
     }
 
-    function extractPathTail(path) {
-        const normalized = String(path || "").trim().replaceAll("\\", "/");
-        if (!normalized) {
-            return "";
-        }
-        const segments = normalized.split("/").filter(function (segment) {
-            return segment;
-        });
-        return segments.length === 0 ? normalized : segments[segments.length - 1];
-    }
-
-    function shortenMiddle(value, maxLength) {
-        const text = String(value || "");
-        if (text.length <= maxLength) {
-            return text;
-        }
-        const prefixLength = Math.max(16, Math.floor((maxLength - 1) / 2));
-        const suffixLength = Math.max(12, maxLength - prefixLength - 1);
-        return text.slice(0, prefixLength) + "…" + text.slice(text.length - suffixLength);
-    }
-
     function renderMetricCard(item) {
         const toneClass = item.tone ? " " + item.tone : "";
         const note = item.note
@@ -684,27 +897,29 @@
         }).join("");
     }
 
-    function renderGlobalResult(result) {
-        return result;
-    }
-
-    function renderGlobalResultError(prefix, error) {
-        return {prefix: prefix, error: error};
-    }
-
     function renderBadge(value) {
-        const normalized = (value || "").toUpperCase();
+        const normalized = normalizeStatus(value);
         let className = "badge";
-        if (normalized === "SUCCEEDED" || normalized === "ACTIVE" || normalized === "PASSED" || normalized === "CONFIRMED") {
+        if (normalized === "SUCCEEDED"
+                || normalized === "ACTIVE"
+                || normalized === "PASSED"
+                || normalized === "CONFIRMED"
+                || normalized === "DOCUMENT"
+                || normalized === "UPLOAD"
+                || normalized === "NORMAL") {
             className += " success";
         }
-        else if (normalized === "FAILED" || normalized === "DISCARDED" || normalized === "ARCHIVED") {
+        else if (normalized === "FAILED" || normalized === "ARCHIVED") {
             className += " danger";
         }
-        else if (normalized) {
+        else {
             className += " warning";
         }
         return "<span class='" + className + "'>" + escapeHtml(getBadgeLabel(value)) + "</span>";
+    }
+
+    function normalizeStatus(value) {
+        return String(value || "").trim().toUpperCase();
     }
 
     async function fetchJson(url, options) {
@@ -873,30 +1088,51 @@
         }
     }
 
-    function formatOrchestrationMode(value) {
-        if (!value) {
-            return "-";
-        }
-        if (value === "state_graph") {
-            return "图式流程";
-        }
-        return value;
-    }
-
     function getBadgeLabel(value) {
-        const normalized = (value || "").toUpperCase();
+        const normalized = normalizeStatus(value);
         const labels = {
             ACTIVE: "生效中",
-            DEPRECATED: "已废弃",
+            DISABLED: "已停用",
             ARCHIVED: "已归档",
             PASSED: "已通过",
             PENDING: "待处理",
             NEEDS_HUMAN_REVIEW: "需人工复核",
             SUCCEEDED: "成功",
             FAILED: "失败",
-            RUNNING: "进行中",
+            RUNNING: "编译中",
             QUEUED: "排队中",
-            CONFIRMED: "已确认"
+            MATCHING: "识别中",
+            MATERIALIZING: "物化中",
+            COMPILE_QUEUED: "待编译",
+            WAIT_CONFIRM: "待确认",
+            SKIPPED_NO_CHANGE: "无变化跳过",
+            CONFIRMED: "已确认",
+            NEW_SOURCE: "新建资料源",
+            EXISTING_SOURCE_UPDATE: "更新已有资料源",
+            EXISTING_SOURCE_APPEND: "追加到已有资料源",
+            AMBIGUOUS: "需人工判断",
+            CREATE: "新建",
+            UPDATE: "更新",
+            APPEND: "追加",
+            REBUILD: "重建",
+            ACTIVE_ONLY: "仅活跃",
+            UPLOAD: "上传型",
+            GIT: "Git",
+            SERVER_DIR: "服务器目录",
+            DOCUMENT: "文档",
+            CODE: "代码",
+            REPORT: "报告",
+            ASSET_HEAVY: "附件型",
+            FULL: "全量",
+            INCREMENTAL: "增量",
+            AUTO: "自动",
+            NORMAL: "普通",
+            ADMIN_ONLY: "仅管理员",
+            DIRECT_TEXT: "直读",
+            OCR_IMAGE: "图片 OCR",
+            OCR_SCANNED_PDF: "扫描 PDF OCR",
+            HYBRID_PDF: "PDF 混合解析",
+            UNKNOWN: "未知"
         };
         return labels[normalized] || value || "-";
     }
@@ -915,6 +1151,14 @@
             hour: "2-digit",
             minute: "2-digit"
         });
+    }
+
+    function parseOptionalInteger(value) {
+        if (value == null || String(value).trim() === "") {
+            return null;
+        }
+        const parsed = Number.parseInt(String(value), 10);
+        return Number.isNaN(parsed) ? null : parsed;
     }
 
     function escapeHtml(value) {

@@ -128,19 +128,20 @@ public class AdminArticleController {
      */
     @PostMapping("/{conceptId}/lifecycle/{action}")
     public LifecycleTransitionResult transitionLifecycle(
-            @PathVariable String conceptId,
+            @PathVariable("conceptId") String articleId,
             @PathVariable String action,
-            @RequestBody AdminLifecycleRequest lifecycleRequest
+            @RequestBody AdminLifecycleRequest lifecycleRequest,
+            @RequestParam(required = false) Long sourceId
     ) {
         String normalizedAction = action == null ? "" : action.trim().toLowerCase(Locale.ROOT);
         if ("deprecate".equals(normalizedAction)) {
-            return lifecycleService.deprecate(conceptId, lifecycleRequest.getReason(), lifecycleRequest.getUpdatedBy());
+            return lifecycleService.deprecate(articleId, sourceId, lifecycleRequest.getReason(), lifecycleRequest.getUpdatedBy());
         }
         if ("archive".equals(normalizedAction)) {
-            return lifecycleService.archive(conceptId, lifecycleRequest.getReason(), lifecycleRequest.getUpdatedBy());
+            return lifecycleService.archive(articleId, sourceId, lifecycleRequest.getReason(), lifecycleRequest.getUpdatedBy());
         }
         if ("activate".equals(normalizedAction)) {
-            return lifecycleService.activate(conceptId, lifecycleRequest.getReason(), lifecycleRequest.getUpdatedBy());
+            return lifecycleService.activate(articleId, sourceId, lifecycleRequest.getReason(), lifecycleRequest.getUpdatedBy());
         }
         throw new IllegalArgumentException("unsupported lifecycle action: " + action);
     }
@@ -154,9 +155,10 @@ public class AdminArticleController {
      */
     @PostMapping("/{conceptId}/correct")
     public ArticleCorrectionResult correct(
-            @PathVariable String conceptId,
-            @RequestBody AdminArticleCorrectionRequest request
+            @PathVariable("conceptId") String articleId,
+            @RequestBody AdminArticleCorrectionRequest request,
+            @RequestParam(required = false) Long sourceId
     ) {
-        return articleCorrectionService.correct(conceptId, request.getCorrectionSummary());
+        return articleCorrectionService.correct(articleId, sourceId, request.getCorrectionSummary());
     }
 }

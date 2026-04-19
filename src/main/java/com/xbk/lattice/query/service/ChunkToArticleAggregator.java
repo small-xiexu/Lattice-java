@@ -27,14 +27,20 @@ public class ChunkToArticleAggregator {
     public List<QueryArticleHit> aggregate(List<ArticleChunkVectorHit> chunkHits) {
         Map<String, ArticleChunkVectorHit> bestHitByConcept = new LinkedHashMap<String, ArticleChunkVectorHit>();
         for (ArticleChunkVectorHit chunkHit : chunkHits) {
-            ArticleChunkVectorHit currentBest = bestHitByConcept.get(chunkHit.getConceptId());
+            String articleIdentity = chunkHit.getArticleKey();
+            if (articleIdentity == null || articleIdentity.isBlank()) {
+                articleIdentity = chunkHit.getConceptId();
+            }
+            ArticleChunkVectorHit currentBest = bestHitByConcept.get(articleIdentity);
             if (currentBest == null || chunkHit.getScore() > currentBest.getScore()) {
-                bestHitByConcept.put(chunkHit.getConceptId(), chunkHit);
+                bestHitByConcept.put(articleIdentity, chunkHit);
             }
         }
         return bestHitByConcept.values().stream()
                 .map(chunkHit -> new QueryArticleHit(
                         QueryEvidenceType.ARTICLE,
+                        chunkHit.getSourceId(),
+                        chunkHit.getArticleKey(),
                         chunkHit.getConceptId(),
                         chunkHit.getTitle(),
                         chunkHit.getChunkText(),

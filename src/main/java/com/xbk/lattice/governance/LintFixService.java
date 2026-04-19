@@ -1,5 +1,6 @@
 package com.xbk.lattice.governance;
 
+import com.xbk.lattice.article.service.ArticleIdentityResolver;
 import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
@@ -36,12 +37,35 @@ public class LintFixService {
 
     private final ArticleSnapshotJdbcRepository articleSnapshotJdbcRepository;
 
+    private final ArticleIdentityResolver articleIdentityResolver;
+
     private final LlmGateway llmGateway;
 
     private RepoSnapshotService repoSnapshotService;
 
     /**
      * 创建 Lint 自动修复服务。
+     *
+     * @param articleJdbcRepository 文章仓储
+     * @param articleSnapshotJdbcRepository 快照仓储
+     * @param articleIdentityResolver 文章身份解析服务
+     * @param llmGateway LLM 网关
+     */
+    @Autowired
+    public LintFixService(
+            ArticleJdbcRepository articleJdbcRepository,
+            ArticleSnapshotJdbcRepository articleSnapshotJdbcRepository,
+            ArticleIdentityResolver articleIdentityResolver,
+            LlmGateway llmGateway
+    ) {
+        this.articleJdbcRepository = articleJdbcRepository;
+        this.articleSnapshotJdbcRepository = articleSnapshotJdbcRepository;
+        this.articleIdentityResolver = articleIdentityResolver;
+        this.llmGateway = llmGateway;
+    }
+
+    /**
+     * 创建兼容旧构造方式的 Lint 自动修复服务。
      *
      * @param articleJdbcRepository 文章仓储
      * @param articleSnapshotJdbcRepository 快照仓储
@@ -52,9 +76,12 @@ public class LintFixService {
             ArticleSnapshotJdbcRepository articleSnapshotJdbcRepository,
             LlmGateway llmGateway
     ) {
-        this.articleJdbcRepository = articleJdbcRepository;
-        this.articleSnapshotJdbcRepository = articleSnapshotJdbcRepository;
-        this.llmGateway = llmGateway;
+        this(
+                articleJdbcRepository,
+                articleSnapshotJdbcRepository,
+                articleJdbcRepository == null ? null : new ArticleIdentityResolver(articleJdbcRepository),
+                llmGateway
+        );
     }
 
     /**
@@ -108,7 +135,7 @@ public class LintFixService {
 
         int fixed = 0;
         for (Map.Entry<String, List<LintIssue>> entry : issuesByTarget.entrySet()) {
-            Optional<ArticleRecord> optionalArticleRecord = articleJdbcRepository.findByConceptId(entry.getKey());
+            Optional<ArticleRecord> optionalArticleRecord = articleIdentityResolver.resolve(entry.getKey());
             if (optionalArticleRecord.isEmpty()) {
                 skipped++;
                 continue;
@@ -120,8 +147,7 @@ public class LintFixService {
                         LatticePrompts.SYSTEM_LINT_FIX,
                         buildPrompt(articleRecord, entry.getValue())
                 );
-                ArticleRecord updatedRecord = new ArticleRecord(
-                        articleRecord.getConceptId(),
+                ArticleRecord updatedRecord = articleRecord.copy(
                         articleRecord.getTitle(),
                         fixedContent,
                         articleRecord.getLifecycle(),
@@ -136,21 +162,8 @@ public class LintFixService {
                         "needs_review"
                 );
                 articleJdbcRepository.upsert(updatedRecord);
-                articleSnapshotJdbcRepository.save(new ArticleSnapshotRecord(
-                        -1L,
-                        updatedRecord.getConceptId(),
-                        updatedRecord.getTitle(),
-                        updatedRecord.getContent(),
-                        updatedRecord.getLifecycle(),
-                        updatedRecord.getCompiledAt(),
-                        updatedRecord.getSourcePaths(),
-                        updatedRecord.getMetadataJson(),
-                        updatedRecord.getSummary(),
-                        updatedRecord.getReferentialKeywords(),
-                        updatedRecord.getDependsOn(),
-                        updatedRecord.getRelated(),
-                        updatedRecord.getConfidence(),
-                        updatedRecord.getReviewStatus(),
+                articleSnapshotJdbcRepository.save(ArticleSnapshotRecord.fromArticle(
+                        updatedRecord,
                         "lint_fix",
                         OffsetDateTime.now()
                 ));

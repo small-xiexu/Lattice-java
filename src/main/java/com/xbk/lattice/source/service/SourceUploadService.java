@@ -104,11 +104,37 @@ public class SourceUploadService {
             }
         }
 
-        SourceSyncRun run = createInitialRun(bundleSnapshot, requestedSourceId);
+        SourceSyncRun run = createInitialRun(bundleSnapshot, requestedSourceId, "UPLOAD", null);
         SourceSyncRun acceptedRun = requestedSource == null
                 ? routeAutomaticDecision(run, bundleSnapshot)
                 : routeExplicitSource(run, requestedSource, bundleSnapshot, "RULE_ONLY");
         return getRunDetail(acceptedRun.getId());
+    }
+
+    /**
+     * 接收已物化的资料源目录。
+     *
+     * @param stagingDir staging 目录
+     * @param sourceId 资料源主键
+     * @param sourceType 资料源类型
+     * @param materializationNode 物化元数据
+     * @return 同步运行详情
+     * @throws IOException IO 异常
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public SourceSyncRunDetail acceptMaterializedSource(
+            Path stagingDir,
+            Long sourceId,
+            String sourceType,
+            JsonNode materializationNode
+    ) throws IOException {
+        KnowledgeSource source = sourceService.findById(sourceId)
+                .orElseThrow(() -> new IllegalArgumentException("source not found: " + sourceId));
+        rejectWhenSourceStatusBlocksSync(source);
+        rejectWhenSourceHasActiveRun(sourceId, null);
+        BundleFeatureExtractor.UploadBundleSnapshot bundleSnapshot = bundleFeatureExtractor.extract(stagingDir);
+        SourceSyncRun run = createInitialRun(bundleSnapshot, sourceId, sourceType, materializationNode);
+        return getRunDetail(routeExplicitSource(run, source, bundleSnapshot, "RULE_ONLY").getId());
     }
 
     /**
@@ -134,6 +160,21 @@ public class SourceUploadService {
     public List<SourceSyncRunDetail> listRunDetails(Long sourceId) {
         List<SourceSyncRunDetail> details = new ArrayList<SourceSyncRunDetail>();
         for (SourceSyncRun run : sourceSyncService.listRuns(sourceId)) {
+            details.add(getRunDetail(run.getId()));
+        }
+        return details;
+    }
+
+    /**
+     * 查询最近的同步运行详情。
+     *
+     * @param limit 返回数量
+     * @return 最近同步运行详情
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public List<SourceSyncRunDetail> listRecentRunDetails(int limit) {
+        List<SourceSyncRunDetail> details = new ArrayList<SourceSyncRunDetail>();
+        for (SourceSyncRun run : sourceSyncService.listRecentRuns(limit)) {
             details.add(getRunDetail(run.getId()));
         }
         return details;
@@ -185,14 +226,16 @@ public class SourceUploadService {
 
     private SourceSyncRun createInitialRun(
             BundleFeatureExtractor.UploadBundleSnapshot bundleSnapshot,
-            Long requestedSourceId
+            Long requestedSourceId,
+            String sourceType,
+            JsonNode materializationNode
     ) {
         OffsetDateTime now = OffsetDateTime.now();
-        String evidenceJson = buildEvidenceJson(bundleSnapshot, null, null, "资料包已进入 staging，等待识别");
+        String evidenceJson = buildEvidenceJson(bundleSnapshot, null, null, "资料包已进入 staging，等待识别", materializationNode);
         SourceSyncRun run = new SourceSyncRun(
                 null,
                 requestedSourceId,
-                "UPLOAD",
+                sourceType,
                 bundleSnapshot.getManifestHash(),
                 "MANUAL",
                 "RULE_ONLY",
@@ -243,7 +286,13 @@ public class SourceUploadService {
                     "WAIT_CONFIRM",
                     decisionResult.getMatchedSourceId(),
                     null,
-                    buildEvidenceJson(bundleSnapshot, decisionResult.getResolverDecision(), null, decisionResult.getMessage()),
+                    buildEvidenceJson(
+                            bundleSnapshot,
+                            decisionResult.getResolverDecision(),
+                            null,
+                            decisionResult.getMessage(),
+                            readMaterializationNode(run.getEvidenceJson())
+                    ),
                     null,
                     null,
                     null
@@ -323,7 +372,13 @@ public class SourceUploadService {
                 "SKIPPED_NO_CHANGE",
                 targetSource.getId(),
                 null,
-                buildEvidenceJson(bundleSnapshot, resolverDecision, null, message),
+                buildEvidenceJson(
+                        bundleSnapshot,
+                        resolverDecision,
+                        null,
+                        message,
+                        readMaterializationNode(run.getEvidenceJson())
+                ),
                 null,
                 null,
                 OffsetDateTime.now()
@@ -357,7 +412,13 @@ public class SourceUploadService {
                 "COMPILE_QUEUED",
                 targetSource.getId(),
                 compileJobRecord.getJobId(),
-                buildEvidenceJson(bundleSnapshot, resolverDecision, compileJobRecord.getJobId(), "已提交编译任务，等待后台执行"),
+                buildEvidenceJson(
+                        bundleSnapshot,
+                        resolverDecision,
+                        compileJobRecord.getJobId(),
+                        "已提交编译任务，等待后台执行",
+                        readMaterializationNode(run.getEvidenceJson())
+                ),
                 null,
                 null,
                 null
@@ -565,7 +626,8 @@ public class SourceUploadService {
             BundleFeatureExtractor.UploadBundleSnapshot bundleSnapshot,
             String acceptedDecision,
             String compileJobId,
-            String message
+            String message,
+            JsonNode materializationNode
     ) {
         ObjectNode rootNode = OBJECT_MAPPER.createObjectNode();
         rootNode.put("stagingDir", bundleSnapshot.getStagingDir().toString());
@@ -581,6 +643,9 @@ public class SourceUploadService {
             sourceNamesNode.add(sourceName);
         }
         rootNode.set("bundleSummary", OBJECT_MAPPER.valueToTree(bundleSnapshot.getBundleSummary()));
+        if (materializationNode != null && !materializationNode.isMissingNode() && !materializationNode.isNull()) {
+            rootNode.set("materialization", materializationNode);
+        }
         return rootNode.toString();
     }
 
@@ -601,6 +666,10 @@ public class SourceUploadService {
         catch (Exception ex) {
             return OBJECT_MAPPER.createObjectNode();
         }
+    }
+
+    private JsonNode readMaterializationNode(String evidenceJson) {
+        return readEvidence(evidenceJson).path("materialization");
     }
 
     private KnowledgeSource createUploadSource(BundleSummary bundleSummary) {

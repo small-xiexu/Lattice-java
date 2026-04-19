@@ -1,7 +1,9 @@
 package com.xbk.lattice.admin.service;
 
+import com.xbk.lattice.article.service.ArticleIdentityResolver;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -24,13 +26,30 @@ public class AdminArticleQueryService {
 
     private final ArticleJdbcRepository articleJdbcRepository;
 
+    private final ArticleIdentityResolver articleIdentityResolver;
+
     /**
      * 创建管理侧文章查询服务。
      *
      * @param articleJdbcRepository 文章仓储
+     * @param articleIdentityResolver 文章身份解析服务
+     */
+    @Autowired
+    public AdminArticleQueryService(
+            ArticleJdbcRepository articleJdbcRepository,
+            ArticleIdentityResolver articleIdentityResolver
+    ) {
+        this.articleJdbcRepository = articleJdbcRepository;
+        this.articleIdentityResolver = articleIdentityResolver;
+    }
+
+    /**
+     * 创建兼容旧构造方式的管理侧文章查询服务。
+     *
+     * @param articleJdbcRepository 文章仓储
      */
     public AdminArticleQueryService(ArticleJdbcRepository articleJdbcRepository) {
-        this.articleJdbcRepository = articleJdbcRepository;
+        this(articleJdbcRepository, new ArticleIdentityResolver(articleJdbcRepository));
     }
 
     /**
@@ -94,16 +113,7 @@ public class AdminArticleQueryService {
      * @return 文章详情
      */
     public ArticleRecord get(String articleId, Long sourceId) {
-        Optional<ArticleRecord> articleRecord = articleJdbcRepository.findByArticleKey(articleId);
-        if (articleRecord.isPresent()) {
-            return articleRecord.orElseThrow();
-        }
-        if (sourceId != null) {
-            articleRecord = articleJdbcRepository.findBySourceIdAndConceptId(sourceId, articleId);
-        }
-        else {
-            articleRecord = articleJdbcRepository.findByConceptId(articleId);
-        }
+        Optional<ArticleRecord> articleRecord = articleIdentityResolver.resolve(articleId, sourceId);
         if (articleRecord.isEmpty()) {
             throw new IllegalArgumentException("article not found: " + articleId);
         }

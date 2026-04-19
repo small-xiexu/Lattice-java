@@ -14,6 +14,10 @@ import java.util.List;
  */
 public class QuerySourceResponse {
 
+    private final Long sourceId;
+
+    private final String articleKey;
+
     private final String conceptId;
 
     private final String title;
@@ -27,15 +31,50 @@ public class QuerySourceResponse {
      * @param title 标题
      * @param sourcePaths 来源路径
      */
+    public QuerySourceResponse(String conceptId, String title, List<String> sourcePaths) {
+        this(null, null, conceptId, title, sourcePaths);
+    }
+
+    /**
+     * 创建查询来源响应。
+     *
+     * @param sourceId 资料源主键
+     * @param articleKey 文章唯一键
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param sourcePaths 来源路径
+     */
     @JsonCreator
     public QuerySourceResponse(
+            @JsonProperty("sourceId") Long sourceId,
+            @JsonProperty("articleKey") String articleKey,
             @JsonProperty("conceptId") String conceptId,
             @JsonProperty("title") String title,
             @JsonProperty("sourcePaths") List<String> sourcePaths
     ) {
+        this.sourceId = sourceId;
+        this.articleKey = articleKey;
         this.conceptId = conceptId;
         this.title = title;
         this.sourcePaths = sourcePaths;
+    }
+
+    /**
+     * 获取资料源主键。
+     *
+     * @return 资料源主键
+     */
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    /**
+     * 获取文章唯一键。
+     *
+     * @return 文章唯一键
+     */
+    public String getArticleKey() {
+        return articleKey;
     }
 
     /**

@@ -106,6 +106,10 @@ class AdminUploadControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].runId").value(runId));
 
+        mockMvc.perform(get("/api/v1/admin/source-runs?limit=5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].runId").value(runId));
+
         Integer articleCount = jdbcTemplate.queryForObject(
                 "select count(*) from lattice_phase_e_upload_test.articles",
                 Integer.class

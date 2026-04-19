@@ -1,6 +1,8 @@
 package com.xbk.lattice.governance;
 
+import com.xbk.lattice.article.service.ArticleIdentityResolver;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
+import com.xbk.lattice.infra.persistence.ArticleRecord;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -29,6 +31,8 @@ public class PropagationService {
 
     private final ArticleJdbcRepository articleJdbcRepository;
 
+    private final ArticleIdentityResolver articleIdentityResolver;
+
     /**
      * 创建传播服务。
      *
@@ -38,10 +42,12 @@ public class PropagationService {
     @Autowired
     public PropagationService(
             DependencyGraphService dependencyGraphService,
-            ArticleJdbcRepository articleJdbcRepository
+            ArticleJdbcRepository articleJdbcRepository,
+            ArticleIdentityResolver articleIdentityResolver
     ) {
         this.dependencyGraphService = dependencyGraphService;
         this.articleJdbcRepository = articleJdbcRepository;
+        this.articleIdentityResolver = articleIdentityResolver;
     }
 
     /**
@@ -50,7 +56,24 @@ public class PropagationService {
      * @param dependencyGraphService 依赖图服务
      */
     public PropagationService(DependencyGraphService dependencyGraphService) {
-        this(dependencyGraphService, null);
+        this(dependencyGraphService, null, null);
+    }
+
+    /**
+     * 创建兼容旧构造方式的传播服务。
+     *
+     * @param dependencyGraphService 依赖图服务
+     * @param articleJdbcRepository 文章仓储
+     */
+    public PropagationService(
+            DependencyGraphService dependencyGraphService,
+            ArticleJdbcRepository articleJdbcRepository
+    ) {
+        this(
+                dependencyGraphService,
+                articleJdbcRepository,
+                articleJdbcRepository == null ? null : new ArticleIdentityResolver(articleJdbcRepository)
+        );
     }
 
     /**
@@ -64,32 +87,39 @@ public class PropagationService {
         if (dependencyGraphService == null) {
             return new PropagationReport(rootConceptId, correctionSummary, List.of());
         }
+        ArticleRecord rootArticle = resolveRootArticle(rootConceptId);
         DependencyGraphSnapshot snapshot = dependencyGraphService.snapshot();
         Map<String, List<DependencyGraphEdge>> downstreamAdjacency = buildAdjacency(snapshot.getEdges());
         Queue<PropagationNode> queue = new ArrayDeque<PropagationNode>();
         Set<String> visited = new LinkedHashSet<String>();
         List<PropagationItem> items = new ArrayList<PropagationItem>();
 
-        visited.add(rootConceptId);
-        queue.add(new PropagationNode(rootConceptId, 0));
+        String rootNodeId = rootArticle == null ? rootConceptId : resolveNodeId(rootArticle);
+        visited.add(rootNodeId);
+        queue.add(new PropagationNode(rootNodeId, 0));
 
         while (!queue.isEmpty()) {
             PropagationNode current = queue.poll();
-            for (DependencyGraphEdge edge : downstreamAdjacency.getOrDefault(current.conceptId, List.of())) {
-                if (!visited.add(edge.getDownstreamConceptId())) {
+            for (DependencyGraphEdge edge : downstreamAdjacency.getOrDefault(current.nodeId, List.of())) {
+                if (!visited.add(edge.getDownstreamNodeId())) {
                     continue;
                 }
                 int depth = current.depth + 1;
                 items.add(new PropagationItem(
-                        edge.getDownstreamConceptId(),
-                        snapshot.findTitle(edge.getDownstreamConceptId()),
+                        snapshot.findSourceId(edge.getDownstreamNodeId()),
+                        snapshot.findArticleKey(edge.getDownstreamNodeId()),
+                        snapshot.findConceptId(edge.getDownstreamNodeId()),
+                        snapshot.findTitle(edge.getDownstreamNodeId()),
                         depth,
                         List.of(edge.getRelationType())
                 ));
-                queue.add(new PropagationNode(edge.getDownstreamConceptId(), depth));
+                queue.add(new PropagationNode(edge.getDownstreamNodeId(), depth));
             }
         }
-        return new PropagationReport(rootConceptId, correctionSummary, items);
+        if (rootArticle == null) {
+            return new PropagationReport(rootConceptId, correctionSummary, items);
+        }
+        return new PropagationReport(rootArticle.getSourceId(), rootArticle.getArticleKey(), rootArticle.getConceptId(), correctionSummary, items);
     }
 
     /**
@@ -114,32 +144,65 @@ public class PropagationService {
         if (articleJdbcRepository == null || downstreamIds == null || downstreamIds.isEmpty()) {
             return;
         }
+        ArticleRecord rootArticle = resolveRootArticle(rootConceptId);
+        if (rootArticle == null) {
+            return;
+        }
         Set<String> uniqueDownstreamIds = new LinkedHashSet<String>(downstreamIds);
         for (String downstreamId : uniqueDownstreamIds) {
             if (downstreamId == null || downstreamId.isBlank()) {
                 continue;
             }
-            articleJdbcRepository.appendUpstreamCorrection(downstreamId, rootConceptId, correctionSummary);
+            ArticleRecord downstreamArticle = resolveDownstreamArticle(rootArticle, downstreamId);
+            if (downstreamArticle == null) {
+                continue;
+            }
+            articleJdbcRepository.appendUpstreamCorrection(downstreamArticle, rootArticle, correctionSummary);
         }
     }
 
     private Map<String, List<DependencyGraphEdge>> buildAdjacency(List<DependencyGraphEdge> edges) {
         Map<String, List<DependencyGraphEdge>> adjacency = new LinkedHashMap<String, List<DependencyGraphEdge>>();
         for (DependencyGraphEdge edge : edges) {
-            adjacency.computeIfAbsent(edge.getUpstreamConceptId(), ignored -> new ArrayList<DependencyGraphEdge>())
+            adjacency.computeIfAbsent(edge.getUpstreamNodeId(), ignored -> new ArrayList<DependencyGraphEdge>())
                     .add(edge);
         }
         return adjacency;
     }
 
+    private ArticleRecord resolveRootArticle(String rootConceptId) {
+        if (articleIdentityResolver == null || rootConceptId == null || rootConceptId.isBlank()) {
+            return null;
+        }
+        return articleIdentityResolver.resolve(rootConceptId).orElse(null);
+    }
+
+    private ArticleRecord resolveDownstreamArticle(ArticleRecord rootArticle, String downstreamId) {
+        if (articleIdentityResolver == null) {
+            return null;
+        }
+        ArticleRecord articleRecord = articleIdentityResolver.resolve(downstreamId, rootArticle.getSourceId()).orElse(null);
+        if (articleRecord != null) {
+            return articleRecord;
+        }
+        return articleIdentityResolver.resolve(downstreamId).orElse(null);
+    }
+
+    private String resolveNodeId(ArticleRecord articleRecord) {
+        if (articleRecord.getArticleKey() != null && !articleRecord.getArticleKey().isBlank()) {
+            return articleRecord.getArticleKey();
+        }
+        return articleRecord.getConceptId();
+    }
+
     private static class PropagationNode {
 
-        private final String conceptId;
+        private final String nodeId;
 
         private final int depth;
 
-        private PropagationNode(String conceptId, int depth) {
-            this.conceptId = conceptId;
+        private PropagationNode(String nodeId, int depth) {
+            this.nodeId = nodeId;
             this.depth = depth;
         }
     }

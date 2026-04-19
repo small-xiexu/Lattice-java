@@ -17,9 +17,9 @@
         try {
             const results = await Promise.all([
                 fetchJson("/api/v1/admin/overview"),
-                fetchJson("/api/v1/admin/jobs")
+                fetchJson("/api/v1/admin/source-runs?limit=10")
             ]);
-            renderReadiness(results[0], results[1].items || []);
+            renderReadiness(results[0], results[1] || []);
         }
         catch (error) {
             showError("刷新知识库状态失败", error);
@@ -72,7 +72,14 @@
         const status = overview.status || {};
         const activeJobs = jobs.filter(function (item) {
             const normalized = String(item.status || "").toUpperCase();
-            return normalized === "QUEUED" || normalized === "RUNNING";
+            return normalized === "MATCHING"
+                    || normalized === "MATERIALIZING"
+                    || normalized === "COMPILE_QUEUED"
+                    || normalized === "QUEUED"
+                    || normalized === "RUNNING";
+        });
+        const waitConfirmJobs = jobs.filter(function (item) {
+            return String(item.status || "").toUpperCase() === "WAIT_CONFIRM";
         });
         const hint = document.getElementById("ask-ready-hint");
         const askButton = document.getElementById("submit-question");
@@ -84,6 +91,10 @@
         }
         canAsk = true;
         askButton.disabled = false;
+        if (waitConfirmJobs.length > 0) {
+            hint.textContent = "当前有资料包等待人工确认归并方式，部分最新资料可能尚未入库。";
+            return;
+        }
         if (activeJobs.length > 0) {
             hint.textContent = "知识库仍在处理中，你可以先提问；如果回答不完整，等任务完成后再试一次。";
             return;

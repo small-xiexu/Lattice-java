@@ -20,6 +20,8 @@ public class PendingQueryRecord {
 
     private final List<String> selectedConceptIds;
 
+    private final List<String> selectedArticleKeys;
+
     private final List<String> sourceFilePaths;
 
     private final String correctionsJson;
@@ -54,10 +56,51 @@ public class PendingQueryRecord {
             OffsetDateTime createdAt,
             OffsetDateTime expiresAt
     ) {
+        this(
+                queryId,
+                question,
+                answer,
+                selectedConceptIds,
+                List.of(),
+                sourceFilePaths,
+                correctionsJson,
+                reviewStatus,
+                createdAt,
+                expiresAt
+        );
+    }
+
+    /**
+     * 创建待确认查询记录。
+     *
+     * @param queryId 查询标识
+     * @param question 问题
+     * @param answer 答案
+     * @param selectedConceptIds 命中概念标识
+     * @param selectedArticleKeys 命中的文章唯一键
+     * @param sourceFilePaths 来源文件路径
+     * @param correctionsJson 纠错历史 JSON
+     * @param reviewStatus 审查状态
+     * @param createdAt 创建时间
+     * @param expiresAt 过期时间
+     */
+    public PendingQueryRecord(
+            String queryId,
+            String question,
+            String answer,
+            List<String> selectedConceptIds,
+            List<String> selectedArticleKeys,
+            List<String> sourceFilePaths,
+            String correctionsJson,
+            String reviewStatus,
+            OffsetDateTime createdAt,
+            OffsetDateTime expiresAt
+    ) {
         this.queryId = queryId;
         this.question = question;
         this.answer = answer;
         this.selectedConceptIds = selectedConceptIds;
+        this.selectedArticleKeys = selectedArticleKeys;
         this.sourceFilePaths = sourceFilePaths;
         this.correctionsJson = correctionsJson;
         this.reviewStatus = reviewStatus;
@@ -99,6 +142,15 @@ public class PendingQueryRecord {
      */
     public List<String> getSelectedConceptIds() {
         return selectedConceptIds;
+    }
+
+    /**
+     * 获取命中的文章唯一键。
+     *
+     * @return 命中的文章唯一键
+     */
+    public List<String> getSelectedArticleKeys() {
+        return selectedArticleKeys;
     }
 
     /**

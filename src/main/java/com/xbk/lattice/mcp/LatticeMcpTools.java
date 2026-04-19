@@ -52,6 +52,11 @@ import com.xbk.lattice.query.service.KnowledgeSearchService;
 import com.xbk.lattice.query.service.PendingQueryManager;
 import com.xbk.lattice.query.service.QueryArticleHit;
 import com.xbk.lattice.query.service.QueryFacadeService;
+import com.xbk.lattice.source.domain.KnowledgeSource;
+import com.xbk.lattice.source.domain.KnowledgeSourcePage;
+import com.xbk.lattice.source.domain.SourceSyncRunDetail;
+import com.xbk.lattice.source.service.SourceService;
+import com.xbk.lattice.source.service.SourceSyncWorkflowService;
 import org.springaicommunity.mcp.annotation.McpTool;
 import org.springaicommunity.mcp.annotation.McpToolParam;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -122,6 +127,10 @@ public class LatticeMcpTools {
 
     private final LinkEnhancementService linkEnhancementService;
 
+    private SourceService sourceService;
+
+    private SourceSyncWorkflowService sourceSyncWorkflowService;
+
     /**
      * 创建 Lattice MCP 工具集。
      *
@@ -177,6 +186,26 @@ public class LatticeMcpTools {
     @Autowired(required = false)
     void setPropagateExecutionService(PropagateExecutionService propagateExecutionService) {
         this.propagateExecutionService = propagateExecutionService;
+    }
+
+    /**
+     * 注入资料源服务。
+     *
+     * @param sourceService 资料源服务
+     */
+    @Autowired(required = false)
+    void setSourceService(SourceService sourceService) {
+        this.sourceService = sourceService;
+    }
+
+    /**
+     * 注入资料源同步工作流服务。
+     *
+     * @param sourceSyncWorkflowService 资料源同步工作流服务
+     */
+    @Autowired(required = false)
+    void setSourceSyncWorkflowService(SourceSyncWorkflowService sourceSyncWorkflowService) {
+        this.sourceSyncWorkflowService = sourceSyncWorkflowService;
     }
 
     /**
@@ -662,12 +691,14 @@ public class LatticeMcpTools {
      * @param id 概念标识或源文件路径
      * @return JSON 字符串，包含 status / type / content 等字段
      */
-    @McpTool(name = "lattice_get", description = "Get a knowledge article or source file by conceptId or file path")
-    public String get(@McpToolParam(description = "The conceptId or file path to fetch") String id) {
+    @McpTool(name = "lattice_get", description = "Get a knowledge article or source file by articleKey, conceptId, or file path")
+    public String get(@McpToolParam(description = "The articleKey, conceptId, or file path to fetch") String id) {
         KnowledgeLookupResult lookupResult = requireKnowledgeLookupService().get(id);
         return "{"
                 + "\"status\":" + jsonString(lookupResult.isFound() ? "found" : "not_found") + ","
                 + "\"type\":" + jsonString(lookupResult.getType()) + ","
+                + "\"sourceId\":" + lookupResult.getSourceId() + ","
+                + "\"articleKey\":" + jsonString(lookupResult.getArticleKey()) + ","
                 + "\"id\":" + jsonString(lookupResult.getId()) + ","
                 + "\"title\":" + jsonString(lookupResult.getTitle()) + ","
                 + "\"content\":" + jsonString(lookupResult.getContent()) + ","
@@ -842,7 +873,7 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_lifecycle_deprecate", description = "Mark an article as deprecated and persist lifecycle metadata")
     public String lifecycleDeprecate(
-            @McpToolParam(description = "The conceptId to deprecate") String conceptId,
+            @McpToolParam(description = "The articleKey or conceptId to deprecate") String conceptId,
             @McpToolParam(description = "Why this article is being deprecated") String reason,
             @McpToolParam(description = "Who performs the lifecycle update") String updatedBy
     ) {
@@ -860,7 +891,7 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_lifecycle_archive", description = "Archive an article and persist lifecycle metadata")
     public String lifecycleArchive(
-            @McpToolParam(description = "The conceptId to archive") String conceptId,
+            @McpToolParam(description = "The articleKey or conceptId to archive") String conceptId,
             @McpToolParam(description = "Why this article is being archived") String reason,
             @McpToolParam(description = "Who performs the lifecycle update") String updatedBy
     ) {
@@ -878,7 +909,7 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_lifecycle_activate", description = "Reactivate an article and persist lifecycle metadata")
     public String lifecycleActivate(
-            @McpToolParam(description = "The conceptId to reactivate") String conceptId,
+            @McpToolParam(description = "The articleKey or conceptId to reactivate") String conceptId,
             @McpToolParam(description = "Why this article is being reactivated") String reason,
             @McpToolParam(description = "Who performs the lifecycle update") String updatedBy
     ) {
@@ -974,7 +1005,7 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_correct", description = "Correct a knowledge article using LLM rewrite with source file cross-validation")
     public String correctKnowledge(
-            @McpToolParam(description = "The conceptId that has been corrected") String conceptId,
+            @McpToolParam(description = "The articleKey or conceptId that has been corrected") String conceptId,
             @McpToolParam(description = "A short summary of the correction") String correctionSummary
     ) {
         ArticleCorrectionResult result = requireArticleCorrectionService().correct(conceptId, correctionSummary);
@@ -984,6 +1015,8 @@ public class LatticeMcpTools {
                 result.getDownstreamIds()
         );
         return "{"
+                + "\"sourceId\":" + result.getSourceId() + ","
+                + "\"articleKey\":" + jsonString(result.getArticleKey()) + ","
                 + "\"conceptId\":" + jsonString(result.getConceptId()) + ","
                 + "\"revisedContentPreview\":" + jsonString(preview(result.getRevisedContent(), 500)) + ","
                 + "\"downstreamCount\":" + result.getDownstreamIds().size() + ","
@@ -1043,9 +1076,9 @@ public class LatticeMcpTools {
      * @param limit 返回数量
      * @return JSON 字符串，包含 conceptId / count / items
      */
-    @McpTool(name = "lattice_history", description = "List article snapshot history for a conceptId")
+    @McpTool(name = "lattice_history", description = "List article snapshot history for an articleKey or conceptId")
     public String history(
-            @McpToolParam(description = "The conceptId to inspect history for") String conceptId,
+            @McpToolParam(description = "The articleKey or conceptId to inspect history for") String conceptId,
             @McpToolParam(description = "The max number of history entries to return") int limit
     ) {
         HistoryReport historyReport = requireHistoryService().history(conceptId, limit);
@@ -1059,6 +1092,8 @@ public class LatticeMcpTools {
         }
         itemsBuilder.append("]");
         return "{"
+                + "\"sourceId\":" + historyReport.getSourceId() + ","
+                + "\"articleKey\":" + jsonString(historyReport.getArticleKey()) + ","
                 + "\"conceptId\":" + jsonString(historyReport.getConceptId()) + ","
                 + "\"count\":" + historyReport.getTotalEntries() + ","
                 + "\"items\":" + itemsBuilder
@@ -1074,11 +1109,13 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_rollback", description = "Restore an article to a previous snapshot version")
     public String rollback(
-            @McpToolParam(description = "The conceptId to restore") String conceptId,
+            @McpToolParam(description = "The articleKey or conceptId to restore") String conceptId,
             @McpToolParam(description = "The snapshotId to restore from") long snapshotId
     ) {
         RollbackResult result = requireSnapshotService().rollback(conceptId, snapshotId);
         return "{"
+                + "\"sourceId\":" + result.getSourceId() + ","
+                + "\"articleKey\":" + jsonString(result.getArticleKey()) + ","
                 + "\"conceptId\":" + jsonString(result.getConceptId()) + ","
                 + "\"restoredSnapshotId\":" + result.getRestoredSnapshotId() + ","
                 + "\"restoredAt\":" + jsonString(formatOffsetDateTime(result.getRestoredAt()))
@@ -1163,6 +1200,50 @@ public class LatticeMcpTools {
     }
 
     /**
+     * 返回资料源列表。
+     *
+     * @param limit 返回数量
+     * @return JSON 字符串，包含 count / items
+     */
+    @McpTool(name = "lattice_source_list", description = "List knowledge sources with status, type, and last sync summary")
+    public String sourceList(
+            @McpToolParam(description = "The max number of sources to return") int limit
+    ) {
+        int safeLimit = limit <= 0 ? 10 : Math.min(limit, 50);
+        KnowledgeSourcePage page = requireSourceService().listSources(null, null, null, 1, safeLimit);
+        StringBuilder itemsBuilder = new StringBuilder();
+        itemsBuilder.append("[");
+        List<KnowledgeSource> items = page.getItems();
+        for (int index = 0; index < items.size(); index++) {
+            if (index > 0) {
+                itemsBuilder.append(",");
+            }
+            itemsBuilder.append(toSourceSummaryJson(items.get(index)));
+        }
+        itemsBuilder.append("]");
+        return "{"
+                + "\"count\":" + items.size() + ","
+                + "\"total\":" + page.getTotal() + ","
+                + "\"items\":" + itemsBuilder
+                + "}";
+    }
+
+    /**
+     * 对资料源发起一次同步。
+     *
+     * @param sourceId 资料源主键
+     * @return JSON 字符串，包含 runId / status / sourceId / compileJobStatus 等字段
+     * @throws IOException IO 异常
+     */
+    @McpTool(name = "lattice_source_sync", description = "Trigger a source sync run and return the run detail")
+    public String sourceSync(
+            @McpToolParam(description = "The sourceId returned by lattice_source_list") long sourceId
+    ) throws IOException {
+        SourceSyncRunDetail detail = requireSourceSyncWorkflowService().syncSource(sourceId);
+        return toSourceRunJson(detail);
+    }
+
+    /**
      * 转换单条 pending 记录为 JSON 对象字符串。
      *
      * @param pendingQueryRecord 待确认记录
@@ -1220,6 +1301,8 @@ public class LatticeMcpTools {
      */
     private String toLifecycleItemJson(LifecycleItem lifecycleItem) {
         return "{"
+                + "\"sourceId\":" + lifecycleItem.getSourceId() + ","
+                + "\"articleKey\":" + jsonString(lifecycleItem.getArticleKey()) + ","
                 + "\"conceptId\":" + jsonString(lifecycleItem.getConceptId()) + ","
                 + "\"title\":" + jsonString(lifecycleItem.getTitle()) + ","
                 + "\"lifecycle\":" + jsonString(lifecycleItem.getLifecycle()) + ","
@@ -1238,6 +1321,8 @@ public class LatticeMcpTools {
      */
     private String toLifecycleTransitionJson(LifecycleTransitionResult result) {
         return "{"
+                + "\"sourceId\":" + result.getSourceId() + ","
+                + "\"articleKey\":" + jsonString(result.getArticleKey()) + ","
                 + "\"conceptId\":" + jsonString(result.getConceptId()) + ","
                 + "\"title\":" + jsonString(result.getTitle()) + ","
                 + "\"lifecycle\":" + jsonString(result.getLifecycle()) + ","
@@ -1308,6 +1393,8 @@ public class LatticeMcpTools {
     private String toArticleSnapshotJson(ArticleSnapshotRecord articleSnapshotRecord) {
         return "{"
                 + "\"snapshotId\":" + articleSnapshotRecord.getSnapshotId() + ","
+                + "\"sourceId\":" + articleSnapshotRecord.getSourceId() + ","
+                + "\"articleKey\":" + jsonString(articleSnapshotRecord.getArticleKey()) + ","
                 + "\"conceptId\":" + jsonString(articleSnapshotRecord.getConceptId()) + ","
                 + "\"title\":" + jsonString(articleSnapshotRecord.getTitle()) + ","
                 + "\"summary\":" + jsonString(articleSnapshotRecord.getSummary()) + ","
@@ -1320,6 +1407,56 @@ public class LatticeMcpTools {
                         ? null
                         : articleSnapshotRecord.getCapturedAt().toString()) + ","
                 + "\"snapshotReason\":" + jsonString(articleSnapshotRecord.getSnapshotReason())
+                + "}";
+    }
+
+    /**
+     * 转换资料源摘要为 JSON。
+     *
+     * @param knowledgeSource 资料源
+     * @return JSON 字符串
+     */
+    private String toSourceSummaryJson(KnowledgeSource knowledgeSource) {
+        return "{"
+                + "\"id\":" + knowledgeSource.getId() + ","
+                + "\"sourceCode\":" + jsonString(knowledgeSource.getSourceCode()) + ","
+                + "\"name\":" + jsonString(knowledgeSource.getName()) + ","
+                + "\"sourceType\":" + jsonString(knowledgeSource.getSourceType()) + ","
+                + "\"contentProfile\":" + jsonString(knowledgeSource.getContentProfile()) + ","
+                + "\"status\":" + jsonString(knowledgeSource.getStatus()) + ","
+                + "\"defaultSyncMode\":" + jsonString(knowledgeSource.getDefaultSyncMode()) + ","
+                + "\"lastSyncStatus\":" + jsonString(knowledgeSource.getLastSyncStatus()) + ","
+                + "\"lastSyncAt\":" + jsonString(formatOffsetDateTime(knowledgeSource.getLastSyncAt()))
+                + "}";
+    }
+
+    /**
+     * 转换资料源同步运行详情为 JSON。
+     *
+     * @param detail 同步运行详情
+     * @return JSON 字符串
+     */
+    private String toSourceRunJson(SourceSyncRunDetail detail) {
+        return "{"
+                + "\"runId\":" + detail.getRunId() + ","
+                + "\"sourceId\":" + detail.getSourceId() + ","
+                + "\"sourceName\":" + jsonString(detail.getSourceName()) + ","
+                + "\"sourceType\":" + jsonString(detail.getSourceType()) + ","
+                + "\"status\":" + jsonString(detail.getStatus()) + ","
+                + "\"resolverMode\":" + jsonString(detail.getResolverMode()) + ","
+                + "\"resolverDecision\":" + jsonString(detail.getResolverDecision()) + ","
+                + "\"syncAction\":" + jsonString(detail.getSyncAction()) + ","
+                + "\"matchedSourceId\":" + detail.getMatchedSourceId() + ","
+                + "\"compileJobId\":" + jsonString(detail.getCompileJobId()) + ","
+                + "\"compileJobStatus\":" + jsonString(detail.getCompileJobStatus()) + ","
+                + "\"manifestHash\":" + jsonString(detail.getManifestHash()) + ","
+                + "\"message\":" + jsonString(detail.getMessage()) + ","
+                + "\"errorMessage\":" + jsonString(detail.getErrorMessage()) + ","
+                + "\"sourceNames\":" + jsonStringList(detail.getSourceNames()) + ","
+                + "\"requestedAt\":" + jsonString(detail.getRequestedAt()) + ","
+                + "\"updatedAt\":" + jsonString(detail.getUpdatedAt()) + ","
+                + "\"startedAt\":" + jsonString(detail.getStartedAt()) + ","
+                + "\"finishedAt\":" + jsonString(detail.getFinishedAt())
                 + "}";
     }
 
@@ -1610,6 +1747,30 @@ public class LatticeMcpTools {
             throw new UnsupportedOperationException("historyService not configured");
         }
         return historyService;
+    }
+
+    /**
+     * 获取资料源服务。
+     *
+     * @return 资料源服务
+     */
+    private SourceService requireSourceService() {
+        if (sourceService == null) {
+            throw new UnsupportedOperationException("sourceService not configured");
+        }
+        return sourceService;
+    }
+
+    /**
+     * 获取资料源同步工作流服务。
+     *
+     * @return 资料源同步工作流服务
+     */
+    private SourceSyncWorkflowService requireSourceSyncWorkflowService() {
+        if (sourceSyncWorkflowService == null) {
+            throw new UnsupportedOperationException("sourceSyncWorkflowService not configured");
+        }
+        return sourceSyncWorkflowService;
     }
 
     /**

@@ -648,7 +648,11 @@ public class CompilePipelineService {
         for (MergedConcept mergedConcept : pendingConcepts) {
             ArticleRecord articleRecord = compileArticleNode.compile(mergedConcept, sourceDir);
             articleJdbcRepository.upsert(articleRecord);
-            articleChunkJdbcRepository.replaceChunksFromContent(articleRecord.getConceptId(), articleRecord.getContent());
+            articleChunkJdbcRepository.replaceChunksFromContent(
+                    articleRecord.getArticleKey(),
+                    articleRecord.getConceptId(),
+                    articleRecord.getContent()
+            );
             articleVectorIndexService.indexArticle(articleRecord);
             if (articleChunkVectorIndexService != null) {
                 articleChunkVectorIndexService.indexArticle(articleRecord);

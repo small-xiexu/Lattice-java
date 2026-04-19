@@ -74,7 +74,7 @@ public class VaultSyncService {
         int skippedFiles = 0;
 
         for (Map.Entry<String, Map<String, String>> entry : articleEntries.entrySet()) {
-            String conceptId = entry.getKey();
+            String articleIdentity = entry.getKey();
             String relativePath = entry.getValue().get("path");
             if (relativePath == null || !relativePath.startsWith("concepts/")) {
                 continue;
@@ -84,7 +84,7 @@ public class VaultSyncService {
                 skippedFiles++;
                 continue;
             }
-            Optional<ArticleRecord> optionalArticleRecord = articleJdbcRepository.findByConceptId(conceptId);
+            Optional<ArticleRecord> optionalArticleRecord = resolveManagedArticle(articleIdentity);
             if (optionalArticleRecord.isEmpty()) {
                 skippedFiles++;
                 continue;
@@ -189,6 +189,14 @@ public class VaultSyncService {
         return result;
     }
 
+    private Optional<ArticleRecord> resolveManagedArticle(String articleIdentity) {
+        Optional<ArticleRecord> articleRecord = articleJdbcRepository.findByArticleKey(articleIdentity);
+        if (articleRecord.isPresent()) {
+            return articleRecord;
+        }
+        return articleJdbcRepository.findByConceptId(articleIdentity);
+    }
+
     private ArticleRecord mergeArticle(ArticleRecord existingRecord, String fileContent) {
         FrontmatterDocument document = parseDocument(fileContent);
         String title = readEditableString(document.frontmatter, "title", existingRecord.getTitle());
@@ -212,8 +220,7 @@ public class VaultSyncService {
                 existingRecord.getReviewStatus(),
                 document.body
         );
-        return new ArticleRecord(
-                existingRecord.getConceptId(),
+        return existingRecord.copy(
                 title,
                 renderedContent,
                 existingRecord.getLifecycle(),

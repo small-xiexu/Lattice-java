@@ -4,6 +4,8 @@ import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.compiler.service.SynthesisArtifactJdbcStore;
 import com.xbk.lattice.compiler.service.SynthesisArtifactRecord;
+import com.xbk.lattice.source.domain.KnowledgeSource;
+import com.xbk.lattice.source.service.SourceService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,6 +55,9 @@ class VaultSyncServiceTests {
     @Autowired
     private VaultSyncService vaultSyncService;
 
+    @Autowired
+    private SourceService sourceService;
+
     /**
      * 验证概念文章修改后可受控回写到数据库。
      *
@@ -63,11 +68,12 @@ class VaultSyncServiceTests {
     void shouldSyncConceptMarkdownBackToDatabase(@TempDir Path tempDir) throws Exception {
         resetTables();
         Path vaultDir = tempDir.resolve("vault");
-        seedArticle("# Payment Timeout\n\nretry=3\n", "Payment Timeout");
+        Long sourceId = createManagedSourceId();
+        seedArticle(sourceId, "# Payment Timeout\n\nretry=3\n", "Payment Timeout");
         seedArtifact("index", "# Index baseline\n");
         vaultExportService.export(vaultDir);
 
-        Path articleFile = vaultDir.resolve("concepts/payment-timeout.md");
+        Path articleFile = vaultDir.resolve("concepts/payments-docs--payment-timeout.md");
         Files.writeString(
                 articleFile,
                 """
@@ -114,7 +120,8 @@ class VaultSyncServiceTests {
     void shouldSyncArtifactMarkdownBackToDatabase(@TempDir Path tempDir) throws Exception {
         resetTables();
         Path vaultDir = tempDir.resolve("vault");
-        seedArticle("# Payment Timeout\n\nretry=3\n", "Payment Timeout");
+        Long sourceId = createManagedSourceId();
+        seedArticle(sourceId, "# Payment Timeout\n\nretry=3\n", "Payment Timeout");
         seedArtifact("index", "# Index baseline\n");
         vaultExportService.export(vaultDir);
 
@@ -145,10 +152,13 @@ class VaultSyncServiceTests {
     void shouldReportConflictWhenDatabaseChangedAfterExport(@TempDir Path tempDir) throws Exception {
         resetTables();
         Path vaultDir = tempDir.resolve("vault");
-        seedArticle("# Payment Timeout\n\nretry=3\n", "Payment Timeout");
+        Long sourceId = createManagedSourceId();
+        seedArticle(sourceId, "# Payment Timeout\n\nretry=3\n", "Payment Timeout");
         vaultExportService.export(vaultDir);
 
         articleJdbcRepository.upsert(new ArticleRecord(
+                sourceId,
+                "payments-docs--payment-timeout",
                 "payment-timeout",
                 "Payment Timeout DB",
                 "# Payment Timeout\n\nretry=4\n",
@@ -164,7 +174,7 @@ class VaultSyncServiceTests {
                 "pending"
         ));
         Files.writeString(
-                vaultDir.resolve("concepts/payment-timeout.md"),
+                vaultDir.resolve("concepts/payments-docs--payment-timeout.md"),
                 """
                         ---
                         title: "Payment Timeout File"
@@ -181,12 +191,14 @@ class VaultSyncServiceTests {
 
         assertThat(result.getSyncedFiles()).isZero();
         assertThat(result.getConflictCount()).isEqualTo(1);
-        assertThat(result.getConflicts().get(0).getFilePath()).isEqualTo("concepts/payment-timeout.md");
+        assertThat(result.getConflicts().get(0).getFilePath()).isEqualTo("concepts/payments-docs--payment-timeout.md");
         assertThat(articleJdbcRepository.findByConceptId("payment-timeout").orElseThrow().getTitle()).isEqualTo("Payment Timeout DB");
     }
 
-    private void seedArticle(String contentBody, String title) {
+    private void seedArticle(Long sourceId, String contentBody, String title) {
         articleJdbcRepository.upsert(new ArticleRecord(
+                sourceId,
+                "payments-docs--payment-timeout",
                 "payment-timeout",
                 title,
                 """
@@ -228,5 +240,28 @@ class VaultSyncServiceTests {
     private void resetTables() {
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_sync_test.synthesis_artifacts");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_sync_test.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_sync_test.knowledge_sources RESTART IDENTITY CASCADE");
+    }
+
+    private Long createManagedSourceId() {
+        KnowledgeSource source = sourceService.save(new KnowledgeSource(
+                null,
+                "payments-docs",
+                "Payments Docs",
+                "UPLOAD",
+                "DOCUMENT",
+                "ACTIVE",
+                "NORMAL",
+                "AUTO",
+                "{}",
+                "{}",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+        return source.getId();
     }
 }

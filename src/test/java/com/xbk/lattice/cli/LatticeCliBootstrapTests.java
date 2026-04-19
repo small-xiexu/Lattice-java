@@ -38,6 +38,8 @@ class LatticeCliBootstrapTests {
         assertThat(helpText).contains("query");
         assertThat(helpText).contains("search");
         assertThat(helpText).contains("status");
+        assertThat(helpText).contains("source-list");
+        assertThat(helpText).contains("source-sync");
         assertThat(helpText).contains("lint");
         assertThat(helpText).contains("history");
         assertThat(helpText).contains("diff");

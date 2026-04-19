@@ -6,6 +6,11 @@ import com.xbk.lattice.api.query.QuerySourceResponse;
 import com.xbk.lattice.infra.persistence.PendingQueryRecord;
 import com.xbk.lattice.query.service.PendingQueryManager;
 import com.xbk.lattice.query.service.QueryFacadeService;
+import com.xbk.lattice.source.domain.KnowledgeSource;
+import com.xbk.lattice.source.domain.KnowledgeSourcePage;
+import com.xbk.lattice.source.domain.SourceSyncRunDetail;
+import com.xbk.lattice.source.service.SourceService;
+import com.xbk.lattice.source.service.SourceSyncWorkflowService;
 import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
@@ -40,6 +45,10 @@ class LatticeMcpToolsTest {
         assertThatCode(() -> LatticeMcpTools.class.getDeclaredMethod("quality"))
                 .doesNotThrowAnyException();
         assertThatCode(() -> LatticeMcpTools.class.getDeclaredMethod("compile", String.class, boolean.class))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> LatticeMcpTools.class.getDeclaredMethod("sourceList", int.class))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> LatticeMcpTools.class.getDeclaredMethod("sourceSync", long.class))
                 .doesNotThrowAnyException();
     }
 
@@ -164,6 +173,80 @@ class LatticeMcpToolsTest {
         String result = tools.query("test");
 
         assertThat(result).contains("\\\"retry=3\\\"");
+    }
+
+    /**
+     * 验证 lattice_source_list 返回资料源摘要。
+     */
+    @Test
+    void sourceListShouldReturnSourceSummaries() {
+        KnowledgeSource source = new KnowledgeSource(
+                11L,
+                "payments-docs",
+                "Payments Docs",
+                "GIT",
+                "DOCUMENT",
+                "ACTIVE",
+                "NORMAL",
+                "AUTO",
+                "{}",
+                "{}",
+                null,
+                null,
+                "SUCCEEDED",
+                OffsetDateTime.parse("2026-04-19T18:00:00+08:00"),
+                null,
+                null
+        );
+        LatticeMcpTools tools = new LatticeMcpTools(null, new UnsupportedPendingQueryManager());
+        tools.setSourceService(new FixedSourceService(new KnowledgeSourcePage(1, 10, 1L, List.of(source))));
+
+        String result = tools.sourceList(10);
+
+        assertThat(result).contains("\"count\":1");
+        assertThat(result).contains("\"sourceCode\":\"payments-docs\"");
+        assertThat(result).contains("\"sourceType\":\"GIT\"");
+        assertThat(result).contains("\"lastSyncStatus\":\"SUCCEEDED\"");
+    }
+
+    /**
+     * 验证 lattice_source_sync 返回同步运行详情。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void sourceSyncShouldReturnRunDetailJson() throws Exception {
+        SourceSyncRunDetail detail = new SourceSyncRunDetail(
+                21L,
+                11L,
+                "Payments Docs",
+                "GIT",
+                "COMPILE_QUEUED",
+                "MANUAL",
+                "EXISTING_SOURCE_UPDATE",
+                "UPDATE",
+                11L,
+                "job-1",
+                "QUEUED",
+                "hash-1",
+                "ok",
+                null,
+                List.of("README.md"),
+                "{}",
+                "2026-04-19T18:10:00+08:00",
+                "2026-04-19T18:10:01+08:00",
+                null,
+                null
+        );
+        LatticeMcpTools tools = new LatticeMcpTools(null, new UnsupportedPendingQueryManager());
+        tools.setSourceSyncWorkflowService(new FixedSourceSyncWorkflowService(detail));
+
+        String result = tools.sourceSync(11L);
+
+        assertThat(result).contains("\"runId\":21");
+        assertThat(result).contains("\"sourceId\":11");
+        assertThat(result).contains("\"status\":\"COMPILE_QUEUED\"");
+        assertThat(result).contains("\"compileJobStatus\":\"QUEUED\"");
     }
 
     // -----------------------------------------------------------------------
@@ -331,6 +414,72 @@ class LatticeMcpToolsTest {
         @Override
         public List<PendingQueryRecord> listPendingQueries() {
             throw new UnsupportedOperationException();
+        }
+    }
+
+    /**
+     * 固定返回资料源分页结果的替身。
+     *
+     * @author xiexu
+     */
+    private static class FixedSourceService extends SourceService {
+
+        private final KnowledgeSourcePage knowledgeSourcePage;
+
+        /**
+         * 创建固定返回值的资料源服务替身。
+         *
+         * @param knowledgeSourcePage 预置分页结果
+         */
+        private FixedSourceService(KnowledgeSourcePage knowledgeSourcePage) {
+            super(null, null);
+            this.knowledgeSourcePage = knowledgeSourcePage;
+        }
+
+        /**
+         * 返回预置的分页结果。
+         *
+         * @param keyword 关键词
+         * @param status 状态
+         * @param sourceType 类型
+         * @param page 页码
+         * @param size 大小
+         * @return 预置分页结果
+         */
+        @Override
+        public KnowledgeSourcePage listSources(String keyword, String status, String sourceType, int page, int size) {
+            return knowledgeSourcePage;
+        }
+    }
+
+    /**
+     * 固定返回同步运行详情的替身。
+     *
+     * @author xiexu
+     */
+    private static class FixedSourceSyncWorkflowService extends SourceSyncWorkflowService {
+
+        private final SourceSyncRunDetail detail;
+
+        /**
+         * 创建固定返回值的同步工作流替身。
+         *
+         * @param detail 预置同步结果
+         */
+        private FixedSourceSyncWorkflowService(SourceSyncRunDetail detail) {
+            super(null, null, null);
+            this.detail = detail;
+        }
+
+        /**
+         * 返回预置同步运行详情。
+         *
+         * @param sourceId 资料源主键
+         * @return 预置同步运行详情
+         */
+        @Override
+        public SourceSyncRunDetail syncSource(Long sourceId) {
+            return detail;
         }
     }
 

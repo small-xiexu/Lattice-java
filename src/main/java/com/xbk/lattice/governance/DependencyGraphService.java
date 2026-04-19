@@ -7,10 +7,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -48,52 +46,68 @@ public class DependencyGraphService {
             return new DependencyGraphSnapshot(List.of(), Map.of());
         }
         List<ArticleRecord> articles = articleJdbcRepository.findAll();
-        Map<String, String> conceptTitles = new LinkedHashMap<String, String>();
-        Set<String> existingConceptIds = new LinkedHashSet<String>();
+        Map<String, String> titlesByNodeId = new LinkedHashMap<String, String>();
+        Map<String, Long> sourceIdsByNodeId = new LinkedHashMap<String, Long>();
+        Map<String, String> articleKeysByNodeId = new LinkedHashMap<String, String>();
+        Map<String, String> conceptIdsByNodeId = new LinkedHashMap<String, String>();
+        Map<String, Map<String, ArticleRecord>> scopedTargets = new LinkedHashMap<String, Map<String, ArticleRecord>>();
         for (ArticleRecord article : articles) {
-            conceptTitles.put(article.getConceptId(), article.getTitle());
-            existingConceptIds.add(article.getConceptId());
+            String nodeId = resolveNodeId(article);
+            titlesByNodeId.put(nodeId, article.getTitle());
+            sourceIdsByNodeId.put(nodeId, article.getSourceId());
+            articleKeysByNodeId.put(nodeId, article.getArticleKey());
+            conceptIdsByNodeId.put(nodeId, article.getConceptId());
+            indexScopedTargets(scopedTargets, article);
         }
 
         Map<String, DependencyGraphEdge> uniqueEdges = new LinkedHashMap<String, DependencyGraphEdge>();
         for (ArticleRecord article : articles) {
-            addDependsOnEdges(article, existingConceptIds, uniqueEdges);
-            addRelatedEdges(article, existingConceptIds, uniqueEdges);
-            addWikiLinkEdges(article, existingConceptIds, uniqueEdges);
+            addDependsOnEdges(article, scopedTargets, uniqueEdges);
+            addRelatedEdges(article, scopedTargets, uniqueEdges);
+            addWikiLinkEdges(article, scopedTargets, uniqueEdges);
         }
-        return new DependencyGraphSnapshot(new ArrayList<DependencyGraphEdge>(uniqueEdges.values()), conceptTitles);
+        return new DependencyGraphSnapshot(
+                new ArrayList<DependencyGraphEdge>(uniqueEdges.values()),
+                titlesByNodeId,
+                sourceIdsByNodeId,
+                articleKeysByNodeId,
+                conceptIdsByNodeId
+        );
     }
 
     private void addDependsOnEdges(
             ArticleRecord article,
-            Set<String> existingConceptIds,
+            Map<String, Map<String, ArticleRecord>> scopedTargets,
             Map<String, DependencyGraphEdge> uniqueEdges
     ) {
         for (String upstream : article.getDependsOn()) {
-            addEdge(upstream, article.getConceptId(), "depends_on", existingConceptIds, uniqueEdges);
+            addEdge(upstream, article, "depends_on", scopedTargets, uniqueEdges);
         }
     }
 
     private void addRelatedEdges(
             ArticleRecord article,
-            Set<String> existingConceptIds,
+            Map<String, Map<String, ArticleRecord>> scopedTargets,
             Map<String, DependencyGraphEdge> uniqueEdges
     ) {
         for (String relatedConceptId : article.getRelated()) {
-            addEdge(relatedConceptId, article.getConceptId(), "related", existingConceptIds, uniqueEdges);
-            addEdge(article.getConceptId(), relatedConceptId, "related", existingConceptIds, uniqueEdges);
+            addEdge(relatedConceptId, article, "related", scopedTargets, uniqueEdges);
+            ArticleRecord relatedArticle = resolveTargetArticle(article, relatedConceptId, scopedTargets);
+            if (relatedArticle != null) {
+                addEdge(resolveNodeId(article), article, relatedArticle, "related", uniqueEdges);
+            }
         }
     }
 
     private void addWikiLinkEdges(
             ArticleRecord article,
-            Set<String> existingConceptIds,
+            Map<String, Map<String, ArticleRecord>> scopedTargets,
             Map<String, DependencyGraphEdge> uniqueEdges
     ) {
-        Matcher matcher = WIKI_LINK_PATTERN.matcher(article.getContent());
+        Matcher matcher = WIKI_LINK_PATTERN.matcher(article.getContent() == null ? "" : article.getContent());
         while (matcher.find()) {
             String linkedConceptId = normalizeWikiLinkTarget(matcher.group(1));
-            addEdge(linkedConceptId, article.getConceptId(), "wiki_link", existingConceptIds, uniqueEdges);
+            addEdge(linkedConceptId, article, "wiki_link", scopedTargets, uniqueEdges);
         }
     }
 
@@ -114,22 +128,82 @@ public class DependencyGraphService {
     }
 
     private void addEdge(
-            String upstreamConceptId,
-            String downstreamConceptId,
+            String upstreamReference,
+            ArticleRecord downstreamArticle,
             String relationType,
-            Set<String> existingConceptIds,
+            Map<String, Map<String, ArticleRecord>> scopedTargets,
             Map<String, DependencyGraphEdge> uniqueEdges
     ) {
-        if (upstreamConceptId == null || upstreamConceptId.isBlank()) {
+        if (upstreamReference == null || upstreamReference.isBlank()) {
             return;
         }
-        if (!existingConceptIds.contains(upstreamConceptId)) {
+        ArticleRecord upstreamArticle = resolveTargetArticle(downstreamArticle, upstreamReference, scopedTargets);
+        if (upstreamArticle == null) {
             return;
         }
-        if (upstreamConceptId.equals(downstreamConceptId)) {
+        addEdge(resolveNodeId(upstreamArticle), upstreamArticle, downstreamArticle, relationType, uniqueEdges);
+    }
+
+    private void addEdge(
+            String upstreamNodeId,
+            ArticleRecord upstreamArticle,
+            ArticleRecord downstreamArticle,
+            String relationType,
+            Map<String, DependencyGraphEdge> uniqueEdges
+    ) {
+        String downstreamNodeId = resolveNodeId(downstreamArticle);
+        if (upstreamNodeId.equals(downstreamNodeId)) {
             return;
         }
-        String key = upstreamConceptId + "->" + downstreamConceptId + ":" + relationType;
-        uniqueEdges.put(key, new DependencyGraphEdge(upstreamConceptId, downstreamConceptId, relationType));
+        String key = upstreamNodeId + "->" + downstreamNodeId + ":" + relationType;
+        uniqueEdges.put(key, new DependencyGraphEdge(
+                upstreamNodeId,
+                downstreamNodeId,
+                upstreamArticle.getSourceId(),
+                downstreamArticle.getSourceId(),
+                upstreamArticle.getArticleKey(),
+                downstreamArticle.getArticleKey(),
+                upstreamArticle.getConceptId(),
+                downstreamArticle.getConceptId(),
+                relationType
+        ));
+    }
+
+    private void indexScopedTargets(
+            Map<String, Map<String, ArticleRecord>> scopedTargets,
+            ArticleRecord article
+    ) {
+        String scopeKey = resolveScopeKey(article.getSourceId());
+        Map<String, ArticleRecord> scopedMap = scopedTargets.computeIfAbsent(
+                scopeKey,
+                ignored -> new LinkedHashMap<String, ArticleRecord>()
+        );
+        scopedMap.put(article.getConceptId(), article);
+        if (article.getArticleKey() != null && !article.getArticleKey().isBlank()) {
+            scopedMap.put(article.getArticleKey(), article);
+        }
+    }
+
+    private ArticleRecord resolveTargetArticle(
+            ArticleRecord article,
+            String targetReference,
+            Map<String, Map<String, ArticleRecord>> scopedTargets
+    ) {
+        Map<String, ArticleRecord> scopedMap = scopedTargets.get(resolveScopeKey(article.getSourceId()));
+        if (scopedMap == null) {
+            return null;
+        }
+        return scopedMap.get(targetReference);
+    }
+
+    private String resolveNodeId(ArticleRecord article) {
+        if (article.getArticleKey() != null && !article.getArticleKey().isBlank()) {
+            return article.getArticleKey();
+        }
+        return article.getConceptId();
+    }
+
+    private String resolveScopeKey(Long sourceId) {
+        return sourceId == null ? "__null__" : String.valueOf(sourceId.longValue());
     }
 }

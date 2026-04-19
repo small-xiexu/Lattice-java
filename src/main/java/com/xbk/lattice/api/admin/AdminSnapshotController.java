@@ -48,14 +48,20 @@ public class AdminSnapshotController {
      */
     @GetMapping("/api/v1/admin/snapshot/article")
     public AdminArticleSnapshotListResponse snapshots(
+            @RequestParam(required = false) String articleId,
             @RequestParam(required = false) String conceptId,
+            @RequestParam(required = false) Long sourceId,
             @RequestParam(defaultValue = "10") int limit
     ) {
-        if (conceptId == null || conceptId.isBlank()) {
+        String targetArticleId = articleId;
+        if (targetArticleId == null || targetArticleId.isBlank()) {
+            targetArticleId = conceptId;
+        }
+        if (targetArticleId == null || targetArticleId.isBlank()) {
             SnapshotReport snapshotReport = snapshotService.snapshot(limit);
             return new AdminArticleSnapshotListResponse(null, snapshotReport.getTotalSnapshots(), snapshotReport.getItems());
         }
-        HistoryReport historyReport = historyService.history(conceptId, limit);
+        HistoryReport historyReport = historyService.history(targetArticleId, sourceId, limit);
         return new AdminArticleSnapshotListResponse(
                 historyReport.getConceptId(),
                 historyReport.getTotalEntries(),
@@ -71,6 +77,6 @@ public class AdminSnapshotController {
      */
     @PostMapping("/api/v1/admin/rollback/article")
     public RollbackResult rollback(@RequestBody AdminArticleRollbackRequest request) {
-        return snapshotService.rollback(request.getConceptId(), request.getSnapshotId());
+        return snapshotService.rollback(request.getArticleId(), request.getSourceId(), request.getSnapshotId());
     }
 }

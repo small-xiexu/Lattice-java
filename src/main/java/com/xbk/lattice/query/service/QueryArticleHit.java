@@ -13,6 +13,10 @@ public class QueryArticleHit {
 
     private final QueryEvidenceType evidenceType;
 
+    private final Long sourceId;
+
+    private final String articleKey;
+
     private final String conceptId;
 
     private final String title;
@@ -43,7 +47,7 @@ public class QueryArticleHit {
             List<String> sourcePaths,
             double score
     ) {
-        this(QueryEvidenceType.ARTICLE, conceptId, title, content, metadataJson, sourcePaths, score);
+        this(QueryEvidenceType.ARTICLE, null, null, conceptId, title, content, metadataJson, sourcePaths, score);
     }
 
     /**
@@ -66,7 +70,61 @@ public class QueryArticleHit {
             List<String> sourcePaths,
             double score
     ) {
+        this(evidenceType, null, null, conceptId, title, content, metadataJson, sourcePaths, score);
+    }
+
+    /**
+     * 创建查询文章命中。
+     *
+     * @param sourceId 资料源主键
+     * @param articleKey 文章唯一键
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param content 内容
+     * @param metadataJson 元数据 JSON
+     * @param sourcePaths 来源路径
+     * @param score 评分
+     */
+    public QueryArticleHit(
+            Long sourceId,
+            String articleKey,
+            String conceptId,
+            String title,
+            String content,
+            String metadataJson,
+            List<String> sourcePaths,
+            double score
+    ) {
+        this(QueryEvidenceType.ARTICLE, sourceId, articleKey, conceptId, title, content, metadataJson, sourcePaths, score);
+    }
+
+    /**
+     * 创建查询命中。
+     *
+     * @param evidenceType 证据类型
+     * @param sourceId 资料源主键
+     * @param articleKey 文章唯一键
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param content 内容
+     * @param metadataJson 元数据 JSON
+     * @param sourcePaths 来源路径
+     * @param score 评分
+     */
+    public QueryArticleHit(
+            QueryEvidenceType evidenceType,
+            Long sourceId,
+            String articleKey,
+            String conceptId,
+            String title,
+            String content,
+            String metadataJson,
+            List<String> sourcePaths,
+            double score
+    ) {
         this.evidenceType = evidenceType;
+        this.sourceId = sourceId;
+        this.articleKey = articleKey;
         this.conceptId = conceptId;
         this.title = title;
         this.content = content;
@@ -82,6 +140,24 @@ public class QueryArticleHit {
      */
     public QueryEvidenceType getEvidenceType() {
         return evidenceType;
+    }
+
+    /**
+     * 获取资料源主键。
+     *
+     * @return 资料源主键
+     */
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    /**
+     * 获取文章唯一键。
+     *
+     * @return 文章唯一键
+     */
+    public String getArticleKey() {
+        return articleKey;
     }
 
     /**

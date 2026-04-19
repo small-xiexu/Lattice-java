@@ -213,6 +213,26 @@ public class ArticleChunkJdbcRepository {
     }
 
     /**
+     * 按文章唯一键查询完整 chunk 记录。
+     *
+     * @param articleKey 文章唯一键
+     * @return chunk 记录列表
+     */
+    public List<ArticleChunkRecord> findByArticleKey(String articleKey) {
+        if (jdbcTemplate == null) {
+            return List.of();
+        }
+        String sql = """
+                select ac.id, ac.article_id, a.concept_id, ac.chunk_index, ac.chunk_text
+                from article_chunks ac
+                join articles a on a.id = ac.article_id
+                where a.article_key = ?
+                order by ac.chunk_index
+                """;
+        return jdbcTemplate.query(sql, this::mapArticleChunkRecord, articleKey);
+    }
+
+    /**
      * 查询全部 chunk 记录。
      *
      * @return 全部 chunk 记录

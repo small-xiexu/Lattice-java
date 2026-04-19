@@ -59,7 +59,8 @@
         llmBindings: [],
         llmBindingFlowExpanded: false,
         documentParseConnections: [],
-        documentParseSettings: null
+        documentParseSettings: null,
+        sourceCredentials: []
     };
 
     document.addEventListener("DOMContentLoaded", function () {
@@ -101,6 +102,8 @@
         document.getElementById("reset-document-parse-connection").addEventListener("click", resetDocumentParseConnectionForm);
         document.getElementById("save-document-parse-settings").addEventListener("click", saveDocumentParseSettings);
         document.getElementById("document-parse-provider-type").addEventListener("change", syncDocumentParseEndpointSuggestion);
+        document.getElementById("save-source-credential").addEventListener("click", saveSourceCredential);
+        document.getElementById("reset-source-credential").addEventListener("click", resetSourceCredentialForm);
     }
 
     async function loadAiConfig(showSuccessFeedback) {
@@ -113,13 +116,15 @@
                 fetchJson("/api/v1/admin/llm/models"),
                 fetchJson("/api/v1/admin/llm/bindings"),
                 fetchJson("/api/v1/admin/document-parse/connections"),
-                fetchJson("/api/v1/admin/document-parse/settings")
+                fetchJson("/api/v1/admin/document-parse/settings"),
+                fetchJson("/api/v1/admin/source-credentials")
             ]);
             state.llmConnections = responses[0].items || [];
             state.llmModels = responses[1].items || [];
             state.llmBindings = responses[2].items || [];
             state.documentParseConnections = responses[3].items || [];
             state.documentParseSettings = responses[4] || null;
+            state.sourceCredentials = responses[5] || [];
             renderLlmConnectionOptions();
             renderLlmBindingRoleOptions();
             renderLlmModelOptions();
@@ -132,6 +137,7 @@
             renderDocumentParseSettingsForm();
             renderDocumentParseConnectionList(state.documentParseConnections);
             renderDocumentParseSettingsSummary(state.documentParseSettings);
+            renderSourceCredentialList(state.sourceCredentials);
             syncLlmModelKindForm();
             syncDocumentParseEndpointSuggestion();
             if (showSuccessFeedback) {
@@ -408,6 +414,31 @@
         }
     }
 
+    async function saveSourceCredential() {
+        const payload = {
+            credentialCode: document.getElementById("source-credential-code").value.trim(),
+            credentialType: document.getElementById("source-credential-type").value,
+            secret: document.getElementById("source-credential-secret").value.trim(),
+            updatedBy: document.getElementById("source-credential-updated-by").value.trim()
+        };
+        if (!payload.credentialCode || !payload.secret) {
+            setStatus("请填写凭据编码和凭据明文", "warning");
+            return;
+        }
+        try {
+            await fetchJson("/api/v1/admin/source-credentials", {
+                method: "POST",
+                body: JSON.stringify(payload)
+            });
+            setStatus("资料源凭据已保存", "success");
+            resetSourceCredentialForm();
+            await loadAiConfig(false);
+        }
+        catch (error) {
+            showError("保存资料源凭据失败", error);
+        }
+    }
+
     async function deleteLlmConnection(id) {
         if (!window.confirm("将删除该连接，确认继续吗？")) {
             return;
@@ -575,6 +606,13 @@
         document.getElementById("document-parse-endpoint-path").value = getDocumentParseDefaultEndpoint("tencent_ocr");
         document.getElementById("document-parse-credential").value = "";
         document.getElementById("document-parse-connection-enabled").checked = true;
+    }
+
+    function resetSourceCredentialForm() {
+        document.getElementById("source-credential-code").value = "";
+        document.getElementById("source-credential-type").value = "GIT_TOKEN";
+        document.getElementById("source-credential-secret").value = "";
+        document.getElementById("source-credential-updated-by").value = "";
     }
 
     function syncLlmModelKindForm() {
@@ -897,6 +935,27 @@
                 + escapeHtml(resolveModelLabel(effectiveSettings.cleanupModelProfileId))
                 + "</p>"
                 + "</div>";
+    }
+
+    function renderSourceCredentialList(items) {
+        const container = document.getElementById("source-credential-list");
+        if (!items || items.length === 0) {
+            container.innerHTML = "<div class='job-card'><p class='item-summary'>还没有资料源凭据。需要私有 Git 凭据时，再在这里新增一个即可。</p></div>";
+            return;
+        }
+        container.innerHTML = "<table class='simple-table'>"
+                + "<thead><tr><th>凭据编码</th><th>类型</th><th>脱敏值</th><th>状态</th><th>更新时间</th></tr></thead>"
+                + "<tbody>"
+                + items.map(function (item) {
+                    return "<tr>"
+                            + "<td>" + escapeHtml(item.credentialCode) + "</td>"
+                            + "<td>" + escapeHtml(item.credentialType) + "</td>"
+                            + "<td>" + escapeHtml(item.secretMask || "未设置") + "</td>"
+                            + "<td>" + renderBadge(item.enabled ? "ACTIVE" : "ARCHIVED") + "</td>"
+                            + "<td>" + escapeHtml(item.updatedAt || "-") + "</td>"
+                            + "</tr>";
+                }).join("")
+                + "</tbody></table>";
     }
 
     function getBindingModels() {

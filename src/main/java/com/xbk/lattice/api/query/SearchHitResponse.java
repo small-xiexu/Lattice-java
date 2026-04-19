@@ -11,6 +11,10 @@ public class SearchHitResponse {
 
     private final String evidenceType;
 
+    private final Long sourceId;
+
+    private final String articleKey;
+
     private final String conceptId;
 
     private final String title;
@@ -43,7 +47,36 @@ public class SearchHitResponse {
             java.util.List<String> sourcePaths,
             double score
     ) {
+        this(evidenceType, null, null, conceptId, title, content, metadataJson, sourcePaths, score);
+    }
+
+    /**
+     * 创建搜索命中响应。
+     *
+     * @param evidenceType 证据类型
+     * @param sourceId 资料源主键
+     * @param articleKey 文章唯一键
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param content 内容
+     * @param metadataJson 元数据
+     * @param sourcePaths 来源路径
+     * @param score 得分
+     */
+    public SearchHitResponse(
+            String evidenceType,
+            Long sourceId,
+            String articleKey,
+            String conceptId,
+            String title,
+            String content,
+            String metadataJson,
+            java.util.List<String> sourcePaths,
+            double score
+    ) {
         this.evidenceType = evidenceType;
+        this.sourceId = sourceId;
+        this.articleKey = articleKey;
         this.conceptId = conceptId;
         this.title = title;
         this.content = content;
@@ -54,6 +87,14 @@ public class SearchHitResponse {
 
     public String getEvidenceType() {
         return evidenceType;
+    }
+
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    public String getArticleKey() {
+        return articleKey;
     }
 
     public String getConceptId() {

@@ -284,13 +284,13 @@ class VectorSearchServiceTests {
         /**
          * 查询已有向量记录。
          *
-         * @param conceptId 概念标识
+         * @param articleKey 文章唯一键
          * @return 向量记录
          */
         @Override
-        public Optional<ArticleVectorRecord> findByConceptId(String conceptId) {
+        public Optional<ArticleVectorRecord> findByArticleKey(String articleKey) {
             return savedRecords.stream()
-                    .filter(record -> record.getConceptId().equals(conceptId))
+                    .filter(record -> record.getArticleKey().equals(articleKey))
                     .findFirst();
         }
 
