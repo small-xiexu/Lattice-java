@@ -1,5 +1,8 @@
 package com.xbk.lattice.api.query;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
 
 /**
@@ -21,7 +24,11 @@ public class SearchResponse {
      * @param count 数量
      * @param items 条目
      */
-    public SearchResponse(int count, List<SearchHitResponse> items) {
+    @JsonCreator
+    public SearchResponse(
+            @JsonProperty("count") int count,
+            @JsonProperty("items") List<SearchHitResponse> items
+    ) {
         this.count = count;
         this.items = items;
     }

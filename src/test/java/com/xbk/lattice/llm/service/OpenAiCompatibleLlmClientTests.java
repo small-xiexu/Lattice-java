@@ -8,9 +8,20 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.ServerSocket;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,13 +37,28 @@ class OpenAiCompatibleLlmClientTests {
 
     private HttpServer httpServer;
 
+    private ServerSocket socketServer;
+
+    private ExecutorService executorService;
+
+    private Future<?> socketServerFuture;
+
     /**
      * 关闭测试 HTTP 服务。
      */
     @AfterEach
-    void tearDown() {
+    void tearDown() throws Exception {
         if (httpServer != null) {
             httpServer.stop(0);
+        }
+        if (socketServer != null && !socketServer.isClosed()) {
+            socketServer.close();
+        }
+        if (socketServerFuture != null) {
+            socketServerFuture.get(5, TimeUnit.SECONDS);
+        }
+        if (executorService != null) {
+            executorService.shutdownNow();
         }
     }
 
@@ -77,6 +103,191 @@ class OpenAiCompatibleLlmClientTests {
         assertThat(requestBody.get()).contains("\"model\":\"gpt-5.4\"");
         assertThat(requestBody.get()).contains("\"role\":\"system\"");
         assertThat(requestBody.get()).contains("\"content\":\"query-user\"");
+    }
+
+    /**
+     * 验证客户端在网关首次直接断开连接时会自动重试并成功拿到响应。
+     *
+     * @throws Exception 异常
+     */
+    @Test
+    void shouldRetryWhenGatewayClosesConnectionBeforeResponse() throws Exception {
+        AtomicInteger requestCount = new AtomicInteger();
+        socketServer = new ServerSocket(0);
+        executorService = Executors.newSingleThreadExecutor();
+        socketServerFuture = executorService.submit(() -> {
+            while (requestCount.get() < 2) {
+                try (Socket socket = socketServer.accept()) {
+                    consumeHttpRequest(socket.getInputStream());
+                    int currentAttempt = requestCount.incrementAndGet();
+                    if (currentAttempt == 1) {
+                        continue;
+                    }
+                    writeSuccessResponse(socket.getOutputStream(), "application/octet-stream");
+                }
+            }
+            return null;
+        });
+        OpenAiCompatibleLlmClient llmClient = new OpenAiCompatibleLlmClient(
+                RestClient.builder(),
+                new ObjectMapper(),
+                "http://127.0.0.1:" + socketServer.getLocalPort(),
+                "test-openai-key",
+                "gpt-5.4",
+                0.3D,
+                96,
+                120,
+                null
+        );
+
+        LlmCallResult result = llmClient.call("query-system", "query-user");
+
+        assertThat(result.getContent()).isEqualTo("answer ok");
+        assertThat(requestCount.get()).isEqualTo(2);
+    }
+
+    /**
+     * 验证客户端在连续三次断流后仍会继续重试，并在第四次成功拿到响应。
+     *
+     * @throws Exception 异常
+     */
+    @Test
+    void shouldRetryUpToFiveAttemptsWhenGatewayClosesConnectionRepeatedly() throws Exception {
+        AtomicInteger requestCount = new AtomicInteger();
+        socketServer = new ServerSocket(0);
+        executorService = Executors.newSingleThreadExecutor();
+        socketServerFuture = executorService.submit(() -> {
+            while (requestCount.get() < 4) {
+                try (Socket socket = socketServer.accept()) {
+                    consumeHttpRequest(socket.getInputStream());
+                    int currentAttempt = requestCount.incrementAndGet();
+                    if (currentAttempt <= 3) {
+                        continue;
+                    }
+                    writeSuccessResponse(socket.getOutputStream(), "application/octet-stream");
+                }
+            }
+            return null;
+        });
+        OpenAiCompatibleLlmClient llmClient = new OpenAiCompatibleLlmClient(
+                RestClient.builder(),
+                new ObjectMapper(),
+                "http://127.0.0.1:" + socketServer.getLocalPort(),
+                "test-openai-key",
+                "gpt-5.4",
+                0.3D,
+                96,
+                120,
+                null
+        );
+
+        LlmCallResult result = llmClient.call("query-system", "query-user");
+
+        assertThat(result.getContent()).isEqualTo("answer ok");
+        assertThat(requestCount.get()).isEqualTo(4);
+    }
+
+    /**
+     * 验证客户端会对可恢复的 5xx 响应执行重试。
+     *
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldRetryWhenGatewayReturnsRecoverableServerError() throws IOException {
+        AtomicInteger requestCount = new AtomicInteger();
+        httpServer = HttpServer.create(new InetSocketAddress(0), 0);
+        httpServer.createContext("/v1/chat/completions", exchange -> {
+            int currentAttempt = requestCount.incrementAndGet();
+            if (currentAttempt == 1) {
+                byte[] responseBytes = "{\"error\":\"temporary upstream failure\"}".getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().add("Content-Type", "application/json");
+                exchange.sendResponseHeaders(502, responseBytes.length);
+                exchange.getResponseBody().write(responseBytes);
+                exchange.close();
+                return;
+            }
+            new SuccessHandler(
+                    new AtomicReference<String>(),
+                    new AtomicReference<String>(),
+                    new AtomicReference<String>(),
+                    "application/octet-stream"
+            ).handle(exchange);
+        });
+        httpServer.start();
+        int port = httpServer.getAddress().getPort();
+        OpenAiCompatibleLlmClient llmClient = new OpenAiCompatibleLlmClient(
+                RestClient.builder(),
+                new ObjectMapper(),
+                "http://127.0.0.1:" + port,
+                "test-openai-key",
+                "gpt-5.4",
+                0.3D,
+                96,
+                120,
+                null
+        );
+
+        LlmCallResult result = llmClient.call("query-system", "query-user");
+
+        assertThat(result.getContent()).isEqualTo("answer ok");
+        assertThat(requestCount.get()).isEqualTo(2);
+    }
+
+    private void consumeHttpRequest(InputStream inputStream) throws IOException {
+        BufferedInputStream bufferedInputStream = new BufferedInputStream(inputStream);
+        StringBuilder headerBuilder = new StringBuilder();
+        int previous3 = -1;
+        int previous2 = -1;
+        int previous1 = -1;
+        int current;
+        while ((current = bufferedInputStream.read()) != -1) {
+            headerBuilder.append((char) current);
+            if (previous3 == '\r' && previous2 == '\n' && previous1 == '\r' && current == '\n') {
+                break;
+            }
+            previous3 = previous2;
+            previous2 = previous1;
+            previous1 = current;
+        }
+        int contentLength = resolveContentLength(headerBuilder.toString());
+        bufferedInputStream.readNBytes(contentLength);
+    }
+
+    private int resolveContentLength(String headers) {
+        for (String line : headers.split("\\r\\n")) {
+            if (line.toLowerCase(Locale.ROOT).startsWith("content-length:")) {
+                return Integer.parseInt(line.substring("content-length:".length()).trim());
+            }
+        }
+        return 0;
+    }
+
+    private void writeSuccessResponse(OutputStream outputStream, String contentType) throws IOException {
+        String responseBody = """
+                {
+                  "id": "chatcmpl_test",
+                  "choices": [
+                    {
+                      "message": {
+                        "role": "assistant",
+                        "content": "answer ok"
+                      }
+                    }
+                  ],
+                  "usage": {
+                    "prompt_tokens": 9,
+                    "completion_tokens": 4
+                  }
+                }
+                """;
+        byte[] responseBytes = responseBody.getBytes(StandardCharsets.UTF_8);
+        String responseHeaders = "HTTP/1.1 200 OK\r\n"
+                + "Content-Type: " + contentType + "\r\n"
+                + "Content-Length: " + responseBytes.length + "\r\n"
+                + "Connection: close\r\n\r\n";
+        outputStream.write(responseHeaders.getBytes(StandardCharsets.UTF_8));
+        outputStream.write(responseBytes);
+        outputStream.flush();
     }
 
     /**

@@ -8,11 +8,17 @@
         lastQueryFailed: false,
         lastQueryError: "",
         lastAnswerHasCitation: false,
-        lastAnswerEmpty: true
+        lastAnswerEmpty: true,
+        lastReviewStatus: "",
+        lastQueryId: "",
+        lastSupportSourceCount: 0,
+        lastEvidenceSourceCount: 0,
+        lastEvidenceWeak: false
     };
 
     document.addEventListener("DOMContentLoaded", function () {
         bindEvents();
+        resetAnswerExperience();
         refreshReadiness();
         renderReadinessCard();
         renderResultGuide();
@@ -48,9 +54,8 @@
             setStatus("当前知识库还没有可用资料，请先上传并处理文档", "warning");
             return;
         }
-        document.getElementById("ask-answer").textContent = "正在生成回答...";
-        document.getElementById("ask-sources").innerHTML = "<div class='job-card'><p class='item-summary'>正在整理引用来源...</p></div>";
-        setStatus("正在生成回答...");
+        renderLoadingState();
+        setStatus("正在生成回答...", "info");
         state.lastQueryFailed = false;
         state.lastQueryError = "";
         try {
@@ -62,25 +67,41 @@
                 }),
                 fetchJson("/api/v1/search?question=" + encodedQuestion + "&limit=5")
             ]);
-            renderAnswer(results[0]);
-            renderSources(results[1].items || [], results[0].sources || []);
-            renderGlobalResult(results[0]);
+            const queryResponse = results[0] || {};
+            const searchItems = results[1].items || [];
+            const responseSources = queryResponse.sources || [];
+            renderAnswer(queryResponse);
+            renderAnswerMetrics(queryResponse, searchItems, responseSources);
+            renderAnswerSupport(queryResponse, searchItems, responseSources);
+            renderSourceSummary(queryResponse, searchItems, responseSources);
+            renderSources(searchItems, responseSources);
+            renderGlobalResult(queryResponse);
             state.lastQueryFailed = false;
             state.lastQueryError = "";
-            state.lastAnswerHasCitation = hasAskCitations(results[1].items || [], results[0].sources || []);
-            state.lastAnswerEmpty = !String(results[0] && results[0].answer ? results[0].answer : "").trim();
+            state.lastReviewStatus = queryResponse.reviewStatus || "";
+            state.lastQueryId = queryResponse.queryId || "";
+            state.lastAnswerHasCitation = hasAskCitations(searchItems, responseSources);
+            state.lastAnswerEmpty = !String(queryResponse.answer || "").trim();
+            state.lastSupportSourceCount = responseSources.length;
+            state.lastEvidenceSourceCount = uniqueSourceCount(searchItems, responseSources);
+            state.lastEvidenceWeak = shouldTreatAsEvidenceWeak(queryResponse, searchItems, responseSources);
+            renderReadinessCard();
             renderResultGuide();
             syncAskFaqOpenState();
-            setStatus("回答已生成", "success");
+            setStatus(state.lastEvidenceWeak ? "回答已生成，但当前证据仍偏弱，请结合来源继续判断" : "回答已生成", state.lastEvidenceWeak ? "warning" : "success");
         }
         catch (error) {
-            document.getElementById("ask-answer").textContent = "暂时无法生成回答，请稍后再试。";
-            document.getElementById("ask-sources").innerHTML = "<div class='job-card'><p class='item-summary'>本次未能加载引用来源。</p></div>";
+            renderFailureState();
             renderGlobalResultError("知识问答失败", error);
             state.lastQueryFailed = true;
             state.lastQueryError = error && error.message ? error.message : "";
+            state.lastReviewStatus = "";
+            state.lastQueryId = "";
             state.lastAnswerHasCitation = false;
             state.lastAnswerEmpty = true;
+            state.lastSupportSourceCount = 0;
+            state.lastEvidenceSourceCount = 0;
+            state.lastEvidenceWeak = true;
             renderReadinessCard();
             renderResultGuide();
             syncAskFaqOpenState();
@@ -90,16 +111,52 @@
 
     function clearQuestion() {
         document.getElementById("ask-question").value = "";
-        document.getElementById("ask-answer").textContent = "还没有回答，先输入一个问题。";
-        document.getElementById("ask-sources").innerHTML = "<div class='job-card'><p class='item-summary'>还没有引用来源，先提交一个问题。</p></div>";
         state.lastQueryFailed = false;
         state.lastQueryError = "";
+        state.lastReviewStatus = "";
+        state.lastQueryId = "";
         state.lastAnswerHasCitation = false;
         state.lastAnswerEmpty = true;
+        state.lastSupportSourceCount = 0;
+        state.lastEvidenceSourceCount = 0;
+        state.lastEvidenceWeak = false;
+        resetAnswerExperience();
         renderReadinessCard();
         renderResultGuide();
         syncAskFaqOpenState();
         setStatus("已清空问题", "success");
+    }
+
+    function renderLoadingState() {
+        document.getElementById("ask-answer").innerHTML = "<p>正在生成回答...</p>";
+        document.getElementById("ask-answer-metrics").innerHTML = "<div class='job-card'><p class='item-summary'>正在判断这次回答的证据态和复核态...</p></div>";
+        document.getElementById("ask-answer-support").innerHTML = "<strong>回答依据</strong><p>正在整理本次回答最直接依赖的来源...</p>";
+        document.getElementById("ask-source-summary").innerHTML = "<strong>证据分层</strong><p>正在区分直接支撑来源和补充检索命中...</p>";
+        document.getElementById("ask-sources").innerHTML = "<div class='job-card'><p class='item-summary'>正在整理引用来源...</p></div>";
+    }
+
+    function renderFailureState() {
+        document.getElementById("ask-answer").innerHTML = "<p>暂时无法生成回答，请稍后再试。</p>";
+        document.getElementById("ask-answer-metrics").innerHTML = [
+            renderMetricCard("结果类型", "回答失败", "本次没有拿到可用答案，请先看顶部报错信息。", "danger"),
+            renderMetricCard("证据状态", "未返回", "这次没有成功拿到可展示的直接来源或检索证据。", "danger"),
+            renderMetricCard("复核状态", "未执行", "主链在生成回答前就已经中断。", "warning")
+        ].join("");
+        document.getElementById("ask-answer-support").innerHTML = "<strong>回答依据</strong><p>这次没有成功拿到可用来源。先判断是知识库未准备好，还是服务 / 配置层面的问题。</p>";
+        document.getElementById("ask-source-summary").innerHTML = "<strong>证据分层</strong><p>本次没有返回可展示的证据。优先先看报错，再决定是回知识库管理还是去管理员设置。</p>";
+        document.getElementById("ask-sources").innerHTML = "<div class='job-card'><p class='item-summary'>本次未能加载引用来源。</p></div>";
+    }
+
+    function resetAnswerExperience() {
+        document.getElementById("ask-answer").innerHTML = "<p>还没有回答，先输入一个问题。</p>";
+        document.getElementById("ask-answer-metrics").innerHTML = [
+            renderMetricCard("结果类型", "等待提问", "提交问题后，这里会显示这次结果更接近“可直接用”还是“证据仍偏弱”。", "info"),
+            renderMetricCard("证据状态", "等待命中", "会区分“直接支撑回答”的来源和“补充检索命中”的资料。", "info"),
+            renderMetricCard("复核状态", "等待返回", "如果主链返回 reviewStatus，这里会同步标出来。", "info")
+        ].join("");
+        document.getElementById("ask-answer-support").innerHTML = "<strong>回答依据</strong><p>提交问题后，这里会显示这次回答最直接依赖的来源，以及是否已经形成稳定引用。</p>";
+        document.getElementById("ask-source-summary").innerHTML = "<strong>证据分层</strong><p>这里会区分“回答直接引用的来源”和“本次检索命中的补充证据”，避免所有来源平铺在一起。</p>";
+        document.getElementById("ask-sources").innerHTML = "<div class='job-card'><p class='item-summary'>还没有引用来源，先提交一个问题。</p></div>";
     }
 
     function renderReadiness(overview, jobs) {
@@ -249,7 +306,7 @@
             return;
         }
         let title = "这次结果怎么看";
-        let description = "提交一个问题后，这里会告诉你本次结果更像是“可以继续看引用”，还是“应该先回知识库管理检查资料”。";
+        let description = "提交一个问题后，这里会告诉你本次结果更像是“可以继续看直接来源”，还是“应该先回知识库管理检查资料”。";
         let actions = [];
 
         if (state.lastQueryFailed) {
@@ -260,16 +317,16 @@
                 {label: "去管理员设置", action: "go-settings", className: "ghost-btn"}
             ];
         }
-        else if (!state.lastAnswerEmpty && state.lastAnswerHasCitation) {
-            title = "这次回答带了引用来源";
-            description = "可以继续结合引用来源判断回答是否可靠；如果答案仍然不准，再回知识库管理核对对应资料是否缺失或过旧。";
+        else if (!state.lastAnswerEmpty && !state.lastEvidenceWeak && state.lastAnswerHasCitation) {
+            title = "这次回答已经带了稳定来源";
+            description = "先看“回答依据”里的直接来源，再往下看补充检索证据。若答案仍不准，再回知识库管理核对对应资料是否缺失或过旧。";
             actions = [
                 {label: "去已入库内容", action: "go-articles", className: "secondary-btn"}
             ];
         }
-        else if (!state.lastAnswerEmpty) {
-            title = "这次回答没有稳定引用";
-            description = "优先检查相关资料是否真的已经入库，而不是先怀疑模型坏了。回答有内容但没有引用时，通常说明命中还不够稳。";
+        else if (!state.lastAnswerEmpty && state.lastEvidenceWeak) {
+            title = "这次有回答，但当前证据仍偏弱";
+            description = "优先检查资料是否真的已经入库，以及这次是否只有检索命中、没有直接来源。证据不足时，不要把回答内容直接当成确定结论。";
             actions = [
                 {label: "去已入库内容", action: "go-articles", className: "secondary-btn"},
                 {label: "回知识库管理", action: "go-management", className: "ghost-btn"}
@@ -300,6 +357,49 @@
                 || (Array.isArray(responseSources) && responseSources.length > 0);
     }
 
+    function uniqueSourceCount(searchItems, responseSources) {
+        const keys = new Set();
+        (responseSources || []).forEach(function (item) {
+            keys.add(buildSourceIdentity(item));
+        });
+        (searchItems || []).forEach(function (item) {
+            keys.add(buildSourceIdentity(item));
+        });
+        return keys.size;
+    }
+
+    function shouldTreatAsEvidenceWeak(result, searchItems, responseSources) {
+        const answer = String(result && result.answer ? result.answer : "").trim();
+        if (!answer) {
+            return true;
+        }
+        if (containsWeakAnswerMarker(answer)) {
+            return true;
+        }
+        if ((responseSources || []).length > 0) {
+            return false;
+        }
+        if ((searchItems || []).length === 0) {
+            return true;
+        }
+        const reviewStatus = String(result && result.reviewStatus ? result.reviewStatus : "").toUpperCase();
+        return reviewStatus === "ISSUES_FOUND"
+                || reviewStatus === "PARSE_FAILED"
+                || reviewStatus === "TIMEOUT_FALLBACK";
+    }
+
+    function containsWeakAnswerMarker(answer) {
+        const markers = [
+            "未找到相关知识",
+            "当前证据不足",
+            "暂无法确认",
+            "本次没有返回可展示的回答"
+        ];
+        return markers.some(function (marker) {
+            return answer.indexOf(marker) >= 0;
+        });
+    }
+
     function syncAskFaqOpenState() {
         const container = document.getElementById("ask-faq-list");
         if (!container) {
@@ -312,7 +412,7 @@
         else if (!state.knowledgeReady) {
             targetKey = "not-ready";
         }
-        else if (!state.lastAnswerEmpty && !state.lastAnswerHasCitation) {
+        else if (!state.lastAnswerEmpty && (state.lastEvidenceWeak || !state.lastAnswerHasCitation)) {
             targetKey = "no-citation";
         }
         const panels = Array.from(container.querySelectorAll("[data-help-faq-key]"));
@@ -325,38 +425,202 @@
     }
 
     function renderAnswer(result) {
-        document.getElementById("ask-answer").textContent = result && result.answer
-                ? result.answer
-                : "本次没有返回可展示的回答。";
+        const answer = String(result && result.answer ? result.answer : "").trim();
+        const container = document.getElementById("ask-answer");
+        if (!answer) {
+            container.innerHTML = "<p>本次没有返回可展示的回答。</p>";
+            return;
+        }
+        container.innerHTML = renderMarkdownLite(answer);
+    }
+
+    function renderAnswerMetrics(result, searchItems, responseSources) {
+        const reviewMeta = getReviewStatusMeta(result && result.reviewStatus);
+        const citationCount = uniqueSourceCount(searchItems, responseSources);
+        const evidenceWeak = shouldTreatAsEvidenceWeak(result || {}, searchItems, responseSources);
+        const metrics = [
+            renderMetricCard(
+                    "结果类型",
+                    evidenceWeak ? "证据待确认" : "可继续使用",
+                    evidenceWeak
+                            ? "这次有回答，但仍需要结合下方来源继续判断。"
+                            : "这次回答已经带了可继续追溯的来源。",
+                    evidenceWeak ? "warning" : "success"
+            ),
+            renderMetricCard(
+                    "证据状态",
+                    responseSources.length > 0 ? "直接来源 " + responseSources.length + " 条" : "直接来源不足",
+                    responseSources.length > 0
+                            ? "另有补充检索命中 " + Math.max(citationCount - responseSources.length, 0) + " 条。"
+                            : "当前只有补充命中或完全没有命中，可信度需要更谨慎判断。",
+                    responseSources.length > 0 ? "success" : "warning"
+            ),
+            renderMetricCard(
+                    "复核状态",
+                    reviewMeta.label,
+                    reviewMeta.note,
+                    reviewMeta.tone
+            ),
+            renderMetricCard(
+                    "检索覆盖",
+                    citationCount > 0 ? citationCount + " 条来源" : "未命中来源",
+                    citationCount > 0
+                            ? "这次共整理出 " + citationCount + " 条可展示来源。"
+                            : "当前没有稳定命中的来源，需要先回知识库管理排查。",
+                    citationCount > 0 ? "info" : "danger"
+            )
+        ];
+        document.getElementById("ask-answer-metrics").innerHTML = metrics.join("");
+    }
+
+    function renderAnswerSupport(result, searchItems, responseSources) {
+        const container = document.getElementById("ask-answer-support");
+        const primaryLabels = (responseSources || []).map(function (item) {
+            return item.title || item.conceptId || "未命名来源";
+        }).slice(0, 4);
+        if (primaryLabels.length > 0) {
+            container.innerHTML = "<strong>回答依据</strong>"
+                    + "<p>这次回答已经直接挂上了以下来源，你可以先从这里判断答案是否站得住：</p>"
+                    + "<div class='help-action-row'>"
+                    + primaryLabels.map(function (label) {
+                        return "<span class='pill'>" + escapeHtml(label) + "</span>";
+                    }).join("")
+                    + "</div>";
+            return;
+        }
+        if ((searchItems || []).length > 0) {
+            container.innerHTML = "<strong>回答依据</strong>"
+                    + "<p>这次虽然命中了资料，但还没有形成稳定的“直接来源”。请优先往下看补充检索证据，再决定这次回答能不能直接采信。</p>";
+            return;
+        }
+        const reviewMeta = getReviewStatusMeta(result && result.reviewStatus);
+        container.innerHTML = "<strong>回答依据</strong>"
+                + "<p>这次没有成功拿到稳定来源。"
+                + escapeHtml(reviewMeta.label ? "复核状态：" + reviewMeta.label + "。" : "")
+                + "优先回知识库管理确认对应资料是否真的已经入库。</p>";
+    }
+
+    function renderSourceSummary(result, searchItems, responseSources) {
+        const container = document.getElementById("ask-source-summary");
+        const reviewMeta = getReviewStatusMeta(result && result.reviewStatus);
+        if ((responseSources || []).length > 0) {
+            container.innerHTML = "<strong>证据分层</strong>"
+                    + "<p>先看“直接支撑本次回答”的来源，再看“补充检索命中”的资料。当前复核状态："
+                    + escapeHtml(reviewMeta.label)
+                    + "。</p>";
+            return;
+        }
+        if ((searchItems || []).length > 0) {
+            container.innerHTML = "<strong>证据分层</strong>"
+                    + "<p>这次只有补充检索命中，没有稳定的直接来源。当前更适合把结果当成“继续追资料的线索”，而不是最终结论。</p>";
+            return;
+        }
+        container.innerHTML = "<strong>证据分层</strong><p>本次没有返回可展示的证据。优先先看报错或回知识库管理确认资料入库状态。</p>";
     }
 
     function renderSources(searchItems, responseSources) {
         const container = document.getElementById("ask-sources");
-        if (searchItems && searchItems.length > 0) {
-            container.innerHTML = searchItems.map(function (item) {
-                return "<article class='source-card'>"
-                        + "<div class='meta-row'>"
-                        + renderBadge(item.evidenceType || "SOURCE")
-                        + "<span class='pill'>" + escapeHtml(item.title || item.conceptId || "未命名来源") + "</span>"
-                        + "</div>"
-                        + "<p class='source-snippet'>" + escapeHtml(trimSnippet(item.content || "暂无片段")) + "</p>"
-                        + "<div class='tag-list'>" + renderTagGroup(item.sourcePaths || []) + "</div>"
-                        + "</article>";
-            }).join("");
+        const searchMap = buildSearchSnippetMap(searchItems || []);
+        const primaryCards = buildPrimarySourceCards(responseSources || [], searchMap);
+        const secondaryCards = buildSecondarySourceCards(searchItems || [], responseSources || []);
+        if (primaryCards.length === 0 && secondaryCards.length === 0) {
+            container.innerHTML = "<div class='job-card'><p class='item-summary'>本次没有返回可展示的引用来源。</p></div>";
             return;
         }
-        if (responseSources && responseSources.length > 0) {
-            container.innerHTML = responseSources.map(function (item) {
-                return "<article class='source-card'>"
-                        + "<div class='meta-row'>"
-                        + "<span class='pill'>" + escapeHtml(item.title || item.conceptId || "未命名来源") + "</span>"
-                        + "</div>"
-                        + "<div class='tag-list'>" + renderTagGroup(item.sourcePaths || []) + "</div>"
-                        + "</article>";
-            }).join("");
-            return;
+        const sections = [];
+        if (primaryCards.length > 0) {
+            sections.push(renderSourceSection(
+                    "直接支撑本次回答",
+                    "这些来源已经直接出现在最终回答的来源列表里，优先先看这里。",
+                    primaryCards
+            ));
         }
-        container.innerHTML = "<div class='job-card'><p class='item-summary'>本次没有返回可展示的引用来源。</p></div>";
+        if (secondaryCards.length > 0) {
+            sections.push(renderSourceSection(
+                    primaryCards.length > 0 ? "补充检索命中" : "本次命中的检索证据",
+                    primaryCards.length > 0
+                            ? "这些资料说明本次检索还命中了更多证据，可继续往下追溯。"
+                            : "这次只有检索命中，还没有形成稳定的直接来源。",
+                    secondaryCards
+            ));
+        }
+        container.innerHTML = sections.join("");
+    }
+
+    function buildSearchSnippetMap(searchItems) {
+        const map = new Map();
+        (searchItems || []).forEach(function (item) {
+            const key = buildSourceIdentity(item);
+            if (!map.has(key)) {
+                map.set(key, trimSnippet(item.content || "暂无片段"));
+            }
+        });
+        return map;
+    }
+
+    function buildPrimarySourceCards(responseSources, searchMap) {
+        return (responseSources || []).map(function (item, index) {
+            const key = buildSourceIdentity(item);
+            return renderSourceCard({
+                title: item.title || item.conceptId || "未命名来源",
+                snippet: searchMap.get(key) || "这条来源已经被最终回答直接引用，可继续结合原始资料判断答案是否可靠。",
+                sourcePaths: item.sourcePaths || [],
+                badge: "DIRECT",
+                rankLabel: "直接依据 " + (index + 1),
+                primary: true
+            });
+        });
+    }
+
+    function buildSecondarySourceCards(searchItems, responseSources) {
+        const primaryKeys = new Set((responseSources || []).map(function (item) {
+            return buildSourceIdentity(item);
+        }));
+        return (searchItems || []).filter(function (item) {
+            return !primaryKeys.has(buildSourceIdentity(item));
+        }).map(function (item, index) {
+            return renderSourceCard({
+                title: item.title || item.conceptId || "未命名来源",
+                snippet: trimSnippet(item.content || "暂无片段"),
+                sourcePaths: item.sourcePaths || [],
+                badge: item.evidenceType || "SOURCE",
+                rankLabel: "补充证据 " + (index + 1),
+                primary: false
+            });
+        });
+    }
+
+    function renderSourceSection(title, description, cards) {
+        return "<section class='source-section'>"
+                + "<div class='panel-title-row'>"
+                + "<div>"
+                + "<h3>" + escapeHtml(title) + "</h3>"
+                + "<p>" + escapeHtml(description) + "</p>"
+                + "</div>"
+                + "</div>"
+                + "<div class='source-grid top-gap'>" + cards.join("") + "</div>"
+                + "</section>";
+    }
+
+    function renderSourceCard(options) {
+        return "<article class='source-card" + (options.primary ? " source-card-primary" : "") + "'>"
+                + "<div class='meta-row'>"
+                + "<span class='pill'>" + escapeHtml(options.rankLabel || "来源") + "</span>"
+                + renderBadge(options.badge || "SOURCE")
+                + "</div>"
+                + "<h4>" + escapeHtml(options.title || "未命名来源") + "</h4>"
+                + "<p class='source-snippet'>" + escapeHtml(options.snippet || "暂无片段") + "</p>"
+                + "<div class='tag-list'>" + renderTagGroup(options.sourcePaths || []) + "</div>"
+                + "</article>";
+    }
+
+    function buildSourceIdentity(item) {
+        const title = item && item.title ? item.title : "";
+        const conceptId = item && item.conceptId ? item.conceptId : "";
+        const paths = Array.isArray(item && item.sourcePaths ? item.sourcePaths : [])
+                ? item.sourcePaths.join("|")
+                : "";
+        return title + "::" + conceptId + "::" + paths;
     }
 
     function trimSnippet(content) {
@@ -376,10 +640,54 @@
         }).join("");
     }
 
+    function renderMetricCard(label, value, note, tone) {
+        return "<article class='metric-card" + (tone ? " " + tone : "") + "'>"
+                + "<span class='label'>" + escapeHtml(label || "-") + "</span>"
+                + "<p class='value'>" + escapeHtml(value || "-") + "</p>"
+                + "<p class='note'>" + escapeHtml(note || "") + "</p>"
+                + "</article>";
+    }
+
+    function getReviewStatusMeta(value) {
+        const normalized = String(value || "").trim().toUpperCase();
+        const mapping = {
+            PASSED: {
+                label: "已复核通过",
+                note: "回答与当前证据基本一致，可以继续结合直接来源判断细节。",
+                tone: "success"
+            },
+            ISSUES_FOUND: {
+                label: "复核发现风险",
+                note: "主链检测到需要继续修正的问题，这次回答更适合作为参考线索而非最终定论。",
+                tone: "warning"
+            },
+            PARSE_RESCUED: {
+                label: "解析已兜底",
+                note: "复核结果经过兜底解析，建议更谨慎地结合来源继续判断。",
+                tone: "warning"
+            },
+            PARSE_FAILED: {
+                label: "复核解析失败",
+                note: "复核结果没有稳定解析出来，请优先结合原始来源判断可靠性。",
+                tone: "danger"
+            },
+            TIMEOUT_FALLBACK: {
+                label: "复核超时回退",
+                note: "本次复核没有按正常路径完成，回答可信度需要结合来源再确认。",
+                tone: "warning"
+            }
+        };
+        return mapping[normalized] || {
+            label: normalized ? normalized : "未标注",
+            note: normalized ? "当前返回了 reviewStatus，但还没有专门的人话说明。" : "这次没有返回额外的复核状态。",
+            tone: normalized ? "warning" : "info"
+        };
+    }
+
     function renderBadge(value) {
         const normalized = (value || "").toUpperCase();
         let className = "badge";
-        if (normalized === "ARTICLE_VECTOR" || normalized === "CHUNK_VECTOR" || normalized === "SOURCE") {
+        if (normalized === "ARTICLE_VECTOR" || normalized === "CHUNK_VECTOR" || normalized === "SOURCE" || normalized === "DIRECT") {
             className += " success";
         }
         else if (normalized) {
@@ -391,6 +699,7 @@
     function getBadgeLabel(value) {
         const normalized = (value || "").toUpperCase();
         const labels = {
+            DIRECT: "回答直接来源",
             FTS: "全文检索",
             REFKEY: "关键词",
             SOURCE: "来源命中",
@@ -399,6 +708,88 @@
             CHUNK_VECTOR: "片段向量"
         };
         return labels[normalized] || value || "-";
+    }
+
+    function renderMarkdownLite(markdown) {
+        const lines = String(markdown || "").replace(/\r/g, "").split("\n");
+        const parts = [];
+        let paragraphBuffer = [];
+        let listItems = [];
+        let listTag = "";
+
+        function flushParagraph() {
+            if (paragraphBuffer.length === 0) {
+                return;
+            }
+            parts.push("<p>" + formatInlineMarkdown(paragraphBuffer.join(" ")) + "</p>");
+            paragraphBuffer = [];
+        }
+
+        function flushList() {
+            if (listItems.length === 0) {
+                return;
+            }
+            parts.push("<" + listTag + ">" + listItems.join("") + "</" + listTag + ">");
+            listItems = [];
+            listTag = "";
+        }
+
+        lines.forEach(function (rawLine) {
+            const line = String(rawLine || "");
+            const trimmed = line.trim();
+            if (!trimmed) {
+                flushParagraph();
+                flushList();
+                return;
+            }
+            const headingMatch = trimmed.match(/^(#{1,3})\s+(.*)$/);
+            if (headingMatch) {
+                flushParagraph();
+                flushList();
+                const level = Math.min(headingMatch[1].length + 1, 4);
+                parts.push("<h" + level + ">" + formatInlineMarkdown(headingMatch[2]) + "</h" + level + ">");
+                return;
+            }
+            const bulletMatch = trimmed.match(/^[-*]\s+(.*)$/);
+            if (bulletMatch) {
+                flushParagraph();
+                if (listTag && listTag !== "ul") {
+                    flushList();
+                }
+                listTag = "ul";
+                listItems.push("<li>" + formatInlineMarkdown(bulletMatch[1]) + "</li>");
+                return;
+            }
+            const orderedMatch = trimmed.match(/^\d+\.\s+(.*)$/);
+            if (orderedMatch) {
+                flushParagraph();
+                if (listTag && listTag !== "ol") {
+                    flushList();
+                }
+                listTag = "ol";
+                listItems.push("<li>" + formatInlineMarkdown(orderedMatch[1]) + "</li>");
+                return;
+            }
+            if (trimmed.startsWith(">")) {
+                flushParagraph();
+                flushList();
+                parts.push("<blockquote><p>" + formatInlineMarkdown(trimmed.replace(/^>\s?/, "")) + "</p></blockquote>");
+                return;
+            }
+            if (listItems.length > 0) {
+                flushList();
+            }
+            paragraphBuffer.push(trimmed);
+        });
+        flushParagraph();
+        flushList();
+        return parts.join("") || "<p>本次没有返回可展示的回答。</p>";
+    }
+
+    function formatInlineMarkdown(value) {
+        return escapeHtml(value)
+                .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+                .replace(/`([^`]+)`/g, "<code>$1</code>");
     }
 
     async function fetchJson(url, options) {

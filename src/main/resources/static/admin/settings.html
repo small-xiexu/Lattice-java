@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>邪修智库｜管理员设置</title>
-    <link rel="stylesheet" href="/admin/admin.css?v=20260420-source-console-16">
+    <link rel="stylesheet" href="/admin/admin.css?v=20260421-openai-regression-1">
 </head>
 <body>
 <div class="app-shell">
@@ -929,12 +929,158 @@
                             <div class="panel-title-row">
                                 <div>
                                     <h2>高级资料源与维护</h2>
-                                    <p>Git 仓库导入和私有凭据选择都放到知识库管理页。这里仅保留服务器目录资料源和知识切片重建这两类管理员维护动作。</p>
+                                    <p>Git 仓库导入和私有凭据选择都放到知识库管理页。这里集中处理问答检索调参、向量索引、服务器目录资料源和知识切片这几类管理员维护动作。</p>
                                 </div>
                             </div>
                             <div class="help-inline-note top-gap">
                                 <strong>这是偏运维动作</strong>
-                                <p>只有在要接部署机目录，或者切片策略、资料结构发生大变化时，才需要使用这里的能力。普通文件上传、Git 导入和日常问答，都不应该从这里开始。</p>
+                                <p>只有在你明确要调检索、重建向量、接部署机目录，或者切片策略发生变化时，才需要使用这里的能力。普通文件上传、Git 导入和日常问答，都不应该从这里开始。</p>
+                            </div>
+
+                            <div class="settings-maintenance-grid top-gap">
+                                <div class="sub-panel">
+                                    <div class="panel-title-row">
+                                        <div>
+                                            <h3>向量检索与重建</h3>
+                                            <p>先看兼容性和当前索引状态，再决定是仅保存配置，还是要继续执行一次重建。</p>
+                                        </div>
+                                        <button id="refresh-vector-status" class="ghost-btn" type="button">刷新向量状态</button>
+                                    </div>
+
+                                    <div id="vector-maintenance-card" class="help-state-card top-gap" data-help-tone="info">
+                                        <p class="help-card-eyebrow">向量检索状态</p>
+                                        <h3 class="help-card-title">正在检查是否已经真正可用</h3>
+                                        <p class="help-card-description">页面会根据 embedding profile、schema 维度和已建索引数量，告诉你现在是“可以继续提问”、还是“必须先重建”。</p>
+                                    </div>
+
+                                    <div id="vector-status-summary" class="metric-grid compact top-gap"></div>
+
+                                    <div class="form-grid top-gap">
+                                        <label class="checkbox-row">
+                                            <input id="vector-config-enabled" type="checkbox">
+                                            <span>启用向量检索</span>
+                                        </label>
+                                        <label>
+                                            <span>Embedding Profile</span>
+                                            <select id="vector-config-profile-id"></select>
+                                        </label>
+                                        <label>
+                                            <span>当前供应商</span>
+                                            <input id="vector-config-provider" type="text" readonly>
+                                        </label>
+                                        <label>
+                                            <span>当前模型</span>
+                                            <input id="vector-config-model-name" type="text" readonly>
+                                        </label>
+                                        <label>
+                                            <span>Profile 维度</span>
+                                            <input id="vector-config-profile-dimensions" type="text" readonly>
+                                        </label>
+                                        <label>
+                                            <span>Schema 维度</span>
+                                            <input id="vector-config-schema-dimensions" type="text" readonly>
+                                        </label>
+                                        <label>
+                                            <span>保存操作人</span>
+                                            <input id="vector-config-operator" type="text" placeholder="admin">
+                                        </label>
+                                        <label>
+                                            <span>重建操作人</span>
+                                            <input id="vector-rebuild-operator" type="text" placeholder="admin">
+                                        </label>
+                                        <label class="field-span-2 checkbox-row">
+                                            <input id="vector-truncate-first" type="checkbox">
+                                            <span>重建前先清空旧向量（当维度不一致且已有历史向量时必须勾选）</span>
+                                        </label>
+                                    </div>
+
+                                    <div id="vector-profile-preview" class="help-inline-note top-gap">
+                                        <strong>当前选择说明</strong>
+                                        <p>选择 embedding profile 后，这里会告诉你保存后是否需要继续重建，以及是否必须先清空旧向量。</p>
+                                    </div>
+
+                                    <div class="button-row wrap top-gap">
+                                        <button id="save-vector-config" class="primary-btn" type="button">保存向量配置</button>
+                                        <button id="rebuild-vector-index" class="warn-btn" type="button">重建向量索引</button>
+                                    </div>
+
+                                    <details class="advanced-panel top-gap">
+                                        <summary>查看原始向量状态与最近一次结果</summary>
+                                        <div class="advanced-panel-body">
+                                            <pre id="vector-status-view" class="code-view">尚未加载向量状态</pre>
+                                            <pre id="vector-config-result" class="code-view top-gap">尚未加载向量配置</pre>
+                                            <pre id="vector-rebuild-result" class="code-view top-gap">尚未执行向量重建</pre>
+                                        </div>
+                                    </details>
+                                </div>
+
+                                <div class="sub-panel">
+                                    <div class="panel-title-row">
+                                        <div>
+                                            <h3>问答检索调参</h3>
+                                            <p>只有在中文“为什么 / 原因 / 为什么不直接”类问题持续命中不稳时，才需要动这里。</p>
+                                        </div>
+                                        <button id="load-retrieval-config" class="ghost-btn" type="button">刷新检索配置</button>
+                                    </div>
+
+                                    <div class="help-inline-note top-gap">
+                                        <strong>先别把调参当第一反应</strong>
+                                        <p>优先确认资料已入库、向量索引可用、旧 query cache 已失效。只有这些都正常，中文原因类问答仍持续不稳时，才考虑微调检索权重。</p>
+                                    </div>
+
+                                    <div id="retrieval-config-summary" class="metric-grid compact top-gap"></div>
+
+                                    <div class="form-grid top-gap">
+                                        <label class="checkbox-row">
+                                            <input id="retrieval-config-parallel-enabled" type="checkbox">
+                                            <span>启用并行检索</span>
+                                        </label>
+                                        <label>
+                                            <span>FTS 权重</span>
+                                            <input id="retrieval-config-fts-weight" type="text" placeholder="1.0">
+                                        </label>
+                                        <label>
+                                            <span>来源命中权重</span>
+                                            <input id="retrieval-config-source-weight" type="text" placeholder="1.0">
+                                        </label>
+                                        <label>
+                                            <span>反馈命中权重</span>
+                                            <input id="retrieval-config-contribution-weight" type="text" placeholder="1.0">
+                                        </label>
+                                        <label>
+                                            <span>文章向量权重</span>
+                                            <input id="retrieval-config-article-vector-weight" type="text" placeholder="0.6">
+                                        </label>
+                                        <label>
+                                            <span>片段向量权重</span>
+                                            <input id="retrieval-config-chunk-vector-weight" type="text" placeholder="1.2">
+                                        </label>
+                                        <label>
+                                            <span>RRF K</span>
+                                            <input id="retrieval-config-rrf-k" type="text" placeholder="60">
+                                        </label>
+                                    </div>
+
+                                    <div class="button-row wrap top-gap">
+                                        <button id="save-retrieval-config" class="primary-btn" type="button">保存检索配置</button>
+                                    </div>
+
+                                    <details class="advanced-panel top-gap">
+                                        <summary>查看原始检索配置</summary>
+                                        <div class="advanced-panel-body">
+                                            <pre id="retrieval-config-result" class="code-view">尚未加载检索配置</pre>
+                                        </div>
+                                    </details>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="panel">
+                            <div class="panel-title-row">
+                                <div>
+                                    <h2>服务器目录与知识切片</h2>
+                                    <p>这些属于更偏运维的维护入口。只有在要接部署机目录，或者切片策略发生变化时，才需要使用。</p>
+                                </div>
                             </div>
 
                             <div class="compile-layout settings-sources-layout top-gap">
@@ -1023,6 +1169,27 @@
                                 </div>
                             </details>
 
+                            <details class="advanced-panel" data-help-faq-key="vector-maintenance">
+                                <summary>切换 embedding profile 或看到维度不兼容时，下一步应该做什么</summary>
+                                <div class="advanced-panel-body">
+                                    <p class="muted">先看“向量检索与重建”卡片里的兼容性判断。如果 profile 维度和 schema 维度不一致，而历史向量又已经存在，就必须勾选“重建前先清空旧向量”再重建；否则你会遇到“配置已保存，但索引其实一直建不起来”的静默失败。</p>
+                                    <div class="help-action-row">
+                                        <button class="secondary-btn" type="button" data-tab-open="settings-sources">去向量检索与重建</button>
+                                    </div>
+                                </div>
+                            </details>
+
+                            <details class="advanced-panel" data-help-faq-key="retrieval-tuning">
+                                <summary>中文“为什么 / 原因”类问题不稳时，什么时候才需要调检索权重</summary>
+                                <div class="advanced-panel-body">
+                                    <p class="muted">先确认资料是否真的入库、向量索引是否已经建好、旧 query cache 是否已经失效。只有这些都正常，中文原因类问题仍然持续答偏或无引用时，才值得改检索权重；否则你很容易把“资料或索引问题”误判成“权重问题”。</p>
+                                    <div class="help-action-row">
+                                        <button class="secondary-btn" type="button" data-tab-open="settings-sources">去问答检索调参</button>
+                                        <a class="ghost-link" href="/admin/ask">去知识问答验证</a>
+                                    </div>
+                                </div>
+                            </details>
+
                             <details class="advanced-panel" data-help-faq-key="sources-maintenance">
                                 <summary>服务器目录资料源和知识切片重建什么时候才需要用</summary>
                                 <div class="advanced-panel-body">
@@ -1042,7 +1209,7 @@
 <script src="/admin/admin-tabs.js?v=20260419-tabs-1"></script>
 <script src="/admin/admin-sections.js?v=20260420-admin-sections-2"></script>
 <script src="/admin/settings.js?v=20260420-settings-3"></script>
-<script src="/admin/settings-page.js?v=20260420-settings-page-3"></script>
+<script src="/admin/settings-page.js?v=20260421-openai-regression-1"></script>
 <script src="/admin/developer-access.js?v=20260420-developer-access-3"></script>
 </body>
 </html>

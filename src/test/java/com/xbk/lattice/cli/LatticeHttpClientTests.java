@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpServer;
 import com.xbk.lattice.api.admin.AdminOverviewPendingResponse;
 import com.xbk.lattice.api.admin.AdminOverviewResponse;
 import com.xbk.lattice.api.compiler.CompileResponse;
+import com.xbk.lattice.api.query.SearchResponse;
 import com.xbk.lattice.governance.QualityMetricsReport;
 import com.xbk.lattice.governance.StatusSnapshot;
 import com.xbk.lattice.cli.remote.LatticeHttpClient;
@@ -117,6 +118,59 @@ class LatticeHttpClientTests {
 
             assertThat(compileResponse.getPersistedCount()).isEqualTo(17);
             assertThat(compileResponse.getJobId()).isEqualTo("job-123");
+        }
+        finally {
+            httpServer.stop(0);
+        }
+    }
+
+    /**
+     * 验证客户端可反序列化 search 响应。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldDeserializeSearchResponse() throws Exception {
+        HttpServer httpServer = HttpServer.create(new InetSocketAddress(0), 0);
+        httpServer.createContext("/api/v1/search", exchange -> {
+            String responseBody = """
+                    {
+                      "count": 1,
+                      "items": [
+                        {
+                          "evidenceType": "VECTOR",
+                          "sourceId": 7,
+                          "articleKey": "legacy-default--adr",
+                          "conceptId": "adr",
+                          "title": "Adr",
+                          "content": "订单服务不直接同步调用库存服务",
+                          "metadataJson": "{\\\"source\\\":\\\"adr\\\"}",
+                          "sourcePaths": ["adr/ADR-012-order-to-inventory-via-mq.md"],
+                          "score": 0.93
+                        }
+                      ]
+                    }
+                    """;
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, responseBody.getBytes(StandardCharsets.UTF_8).length);
+            try (OutputStream outputStream = exchange.getResponseBody()) {
+                outputStream.write(responseBody.getBytes(StandardCharsets.UTF_8));
+            }
+        });
+        httpServer.start();
+        try {
+            LatticeHttpClient latticeHttpClient = new LatticeHttpClient("http://127.0.0.1:" + httpServer.getAddress().getPort());
+
+            SearchResponse searchResponse = latticeHttpClient.get(
+                    "/api/v1/search",
+                    java.util.Map.of("question", "为什么要走消息队列"),
+                    SearchResponse.class
+            );
+
+            assertThat(searchResponse.getCount()).isEqualTo(1);
+            assertThat(searchResponse.getItems()).hasSize(1);
+            assertThat(searchResponse.getItems().getFirst().getArticleKey()).isEqualTo("legacy-default--adr");
+            assertThat(searchResponse.getItems().getFirst().getSourceId()).isEqualTo(7L);
         }
         finally {
             httpServer.stop(0);

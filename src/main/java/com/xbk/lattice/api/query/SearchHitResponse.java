@@ -1,5 +1,8 @@
 package com.xbk.lattice.api.query;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * 搜索命中响应
  *
@@ -63,16 +66,17 @@ public class SearchHitResponse {
      * @param sourcePaths 来源路径
      * @param score 得分
      */
+    @JsonCreator
     public SearchHitResponse(
-            String evidenceType,
-            Long sourceId,
-            String articleKey,
-            String conceptId,
-            String title,
-            String content,
-            String metadataJson,
-            java.util.List<String> sourcePaths,
-            double score
+            @JsonProperty("evidenceType") String evidenceType,
+            @JsonProperty("sourceId") Long sourceId,
+            @JsonProperty("articleKey") String articleKey,
+            @JsonProperty("conceptId") String conceptId,
+            @JsonProperty("title") String title,
+            @JsonProperty("content") String content,
+            @JsonProperty("metadataJson") String metadataJson,
+            @JsonProperty("sourcePaths") java.util.List<String> sourcePaths,
+            @JsonProperty("score") double score
     ) {
         this.evidenceType = evidenceType;
         this.sourceId = sourceId;

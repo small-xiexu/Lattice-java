@@ -59,6 +59,9 @@
         llmModels: [],
         llmBindings: [],
         llmBindingFlowExpanded: false,
+        vectorConfig: null,
+        vectorStatus: null,
+        retrievalConfig: null,
         documentParseConnections: [],
         documentParseSettings: null,
         helpState: {
@@ -67,6 +70,7 @@
             lastTestType: "",
             lastTestFailed: false,
             bindingRecentlyChanged: false,
+            retrievalRecentlyChanged: false,
             documentParseTestFailed: false
         }
     };
@@ -120,6 +124,12 @@
         document.getElementById("reset-document-parse-connection").addEventListener("click", resetDocumentParseConnectionForm);
         document.getElementById("save-document-parse-settings").addEventListener("click", saveDocumentParseSettings);
         document.getElementById("document-parse-provider-type").addEventListener("change", syncDocumentParseEndpointSuggestion);
+        document.getElementById("refresh-vector-status").addEventListener("click", refreshVectorMaintenance);
+        document.getElementById("save-vector-config").addEventListener("click", saveVectorConfig);
+        document.getElementById("rebuild-vector-index").addEventListener("click", rebuildVectorIndex);
+        document.getElementById("vector-config-profile-id").addEventListener("change", syncVectorProfilePreview);
+        document.getElementById("load-retrieval-config").addEventListener("click", loadRetrievalConfig);
+        document.getElementById("save-retrieval-config").addEventListener("click", saveRetrievalConfig);
         document.addEventListener("click", handleSettingsHelpActionClick);
     }
 
@@ -133,13 +143,19 @@
                 fetchJson("/api/v1/admin/llm/models"),
                 fetchJson("/api/v1/admin/llm/bindings"),
                 fetchJson("/api/v1/admin/document-parse/connections"),
-                fetchJson("/api/v1/admin/document-parse/settings")
+                fetchJson("/api/v1/admin/document-parse/settings"),
+                fetchJson("/api/v1/admin/vector/config"),
+                fetchJson("/api/v1/admin/vector/status"),
+                fetchJson("/api/v1/admin/query/retrieval/config")
             ]);
             state.llmConnections = responses[0].items || [];
             state.llmModels = responses[1].items || [];
             state.llmBindings = responses[2].items || [];
             state.documentParseConnections = responses[3].items || [];
             state.documentParseSettings = responses[4] || null;
+            state.vectorConfig = responses[5] || null;
+            state.vectorStatus = responses[6] || null;
+            state.retrievalConfig = responses[7] || null;
             renderLlmConnectionOptions();
             renderLlmBindingRoleOptions();
             renderLlmModelOptions();
@@ -147,12 +163,19 @@
             renderLlmConnectionList(state.llmConnections);
             renderLlmModelList(state.llmModels);
             renderLlmBindingList(state.llmBindings);
+            renderVectorProfileOptions(state.vectorConfig ? state.vectorConfig.embeddingModelProfileId : "");
+            fillVectorConfigForm(state.vectorConfig || {});
+            renderVectorStatusSummary(state.vectorStatus || {});
+            renderVectorMaintenanceCard();
             renderDocumentParseConnectionOptions();
             renderDocumentParseCleanupModelOptions();
             renderDocumentParseSettingsForm();
             renderDocumentParseConnectionList(state.documentParseConnections);
             renderDocumentParseSettingsSummary(state.documentParseSettings);
+            fillRetrievalConfigForm(state.retrievalConfig || {});
+            renderRetrievalConfigSummary(state.retrievalConfig || {});
             syncLlmModelKindForm();
+            syncVectorProfilePreview();
             syncDocumentParseEndpointSuggestion();
             renderSettingsHelpCard();
             syncSettingsFaqOpenState();
@@ -372,6 +395,194 @@
         }
         catch (error) {
             showError("保存角色绑定失败", error);
+        }
+    }
+
+    async function refreshVectorMaintenance() {
+        setStatus("正在刷新向量状态...", "info");
+        try {
+            const responses = await Promise.all([
+                fetchJson("/api/v1/admin/vector/config"),
+                fetchJson("/api/v1/admin/vector/status")
+            ]);
+            state.vectorConfig = responses[0] || null;
+            state.vectorStatus = responses[1] || null;
+            fillVectorConfigForm(state.vectorConfig || {});
+            renderVectorStatusSummary(state.vectorStatus || {});
+            renderVectorMaintenanceCard();
+            syncVectorProfilePreview();
+            renderSettingsHelpCard();
+            syncSettingsFaqOpenState();
+            setStatus("向量状态已刷新", "success");
+        }
+        catch (error) {
+            showError("刷新向量状态失败", error);
+        }
+    }
+
+    async function saveVectorConfig() {
+        const payload = {
+            vectorEnabled: document.getElementById("vector-config-enabled").checked,
+            embeddingModelProfileId: parseOptionalInteger(document.getElementById("vector-config-profile-id").value),
+            operator: document.getElementById("vector-config-operator").value.trim() || "admin"
+        };
+        if (!payload.embeddingModelProfileId || payload.embeddingModelProfileId <= 0) {
+            setStatus("请先选择可用的 Embedding Profile", "warning");
+            return;
+        }
+        const riskMessage = buildVectorSaveRiskMessage(payload.embeddingModelProfileId, payload.vectorEnabled);
+        if (riskMessage && !window.confirm(riskMessage)) {
+            return;
+        }
+        try {
+            const result = await fetchJson("/api/v1/admin/vector/config", {
+                method: "PUT",
+                body: JSON.stringify(payload)
+            });
+            state.vectorConfig = result || null;
+            fillVectorConfigForm(result || {});
+            document.getElementById("vector-config-result").textContent = JSON.stringify(result, null, 2);
+            updateSettingsHelpState({
+                lastSaveType: "vector-config",
+                lastSaveSucceeded: true,
+                lastTestFailed: false,
+                bindingRecentlyChanged: false,
+                retrievalRecentlyChanged: false,
+                documentParseTestFailed: false
+            });
+            await refreshVectorMaintenanceAfterMutation(result && result.rebuildRecommended
+                    ? "向量配置已保存，下一步请继续执行一次向量索引重建"
+                    : "向量配置已保存");
+        }
+        catch (error) {
+            renderResultError("vector-config-result", "保存向量配置失败", error);
+            showError("保存向量配置失败", error);
+        }
+    }
+
+    async function rebuildVectorIndex() {
+        const truncateFirst = document.getElementById("vector-truncate-first").checked;
+        const operator = document.getElementById("vector-rebuild-operator").value.trim() || "admin";
+        const rebuildGuardMessage = buildVectorRebuildGuardMessage(truncateFirst);
+        if (rebuildGuardMessage) {
+            setStatus(rebuildGuardMessage, "warning");
+            return;
+        }
+        const confirmed = window.confirm(
+                truncateFirst
+                        ? "将先清空旧向量，再按当前 embedding profile 重建向量索引，确认继续吗？"
+                        : "将按当前 embedding profile 直接补齐或刷新向量索引，确认继续吗？"
+        );
+        if (!confirmed) {
+            return;
+        }
+        try {
+            const result = await fetchJson("/api/v1/admin/vector/rebuild", {
+                method: "POST",
+                body: JSON.stringify({
+                    truncateFirst: truncateFirst,
+                    operator: operator
+                })
+            });
+            document.getElementById("vector-rebuild-result").textContent = JSON.stringify(result, null, 2);
+            updateSettingsHelpState({
+                lastSaveType: "vector-rebuild",
+                lastSaveSucceeded: true,
+                lastTestFailed: false,
+                bindingRecentlyChanged: false,
+                retrievalRecentlyChanged: false,
+                documentParseTestFailed: false
+            });
+            await refreshVectorMaintenanceAfterMutation("向量索引重建已完成");
+        }
+        catch (error) {
+            renderResultError("vector-rebuild-result", "向量索引重建失败", error);
+            showError("向量索引重建失败", error);
+        }
+    }
+
+    async function loadRetrievalConfig() {
+        try {
+            const result = await fetchJson("/api/v1/admin/query/retrieval/config");
+            state.retrievalConfig = result || null;
+            fillRetrievalConfigForm(result || {});
+            renderRetrievalConfigSummary(result || {});
+            document.getElementById("retrieval-config-result").textContent = JSON.stringify(result, null, 2);
+            renderSettingsHelpCard();
+            syncSettingsFaqOpenState();
+            setStatus("检索配置已刷新", "success");
+        }
+        catch (error) {
+            renderResultError("retrieval-config-result", "加载检索配置失败", error);
+            showError("加载检索配置失败", error);
+        }
+    }
+
+    async function saveRetrievalConfig() {
+        const payload = {
+            parallelEnabled: document.getElementById("retrieval-config-parallel-enabled").checked,
+            ftsWeight: parseOptionalDecimal(document.getElementById("retrieval-config-fts-weight").value),
+            sourceWeight: parseOptionalDecimal(document.getElementById("retrieval-config-source-weight").value),
+            contributionWeight: parseOptionalDecimal(document.getElementById("retrieval-config-contribution-weight").value),
+            articleVectorWeight: parseOptionalDecimal(document.getElementById("retrieval-config-article-vector-weight").value),
+            chunkVectorWeight: parseOptionalDecimal(document.getElementById("retrieval-config-chunk-vector-weight").value),
+            rrfK: parseOptionalInteger(document.getElementById("retrieval-config-rrf-k").value)
+        };
+        if (payload.ftsWeight === null
+                || payload.sourceWeight === null
+                || payload.contributionWeight === null
+                || payload.articleVectorWeight === null
+                || payload.chunkVectorWeight === null) {
+            setStatus("请把所有检索权重都填写完整", "warning");
+            return;
+        }
+        if (payload.rrfK === null || payload.rrfK <= 0) {
+            setStatus("RRF K 必须是正整数", "warning");
+            return;
+        }
+        try {
+            const result = await fetchJson("/api/v1/admin/query/retrieval/config", {
+                method: "PUT",
+                body: JSON.stringify(payload)
+            });
+            state.retrievalConfig = result || null;
+            fillRetrievalConfigForm(result || {});
+            renderRetrievalConfigSummary(result || {});
+            document.getElementById("retrieval-config-result").textContent = JSON.stringify(result, null, 2);
+            updateSettingsHelpState({
+                lastSaveType: "retrieval-config",
+                lastSaveSucceeded: true,
+                lastTestFailed: false,
+                bindingRecentlyChanged: false,
+                retrievalRecentlyChanged: true,
+                documentParseTestFailed: false
+            });
+            setStatus("检索配置已保存，建议回知识问答用新问题复测中文原因类场景", "success");
+        }
+        catch (error) {
+            renderResultError("retrieval-config-result", "保存检索配置失败", error);
+            showError("保存检索配置失败", error);
+        }
+    }
+
+    async function refreshVectorMaintenanceAfterMutation(successMessage) {
+        try {
+            const responses = await Promise.all([
+                fetchJson("/api/v1/admin/vector/config"),
+                fetchJson("/api/v1/admin/vector/status")
+            ]);
+            state.vectorConfig = responses[0] || null;
+            state.vectorStatus = responses[1] || null;
+            fillVectorConfigForm(state.vectorConfig || {});
+            renderVectorStatusSummary(state.vectorStatus || {});
+            renderVectorMaintenanceCard();
+            syncVectorProfilePreview();
+            renderSettingsHelpCard();
+            syncSettingsFaqOpenState();
+            setStatus(successMessage, "success");
+        }
+        catch (error) {
+            showError("刷新向量状态失败", error);
         }
     }
 
@@ -982,9 +1193,176 @@
                 + "</div>";
     }
 
+    function fillVectorConfigForm(result) {
+        const effectiveConfig = result || {};
+        state.vectorConfig = effectiveConfig;
+        document.getElementById("vector-config-enabled").checked = !!effectiveConfig.vectorEnabled;
+        renderVectorProfileOptions(effectiveConfig.embeddingModelProfileId || "");
+        document.getElementById("vector-config-provider").value = effectiveConfig.providerType || "";
+        document.getElementById("vector-config-model-name").value = effectiveConfig.modelName || "";
+        document.getElementById("vector-config-profile-dimensions").value = effectiveConfig.profileDimensions || "";
+        document.getElementById("vector-config-schema-dimensions").value = state.vectorStatus
+                && state.vectorStatus.schemaDimensions
+                ? String(state.vectorStatus.schemaDimensions)
+                : "";
+        document.getElementById("vector-config-operator").value = effectiveConfig.updatedBy || "admin";
+        if (!document.getElementById("vector-rebuild-operator").value.trim()) {
+            document.getElementById("vector-rebuild-operator").value = effectiveConfig.updatedBy || "admin";
+        }
+        document.getElementById("vector-config-result").textContent = JSON.stringify(effectiveConfig, null, 2);
+    }
+
+    function renderVectorProfileOptions(selectedId) {
+        const select = document.getElementById("vector-config-profile-id");
+        const currentValue = String(selectedId || select.value || "");
+        const embeddingModels = getEmbeddingModels();
+        if (embeddingModels.length === 0) {
+            select.innerHTML = "<option value=''>请先在“模型与角色”里创建启用中的向量模型</option>";
+            return;
+        }
+        select.innerHTML = embeddingModels.map(function (item) {
+            const dimensionsLabel = item.expectedDimensions ? " / " + item.expectedDimensions + " 维" : "";
+            return "<option value='" + escapeHtml(String(item.id)) + "'>"
+                    + escapeHtml(item.modelName + " / " + resolveConnectionLabel(item.connectionId) + dimensionsLabel)
+                    + "</option>";
+        }).join("");
+        if (currentValue) {
+            select.value = currentValue;
+        }
+        syncVectorProfilePreview();
+    }
+
+    function renderVectorStatusSummary(status) {
+        const container = document.getElementById("vector-status-summary");
+        if (!container) {
+            return;
+        }
+        if (!status || Object.keys(status).length === 0) {
+            container.innerHTML = "<div class='job-card'><p class='item-summary'>还没有向量状态，先刷新一次再判断是否需要重建。</p></div>";
+            return;
+        }
+        const indexedArticleCount = Number(status.indexedArticleCount || 0);
+        const articleCount = Number(status.articleCount || 0);
+        const indexedChunkCount = Number(status.indexedChunkCount || 0);
+        const dimensionsMatch = status.dimensionsMatch === null || status.dimensionsMatch === undefined
+                ? "未判断"
+                : status.dimensionsMatch ? "已兼容" : "不兼容";
+        container.innerHTML = [
+            renderMetricCard(
+                    "向量开关",
+                    status.vectorEnabled ? "已启用" : "已关闭",
+                    status.vectorTypeAvailable ? "数据库已支持 vector 类型" : "当前数据库还不支持 vector 类型",
+                    status.vectorEnabled ? "success" : "warning"
+            ),
+            renderMetricCard(
+                    "维度兼容",
+                    dimensionsMatch,
+                    "profile " + renderNumberValue(status.profileDimensions) + " 维 / schema "
+                            + renderNumberValue(status.schemaDimensions) + " 维",
+                    status.dimensionsMatch ? "success" : "danger"
+            ),
+            renderMetricCard(
+                    "已建索引",
+                    indexedArticleCount + " / " + articleCount,
+                    "文章向量 " + indexedArticleCount + " 条，片段向量 " + indexedChunkCount + " 条",
+                    indexedArticleCount > 0 ? "success" : "warning"
+            ),
+            renderMetricCard(
+                    "ANN 状态",
+                    status.annIndexReady ? "已就绪" : "待补齐",
+                    status.annIndexType
+                            ? "索引类型：" + status.annIndexType
+                            : "当前尚未检测到 ANN 索引类型",
+                    status.annIndexReady ? "success" : "warning"
+            )
+        ].join("");
+        document.getElementById("vector-status-view").textContent = JSON.stringify(status, null, 2);
+    }
+
+    function renderVectorMaintenanceCard() {
+        const container = document.getElementById("vector-maintenance-card");
+        if (!container) {
+            return;
+        }
+        const maintenanceState = resolveVectorMaintenanceState();
+        container.setAttribute("data-help-tone", maintenanceState.tone);
+        container.innerHTML = "<p class='help-card-eyebrow'>向量检索状态</p>"
+                + "<h3 class='help-card-title'>" + escapeHtml(maintenanceState.title) + "</h3>"
+                + "<p class='help-card-description'>" + escapeHtml(maintenanceState.description) + "</p>"
+                + renderStaticPills(maintenanceState.nextSteps || []);
+    }
+
+    function fillRetrievalConfigForm(result) {
+        const effectiveConfig = result || {};
+        state.retrievalConfig = effectiveConfig;
+        document.getElementById("retrieval-config-parallel-enabled").checked = !!effectiveConfig.parallelEnabled;
+        document.getElementById("retrieval-config-fts-weight").value = renderNumberField(effectiveConfig.ftsWeight, "1.0");
+        document.getElementById("retrieval-config-source-weight").value = renderNumberField(effectiveConfig.sourceWeight, "1.0");
+        document.getElementById("retrieval-config-contribution-weight").value = renderNumberField(
+                effectiveConfig.contributionWeight,
+                "1.0"
+        );
+        document.getElementById("retrieval-config-article-vector-weight").value = renderNumberField(
+                effectiveConfig.articleVectorWeight,
+                "0.6"
+        );
+        document.getElementById("retrieval-config-chunk-vector-weight").value = renderNumberField(
+                effectiveConfig.chunkVectorWeight,
+                "1.2"
+        );
+        document.getElementById("retrieval-config-rrf-k").value = renderNumberField(effectiveConfig.rrfK, "60");
+        document.getElementById("retrieval-config-result").textContent = JSON.stringify(effectiveConfig, null, 2);
+    }
+
+    function renderRetrievalConfigSummary(settings) {
+        const container = document.getElementById("retrieval-config-summary");
+        if (!container) {
+            return;
+        }
+        if (!settings || Object.keys(settings).length === 0) {
+            container.innerHTML = "<div class='job-card'><p class='item-summary'>还没有检索配置，先刷新一次再判断是否要调参。</p></div>";
+            return;
+        }
+        const vectorWeight = Number(settings.articleVectorWeight || 0) + Number(settings.chunkVectorWeight || 0);
+        const textWeight = Number(settings.ftsWeight || 0) + Number(settings.sourceWeight || 0);
+        container.innerHTML = [
+            renderMetricCard(
+                    "并行检索",
+                    settings.parallelEnabled ? "已启用" : "已关闭",
+                    settings.parallelEnabled ? "会同时汇总多路召回结果" : "当前按串行方式执行召回",
+                    settings.parallelEnabled ? "success" : "warning"
+            ),
+            renderMetricCard(
+                    "文本侧权重",
+                    textWeight.toFixed(1),
+                    "FTS " + renderNumberValue(settings.ftsWeight) + " / 来源命中 " + renderNumberValue(settings.sourceWeight),
+                    "info"
+            ),
+            renderMetricCard(
+                    "向量侧权重",
+                    vectorWeight.toFixed(1),
+                    "文章向量 " + renderNumberValue(settings.articleVectorWeight)
+                            + " / 片段向量 " + renderNumberValue(settings.chunkVectorWeight),
+                    vectorWeight >= textWeight ? "success" : "warning"
+            ),
+            renderMetricCard(
+                    "融合参数",
+                    "RRF K=" + renderNumberValue(settings.rrfK),
+                    "反馈命中权重 " + renderNumberValue(settings.contributionWeight),
+                    "info"
+            )
+        ].join("");
+    }
+
     function getBindingModels() {
         return (state.llmModels || []).filter(function (item) {
             return item.enabled && item.modelKind !== "EMBEDDING";
+        });
+    }
+
+    function getEmbeddingModels() {
+        return (state.llmModels || []).filter(function (item) {
+            return item.enabled && String(item.modelKind || "").toUpperCase() === "EMBEDDING";
         });
     }
 
@@ -1047,6 +1425,190 @@
             return "/v1/documents:process";
         }
         return "/ocr/v1/general-basic";
+    }
+
+    function resolveVectorMaintenanceState() {
+        const vectorConfig = state.vectorConfig || {};
+        const vectorStatus = state.vectorStatus || {};
+        const indexedArticleCount = Number(vectorStatus.indexedArticleCount || 0);
+        const indexedChunkCount = Number(vectorStatus.indexedChunkCount || 0);
+        if (!vectorConfig.embeddingModelProfileId) {
+            return {
+                tone: "warning",
+                title: "还没有可用的向量配置",
+                description: "先去“模型与角色”准备一个启用中的向量模型，再回到这里选择 embedding profile。",
+                nextSteps: ["先建向量模型", "再保存向量配置"]
+            };
+        }
+        if (!vectorConfig.vectorEnabled) {
+            return {
+                tone: "warning",
+                title: "当前向量检索仍处于关闭状态",
+                description: "如果你希望中文原因类问题能稳定命中 ADR、架构说明和 runbook，先启用向量检索，再根据提示决定是否需要重建。",
+                nextSteps: ["启用向量检索", "保存配置后再判断是否重建"]
+            };
+        }
+        if (vectorStatus.dimensionsMatch === false && (indexedArticleCount > 0 || indexedChunkCount > 0)) {
+            return {
+                tone: "danger",
+                title: "当前维度不兼容，必须先清空旧向量再重建",
+                description: "embedding profile 和 schema 维度不一致，而且库里已经有历史向量。此时如果不勾选“重建前先清空旧向量”，索引会一直停在不兼容状态。",
+                nextSteps: ["勾选清空旧向量", "执行向量索引重建"]
+            };
+        }
+        if (vectorStatus.dimensionsMatch === false) {
+            return {
+                tone: "warning",
+                title: "当前维度还没对齐，下一步需要重建一次",
+                description: "现在保存配置是允许的，但真正让向量检索恢复可用，还需要继续执行一次向量索引重建来对齐 schema。",
+                nextSteps: ["先保存配置", "再执行向量索引重建"]
+            };
+        }
+        if (vectorConfig.rebuildRecommended) {
+            return {
+                tone: "warning",
+                title: "配置已变更，建议继续重建向量索引",
+                description: vectorConfig.rebuildReason
+                        || "embedding profile 已切换。为了让历史文章重新生成与当前模型一致的向量，建议继续执行一次重建。",
+                nextSteps: ["保持当前配置", "执行向量索引重建"]
+            };
+        }
+        if (Number(vectorStatus.articleCount || 0) > 0 && indexedArticleCount === 0) {
+            return {
+                tone: "warning",
+                title: "当前还没有真正建起可用向量索引",
+                description: "文章已经存在，但 article_vector_index 仍为空。此时问答会退化到非向量召回，中文原因类问题通常不够稳。",
+                nextSteps: ["执行向量索引重建", "完成后再回知识问答复测"]
+            };
+        }
+        return {
+            tone: "success",
+            title: "当前向量检索已具备可用基线",
+            description: "profile、schema 和已建索引数量已经对齐。接下来优先回知识问答验证复杂中文“为什么 / 原因”类问题是否稳定命中。",
+            nextSteps: ["回知识问答复测", "如仍不稳再看检索调参"]
+        };
+    }
+
+    function buildVectorSaveRiskMessage(embeddingModelProfileId, vectorEnabled) {
+        if (!vectorEnabled) {
+            return "";
+        }
+        const selectedModel = findModelById(embeddingModelProfileId);
+        const selectedDimensions = selectedModel && selectedModel.expectedDimensions
+                ? Number(selectedModel.expectedDimensions)
+                : 0;
+        const vectorStatus = state.vectorStatus || {};
+        const schemaDimensions = vectorStatus.schemaDimensions ? Number(vectorStatus.schemaDimensions) : 0;
+        const indexedArticleCount = Number(vectorStatus.indexedArticleCount || 0);
+        const indexedChunkCount = Number(vectorStatus.indexedChunkCount || 0);
+        if (selectedDimensions <= 0 || schemaDimensions <= 0 || selectedDimensions === schemaDimensions) {
+            return "";
+        }
+        if (indexedArticleCount > 0 || indexedChunkCount > 0) {
+            return "当前 schema 是 " + schemaDimensions + " 维，选中的 embedding profile 是 " + selectedDimensions
+                    + " 维，而且库里已经有历史向量。\n\n保存后必须勾选“重建前先清空旧向量”再执行重建，否则索引会一直停在不兼容状态。\n\n确认继续保存吗？";
+        }
+        return "当前 schema 是 " + schemaDimensions + " 维，选中的 embedding profile 是 " + selectedDimensions
+                + " 维。\n\n保存后还需要继续执行一次向量索引重建，系统才会把 schema 自动对齐到新维度。\n\n确认继续保存吗？";
+    }
+
+    function buildVectorRebuildGuardMessage(truncateFirst) {
+        const vectorConfig = state.vectorConfig || {};
+        const vectorStatus = state.vectorStatus || {};
+        const indexedArticleCount = Number(vectorStatus.indexedArticleCount || 0);
+        const indexedChunkCount = Number(vectorStatus.indexedChunkCount || 0);
+        if (!vectorConfig.vectorEnabled) {
+            return "当前还没有启用向量检索，请先保存向量配置。";
+        }
+        if (vectorStatus.dimensionsMatch === false
+                && (indexedArticleCount > 0 || indexedChunkCount > 0)
+                && !truncateFirst) {
+            return "当前已有历史向量且维度不一致，请先勾选“重建前先清空旧向量”再执行重建。";
+        }
+        return "";
+    }
+
+    function renderMetricCard(label, value, note, tone) {
+        return "<article class='metric-card" + (tone ? " " + tone : "") + "'>"
+                + "<span class='label'>" + escapeHtml(label || "-") + "</span>"
+                + "<p class='value'>" + escapeHtml(value || "-") + "</p>"
+                + "<p class='note'>" + escapeHtml(note || "") + "</p>"
+                + "</article>";
+    }
+
+    function renderStaticPills(items) {
+        if (!items || items.length === 0) {
+            return "";
+        }
+        return "<div class='help-action-row'>"
+                + items.map(function (item) {
+                    return "<span class='pill'>" + escapeHtml(item) + "</span>";
+                }).join("")
+                + "</div>";
+    }
+
+    function renderNumberValue(value) {
+        if (value === null || value === undefined || value === "") {
+            return "-";
+        }
+        return String(value);
+    }
+
+    function renderNumberField(value, fallback) {
+        if (value === null || value === undefined || value === "") {
+            return fallback || "";
+        }
+        return String(value);
+    }
+
+    function findModelById(modelId) {
+        return (state.llmModels || []).find(function (item) {
+            return String(item.id) === String(modelId);
+        }) || null;
+    }
+
+    function syncVectorProfilePreview() {
+        const container = document.getElementById("vector-profile-preview");
+        if (!container) {
+            return;
+        }
+        const selectedModel = findModelById(document.getElementById("vector-config-profile-id").value);
+        if (!selectedModel) {
+            container.innerHTML = "<strong>当前选择说明</strong>"
+                    + "<p>还没有选中可用的 embedding profile。先在“模型与角色”里准备启用中的向量模型，再回来继续。</p>";
+            return;
+        }
+        const selectedDimensions = selectedModel.expectedDimensions ? Number(selectedModel.expectedDimensions) : 0;
+        const vectorStatus = state.vectorStatus || {};
+        const schemaDimensions = vectorStatus.schemaDimensions ? Number(vectorStatus.schemaDimensions) : 0;
+        const indexedArticleCount = Number(vectorStatus.indexedArticleCount || 0);
+        const indexedChunkCount = Number(vectorStatus.indexedChunkCount || 0);
+        let nextStep = "当前 profile 与运行时配置一致时，通常只需要保持现状并回知识问答复测。";
+        if (schemaDimensions > 0 && selectedDimensions > 0 && schemaDimensions !== selectedDimensions) {
+            if (indexedArticleCount > 0 || indexedChunkCount > 0) {
+                nextStep = "当前 schema 仍是 " + schemaDimensions + " 维，而且库里已有历史向量。保存后必须勾选“重建前先清空旧向量”再重建。";
+            }
+            else {
+                nextStep = "当前 schema 是 " + schemaDimensions + " 维。保存后还要继续执行一次向量索引重建，系统才会自动对齐到 " + selectedDimensions + " 维。";
+            }
+        }
+        container.innerHTML = "<strong>" + escapeHtml(selectedModel.modelName || "未命名模型")
+                + "</strong>"
+                + "<p>供应商："
+                + escapeHtml(resolveConnectionLabel(selectedModel.connectionId))
+                + "｜期望维度："
+                + escapeHtml(renderNumberValue(selectedModel.expectedDimensions))
+                + " 维</p>"
+                + "<p>" + escapeHtml(nextStep) + "</p>";
+    }
+
+    function renderResultError(targetId, prefix, error) {
+        const target = document.getElementById(targetId);
+        if (!target) {
+            return;
+        }
+        const message = error && error.message ? error.message : String(error);
+        target.textContent = prefix + "：" + message;
     }
 
     function getModelKindLabel(modelKind) {
@@ -1132,6 +1694,15 @@
         }
         const parsed = Number(text);
         return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+    }
+
+    function parseOptionalDecimal(value) {
+        const text = String(value || "").trim();
+        if (!text) {
+            return null;
+        }
+        const parsed = Number(text);
+        return Number.isFinite(parsed) ? parsed : null;
     }
 
     async function fetchJson(url, options) {
@@ -1237,6 +1808,23 @@
                 faqKey: "parse-test-failed"
             };
         }
+        const vectorMaintenanceState = resolveVectorMaintenanceState();
+        const vectorStatus = state.vectorStatus || {};
+        const hasVectorSignal = !!(state.vectorConfig && state.vectorConfig.embeddingModelProfileId)
+                || Number(vectorStatus.articleCount || 0) > 0
+                || Number(vectorStatus.indexedArticleCount || 0) > 0;
+        if (hasVectorSignal && (vectorMaintenanceState.tone === "danger" || vectorMaintenanceState.tone === "warning")) {
+            return {
+                tone: vectorMaintenanceState.tone,
+                title: vectorMaintenanceState.title,
+                description: vectorMaintenanceState.description,
+                actions: [
+                    {label: "去向量检索与重建", action: "open-settings-sources", className: "primary-btn"},
+                    {label: "去知识问答复测", action: "go-ask", className: "ghost-btn"}
+                ],
+                faqKey: "vector-maintenance"
+            };
+        }
         if (helpState.bindingRecentlyChanged) {
             return {
                 tone: "warning",
@@ -1247,6 +1835,18 @@
                     {label: "去模型与角色", action: "open-settings-llm", className: "ghost-btn"}
                 ],
                 faqKey: "binding-change"
+            };
+        }
+        if (helpState.retrievalRecentlyChanged) {
+            return {
+                tone: "warning",
+                title: "检索配置已更新，建议回问答页用新问题复测",
+                description: "检索权重改动只会影响后续新问题。优先用复杂中文“为什么 / 原因”类问题复测，不要只看保存成功提示就判断问题已经收敛。",
+                actions: [
+                    {label: "去知识问答", action: "go-ask", className: "primary-btn"},
+                    {label: "回问答检索调参", action: "open-settings-sources", className: "ghost-btn"}
+                ],
+                faqKey: "retrieval-tuning"
             };
         }
         if (helpState.lastSaveSucceeded) {

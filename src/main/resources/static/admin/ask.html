@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>邪修智库｜知识问答</title>
-    <link rel="stylesheet" href="/admin/admin.css?v=20260420-source-console-16">
+    <link rel="stylesheet" href="/admin/admin.css?v=20260421-openai-regression-1">
 </head>
 <body>
 <div class="app-shell">
@@ -19,7 +19,7 @@
             <section class="sidebar-section">
                 <p class="sidebar-kicker">邪修智库</p>
                 <h1 class="sidebar-title">知识问答</h1>
-                <p class="sidebar-copy">用户只需要把问题说清楚，邪修智库（Lattice-java）会返回回答与引用来源，不再关心模型路由和 token 配额。</p>
+                <p class="sidebar-copy">用户只需要把问题说清楚，邪修智库（Lattice-java）会返回回答、直接依据和检索证据，不再关心模型路由和 token 配额。</p>
             </section>
 
             <nav class="nav-stack">
@@ -62,7 +62,7 @@
                         <div class="hero-copy">
                             <p class="hero-eyebrow">邪修智库问答</p>
                             <h2 class="hero-title">直接提问，基于知识库返回答案</h2>
-                            <p class="hero-description">这个页面只做一件事：把问题变成回答，并把依据来源展示出来。界面会尽量轻，不让用户感觉自己在操作配置中心。</p>
+                            <p class="hero-description">这个页面只做一件事：把问题变成回答，并让你一眼看懂“这次有没有稳定证据、该不该直接相信、下一步要不要回知识库排查”。</p>
                         </div>
 
                         <div class="hero-side">
@@ -107,17 +107,22 @@
                     </div>
 
                     <div class="sub-panel">
-                        <div class="panel-title-row">
-                            <div>
-                                <h2>回答结果</h2>
-                                <p>这里只展示最终回答，不暴露模型、路由、token 等底层细节。</p>
+                            <div class="panel-title-row">
+                                <div>
+                                    <h2>回答结果</h2>
+                                    <p>这里只展示最终回答，并同步告诉你这次答案的证据态、复核态和最直接的支撑来源。</p>
+                                </div>
                             </div>
-                        </div>
                         <div id="ask-result-guide" class="help-inline-note top-gap">
                             <strong>这次结果怎么看</strong>
                             <p>提交一个问题后，这里会告诉你本次结果更像是“可以继续看引用”，还是“应该先回知识库管理检查资料”。</p>
                         </div>
-                        <div id="ask-answer" class="answer-box top-gap">还没有回答，先输入一个问题。</div>
+                        <div id="ask-answer-metrics" class="metric-grid compact top-gap"></div>
+                        <div id="ask-answer-support" class="help-inline-note top-gap">
+                            <strong>回答依据</strong>
+                            <p>提交问题后，这里会显示这次回答最直接依赖的来源，以及是否已经形成稳定引用。</p>
+                        </div>
+                        <div id="ask-answer" class="answer-box answer-markdown top-gap">还没有回答，先输入一个问题。</div>
                     </div>
                 </section>
 
@@ -125,8 +130,12 @@
                     <div class="panel-title-row">
                         <div>
                             <h2>引用来源</h2>
-                            <p>帮助判断回答的依据是否可靠，也方便继续回溯原始资料。</p>
+                            <p>先看“直接支撑本次回答”的来源，再看“补充检索命中”的资料，这样更容易判断答案到底靠什么站住脚。</p>
                         </div>
+                    </div>
+                    <div id="ask-source-summary" class="help-inline-note top-gap">
+                        <strong>证据分层</strong>
+                        <p>这里会区分“回答直接引用的来源”和“本次检索命中的补充证据”，避免所有来源平铺在一起。</p>
                     </div>
                     <div id="ask-sources" class="source-grid top-gap">
                         <div class="job-card">
@@ -199,6 +208,6 @@
         </div>
     </div>
 </div>
-<script src="/admin/ask.js?v=20260420-source-console-2"></script>
+<script src="/admin/ask.js?v=20260421-openai-regression-1"></script>
 </body>
 </html>
