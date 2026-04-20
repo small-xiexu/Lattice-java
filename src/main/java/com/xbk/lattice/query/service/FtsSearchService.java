@@ -61,7 +61,9 @@ public class FtsSearchService {
 
         String tsConfig = ftsConfigResolver.resolveArticleTsConfig();
         String sql = """
-                select concept_id,
+                select source_id,
+                       article_key,
+                       concept_id,
                        title,
                        content,
                        metadata_json::text as metadata_json,
@@ -106,6 +108,8 @@ public class FtsSearchService {
      */
     private QueryArticleHit mapQueryArticleHit(ResultSet resultSet, int rowNum) throws SQLException {
         return new QueryArticleHit(
+                readLong(resultSet, "source_id"),
+                resultSet.getString("article_key"),
                 resultSet.getString("concept_id"),
                 resultSet.getString("title"),
                 resultSet.getString("content"),
@@ -113,6 +117,19 @@ public class FtsSearchService {
                 readSourcePaths(resultSet),
                 resultSet.getDouble("score")
         );
+    }
+
+    /**
+     * 读取可空长整型列。
+     *
+     * @param resultSet 结果集
+     * @param columnName 列名
+     * @return 长整型值
+     * @throws SQLException SQL 异常
+     */
+    private Long readLong(ResultSet resultSet, String columnName) throws SQLException {
+        Object value = resultSet.getObject(columnName);
+        return value == null ? null : resultSet.getLong(columnName);
     }
 
     /**

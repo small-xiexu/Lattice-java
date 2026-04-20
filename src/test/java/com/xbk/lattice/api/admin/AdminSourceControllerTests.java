@@ -1,8 +1,11 @@
 package com.xbk.lattice.api.admin;
 
 import com.xbk.lattice.source.domain.KnowledgeSource;
+import com.xbk.lattice.compiler.service.CompileJobService;
 import com.xbk.lattice.source.service.SourceService;
+import org.eclipse.jgit.api.Git;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -10,9 +13,14 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -33,7 +41,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.flyway.default-schema=lattice_phase_e_source_admin_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
-        "lattice.query.cache.store=in-memory"
+        "lattice.query.cache.store=in-memory",
+        "lattice.compiler.jobs.worker-enabled=false",
+        "lattice.source.admin.allowed-server-dirs[0]=${java.io.tmpdir}"
 })
 @AutoConfigureMockMvc
 class AdminSourceControllerTests {
@@ -46,6 +56,9 @@ class AdminSourceControllerTests {
 
     @Autowired
     private SourceService sourceService;
+
+    @Autowired
+    private CompileJobService compileJobService;
 
     /**
      * 验证资料源列表支持分页与过滤。
@@ -132,6 +145,98 @@ class AdminSourceControllerTests {
     }
 
     /**
+     * 验证 Git 资料源可创建并完成配置校验。
+     *
+     * @param tempDir 临时目录
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldCreateAndValidateGitSource(@TempDir Path tempDir) throws Exception {
+        resetTables();
+        Path gitRepoDir = tempDir.resolve("git-source");
+        Files.createDirectories(gitRepoDir);
+        Files.writeString(gitRepoDir.resolve("README.md"), "# Git Source\n", StandardCharsets.UTF_8);
+        try (Git git = Git.init().setDirectory(gitRepoDir.toFile()).call()) {
+            git.add().addFilepattern(".").call();
+            git.commit().setMessage("init").setAuthor("tester", "tester@example.com").call();
+        }
+
+        String responseBody = mockMvc.perform(post("/api/v1/admin/sources/git")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sourceCode": "git-docs",
+                                  "name": "Git Docs",
+                                  "contentProfile": "DOCUMENT",
+                                  "remoteUrl": "%s",
+                                  "branch": "master"
+                                }
+                                """.formatted(gitRepoDir.toUri().toString())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sourceCode").value("git-docs"))
+                .andExpect(jsonPath("$.sourceType").value("GIT"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        Long sourceId = readLong(responseBody, "id");
+
+        mockMvc.perform(post("/api/v1/admin/sources/" + sourceId + "/validate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.valid").value(true))
+                .andExpect(jsonPath("$.sourceType").value("GIT"))
+                .andExpect(jsonPath("$.branch").value("master"));
+    }
+
+    /**
+     * 验证服务器目录资料源可同步并写入源文件清单。
+     *
+     * @param tempDir 临时目录
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldCreateSyncAndListServerDirSourceFiles(@TempDir Path tempDir) throws Exception {
+        resetTables();
+        Path serverDir = tempDir.resolve("server-docs");
+        Files.createDirectories(serverDir);
+        Files.writeString(serverDir.resolve("README.md"), "# Server Docs\n\nretry=3\n", StandardCharsets.UTF_8);
+
+        String responseBody = mockMvc.perform(post("/api/v1/admin/sources/server-dir")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sourceCode": "server-docs",
+                                  "name": "Server Docs",
+                                  "contentProfile": "DOCUMENT",
+                                  "serverDir": "%s"
+                                }
+                                """.formatted(serverDir.toString().replace("\\", "\\\\"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sourceType").value("SERVER_DIR"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        Long sourceId = readLong(responseBody, "id");
+
+        String syncBody = mockMvc.perform(post("/api/v1/admin/sources/" + sourceId + "/sync"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPILE_QUEUED"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        Long runId = readLong(syncBody, "runId");
+
+        compileJobService.processNextQueuedJob();
+
+        mockMvc.perform(get("/api/v1/admin/sources/" + sourceId + "/runs/" + runId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCEEDED"));
+
+        mockMvc.perform(get("/api/v1/admin/sources/" + sourceId + "/files"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].relativePath").value("README.md"));
+    }
+
+    /**
      * 创建测试资料源。
      *
      * @param sourceCode 资料源编码
@@ -176,6 +281,14 @@ class AdminSourceControllerTests {
      * 重置测试表。
      */
     private void resetTables() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.source_sync_runs RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.source_snapshots RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.source_file_chunks RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.source_files RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.article_source_refs RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.article_chunks RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.articles RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.compile_jobs RESTART IDENTITY CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.knowledge_sources RESTART IDENTITY CASCADE");
         jdbcTemplate.update(
                 """
@@ -203,5 +316,12 @@ class AdminSourceControllerTests {
                         )
                         """
         );
+    }
+
+    private Long readLong(String responseBody, String fieldName) throws Exception {
+        com.fasterxml.jackson.databind.JsonNode rootNode = new com.fasterxml.jackson.databind.ObjectMapper().readTree(responseBody);
+        return rootNode.path(fieldName).isMissingNode() || rootNode.path(fieldName).isNull()
+                ? null
+                : rootNode.path(fieldName).asLong();
     }
 }

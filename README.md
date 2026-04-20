@@ -1,539 +1,325 @@
-# Lattice
+# 邪修智库（Lattice-java）
 
-面向 AI 客户端的知识库与 MCP 后端。
+> 把 Markdown、YAML、代码、PDF、Excel、Git Repo 丢进炉里。<br>
+> 炼的不是一次性答案，而是一套能被追责、能被回写、能被回滚的知识体。<br>
+> 它不是传统 RAG，更像一个 `知识炼制系统 + Agent 仪轨 + 运行时封印层`。
 
-**面向 AI 客户端的知识编译型知识库后端**
+判断它是不是普通 RAG，不用听口号，看系统里有没有这些“器官”就够了：
 
-把分散在文档、配置、代码、PDF、Excel 等资料中的知识，编译成可审查、可治理、可回滚、可多入口消费的知识资产。
+- `articles` / `article_chunks`：系统消费的是炼过的知识，不是裸 chunk。
+- `pending_queries` / `contributions`：回答不是终点，还能被确认、纠偏、丢弃，再继续沉淀回系统。
+- `execution_llm_snapshots`：每次 compile / query 都会留下运行时封印，知道当时到底是谁在出手。
+- `article_snapshots` / `repo_snapshots`：知识资产自带历史、回档、导出，不是回答完就烟消云散。
 
-Lattice 不是一个“套壳聊天页面”，也不是一个只会做“切块 + 向量检索 + 生成答案”的传统 RAG Demo。它的核心目标，是把分散在文档、配置、代码、PDF、Excel 等资料里的知识，先编译成可治理、可审查、可回滚的知识资产，再通过 Web、HTTP API、CLI、MCP 等统一入口稳定地提供给人和 AI 客户端使用。
+邪修智库做的事很反常识：先把资料炼成知识资产，再把这层资产通过 Web、HTTP API、CLI、MCP 统一供给人和 AI。
 
-如果只用一句话概括：
+它不相信原始文档天然就是知识，也不相信一次 prompt 就能把碎片召成真相。它更像先拆骨、归脉、审查、修补，再让知识开口说话。
 
-> 传统 RAG 更像“从碎片里现找答案”，Lattice 更像“先把知识编译成结构化资产，再让系统基于这套资产回答、治理、沉淀和演进”。
-
----
-
-## 30 秒快速理解
-
-如果你只有半分钟，这个项目可以直接这样理解：
-
-- 它不是聊天前台，而是知识系统后端。
-- 它不是只做检索，而是先做知识编译，再做问答与治理。
-- 它不是单次回答项目，而是把编译、问答、反馈、版本、导出连成闭环。
-- 它不是单入口工具，而是同时面向 Web、HTTP API、CLI、MCP。
-
-再压缩成 4 个关键词：
-
-- 知识编译
-- 图编排
-- 反馈闭环
-- 治理型 RAG
+`Spring Boot 3.5` · `Spring AI Alibaba Graph` · `PostgreSQL` · `Redis` · `Web / HTTP API / CLI / MCP`
 
 ---
 
-## 这份 README 适合谁看
+## 此道不修传统 RAG
 
-如果你属于下面任意一种角色，这份 README 对你都应该有价值：
+如果你第一眼把它当成“又一个知识库问答项目”，大概率会看错重点。这个仓库真正供奉的一等公民，不只是检索和回答，而是那些会留下痕迹、会继续演化、会反过来塑造系统本身的对象和链路：
 
-- 想做企业知识库后端，而不满足于一个简单 RAG Demo 的工程师
-- 想给 AI 客户端接一个真正可治理知识后端的架构师
-- 想理解“知识编译型系统”和“传统检索增强生成”差异的产品负责人
-- 想评估 Spring AI Alibaba Graph、固定角色 Agent、模型快照治理是否真正落地的人
-
-如果你主要关心的是“今天怎么把服务跑起来”，可以直接跳到后面的 [快速开始](#快速开始) 或 [文档导航](#文档导航)。
-
----
-
-## 项目名片
-
-| 维度 | 内容 |
+| 传统 RAG 常见终点 | 邪修智库真正落地的一等公民 |
 | --- | --- |
-| 项目定位 | 面向 AI 客户端的知识库与 MCP 后端 |
-| 核心范式 | 知识编译型知识库，而不是纯检索拼接型 RAG |
-| 主编排骨架 | Spring AI Alibaba Graph |
-| 主要角色 | 编译侧：`writer / reviewer / fixer`；问答侧：`answer / reviewer / rewrite` |
-| 主要入口 | Web、HTTP API、CLI、MCP |
-| 核心资产 | `articles`、`contributions`、`execution_llm_snapshots`、`article_snapshots`、`repo_snapshots` |
-| 产品面拆分 | `/admin`、`/admin/ask`、`/admin/ai` |
-| 关键词 | 知识编译、治理型 RAG、MCP 后端、反馈闭环 |
+| 原始 chunk + 一次性 answer | `articles`、`article_chunks`、`metadata` 这类编译后的知识资产 |
+| `retrieve -> answer` 单链路 | `compile graph` 和 `query graph` 两条显式主链 |
+| 模型名只是一个字符串参数 | `connections`、`models`、`bindings`、`execution_llm_snapshots` |
+| 回答停留在聊天记录里 | `pending_queries -> confirm/correct/discard -> contributions` |
+| 配置改了就污染后续所有结果 | 运行时快照冻结，能追踪这次执行到底用了什么 |
+| 只有页面能玩一下 | Web、HTTP API、CLI、MCP 共用同一后端能力 |
+
+真正不对劲的地方，不是“支持 PDF / Excel / Git Repo”这种所有 README 都会写的能力，而是下面这些更硬的东西：
+
+- 先编译知识，再问答，不是拿原始碎片临场拼 prompt。
+- compile 和 query 都是图编排，并且都有固定职责 Agent 链。
+- 问答结果不是一次性输出，而是可以进入 pending、被修正、被确认、继续沉淀回系统。
+- 每次运行会冻结模型绑定与配置快照，不会因为后台改了配置就说不清历史结果。
+- 知识资产本身可做 snapshot、history、rollback、vault export，不是回答完就结束。
+
+如果你只想先看实际效果，可以先看下面的真实界面；如果你只想尽快启动，可以直接跳到后面的 [快速开始](#快速开始)。
 
 ---
 
-## 项目是什么
+## 四道邪门
 
-`Lattice-java` 当前可以被准确理解为 4 个东西的组合：
+### 1. 它先炼知识，不先切块
 
-1. 一个知识编译型知识库后端。
-2. 一个以 Spring Boot + PostgreSQL + Redis 为基础设施的服务。
-3. 一个以 Spring AI Alibaba Graph 为主编排骨架的 compile / query 系统。
-4. 一个同时服务 Web 页面、HTTP API、CLI、MCP 客户端的统一知识服务层。
+在邪修智库里，源资料不会直接等同于最终知识。系统会走一条显式编译链：
 
-它不追求做“大而全平台”，而是聚焦在一件事上：
+`source materials -> analyze -> writer -> reviewer -> fixer -> persist`
 
-- 把复杂资料变成高质量知识资产。
-- 把知识资产稳定暴露给 AI 客户端和人类使用者。
-- 把回答、反馈、治理、导出、版本历史串成一个闭环。
+也就是说，问答消费的是编译后的知识资产，而不是只靠原始 chunk 临场拼装。
 
----
+### 2. 它把 Agent 仪轨刻进了骨架
 
-## 它解决什么问题
+这里的 Agent 不是宣传话术，而是前后台、模型绑定和运行时快照里都能看到的真实角色：
 
-传统企业知识库或传统 RAG，通常会遇到下面这些问题：
+- 编译侧：`writer / reviewer / fixer`
+- 问答侧：`answer / reviewer / rewrite`
 
-- 资料很多，但分散在 Markdown、YAML、Java、PDF、Excel、ADR、Runbook 里，难以统一消费。
-- 检索只能命中碎片，答案容易拼凑、不稳定、上下文不完整。
-- 资料更新后，系统不知道哪些知识该重编、哪些答案该修正。
-- 用户反馈来了，往往只是留在聊天记录里，无法真正沉淀回知识库。
-- 多入口系统经常各用各的逻辑，Web、API、CLI、MCP 之间语义不一致。
-- 知识库缺少版本治理，出了问题很难回答“是谁改的、什么时候改的、能不能回滚”。
-- 模型路由混乱，运行时到底用了哪个模型、哪条绑定、哪次快照，经常说不清楚。
+换句话说，Graph 负责流程，Agent 负责高认知动作，这个边界在系统里是明确存在的。
 
-Lattice 的设计，就是围绕这些问题展开的。
+### 3. 它让回答死不掉，也散不掉
 
-它不是把“检索”当成唯一核心，而是把下面这条链路当成主线：
+传统 RAG 常常在回答结束后就没有后文了。邪修智库把后续链路也做成了正式能力：
 
-`源资料 -> 编译 -> 审查 -> 修复 -> 持久化 -> 问答 -> 反馈 -> 治理 -> 导出/回滚`
+`pending query -> confirm/correct/discard -> contribution -> snapshot/rollback/export`
 
----
+这意味着它更像一个会持续演进的知识系统，而不是一次性问答页。
 
-## 一个具体例子
+### 4. 它记得这次到底是谁出的手
 
-假设你的知识来源同时包含下面这些内容：
+很多项目的模型配置只是个页面表单。邪修智库会把连接、模型、绑定和执行时快照接起来，所以系统能回答：
 
-- 一份 Markdown 版支付熔断规则
-- 一份 YAML 配置
-- 一段 Java 重试逻辑
-- 一份 PDF 操作手册
-- 一份 Excel 补推模板
-
-在传统 RAG 里，系统大概率会这样工作：
-
-1. 把它们全部切块。
-2. 问题来了以后检索若干片段。
-3. 把片段拼进 prompt。
-4. 让模型现场组织答案。
-
-这类方式的问题是：
-
-- 回答高度依赖临场检索命中。
-- 同一问题在不同时间可能得到不同拼接结果。
-- 用户纠错之后，系统通常没有真正沉淀机制。
-- 很难治理“这条知识到底来自哪、改过几次、能不能回退”。
-
-而在 Lattice 里，系统更倾向于先做这些事：
-
-1. ingest 原始资料。
-2. 分析并合并概念。
-3. 生成知识文章草稿。
-4. 审查草稿。
-5. 必要时自动修复。
-6. 持久化成文章、切片、元数据、来源关系。
-7. 问答时再基于这层知识资产生成答案。
-8. 用户反馈后进入 pending，再决定 confirm、correct 还是 discard。
-
-这样做的直接收益是：
-
-- 问答消费的是“编译后的知识”，不是只有原始碎片。
-- 知识质量有显式审查环节。
-- 反馈会沉淀，而不是消失在会话中。
-- 文章、快照、导出、回滚都能纳入治理。
-
-这就是 Lattice 和普通“检索增强聊天”最本质的差异。
+- 这次 compile / query 用的是哪条 binding
+- 当时冻结下来的模型快照是什么
+- 后续配置变更会影响哪些新任务，不会污染哪些历史结果
 
 ---
 
-## 它能做什么
+## 看它现形
 
-当前项目已经形成 5 组清晰能力。
+### 第一张：问答现形
 
-### 1. 知识编译
+<img src="docs/images/readme/ask-answer-result.png" alt="邪修智库真实问答结果" />
 
-- 支持从目录型知识源导入资料。
-- 已在真实验收中覆盖 `md`、`yaml`、`json`、`java`、`pdf`、`xlsx`、`drawio`、`png` 等类型。
-- 把源资料转成文章、文章切片、来源关联、结构化元数据等知识资产。
-- 支持全量编译与增量编译。
-- 编译链路不是黑盒，而是可观察、可追踪、可回环的图编排流程。
+这张图不是 README 摆拍，而是基于一条真实最小链路生成的：
 
-### 2. 知识问答
+- 先通过项目自身的编译入口导入 `payment/analyze.json`
+- 再在页面提问 `payment timeout retry=3 是什么配置`
+- 页面返回最终回答、证据摘要和引用来源
 
-- 提供基于知识库的问答能力。
-- 不只依赖单一路径检索，而是融合 FTS、来源命中、文章命中、贡献命中等多种信号。
-- Query 侧本身也走图编排，不是简单 `search -> answer` 一步到底。
-- 问答链路支持 `answer / reviewer / rewrite` 三角色运行时快照冻结。
-- 页面问答会展示引用来源，避免只给“黑盒答案”。
+### 第二张：Agent 仪轨
 
-### 3. 反馈闭环
+<img src="docs/images/readme/agent-bindings.png" alt="邪修智库 Agent 角色绑定页面" />
 
-- 问答结果不会停留在一次性回答。
-- 支持 `correct -> confirm`、直接 `confirm`、`discard`。
-- 已确认的反馈可以沉淀为 contribution，进入长期知识资产。
-- 反馈链路通过 pending query 管理，不是散落在聊天历史里。
+这里能直接看到两条核心角色链：
 
-### 4. 治理与版本
+- 编译侧：`writer / reviewer / fixer`
+- 问答侧：`answer / reviewer / rewrite`
 
-- 支持 quality、coverage、omissions、lint 等治理能力。
-- 支持文章生命周期切换。
-- 支持文章级 snapshot、history、rollback。
-- 支持整库级 repo snapshot 能力。
-- 支持 Vault export / sync，把知识资产导出到可管理目录。
+这也是这个项目和普通“带个模型配置页的知识库”差异很大的地方之一：Agent 编排不是文档概念，而是后台真实可维护、可冻结到运行时的系统骨架。
 
-### 5. 多入口交付
+### 第三张：炉台与外门
 
-- Web 页面
-- HTTP API
-- CLI
-- MCP
+<table>
+  <tr>
+    <td width="50%">
+      <strong>知识库管理</strong><br/>
+      资料导入、Git 仓库接入、同步运行、已入库内容与状态工作台。<br/><br/>
+      <img src="docs/images/readme/knowledge-console.png" alt="邪修智库知识库管理工作台" />
+    </td>
+    <td width="50%">
+      <strong>开发者接入</strong><br/>
+      CLI、HTTP API、MCP 模板和首次验证路径集中展示。<br/><br/>
+      <img src="docs/images/readme/developer-access.png" alt="邪修智库开发者接入页面" />
+    </td>
+  </tr>
+</table>
 
-这意味着 Lattice 不只是一个“给人点点点的后台”，也不是一个“只能给 AI 用的 MCP 服务”，而是一个统一知识服务层。
+从 GitHub 首页能直接看出来，这个项目已经不是“只有一个后台表单”的 demo，而是已经摆出了完整门面：
 
----
-
-## 核心理念
-
-Lattice 的核心不是“多加几个模型”，而是下面几条设计原则。
-
-### 1. 先编译知识，再消费知识
-
-Lattice 不是直接把原始资料切块后丢给检索器，然后让模型现场拼答案。它更强调先把资料整理、归并、抽象、审查成知识文章，再在问答时消费这层知识资产。
-
-这带来的变化是：
-
-- 查询不再只能依赖原始碎片。
-- 知识可以被治理、追踪和回滚。
-- 资料和答案之间不再只有一次性的 prompt 关系。
-
-### 2. Graph 是主骨架，不是装饰层
-
-项目核心流程不是“大 Service 里串十几个方法”，而是基于 Spring AI Alibaba Graph 明确建模：
-
-- compile graph
-- query graph
-- 条件边
-- 生命周期监听
-- 节点级步骤日志
-- 失败后的修复回环
-
-也就是说，Graph 在这里不是“包装器”，而是主编排层。
-
-### 3. Agent 是固定角色，不是放飞自我的自治体
-
-Lattice 里的 Agent 更像固定职责角色，而不是自由 Agent 社会。
-
-当前核心角色包括：
-
-- compile 侧：`writer / reviewer / fixer`
-- query 侧：`answer / reviewer / rewrite`
-
-Graph 决定流程怎么走，Agent 负责执行高认知动作，两者职责边界是明确的。
-
-### 4. 模型路由必须可治理
-
-Lattice 不把模型调用当成“前端随便传个 model name”这么简单。
-
-它强调：
-
-- 连接配置
-- 模型配置
-- Agent 绑定
-- 运行时快照冻结
-
-这让系统可以回答：
-
-- 这次 compile 或 query 到底用了哪个连接、哪个模型、哪条绑定。
-- 配置改动后会影响哪些新任务，不会污染哪些旧任务。
-
-### 5. 用户页和内部配置页必须分离
-
-普通用户的目标是：
-
-- 导资料
-- 看处理状态
-- 提问题
-
-不是去理解：
-
-- temperature
-- timeout
-- fallback
-- route label
-- token 价格
-
-所以当前产品面已经拆成：
-
-- `/admin`
-  - 面向用户的知识库管理页
-- `/admin/ask`
-  - 面向用户的知识问答页
-- `/admin/ai`
-  - 面向内部维护的 AI 接入页
-
-这不是“多做一个页面”，而是在产品心智上把“用知识库”和“配模型”彻底分离。
+- 知识库工作台
+- 真实问答页
+- Agent 编排与模型绑定页
+- 开发者接入页
 
 ---
 
-## 核心架构
+## 它走的不是正道
 
-从职责上看，Lattice 可以概括为下面几层：
-
-```mermaid
-flowchart TD
-    A["Source Materials<br/>Markdown / YAML / Code / PDF / Excel"] --> B["Compile Graph"]
-    B --> C["Writer / Reviewer / Fixer"]
-    C --> D["Knowledge Articles + Chunks + Metadata"]
-    D --> E["Query Graph"]
-    E --> F["Answer / Reviewer / Rewrite"]
-    F --> G["Web / HTTP API / CLI / MCP"]
-    G --> H["Pending Feedback / Contributions"]
-    D --> I["Governance<br/>Quality / Coverage / Lint / Lifecycle"]
-    D --> J["History & Export<br/>Snapshots / Rollback / Vault"]
-    K["LLM Config Center<br/>Connections / Models / Bindings / Snapshots"] --> B
-    K --> E
-```
-
-如果换成更偏工程视角的说法，当前系统可分为：
-
-- Trigger 层
-  - Web Controller
-  - CLI
-  - MCP Tools
-- Case 层
-  - Compile Application Facade
-  - Query Facade
-  - Graph Orchestrator
-- Domain 层
-  - 编译、审查、修复、持久化、检索、导出等核心服务
-  - 固定角色 Agent
-- Infrastructure 层
-  - PostgreSQL
-  - Redis
-  - LLM Client
-  - Vault / Repo Snapshot
-
----
-
-## 核心对象
-
-如果你第一次接触这个项目，理解下面几个对象会很有帮助。
-
-| 对象 | 作用 | 不是谁 |
-| --- | --- | --- |
-| `source_files` | 原始资料文件记录 | 不是最终知识 |
-| `source_file_chunks` | 源资料切片 | 不是最终回答单元 |
-| `articles` | 编译后的知识文章 | 是系统最重要的知识资产之一 |
-| `article_chunks` | 文章级切片 | 服务于检索和回答 |
-| `pending_queries` | 待确认问答记录 | 不是最终沉淀结果 |
-| `contributions` | 已确认反馈沉淀 | 是知识演进的一部分 |
-| `execution_llm_snapshots` | 运行时冻结模型快照 | 解决“本次到底用了什么模型” |
-| `article_snapshots` | 单篇文章历史版本 | 支持文章级回滚 |
-| `repo_snapshots` | 整库级快照 | 支持整库级治理与审计 |
-
-这个对象模型体现了一个很重要的观点：
-
-- Lattice 不把“回答”当成唯一产出。
-- 它同时把“知识资产”“反馈资产”“配置快照”“版本历史”都当成正式一等公民。
-
----
-
-## 与传统 RAG 的区别
-
-下面这张表，是理解 Lattice 最重要的一部分。
-
-| 维度 | 传统 RAG | Lattice |
+| 维度 | 传统 RAG | 邪修智库 |
 | --- | --- | --- |
 | 核心思路 | 先检索碎片，再现场生成答案 | 先把知识编译成资产，再基于资产问答 |
-| 知识单元 | 以 chunk 为主 | 同时有 source、article、chunk、contribution 多层资产 |
-| 编译流程 | 往往很薄，甚至没有 compile 概念 | 有明确的 `compile -> review -> fix -> persist` 图编排 |
-| 审查机制 | 常见做法是没有，或仅 prompt 内自检 | 审查和修复是显式节点与角色 |
-| 增量更新 | 常见是重切块、重嵌入 | 有增量编译语义和图内分支 |
-| 模型管理 | 通常散在业务代码或页面参数中 | 统一连接、模型、Agent 绑定、运行时快照 |
-| 反馈闭环 | 多数停留在聊天日志 | 有 pending、confirm、discard、contribution 沉淀 |
-| 治理能力 | 通常较弱 | 有 quality、coverage、lint、lifecycle、snapshot、rollback、export |
-| 多入口一致性 | Web、API、CLI、MCP 常常各自为政 | 统一后端能力，对外多入口复用 |
-| 产品心智 | 用户经常直接面对模型配置 | 用户页与内部 AI 接入页已经拆分 |
+| 主链路 | 常见是 `retrieve -> answer` | 显式区分 `compile graph` 和 `query graph` |
+| Agent 用法 | 常见是 prompt 内自检或单模型一步出结果 | 固定角色链：`writer / reviewer / fixer`、`answer / reviewer / rewrite` |
+| 模型管理 | 配置常散落在页面参数或业务代码里 | 统一 connections、models、bindings、execution snapshots |
+| 反馈沉淀 | 常停留在聊天记录里 | `pending -> confirm/correct/discard -> contribution` |
+| 治理能力 | 很少追踪版本、回滚和导出 | 内建 snapshot、history、rollback、vault export |
+| 对外交付 | 页面、API、CLI、MCP 常各自为政 | 多入口复用同一套知识后端 |
 
-如果只看“能不能回答问题”，传统 RAG 和 Lattice 都可以做。但如果你关心的是：
-
-- 知识质量是否稳定
-- 回答是否可追踪
-- 反馈能不能沉淀
-- 模型路由能不能治理
-- 版本问题能不能回滚
-- 多入口能不能统一
-
-那 Lattice 明显不是同一类产品。
+一句话说，传统 RAG 更像“从碎片里临时招魂”，邪修智库更像“先把知识炼成稳定形体，再基于这套形体回答、治理和演进”。
 
 ---
 
-## 这个项目的特别之处
+## 能炼什么
 
-下面这些点，是 Lattice 相比普通知识库项目真正有辨识度的地方。
-
-### 1. 它是“知识编译型”而不是“检索拼接型”
-
-这意味着系统更重视：
-
-- 知识形成
-- 知识质量
-- 知识治理
-
-而不是只重视“检索召回率”。
-
-### 2. compile 和 query 都图化了
-
-很多系统只会把离线导入做成脚本，把在线问答做成简单请求链。Lattice 把 compile 和 query 两条主链都纳入图编排，因而更适合做：
-
-- 条件分支
-- 失败回环
-- 节点级观测
-- 角色化路由
-
-### 3. Agent 角色是固定职责，而不是概念噱头
-
-Lattice 没有把 Agent 当成市场化词汇，而是落到了明确角色和明确职责上。
-
-这让“Writer / Reviewer / Fixer”“Answer / Reviewer / Rewrite”不只是宣传语，而是系统骨架的一部分。
-
-### 4. 模型配置中心不是摆设，而是运行时契约
-
-很多项目的“模型配置”只是一个页面表单；Lattice 的模型配置中心会真正影响：
-
-- compile 路由
-- query 路由
-- 运行时快照冻结
-- 新旧任务隔离
-
-这让模型配置从“运维杂项”升级成了系统契约。
-
-### 5. 用户体验不是让所有人都懂 LLM
-
-当前产品面有一个非常清楚的取舍：
-
-- 普通用户只需要导资料、看状态、提问题
-- 内部维护者才需要关心连接、模型、Agent 绑定
-
-这个取舍看起来朴素，但其实非常重要，因为它避免了把单项目系统过度平台化。
-
-### 6. 它天然适合做 AI 客户端后端
-
-因为它本身就是：
-
-- Web 可用
-- HTTP 可用
-- CLI 可用
-- MCP 可用
-
-所以它适合挂在 AI 客户端后面，成为“知识与治理后端”，而不只是一个页面后台。
+- 多源 ingest：已经在真实验收中覆盖 `md`、`yaml`、`json`、`java`、`pdf`、`xlsx`、`drawio`、`png` 等类型。
+- 知识编译：不是直接切块入库，而是走 `analyze -> writer -> reviewer -> fixer -> persist` 的编译链。
+- 知识问答：不只是 `search -> answer`，而是 `retrieve -> answer -> reviewer -> rewrite -> finalize` 的问答链。
+- 反馈闭环：支持 `confirm`、`correct`、`discard`，确认后的结果可以沉淀为 contribution。
+- 治理能力：支持 quality、coverage、lifecycle、snapshot、history、rollback、vault export。
+- 多入口交付：Web、HTTP API、CLI、MCP 共用统一知识服务层。
 
 ---
 
-## 核心亮点
+## 架构海报
 
-如果把这个项目的亮点压缩成一组清单，可以概括为：
+下面这张图把这个项目最有辨识度的 4 层关系放到了一张图里：`Graph`、`模型中心`、`知识资产`、`治理闭环`。
 
-- 知识编译主线明确，不是一次性 prompt 项目。
-- compile / query 双图编排。
-- Graph + 固定角色 Agent 的混合架构。
-- 统一模型中心与运行时快照冻结。
-- 支持 Web、HTTP API、CLI、MCP 多入口复用。
-- 具备 pending feedback 闭环。
-- 具备 snapshot / rollback / vault export 等治理能力。
-- 用户页面与内部 AI 接入页面彻底分离。
+```mermaid
+flowchart LR
+    subgraph IN["多源知识输入"]
+        IN1["Markdown / YAML / Code"]
+        IN2["PDF / Excel / Images"]
+        IN3["Git Repo / Upload / Server Dir"]
+    end
+
+    subgraph MC["模型中心"]
+        MC1["Connections"]
+        MC2["Models"]
+        MC3["Bindings"]
+        MC4["Execution Snapshots"]
+        MC1 --> MC2 --> MC3 --> MC4
+    end
+
+    subgraph CG["Compile Graph"]
+        CG1["Analyze"]
+        CG2["Writer"]
+        CG3["Reviewer"]
+        CG4["Fixer"]
+        CG5["Persist"]
+        CG1 --> CG2 --> CG3
+        CG3 -->|通过| CG5
+        CG3 -->|需修复| CG4 --> CG3
+    end
+
+    subgraph KA["知识资产层"]
+        KA1["Articles"]
+        KA2["Article Chunks"]
+        KA3["Sources & Metadata"]
+        KA4["Article / Repo Snapshots"]
+    end
+
+    subgraph QG["Query Graph"]
+        QG1["Retrieve & Fuse"]
+        QG2["Answer"]
+        QG3["Reviewer"]
+        QG4["Rewrite"]
+        QG5["Finalize"]
+        QG1 --> QG2 --> QG3
+        QG3 -->|通过| QG5
+        QG3 -->|需改写| QG4 --> QG3
+    end
+
+    subgraph DS["交付入口"]
+        DS1["Web"]
+        DS2["HTTP API"]
+        DS3["CLI"]
+        DS4["MCP"]
+    end
+
+    subgraph GV["治理闭环"]
+        GV1["Pending Feedback"]
+        GV2["Confirm / Correct / Discard"]
+        GV3["Contribution"]
+        GV4["Lifecycle / Lint / Coverage"]
+        GV5["Rollback / Vault Export"]
+        GV1 --> GV2 --> GV3 --> GV4 --> GV5
+    end
+
+    IN1 --> CG1
+    IN2 --> CG1
+    IN3 --> CG1
+    CG5 --> KA1
+    CG5 --> KA2
+    CG5 --> KA3
+    KA1 --> QG1
+    KA2 --> QG1
+    KA3 --> QG1
+    QG5 --> DS1
+    QG5 --> DS2
+    QG5 --> DS3
+    QG5 --> DS4
+    DS1 --> GV1
+    DS2 --> GV1
+    DS3 --> GV1
+    DS4 --> GV1
+    GV5 --> KA4
+    MC3 -.角色路由.-> CG2
+    MC3 -.角色路由.-> CG3
+    MC3 -.角色路由.-> CG4
+    MC3 -.角色路由.-> QG2
+    MC3 -.角色路由.-> QG3
+    MC3 -.角色路由.-> QG4
+    MC4 -.运行时冻结.-> CG5
+    MC4 -.运行时冻结.-> QG5
+
+    style MC fill:#eef4ff,stroke:#2f6fdf,stroke-width:2px,color:#10213a
+    style CG fill:#fff4e6,stroke:#ca7a1f,stroke-width:2px,color:#35210c
+    style KA fill:#f7f7f7,stroke:#6b7280,stroke-width:2px,color:#1f2937
+    style QG fill:#eef8f1,stroke:#2f8a57,stroke-width:2px,color:#143122
+    style GV fill:#fff1ef,stroke:#cf4f3b,stroke-width:2px,color:#3a1713
+    style DS fill:#f6f0ff,stroke:#7356d6,stroke-width:2px,color:#23173f
+```
+
+这张图想表达的核心关系只有一句：
+
+- Graph 决定流程怎么走
+- Agent 负责执行高认知动作
+- 模型中心决定每个角色用什么模型
+- 治理闭环把回答重新沉淀回知识资产
 
 ---
 
-## 适合什么场景
+## 适合什么项目
 
-Lattice 更适合下面这类问题：
+- 你要做的不是聊天玩具，而是一个可长期演进的知识系统后端。
+- 你的资料同时散落在文档、代码、配置、PDF、Excel、运维手册里。
+- 你需要给 Web 页面、内部工具、CLI 或 MCP 客户端提供统一知识服务。
+- 你关心回答质量、反馈沉淀、版本历史、回滚和导出，而不是只关心一次命中。
+- 你希望模型路由是可配置、可冻结、可追踪的，不想把模型选择散在代码和页面参数里。
 
-- 企业内部知识散落在多种资料格式中，需要统一编译和查询。
-- 不是只想做聊天，而是想沉淀“长期可治理的知识资产”。
-- 需要给 AI 客户端提供 MCP 或 API 形式的知识后端。
-- 希望问答、反馈、治理、导出在同一套系统里闭环。
-- 希望模型调用不是不可见黑盒，而是可配置、可冻结、可追踪。
+## 不太适合什么项目
 
-它尤其适合这种资料组合：
-
-- SOP / Runbook
-- ADR / 架构说明
-- 配置文件
-- 代码片段
-- PDF 手册
-- Excel 模板
-- 运维文档
+- 你只想做一个最小向量检索 demo。
+- 你只想验证“模型能不能答一句话”。
+- 你不关心知识治理、反馈闭环、版本历史和多入口复用。
+- 你只需要一个轻量聊天前台，不需要知识系统后端。
 
 ---
 
-## 不适合什么场景
+## 当前状态
 
-如果你的目标只是下面这些，Lattice 可能反而偏重：
-
-- 做一个最小化的向量检索 Demo
-- 只想快速验证“能不能回答一句话”
-- 不关心反馈沉淀、治理、版本历史
-- 不需要 CLI / MCP / 多入口统一
-
-换句话说，Lattice 更像“知识系统后端”，而不是“一个轻量聊天玩具”。
-
----
-
-## 当前项目状态
-
-基于 **2026-04-18** 这轮真实验收，项目主链路已经真实跑通：
+截至 **2026-04-18** 的真实验收，项目主链路已经跑通：
 
 - 独立 schema 启动
-- AI 接入页配置
+- 管理员设置页配置
 - 复杂知识源全量编译
 - 增量编译
 - Query 问答
-- pending query `correct -> confirm` / `discard`
+- pending query 的 `correct -> confirm` / `discard`
 - Admin 治理接口
 - CLI remote / standalone
 - MCP raw HTTP
 - Vault 导出
 - 文章级快照、历史与回滚
 
-当前真实结论包括：
+当前已经明确成立的结论包括：
 
 - compile / query 已共享统一连接、模型、Agent 绑定与快照能力
-- `/admin`、`/admin/ask`、`/admin/ai` 三页已经拆分
-- Query `answer / reviewer / rewrite` 已真实冻结到 `execution_llm_snapshots`
+- `/admin`、`/admin/ask`、`/admin/settings`、`/admin/developer-access` 已是分离页面
+- Query 侧 `answer / reviewer / rewrite` 已真实冻结到 `execution_llm_snapshots`
 - CLI remote 已补验 `compile / status / search / query / vault-export`
 - MCP HTTP 端点已真实跑通 `initialize / tools/list / lattice_status / lattice_query`
 
-当前仍需接受的限制包括：
+当前已知限制包括：
 
 - 某些真实 embedding 网关下，向量检索仍可能因 embeddings 接口异常而降级
-- Admin 文章纠错接口还没有在当前网关组合下完全打通
+- Admin 文章纠错接口还没有在当前网关组合下完成最新一轮全量验收
 - 整库 repo diff / rollback 还没有完成最新一轮完整真实回归
 
-更细的样本、命令、验收结果与限制，请看：
-
-- [`docs/项目全流程真实验收手册.md`](docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md)
-
----
-
-## 产品使用路径
-
-当前最核心的实际使用路径是：
-
-1. 启动服务。
-2. 打开 `/admin/ai` 配好连接、模型、Agent 绑定。
-3. 打开 `/admin` 上传资料或同步目录，触发知识编译。
-4. 在 `/admin` 查看作业状态、文章列表和知识详情。
-5. 打开 `/admin/ask` 直接提问，查看回答和引用来源。
-6. 需要治理时，再通过 Admin 接口、CLI、MCP 做反馈、治理、导出、回滚。
-
-这条路径体现的是一个非常明确的产品取向：
-
-- 用户先接触知识，不先接触模型。
-- 内部维护先维护路由和能力，再让用户使用知识库。
+更细的样本、命令、日志和限制说明，请看 [`docs/项目全流程真实验收手册.md`](docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md)。
 
 ---
 
 ## 快速开始
 
-这里只保留一个简版 Quick Start，详细步骤请看独立文档。
+这里只保留一个对外阅读友好的最小启动口径，详细步骤请看独立文档。
 
 ### 环境
 
@@ -542,11 +328,13 @@ Lattice 更适合下面这类问题：
 - Redis
 - Maven
 
-### 最小启动口径
+### 最小启动命令
+
+下面这组命令沿用仓库当前的真实验证口径，使用 `lattice` schema：
 
 ```bash
 docker exec vector_db psql -U postgres -d ai-rag-knowledge \
-  -c "CREATE SCHEMA IF NOT EXISTS lattice;"
+  -c "DROP SCHEMA IF EXISTS lattice CASCADE; CREATE SCHEMA lattice;"
 
 export SPRING_PROFILES_ACTIVE=jdbc
 export SPRING_DATASOURCE_URL='jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice'
@@ -560,23 +348,29 @@ export LATTICE_REDIS_PORT=6379
 export LATTICE_LLM_BOOTSTRAP_ENABLED=true
 export LATTICE_LLM_SECRET_ENCRYPTION_KEY='请设置一个 32+ 字节密钥'
 
+mvn -q spring-boot:run
+```
+
+如果你本地 Maven 镜像握手不稳定，再临时改用：
+
+```bash
 mvn -q -s .codex/maven-settings.xml spring-boot:run
 ```
 
-### 启动后最小验证
+### 为什么这里直接重建 schema
 
-```bash
-curl http://127.0.0.1:8080/actuator/health
-```
+- 当前仓库的 Flyway 迁移已经收敛为单一基线 `V1__baseline_schema.sql`
+- 如果你本地的 `lattice` schema 跑过旧版本迁移链，旧的 `flyway_schema_history` 可能还在
+- 这时启动会报 `Migration checksum mismatch for migration version 1`
+- 对首次上手最稳妥的做法，就是直接 `DROP SCHEMA ... CASCADE` 后重新启动
 
-### 启动后第一轮页面验收
+### 启动后 3 分钟验证
 
-1. 打开 `http://127.0.0.1:8080/admin/ai`
-2. 配置连接、模型、Agent 绑定
-3. 打开 `http://127.0.0.1:8080/admin`
-4. 导入资料或同步目录
-5. 打开 `http://127.0.0.1:8080/admin/ask`
-6. 直接提问并确认回答与引用来源
+1. 访问 `http://127.0.0.1:8080/actuator/health`
+2. 打开 `http://127.0.0.1:8080/admin/settings`，配置连接、模型和 Agent 绑定
+3. 打开 `http://127.0.0.1:8080/admin`，导入文件或 Git 仓库，触发编译
+4. 打开 `http://127.0.0.1:8080/admin/ask`，直接提问并确认回答与引用来源
+5. 打开 `http://127.0.0.1:8080/admin/developer-access`，查看 CLI、HTTP API、MCP 接入方式
 
 ---
 
@@ -584,23 +378,15 @@ curl http://127.0.0.1:8080/actuator/health
 
 ### 想知道怎么启动
 
-- [`.codex/项目启动配置清单.md`](.codex/%E9%A1%B9%E7%9B%AE%E5%90%AF%E5%8A%A8%E9%85%8D%E7%BD%AE%E6%B8%85%E5%8D%95.md)
+- [`docs/项目启动配置清单.md`](docs/%E9%A1%B9%E7%9B%AE%E5%90%AF%E5%8A%A8%E9%85%8D%E7%BD%AE%E6%B8%85%E5%8D%95.md)
 
 ### 想知道当前真实跑通了什么
 
 - [`docs/项目全流程真实验收手册.md`](docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md)
 
-### 想知道 `.doc`、图片 OCR、文档解析后续怎么接
+### 想知道开发者接入页是怎么设计和实现的
 
-- [`docs/文档解析与OCR接入技术方案.md`](docs/%E6%96%87%E6%A1%A3%E8%A7%A3%E6%9E%90%E4%B8%8EOCR%E6%8E%A5%E5%85%A5%E6%8A%80%E6%9C%AF%E6%96%B9%E6%A1%88.md)
-
-### 想知道资料源、统一上传、Git 同步和智能归并后续怎么做
-
-- [`docs/资料源管理与智能同步技术方案.md`](docs/%E8%B5%84%E6%96%99%E6%BA%90%E7%AE%A1%E7%90%86%E4%B8%8E%E6%99%BA%E8%83%BD%E5%90%8C%E6%AD%A5%E6%8A%80%E6%9C%AF%E6%96%B9%E6%A1%88.md)
-
-### 想知道为什么这样设计
-
-- [`.codex/Spring AI Alibaba Graph 完整接入设计方案.md`](.codex/Spring%20AI%20Alibaba%20Graph%20%E5%AE%8C%E6%95%B4%E6%8E%A5%E5%85%A5%E8%AE%BE%E8%AE%A1%E6%96%B9%E6%A1%88.md)
+- [`docs/开发者接入页面实施清单.md`](docs/%E5%BC%80%E5%8F%91%E8%80%85%E6%8E%A5%E5%85%A5%E9%A1%B5%E9%9D%A2%E5%AE%9E%E6%96%BD%E6%B8%85%E5%8D%95.md)
 
 ### 想知道数据库对象和实体关系
 
@@ -608,17 +394,6 @@ curl http://127.0.0.1:8080/actuator/health
 
 ---
 
-## 一句话结论
+## 一句话总结
 
-Lattice 的特别之处，不在于“也能接大模型”，而在于它把企业知识系统真正做成了：
-
-- 可编译
-- 可审查
-- 可修复
-- 可查询
-- 可反馈
-- 可治理
-- 可导出
-- 可回滚
-
-的统一后端。
+邪修智库不是“又一个带聊天页的 RAG demo”，而是一个把知识编译、Agent 编排、模型中心、反馈沉淀和治理能力真正落到工程里的 Java 知识后端。

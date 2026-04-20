@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+if [ "$#" -lt 1 ]; then
+    echo "用法: ./bin/lattice-mcp-bridge <mcp-http-url> [额外 mcp-stdio 参数]" >&2
+    exit 64
+fi
+
+BRIDGE_URL=$1
+shift
+
+exec "$SCRIPT_DIR/lattice-cli" mcp-stdio --bridge "$BRIDGE_URL" "$@"

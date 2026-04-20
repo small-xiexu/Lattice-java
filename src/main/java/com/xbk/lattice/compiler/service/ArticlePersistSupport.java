@@ -9,6 +9,7 @@ import com.xbk.lattice.infra.persistence.ArticleSourceRefJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleSourceRefRecord;
 import com.xbk.lattice.query.service.ArticleChunkVectorIndexService;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
+import com.xbk.lattice.query.service.QueryCacheStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,8 @@ public class ArticlePersistSupport {
     private final SourceIngestSupport sourceIngestSupport;
 
     private final ArticleSourceRefJdbcRepository articleSourceRefJdbcRepository;
+
+    private QueryCacheStore queryCacheStore;
 
     private RepoSnapshotService repoSnapshotService;
 
@@ -121,6 +124,16 @@ public class ArticlePersistSupport {
     }
 
     /**
+     * 注入查询缓存存储。
+     *
+     * @param queryCacheStore 查询缓存存储
+     */
+    @Autowired(required = false)
+    void setQueryCacheStore(QueryCacheStore queryCacheStore) {
+        this.queryCacheStore = queryCacheStore;
+    }
+
+    /**
      * 正式落库文章。
      *
      * @param jobId 作业标识
@@ -161,6 +174,7 @@ public class ArticlePersistSupport {
             }
             persistedCount++;
         }
+        evictQueryCacheIfNeeded(persistedCount);
         return persistedCount;
     }
 
@@ -207,6 +221,18 @@ public class ArticlePersistSupport {
         return articleCompileSupport.finalizeArticleForPersist(reviewEnvelope);
     }
 
+    /**
+     * 在文章落库成功后清理查询缓存。
+     *
+     * @param persistedCount 已落库文章数
+     */
+    private void evictQueryCacheIfNeeded(int persistedCount) {
+        if (persistedCount <= 0 || queryCacheStore == null) {
+            return;
+        }
+        queryCacheStore.evictAll();
+    }
+
     private ArticleRecord ensureSourceAwareIdentifiers(ArticleRecord articleRecord, Long sourceId, String sourceCode) {
         Long effectiveSourceId = articleRecord.getSourceId() == null ? sourceId : articleRecord.getSourceId();
         String effectiveArticleKey = articleRecord.getArticleKey();
@@ -248,9 +274,23 @@ public class ArticlePersistSupport {
                 || sourceId == null) {
             return;
         }
+        java.util.Map<String, ArticleSourceRefRecord> existingRefsByLabel = new java.util.LinkedHashMap<String, ArticleSourceRefRecord>();
+        for (ArticleSourceRefRecord existingRef : articleSourceRefJdbcRepository.findByArticleKey(articleRecord.getArticleKey())) {
+            if (existingRef.getRefLabel() == null || existingRef.getRefLabel().isBlank()) {
+                continue;
+            }
+            existingRefsByLabel.put(existingRef.getRefLabel(), existingRef);
+        }
+
         java.util.List<ArticleSourceRefRecord> refRecords = new java.util.ArrayList<ArticleSourceRefRecord>();
         for (String sourcePath : articleRecord.getSourcePaths()) {
             Long sourceFileId = sourceFileIdsByPath.get(sourcePath);
+            if (sourceFileId == null) {
+                ArticleSourceRefRecord existingRef = existingRefsByLabel.get(sourcePath);
+                if (existingRef != null) {
+                    sourceFileId = existingRef.getSourceFileId();
+                }
+            }
             if (sourceFileId == null) {
                 throw new IllegalStateException("source file id missing for article path: " + sourcePath);
             }

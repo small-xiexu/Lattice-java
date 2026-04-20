@@ -2,9 +2,13 @@ package com.xbk.lattice.api.admin;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import com.xbk.lattice.source.domain.KnowledgeSource;
 import com.xbk.lattice.source.domain.KnowledgeSourcePage;
+import com.xbk.lattice.source.domain.SourceSyncRunDetail;
+import com.xbk.lattice.source.domain.SourceValidationResult;
 import com.xbk.lattice.source.service.SourceService;
+import com.xbk.lattice.source.service.SourceSyncWorkflowService;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -13,6 +17,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -47,13 +52,19 @@ public class AdminSourceController {
 
     private final SourceService sourceService;
 
+    private final SourceSyncWorkflowService sourceSyncWorkflowService;
+
     /**
      * 创建资料源后台控制器。
      *
      * @param sourceService 资料源服务
      */
-    public AdminSourceController(SourceService sourceService) {
+    public AdminSourceController(
+            SourceService sourceService,
+            SourceSyncWorkflowService sourceSyncWorkflowService
+    ) {
         this.sourceService = sourceService;
+        this.sourceSyncWorkflowService = sourceSyncWorkflowService;
     }
 
     /**
@@ -111,6 +122,28 @@ public class AdminSourceController {
     }
 
     /**
+     * 创建 Git 资料源。
+     *
+     * @param request 创建请求
+     * @return 资料源详情
+     */
+    @PostMapping("/git")
+    public AdminKnowledgeSourceDetailResponse createGitSource(@RequestBody AdminSourceCreateRequest request) {
+        return toDetailResponse(sourceSyncWorkflowService.createGitSource(request));
+    }
+
+    /**
+     * 创建服务器目录资料源。
+     *
+     * @param request 创建请求
+     * @return 资料源详情
+     */
+    @PostMapping("/server-dir")
+    public AdminKnowledgeSourceDetailResponse createServerDirSource(@RequestBody AdminSourceCreateRequest request) {
+        return toDetailResponse(sourceSyncWorkflowService.createServerDirSource(request));
+    }
+
+    /**
      * 更新资料源基础信息。
      *
      * @param sourceId 资料源主键
@@ -151,6 +184,62 @@ public class AdminSourceController {
                 existing.getUpdatedAt()
         ));
         return toDetailResponse(updated);
+    }
+
+    /**
+     * 校验资料源配置。
+     *
+     * @param sourceId 资料源主键
+     * @return 校验结果
+     * @throws java.io.IOException IO 异常
+     */
+    @PostMapping("/{sourceId}/validate")
+    public AdminSourceValidationResponse validateSource(@PathVariable Long sourceId) throws java.io.IOException {
+        SourceValidationResult validationResult = sourceSyncWorkflowService.validateSource(sourceId);
+        return new AdminSourceValidationResponse(
+                validationResult.isValid(),
+                validationResult.getSourceType(),
+                validationResult.getMessage(),
+                validationResult.getResolvedRef(),
+                validationResult.getBranch(),
+                validationResult.getGitCommit()
+        );
+    }
+
+    /**
+     * 对指定资料源发起同步。
+     *
+     * @param sourceId 资料源主键
+     * @return 同步运行详情
+     * @throws java.io.IOException IO 异常
+     */
+    @PostMapping("/{sourceId}/sync")
+    public SourceSyncRunDetail syncSource(@PathVariable Long sourceId) throws java.io.IOException {
+        return sourceSyncWorkflowService.syncSource(sourceId);
+    }
+
+    /**
+     * 查询资料源下的文件列表。
+     *
+     * @param sourceId 资料源主键
+     * @return 文件列表
+     */
+    @GetMapping("/{sourceId}/files")
+    public List<AdminSourceFileResponse> listSourceFiles(@PathVariable Long sourceId) {
+        List<AdminSourceFileResponse> responses = new ArrayList<AdminSourceFileResponse>();
+        for (SourceFileRecord sourceFileRecord : sourceService.listSourceFiles(sourceId)) {
+            JsonNode metadataNode = readJson(sourceFileRecord.getMetadataJson());
+            responses.add(new AdminSourceFileResponse(
+                    sourceFileRecord.getId(),
+                    sourceFileRecord.getSourceId(),
+                    sourceFileRecord.getRelativePath(),
+                    sourceFileRecord.getFormat(),
+                    sourceFileRecord.getFileSize(),
+                    metadataNode.path("parseMode").asText(null),
+                    metadataNode.path("parseProvider").asText(null)
+            ));
+        }
+        return responses;
     }
 
     private String resolveName(KnowledgeSource existing, AdminKnowledgeSourcePatchRequest request) {
@@ -281,6 +370,18 @@ public class AdminSourceController {
 
     private String formatTime(java.time.OffsetDateTime value) {
         return value == null ? null : value.toString();
+    }
+
+    private JsonNode readJson(String json) {
+        if (!StringUtils.hasText(json)) {
+            return OBJECT_MAPPER.createObjectNode();
+        }
+        try {
+            return OBJECT_MAPPER.readTree(json);
+        }
+        catch (Exception ex) {
+            return OBJECT_MAPPER.createObjectNode();
+        }
     }
 
     /**

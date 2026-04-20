@@ -47,13 +47,14 @@ public class PendingQueryJdbcRepository {
 
         String sql = """
                 insert into pending_queries (
-                    query_id, question, answer, selected_concept_ids, source_file_paths,
+                    query_id, question, answer, selected_concept_ids, selected_article_keys, source_file_paths,
                     corrections, review_status, created_at, expires_at
                 )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on conflict (query_id) do update
                 set answer = excluded.answer,
                     selected_concept_ids = excluded.selected_concept_ids,
+                    selected_article_keys = excluded.selected_article_keys,
                     source_file_paths = excluded.source_file_paths,
                     corrections = excluded.corrections,
                     review_status = excluded.review_status,
@@ -63,6 +64,10 @@ public class PendingQueryJdbcRepository {
             Array conceptIdsArray = connection.createArrayOf(
                     "text",
                     pendingQueryRecord.getSelectedConceptIds().toArray(new String[0])
+            );
+            Array articleKeysArray = connection.createArrayOf(
+                    "text",
+                    pendingQueryRecord.getSelectedArticleKeys().toArray(new String[0])
             );
             Array sourcePathsArray = connection.createArrayOf(
                     "text",
@@ -77,11 +82,12 @@ public class PendingQueryJdbcRepository {
             preparedStatement.setString(2, pendingQueryRecord.getQuestion());
             preparedStatement.setString(3, pendingQueryRecord.getAnswer());
             preparedStatement.setArray(4, conceptIdsArray);
-            preparedStatement.setArray(5, sourcePathsArray);
-            preparedStatement.setObject(6, correctionsObject);
-            preparedStatement.setString(7, pendingQueryRecord.getReviewStatus());
-            preparedStatement.setObject(8, pendingQueryRecord.getCreatedAt());
-            preparedStatement.setObject(9, pendingQueryRecord.getExpiresAt());
+            preparedStatement.setArray(5, articleKeysArray);
+            preparedStatement.setArray(6, sourcePathsArray);
+            preparedStatement.setObject(7, correctionsObject);
+            preparedStatement.setString(8, pendingQueryRecord.getReviewStatus());
+            preparedStatement.setObject(9, pendingQueryRecord.getCreatedAt());
+            preparedStatement.setObject(10, pendingQueryRecord.getExpiresAt());
             return preparedStatement;
         });
     }
@@ -98,7 +104,7 @@ public class PendingQueryJdbcRepository {
         }
 
         String sql = """
-                select query_id, question, answer, selected_concept_ids, source_file_paths,
+                select query_id, question, answer, selected_concept_ids, selected_article_keys, source_file_paths,
                        corrections::text as corrections, review_status, created_at, expires_at
                 from pending_queries
                 where query_id = ?
@@ -121,7 +127,7 @@ public class PendingQueryJdbcRepository {
         }
 
         String sql = """
-                select query_id, question, answer, selected_concept_ids, source_file_paths,
+                select query_id, question, answer, selected_concept_ids, selected_article_keys, source_file_paths,
                        corrections::text as corrections, review_status, created_at, expires_at
                 from pending_queries
                 where expires_at >= CURRENT_TIMESTAMP
@@ -156,6 +162,7 @@ public class PendingQueryJdbcRepository {
                 resultSet.getString("question"),
                 resultSet.getString("answer"),
                 readTextArray(resultSet, "selected_concept_ids"),
+                readTextArray(resultSet, "selected_article_keys"),
                 readTextArray(resultSet, "source_file_paths"),
                 resultSet.getString("corrections"),
                 resultSet.getString("review_status"),

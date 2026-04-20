@@ -27,11 +27,9 @@
 
 ## 实施约定
 
-- 当前实施、验收与收口台账以 [`.codex/Spring AI Alibaba Graph 完整接入设计方案.md`](/Users/sxie/xbk/Lattice-java/.codex/Spring%20AI%20Alibaba%20Graph%20%E5%AE%8C%E6%95%B4%E6%8E%A5%E5%85%A5%E8%AE%BE%E8%AE%A1%E6%96%B9%E6%A1%88.md) 为准
-- 当前运行入口以 [`.codex/项目启动配置清单.md`](/Users/sxie/xbk/Lattice-java/.codex/%E9%A1%B9%E7%9B%AE%E5%90%AF%E5%8A%A8%E9%85%8D%E7%BD%AE%E6%B8%85%E5%8D%95.md) 和 [`README.md`](/Users/sxie/xbk/Lattice-java/README.md) 为准
-- [`.codex/Spring AI Alibaba Graph 技术验证记录.md`](/Users/sxie/xbk/Lattice-java/.codex/Spring%20AI%20Alibaba%20Graph%20%E6%8A%80%E6%9C%AF%E9%AA%8C%E8%AF%81%E8%AE%B0%E5%BD%95.md) 仅作为技术验证附录，不作为实施台账
-- `B5-B9` 阶段历史文档与重构总设计文档均已退场，不再作为当前推进入口
-- 若继续推进后续迭代，先读取上述台账与运行文档；如需多阶段执行，先新建或指定新的执行清单，再开始实施
+- 当前运行、验收与回归入口以 [`docs/项目启动配置清单.md`](/Users/sxie/xbk/Lattice-java/docs/%E9%A1%B9%E7%9B%AE%E5%90%AF%E5%8A%A8%E9%85%8D%E7%BD%AE%E6%B8%85%E5%8D%95.md)、[`README.md`](/Users/sxie/xbk/Lattice-java/README.md) 与 [`docs/项目全流程真实验收手册.md`](/Users/sxie/xbk/Lattice-java/docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md) 为准
+- `B5-B9` 阶段历史文档、Graph 完整设计台账、专题技术方案与一次性回归附录均已退场，不再作为当前推进入口
+- 若继续推进后续迭代，先读取上述运行/验收文档；如需多阶段执行，先新建或指定新的执行清单，再开始实施
 - B1 默认不引入向量 ORM 映射；向量字段写入和检索后置到 B3，优先使用 `JdbcTemplate/jOOQ + SQL`
 - 涉及 PostgreSQL 本机端口访问、Docker `exec` 或外网依赖下载时，注意当前环境可能需要额外权限
 - 若做后台/真实链路验收，默认先走 OpenAI 成本更可控的模型绑定完成主回归；只有在“验证 Claude 角色选路是否仍可用”这一类专项场景下，才临时切到 Claude 绑定并在验收后恢复

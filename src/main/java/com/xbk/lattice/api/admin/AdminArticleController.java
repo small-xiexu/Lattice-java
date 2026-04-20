@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -70,6 +71,12 @@ public class AdminArticleController {
         List<ArticleRecord> articleRecords = adminArticleQueryService.list(query, lifecycle, sourceId);
         List<AdminArticleSummaryResponse> items = new ArrayList<AdminArticleSummaryResponse>();
         for (ArticleRecord articleRecord : articleRecords) {
+            List<String> sourcePaths = articleRecord.getSourcePaths() == null
+                    ? Collections.<String>emptyList()
+                    : articleRecord.getSourcePaths();
+            String compiledAt = articleRecord.getCompiledAt() == null ? null : articleRecord.getCompiledAt().toString();
+            int resolvedSourceCount = sourcePaths.size();
+            String primarySourcePath = sourcePaths.isEmpty() ? null : sourcePaths.get(0);
             items.add(new AdminArticleSummaryResponse(
                     articleRecord.getSourceId(),
                     articleRecord.getArticleKey(),
@@ -77,10 +84,12 @@ public class AdminArticleController {
                     articleRecord.getTitle(),
                     articleRecord.getLifecycle(),
                     articleRecord.getReviewStatus(),
-                    articleRecord.getCompiledAt() == null ? null : articleRecord.getCompiledAt().toString(),
+                    compiledAt,
                     articleRecord.getSummary(),
-                    articleRecord.getSourcePaths().size(),
-                    articleRecord.getSourcePaths().isEmpty() ? null : articleRecord.getSourcePaths().get(0)
+                    resolvedSourceCount,
+                    primarySourcePath,
+                    sourcePaths,
+                    primarySourcePath
             ));
         }
         return new AdminArticleListResponse(items.size(), items);
@@ -99,6 +108,12 @@ public class AdminArticleController {
             @RequestParam(required = false) Long sourceId
     ) {
         ArticleRecord articleRecord = adminArticleQueryService.get(articleId, sourceId);
+        List<String> sourcePaths = articleRecord.getSourcePaths() == null
+                ? Collections.<String>emptyList()
+                : articleRecord.getSourcePaths();
+        String compiledAt = articleRecord.getCompiledAt() == null ? null : articleRecord.getCompiledAt().toString();
+        int resolvedSourceCount = sourcePaths.size();
+        String primarySourcePath = sourcePaths.isEmpty() ? null : sourcePaths.get(0);
         return new AdminArticleDetailResponse(
                 articleRecord.getSourceId(),
                 articleRecord.getArticleKey(),
@@ -106,11 +121,13 @@ public class AdminArticleController {
                 articleRecord.getTitle(),
                 articleRecord.getContent(),
                 articleRecord.getLifecycle(),
-                articleRecord.getCompiledAt() == null ? null : articleRecord.getCompiledAt().toString(),
+                compiledAt,
                 articleRecord.getSummary(),
                 articleRecord.getReviewStatus(),
                 articleRecord.getConfidence(),
-                articleRecord.getSourcePaths(),
+                resolvedSourceCount,
+                primarySourcePath,
+                sourcePaths,
                 articleRecord.getReferentialKeywords(),
                 articleRecord.getDependsOn(),
                 articleRecord.getRelated(),
@@ -128,19 +145,20 @@ public class AdminArticleController {
      */
     @PostMapping("/{conceptId}/lifecycle/{action}")
     public LifecycleTransitionResult transitionLifecycle(
-            @PathVariable String conceptId,
+            @PathVariable("conceptId") String articleId,
             @PathVariable String action,
-            @RequestBody AdminLifecycleRequest lifecycleRequest
+            @RequestBody AdminLifecycleRequest lifecycleRequest,
+            @RequestParam(required = false) Long sourceId
     ) {
         String normalizedAction = action == null ? "" : action.trim().toLowerCase(Locale.ROOT);
         if ("deprecate".equals(normalizedAction)) {
-            return lifecycleService.deprecate(conceptId, lifecycleRequest.getReason(), lifecycleRequest.getUpdatedBy());
+            return lifecycleService.deprecate(articleId, sourceId, lifecycleRequest.getReason(), lifecycleRequest.getUpdatedBy());
         }
         if ("archive".equals(normalizedAction)) {
-            return lifecycleService.archive(conceptId, lifecycleRequest.getReason(), lifecycleRequest.getUpdatedBy());
+            return lifecycleService.archive(articleId, sourceId, lifecycleRequest.getReason(), lifecycleRequest.getUpdatedBy());
         }
         if ("activate".equals(normalizedAction)) {
-            return lifecycleService.activate(conceptId, lifecycleRequest.getReason(), lifecycleRequest.getUpdatedBy());
+            return lifecycleService.activate(articleId, sourceId, lifecycleRequest.getReason(), lifecycleRequest.getUpdatedBy());
         }
         throw new IllegalArgumentException("unsupported lifecycle action: " + action);
     }
@@ -154,9 +172,10 @@ public class AdminArticleController {
      */
     @PostMapping("/{conceptId}/correct")
     public ArticleCorrectionResult correct(
-            @PathVariable String conceptId,
-            @RequestBody AdminArticleCorrectionRequest request
+            @PathVariable("conceptId") String articleId,
+            @RequestBody AdminArticleCorrectionRequest request,
+            @RequestParam(required = false) Long sourceId
     ) {
-        return articleCorrectionService.correct(conceptId, request.getCorrectionSummary());
+        return articleCorrectionService.correct(articleId, sourceId, request.getCorrectionSummary());
     }
 }

@@ -300,7 +300,11 @@ public class IncrementalCompileService {
             }
             ArticleRecord updatedArticle = enhanceExistingArticle(existingArticle.orElseThrow(), entry.getValue());
             articleJdbcRepository.upsert(updatedArticle);
-            articleChunkJdbcRepository.replaceChunksFromContent(updatedArticle.getConceptId(), updatedArticle.getContent());
+            articleChunkJdbcRepository.replaceChunksFromContent(
+                    updatedArticle.getArticleKey(),
+                    updatedArticle.getConceptId(),
+                    updatedArticle.getContent()
+            );
             articleVectorIndexService.indexArticle(updatedArticle);
             if (articleChunkVectorIndexService != null) {
                 articleChunkVectorIndexService.indexArticle(updatedArticle);
@@ -319,7 +323,11 @@ public class IncrementalCompileService {
         for (MergedConcept mergedConcept : conceptsToCreate) {
             ArticleRecord createdArticle = compileArticleNode.compile(mergedConcept, sourceDir);
             articleJdbcRepository.upsert(createdArticle);
-            articleChunkJdbcRepository.replaceChunksFromContent(createdArticle.getConceptId(), createdArticle.getContent());
+            articleChunkJdbcRepository.replaceChunksFromContent(
+                    createdArticle.getArticleKey(),
+                    createdArticle.getConceptId(),
+                    createdArticle.getContent()
+            );
             articleVectorIndexService.indexArticle(createdArticle);
             if (articleChunkVectorIndexService != null) {
                 articleChunkVectorIndexService.indexArticle(createdArticle);
@@ -776,8 +784,7 @@ public class IncrementalCompileService {
                 : frontmatterValues.getReviewStatus();
         String title = frontmatterValues.getTitle().isBlank() ? existingArticle.getTitle() : frontmatterValues.getTitle();
 
-        return new ArticleRecord(
-                existingArticle.getConceptId(),
+        return existingArticle.copy(
                 title,
                 markdownContent,
                 existingArticle.getLifecycle(),

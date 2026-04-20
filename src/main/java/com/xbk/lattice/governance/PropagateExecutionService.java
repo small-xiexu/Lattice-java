@@ -2,12 +2,14 @@ package com.xbk.lattice.governance;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xbk.lattice.article.service.ArticleIdentityResolver;
 import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotRecord;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,10 +36,33 @@ public class PropagateExecutionService {
 
     private final ArticleSnapshotJdbcRepository articleSnapshotJdbcRepository;
 
+    private final ArticleIdentityResolver articleIdentityResolver;
+
     private final LlmGateway llmGateway;
 
     /**
      * 创建下游传播执行服务。
+     *
+     * @param articleJdbcRepository 文章仓储
+     * @param articleSnapshotJdbcRepository 快照仓储
+     * @param articleIdentityResolver 文章身份解析器
+     * @param llmGateway LLM 网关
+     */
+    @Autowired
+    public PropagateExecutionService(
+            ArticleJdbcRepository articleJdbcRepository,
+            ArticleSnapshotJdbcRepository articleSnapshotJdbcRepository,
+            ArticleIdentityResolver articleIdentityResolver,
+            LlmGateway llmGateway
+    ) {
+        this.articleJdbcRepository = articleJdbcRepository;
+        this.articleSnapshotJdbcRepository = articleSnapshotJdbcRepository;
+        this.articleIdentityResolver = articleIdentityResolver;
+        this.llmGateway = llmGateway;
+    }
+
+    /**
+     * 创建兼容旧构造方式的传播执行服务。
      *
      * @param articleJdbcRepository 文章仓储
      * @param articleSnapshotJdbcRepository 快照仓储
@@ -48,9 +73,12 @@ public class PropagateExecutionService {
             ArticleSnapshotJdbcRepository articleSnapshotJdbcRepository,
             LlmGateway llmGateway
     ) {
-        this.articleJdbcRepository = articleJdbcRepository;
-        this.articleSnapshotJdbcRepository = articleSnapshotJdbcRepository;
-        this.llmGateway = llmGateway;
+        this(
+                articleJdbcRepository,
+                articleSnapshotJdbcRepository,
+                articleJdbcRepository == null ? null : new ArticleIdentityResolver(articleJdbcRepository),
+                llmGateway
+        );
     }
 
     /**
@@ -61,13 +89,15 @@ public class PropagateExecutionService {
      */
     @Transactional(rollbackFor = Exception.class)
     public PropagationExecutionResult executePropagation(String rootConceptId) {
-        Optional<ArticleRecord> optionalRootArticle = articleJdbcRepository.findByConceptId(rootConceptId);
+        Optional<ArticleRecord> optionalRootArticle = articleIdentityResolver == null
+                ? articleJdbcRepository.findByConceptId(rootConceptId)
+                : articleIdentityResolver.resolve(rootConceptId);
         if (optionalRootArticle.isEmpty()) {
             return new PropagationExecutionResult(0, 0, 0);
         }
 
         ArticleRecord rootArticle = optionalRootArticle.orElseThrow();
-        List<ArticleRecord> downstreamArticles = articleJdbcRepository.findWithUpstreamCorrections(rootConceptId);
+        List<ArticleRecord> downstreamArticles = articleJdbcRepository.findWithUpstreamCorrections(rootArticle);
         int processed = 0;
         int updated = 0;
         int skipped = 0;
@@ -87,8 +117,7 @@ public class PropagateExecutionService {
                         buildApplyPrompt(rootArticle, downstreamArticle, correctionSummary)
                 );
                 String propagatedContent = appendPropagationMarker(updatedContent, rootConceptId);
-                ArticleRecord updatedRecord = new ArticleRecord(
-                        downstreamArticle.getConceptId(),
+                ArticleRecord updatedRecord = downstreamArticle.copy(
                         downstreamArticle.getTitle(),
                         propagatedContent,
                         downstreamArticle.getLifecycle(),
@@ -103,21 +132,8 @@ public class PropagateExecutionService {
                         "needs_review"
                 );
                 articleJdbcRepository.upsert(updatedRecord);
-                articleSnapshotJdbcRepository.save(new ArticleSnapshotRecord(
-                        -1L,
-                        updatedRecord.getConceptId(),
-                        updatedRecord.getTitle(),
-                        updatedRecord.getContent(),
-                        updatedRecord.getLifecycle(),
-                        updatedRecord.getCompiledAt(),
-                        updatedRecord.getSourcePaths(),
-                        updatedRecord.getMetadataJson(),
-                        updatedRecord.getSummary(),
-                        updatedRecord.getReferentialKeywords(),
-                        updatedRecord.getDependsOn(),
-                        updatedRecord.getRelated(),
-                        updatedRecord.getConfidence(),
-                        updatedRecord.getReviewStatus(),
+                articleSnapshotJdbcRepository.save(ArticleSnapshotRecord.fromArticle(
+                        updatedRecord,
                         "propagation",
                         OffsetDateTime.now()
                 ));
@@ -126,7 +142,7 @@ public class PropagateExecutionService {
             else {
                 skipped++;
             }
-            articleJdbcRepository.clearUpstreamCorrection(downstreamArticle.getConceptId(), rootConceptId);
+            articleJdbcRepository.clearUpstreamCorrection(downstreamArticle, rootArticle);
             processed++;
         }
         return new PropagationExecutionResult(processed, updated, skipped);
@@ -165,6 +181,7 @@ public class PropagateExecutionService {
             String correctionSummary
     ) {
         return "上游概念：" + rootArticle.getConceptId() + "\n"
+                + "上游文章键：" + rootArticle.getArticleKey() + "\n"
                 + "纠错摘要：" + correctionSummary + "\n"
                 + "上游文章：\n" + rootArticle.getContent() + "\n\n"
                 + "下游文章：\n" + downstreamArticle.getContent();
@@ -176,6 +193,7 @@ public class PropagateExecutionService {
             String correctionSummary
     ) {
         return "上游概念：" + rootArticle.getConceptId() + "\n"
+                + "上游文章键：" + rootArticle.getArticleKey() + "\n"
                 + "纠错摘要：" + correctionSummary + "\n"
                 + "请基于上游纠错重写下游文章。\n\n"
                 + "下游文章原文：\n" + downstreamArticle.getContent();

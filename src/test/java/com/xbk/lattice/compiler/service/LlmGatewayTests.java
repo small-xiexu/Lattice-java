@@ -185,5 +185,11 @@ class LlmGatewayTests {
         public Long getExpire(String key) {
             return ttlSeconds.get(key);
         }
+
+        @Override
+        public void deleteByPrefix(String keyPrefix) {
+            values.keySet().removeIf(key -> key.startsWith(keyPrefix));
+            ttlSeconds.keySet().removeIf(key -> key.startsWith(keyPrefix));
+        }
     }
 }

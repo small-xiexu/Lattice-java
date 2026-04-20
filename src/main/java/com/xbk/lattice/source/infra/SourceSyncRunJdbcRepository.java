@@ -74,6 +74,27 @@ public class SourceSyncRunJdbcRepository {
     }
 
     /**
+     * 查询最近的同步运行。
+     *
+     * @param limit 返回数量
+     * @return 最近运行列表
+     */
+    public List<SourceSyncRun> findRecent(int limit) {
+        return jdbcTemplate.query(
+                """
+                        select id, source_id, source_type, manifest_hash, trigger_type, resolver_mode,
+                               resolver_decision, sync_action, status, matched_source_id, compile_job_id,
+                               evidence_json, error_message, requested_at, updated_at, started_at, finished_at
+                        from source_sync_runs
+                        order by requested_at desc, id desc
+                        limit ?
+                        """,
+                this::mapRecord,
+                Math.max(limit, 1)
+        );
+    }
+
+    /**
      * 查询资料包 prelock 命中的活动运行。
      *
      * @param manifestHash 资料包 manifest 哈希

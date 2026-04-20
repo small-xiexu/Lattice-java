@@ -4,11 +4,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.xbk.lattice.article.service.ArticleIdentityResolver;
 import com.xbk.lattice.governance.domain.LifecycleItem;
 import com.xbk.lattice.governance.domain.LifecycleReport;
 import com.xbk.lattice.governance.domain.LifecycleTransitionResult;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * 生命周期服务
@@ -33,13 +34,30 @@ public class LifecycleService {
 
     private final ArticleJdbcRepository articleJdbcRepository;
 
+    private final ArticleIdentityResolver articleIdentityResolver;
+
     /**
      * 创建生命周期服务。
      *
      * @param articleJdbcRepository 文章仓储
+     * @param articleIdentityResolver 文章身份解析服务
+     */
+    @Autowired
+    public LifecycleService(
+            ArticleJdbcRepository articleJdbcRepository,
+            ArticleIdentityResolver articleIdentityResolver
+    ) {
+        this.articleJdbcRepository = articleJdbcRepository;
+        this.articleIdentityResolver = articleIdentityResolver;
+    }
+
+    /**
+     * 创建兼容旧构造方式的生命周期服务。
+     *
+     * @param articleJdbcRepository 文章仓储
      */
     public LifecycleService(ArticleJdbcRepository articleJdbcRepository) {
-        this.articleJdbcRepository = articleJdbcRepository;
+        this(articleJdbcRepository, new ArticleIdentityResolver(articleJdbcRepository));
     }
 
     /**
@@ -92,7 +110,21 @@ public class LifecycleService {
      */
     @Transactional(rollbackFor = Exception.class)
     public LifecycleTransitionResult deprecate(String conceptId, String reason, String updatedBy) {
-        return transition(conceptId, "deprecated", reason, updatedBy);
+        return deprecate(conceptId, null, reason, updatedBy);
+    }
+
+    /**
+     * 将文章标记为 deprecated。
+     *
+     * @param articleId 文章唯一键或概念标识
+     * @param sourceId 可选资料源主键
+     * @param reason 原因
+     * @param updatedBy 更新人
+     * @return 生命周期切换结果
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public LifecycleTransitionResult deprecate(String articleId, Long sourceId, String reason, String updatedBy) {
+        return transition(articleId, sourceId, "deprecated", reason, updatedBy);
     }
 
     /**
@@ -105,7 +137,21 @@ public class LifecycleService {
      */
     @Transactional(rollbackFor = Exception.class)
     public LifecycleTransitionResult archive(String conceptId, String reason, String updatedBy) {
-        return transition(conceptId, "archived", reason, updatedBy);
+        return archive(conceptId, null, reason, updatedBy);
+    }
+
+    /**
+     * 将文章标记为 archived。
+     *
+     * @param articleId 文章唯一键或概念标识
+     * @param sourceId 可选资料源主键
+     * @param reason 原因
+     * @param updatedBy 更新人
+     * @return 生命周期切换结果
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public LifecycleTransitionResult archive(String articleId, Long sourceId, String reason, String updatedBy) {
+        return transition(articleId, sourceId, "archived", reason, updatedBy);
     }
 
     /**
@@ -118,7 +164,21 @@ public class LifecycleService {
      */
     @Transactional(rollbackFor = Exception.class)
     public LifecycleTransitionResult activate(String conceptId, String reason, String updatedBy) {
-        return transition(conceptId, "active", reason, updatedBy);
+        return activate(conceptId, null, reason, updatedBy);
+    }
+
+    /**
+     * 将文章恢复为 active。
+     *
+     * @param articleId 文章唯一键或概念标识
+     * @param sourceId 可选资料源主键
+     * @param reason 原因
+     * @param updatedBy 更新人
+     * @return 生命周期切换结果
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public LifecycleTransitionResult activate(String articleId, Long sourceId, String reason, String updatedBy) {
+        return transition(articleId, sourceId, "active", reason, updatedBy);
     }
 
     /**
@@ -131,17 +191,13 @@ public class LifecycleService {
      * @return 生命周期切换结果
      */
     private LifecycleTransitionResult transition(
-            String conceptId,
+            String articleId,
+            Long sourceId,
             String lifecycle,
             String reason,
             String updatedBy
     ) {
-        Optional<ArticleRecord> optionalArticleRecord = articleJdbcRepository.findByConceptId(conceptId);
-        if (optionalArticleRecord.isEmpty()) {
-            throw new IllegalArgumentException("article not found: " + conceptId);
-        }
-
-        ArticleRecord articleRecord = optionalArticleRecord.orElseThrow();
+        ArticleRecord articleRecord = articleIdentityResolver.require(articleId, sourceId);
         OffsetDateTime updatedAt = OffsetDateTime.now();
         String metadataJson = mergeLifecycleMetadata(
                 articleRecord.getMetadataJson(),
@@ -150,8 +206,7 @@ public class LifecycleService {
                 updatedBy,
                 updatedAt
         );
-        ArticleRecord updatedRecord = new ArticleRecord(
-                articleRecord.getConceptId(),
+        ArticleRecord updatedRecord = articleRecord.copy(
                 articleRecord.getTitle(),
                 articleRecord.getContent(),
                 lifecycle,
@@ -168,6 +223,8 @@ public class LifecycleService {
         articleJdbcRepository.upsert(updatedRecord);
 
         return new LifecycleTransitionResult(
+                updatedRecord.getSourceId(),
+                updatedRecord.getArticleKey(),
                 updatedRecord.getConceptId(),
                 updatedRecord.getTitle(),
                 lifecycle,
@@ -233,6 +290,8 @@ public class LifecycleService {
     private LifecycleItem toLifecycleItem(ArticleRecord articleRecord, String lifecycle) {
         JsonNode lifecycleNode = readLifecycleNode(articleRecord.getMetadataJson());
         return new LifecycleItem(
+                articleRecord.getSourceId(),
+                articleRecord.getArticleKey(),
                 articleRecord.getConceptId(),
                 articleRecord.getTitle(),
                 lifecycle,

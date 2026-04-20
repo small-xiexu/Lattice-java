@@ -13,6 +13,10 @@ import java.util.List;
  */
 public class HistoryReport {
 
+    private final Long sourceId;
+
+    private final String articleKey;
+
     private final String conceptId;
 
     private final List<ArticleSnapshotRecord> items;
@@ -23,9 +27,39 @@ public class HistoryReport {
      * @param conceptId 概念标识
      * @param items 历史项列表
      */
-    public HistoryReport(String conceptId, List<ArticleSnapshotRecord> items) {
+    public HistoryReport(Long sourceId, String articleKey, String conceptId, List<ArticleSnapshotRecord> items) {
+        this.sourceId = sourceId;
+        this.articleKey = articleKey;
         this.conceptId = conceptId;
         this.items = items;
+    }
+
+    /**
+     * 创建兼容旧调用的历史报告。
+     *
+     * @param conceptId 概念标识
+     * @param items 历史项列表
+     */
+    public HistoryReport(String conceptId, List<ArticleSnapshotRecord> items) {
+        this(null, conceptId, conceptId, items);
+    }
+
+    /**
+     * 获取资料源主键。
+     *
+     * @return 资料源主键
+     */
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    /**
+     * 获取文章唯一键。
+     *
+     * @return 文章唯一键
+     */
+    public String getArticleKey() {
+        return articleKey;
     }
 
     /**

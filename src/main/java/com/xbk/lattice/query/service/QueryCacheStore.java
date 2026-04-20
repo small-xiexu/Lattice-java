@@ -28,4 +28,9 @@ public interface QueryCacheStore {
      * @param queryResponse 查询结果
      */
     void put(String cacheKey, QueryResponse queryResponse);
+
+    /**
+     * 清空当前查询缓存。
+     */
+    void evictAll();
 }

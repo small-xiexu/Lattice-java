@@ -45,3 +45,7 @@ build/
 
 ### Local AI Runtime Config ###
 .claude/
+
+### Local JS Tool Caches ###
+.npm-cache/
+.playwright-browsers/

@@ -10,6 +10,8 @@ import com.xbk.lattice.infra.persistence.ContributionJdbcRepository;
 import com.xbk.lattice.infra.persistence.ContributionRecord;
 import com.xbk.lattice.infra.persistence.RepoSnapshotJdbcRepository;
 import com.xbk.lattice.infra.persistence.RepoSnapshotRecord;
+import com.xbk.lattice.source.domain.KnowledgeSource;
+import com.xbk.lattice.source.service.SourceService;
 import com.xbk.lattice.vault.VaultExportService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -71,6 +73,9 @@ class VaultSnapshotServiceTests {
     @Autowired
     private VaultSnapshotService vaultSnapshotService;
 
+    @Autowired
+    private SourceService sourceService;
+
     /**
      * 验证可基于 repo snapshot 计算 Vault diff，并执行整库 rollback。
      *
@@ -82,12 +87,13 @@ class VaultSnapshotServiceTests {
         resetTables();
         Path vaultDir = tempDir.resolve("vault");
 
-        seedBaselineState();
+        Long sourceId = createManagedSourceId();
+        seedBaselineState(sourceId);
         vaultExportService.export(vaultDir);
         String baselineCommitId = vaultGitService.commitAll(vaultDir, "[lattice:manual] baseline");
         RepoSnapshotRecord baselineSnapshot = repoSnapshotService.snapshot("manual", "baseline", baselineCommitId);
 
-        seedMutatedState();
+        seedMutatedState(sourceId);
         vaultExportService.export(vaultDir);
         String mutatedCommitId = vaultGitService.commitAll(vaultDir, "[lattice:manual] mutated");
 
@@ -97,7 +103,7 @@ class VaultSnapshotServiceTests {
 
         assertThat(mutatedCommitId).isNotBlank();
         assertThat(diffSummaries).extracting(VaultDiffSummary::getFilePath)
-                .contains("concepts/payment-timeout.md", "index.md");
+                .contains("concepts/payments-docs--payment-timeout.md", "index.md");
         assertThat(rollbackResult.getRestoredSnapshotId()).isEqualTo(baselineSnapshot.getId());
         assertThat(articleJdbcRepository.findByConceptId("payment-timeout")).isPresent();
         assertThat(articleJdbcRepository.findByConceptId("payment-timeout").orElseThrow().getContent())
@@ -110,8 +116,10 @@ class VaultSnapshotServiceTests {
         assertThat(latestSnapshots.get(0).getTriggerEvent()).isEqualTo("rollback");
     }
 
-    private void seedBaselineState() {
+    private void seedBaselineState(Long sourceId) {
         articleJdbcRepository.upsert(new ArticleRecord(
+                sourceId,
+                "payments-docs--payment-timeout",
                 "payment-timeout",
                 "Payment Timeout",
                 "# Payment Timeout\n\nretry=3\n",
@@ -142,12 +150,14 @@ class VaultSnapshotServiceTests {
         ));
     }
 
-    private void seedMutatedState() {
+    private void seedMutatedState(Long sourceId) {
         articleJdbcRepository.deleteAll();
         contributionJdbcRepository.deleteAll();
         synthesisArtifactJdbcStore.deleteAll();
 
         articleJdbcRepository.upsert(new ArticleRecord(
+                sourceId,
+                "payments-docs--payment-timeout",
                 "payment-timeout",
                 "Payment Timeout",
                 "# Payment Timeout\n\nretry=5\n",
@@ -184,5 +194,28 @@ class VaultSnapshotServiceTests {
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_snapshot_test.contributions");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_snapshot_test.synthesis_artifacts");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_snapshot_test.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_snapshot_test.knowledge_sources RESTART IDENTITY CASCADE");
+    }
+
+    private Long createManagedSourceId() {
+        KnowledgeSource source = sourceService.save(new KnowledgeSource(
+                null,
+                "payments-docs",
+                "Payments Docs",
+                "UPLOAD",
+                "DOCUMENT",
+                "ACTIVE",
+                "NORMAL",
+                "AUTO",
+                "{}",
+                "{}",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+        return source.getId();
     }
 }

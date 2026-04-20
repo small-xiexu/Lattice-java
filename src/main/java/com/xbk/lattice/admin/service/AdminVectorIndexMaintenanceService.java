@@ -12,6 +12,7 @@ import com.xbk.lattice.query.service.ArticleChunkVectorIndexService;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
 import com.xbk.lattice.query.service.QueryVectorConfigService;
 import com.xbk.lattice.query.service.QueryVectorConfigState;
+import com.xbk.lattice.query.service.QueryCacheStore;
 import com.xbk.lattice.query.service.SearchCapabilityService;
 import com.xbk.lattice.query.service.VectorSchemaInspection;
 import com.xbk.lattice.query.service.VectorSchemaInspector;
@@ -54,6 +55,8 @@ public class AdminVectorIndexMaintenanceService {
 
     private final VectorSchemaInspector vectorSchemaInspector;
 
+    private final QueryCacheStore queryCacheStore;
+
     /**
      * 创建管理侧向量索引维护服务。
      *
@@ -72,7 +75,8 @@ public class AdminVectorIndexMaintenanceService {
             ArticleVectorIndexService articleVectorIndexService,
             ArticleChunkVectorJdbcRepository articleChunkVectorJdbcRepository,
             ArticleChunkVectorIndexService articleChunkVectorIndexService,
-            VectorSchemaInspector vectorSchemaInspector
+            VectorSchemaInspector vectorSchemaInspector,
+            QueryCacheStore queryCacheStore
     ) {
         this.searchCapabilityService = searchCapabilityService;
         this.queryVectorConfigService = queryVectorConfigService;
@@ -83,6 +87,7 @@ public class AdminVectorIndexMaintenanceService {
         this.articleChunkVectorJdbcRepository = articleChunkVectorJdbcRepository;
         this.articleChunkVectorIndexService = articleChunkVectorIndexService;
         this.vectorSchemaInspector = vectorSchemaInspector;
+        this.queryCacheStore = queryCacheStore;
     }
 
     /**
@@ -149,7 +154,7 @@ public class AdminVectorIndexMaintenanceService {
         AdminVectorIndexRebuildRequest effectiveRequest = request == null
                 ? new AdminVectorIndexRebuildRequest()
                 : request;
-        validateRebuildPrerequisites();
+        validateRebuildPrerequisites(effectiveRequest);
         List<ArticleRecord> articleRecords = articleJdbcRepository.findAll();
         int previousIndexedArticleCount = articleVectorJdbcRepository.countAll();
         int previousIndexedChunkCount = articleChunkVectorJdbcRepository == null
@@ -161,6 +166,7 @@ public class AdminVectorIndexMaintenanceService {
                 articleChunkVectorJdbcRepository.deleteAll();
             }
         }
+        alignSchemaDimensionsIfNeeded(effectiveRequest);
         articleVectorIndexService.indexArticles(articleRecords);
         if (articleChunkVectorIndexService != null) {
             if (articleChunkJdbcRepository != null) {
@@ -175,6 +181,7 @@ public class AdminVectorIndexMaintenanceService {
         String configuredModelName = articleVectorIndexService.getConfiguredModelName();
         String operator = normalizeOperator(effectiveRequest.getOperator());
         OffsetDateTime rebuiltAt = articleVectorJdbcRepository.findLatestUpdatedAt().orElse(OffsetDateTime.now());
+        queryCacheStore.evictAll();
         log.info(
                 "Vector index rebuild finished. truncateFirst: {}, targetArticleCount: {}, indexedArticleCount: {}, indexedChunkCount: {}, configuredModelName: {}, operator: {}",
                 effectiveRequest.isTruncateFirst(),
@@ -200,8 +207,9 @@ public class AdminVectorIndexMaintenanceService {
     /**
      * 校验重建前提条件。
      */
-    private void validateRebuildPrerequisites() {
-        if (!queryVectorConfigService.getCurrentState().isVectorEnabled()) {
+    private void validateRebuildPrerequisites(AdminVectorIndexRebuildRequest request) {
+        QueryVectorConfigState state = queryVectorConfigService.getCurrentState();
+        if (!state.isVectorEnabled()) {
             throw new IllegalArgumentException("当前未启用向量索引");
         }
         if (!searchCapabilityService.supportsVectorType()) {
@@ -213,9 +221,57 @@ public class AdminVectorIndexMaintenanceService {
         if (!articleVectorIndexService.isIndexingAvailable()) {
             throw new IllegalArgumentException("当前 embedding 模型或向量索引能力不可用");
         }
-        if (!vectorSchemaInspector.inspect().isDimensionsConsistent()) {
-            throw new IllegalArgumentException("当前 embedding profile 维度与 schema 维度不一致");
+        if (state.getProfileDimensions() == null || state.getProfileDimensions().intValue() <= 0) {
+            throw new IllegalArgumentException("当前 embedding profile 未配置 expectedDimensions");
         }
+        ensureMismatchIsRepairable(request);
+    }
+
+    /**
+     * 在必要时把向量 schema 对齐到当前 profile 维度。
+     *
+     * @param request 重建请求
+     */
+    private void alignSchemaDimensionsIfNeeded(AdminVectorIndexRebuildRequest request) {
+        QueryVectorConfigState state = queryVectorConfigService.getCurrentState();
+        int targetDimensions = state.getProfileDimensions().intValue();
+        VectorSchemaInspection inspection = vectorSchemaInspector.inspect();
+        if (inspection.isDimensionsConsistent()) {
+            return;
+        }
+        articleVectorJdbcRepository.alignEmbeddingColumnDimensions(targetDimensions);
+        if (articleChunkVectorJdbcRepository != null && searchCapabilityService.hasArticleChunkVectorIndex()) {
+            articleChunkVectorJdbcRepository.alignEmbeddingColumnDimensions(targetDimensions);
+        }
+        log.info(
+                "Aligned vector schema dimensions before rebuild. targetDimensions: {}, truncateFirst: {}, operator: {}",
+                targetDimensions,
+                request.isTruncateFirst(),
+                normalizeOperator(request.getOperator())
+        );
+    }
+
+    /**
+     * 当 schema 维度不一致时，校验本次是否具备自动修复条件。
+     *
+     * @param request 重建请求
+     */
+    private void ensureMismatchIsRepairable(AdminVectorIndexRebuildRequest request) {
+        VectorSchemaInspection inspection = vectorSchemaInspector.inspect();
+        if (inspection.isDimensionsConsistent()) {
+            return;
+        }
+        int indexedArticleCount = articleVectorJdbcRepository.countAll();
+        int indexedChunkCount = articleChunkVectorJdbcRepository == null
+                ? 0
+                : articleChunkVectorJdbcRepository.countAll();
+        if (indexedArticleCount == 0 && indexedChunkCount == 0) {
+            return;
+        }
+        if (request != null && request.isTruncateFirst()) {
+            return;
+        }
+        throw new IllegalArgumentException("当前 embedding profile 维度与 schema 维度不一致，且已有历史向量数据，请勾选 truncateFirst 后重建");
     }
 
     /**

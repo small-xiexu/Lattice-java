@@ -174,7 +174,12 @@ public class VaultSnapshotService {
     private ArticleRecord readArticle(String payloadJson) {
         try {
             JsonNode rootNode = OBJECT_MAPPER.readTree(payloadJson);
+            JsonNode sourceIdNode = rootNode.get("sourceId");
+            Long sourceId = sourceIdNode == null || sourceIdNode.isNull() ? null : sourceIdNode.asLong();
+            String articleKey = rootNode.path("articleKey").asText(rootNode.path("conceptId").asText());
             return new ArticleRecord(
+                    sourceId,
+                    articleKey,
                     rootNode.path("conceptId").asText(),
                     rootNode.path("title").asText(),
                     rootNode.path("content").asText(),

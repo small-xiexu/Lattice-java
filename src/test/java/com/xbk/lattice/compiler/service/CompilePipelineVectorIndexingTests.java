@@ -1,9 +1,11 @@
 package com.xbk.lattice.compiler.service;
 
+import com.xbk.lattice.api.query.QueryResponse;
 import com.xbk.lattice.llm.service.LlmSecretCryptoService;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
 import com.xbk.lattice.query.service.EmbeddingClientFactory;
 import com.xbk.lattice.query.service.EmbeddingRouteResolution;
+import com.xbk.lattice.query.service.QueryCacheStore;
 import com.xbk.lattice.query.service.SearchCapabilityService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -72,6 +74,9 @@ class CompilePipelineVectorIndexingTests {
 
     @Autowired
     private LlmSecretCryptoService llmSecretCryptoService;
+
+    @Autowired
+    private QueryCacheStore queryCacheStore;
 
     /**
      * 验证 full compile 完成后会落库文章向量索引。
@@ -161,6 +166,7 @@ class CompilePipelineVectorIndexingTests {
                         + "}",
                 StandardCharsets.UTF_8
         );
+        queryCacheStore.put("payment timeout compensation", new QueryResponse("旧缓存答案", List.of(), List.of(), null, "PASSED"));
 
         compilePipelineService.incrementalCompile(tempDir);
 
@@ -181,12 +187,14 @@ class CompilePipelineVectorIndexingTests {
         assertThat(chunkVectorCount).isGreaterThan(0);
         assertThat(afterHash).isNotBlank();
         assertThat(afterHash).isNotEqualTo(beforeHash);
+        assertThat(queryCacheStore.get("payment timeout compensation")).isEmpty();
     }
 
     /**
      * 重置编译相关测试表。
      */
     private void resetCompileTables() {
+        queryCacheStore.evictAll();
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_compile_test.llm_model_profiles RESTART IDENTITY CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_compile_test.llm_provider_connections RESTART IDENTITY CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_compile_test.source_files CASCADE");

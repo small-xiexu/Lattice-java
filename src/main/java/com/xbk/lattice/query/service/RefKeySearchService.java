@@ -48,7 +48,7 @@ public class RefKeySearchService {
         }
 
         String sql = """
-                select concept_id, title, content, metadata_json::text as metadata_json, source_paths
+                select source_id, article_key, concept_id, title, content, metadata_json::text as metadata_json, source_paths
                 from articles
                 """;
         List<QueryArticleHit> articleHits = jdbcTemplate.query(sql, this::mapArticleWithoutScore);
@@ -57,6 +57,8 @@ public class RefKeySearchService {
             double score = scoreArticleHit(articleHit, queryTokens);
             if (score > 0) {
                 matchedHits.add(new QueryArticleHit(
+                        articleHit.getSourceId(),
+                        articleHit.getArticleKey(),
                         articleHit.getConceptId(),
                         articleHit.getTitle(),
                         articleHit.getContent(),
@@ -115,6 +117,8 @@ public class RefKeySearchService {
      */
     private QueryArticleHit mapArticleWithoutScore(ResultSet resultSet, int rowNum) throws SQLException {
         return new QueryArticleHit(
+                readLong(resultSet, "source_id"),
+                resultSet.getString("article_key"),
                 resultSet.getString("concept_id"),
                 resultSet.getString("title"),
                 resultSet.getString("content"),
@@ -122,6 +126,19 @@ public class RefKeySearchService {
                 readSourcePaths(resultSet),
                 0
         );
+    }
+
+    /**
+     * 读取可空长整型列。
+     *
+     * @param resultSet 结果集
+     * @param columnName 列名
+     * @return 长整型值
+     * @throws SQLException SQL 异常
+     */
+    private Long readLong(ResultSet resultSet, String columnName) throws SQLException {
+        Object value = resultSet.getObject(columnName);
+        return value == null ? null : resultSet.getLong(columnName);
     }
 
     /**

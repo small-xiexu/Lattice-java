@@ -88,6 +88,7 @@ public class PendingQueryService implements PendingQueryManager {
                 question,
                 queryResponse.getAnswer(),
                 extractConceptIds(queryResponse.getArticles()),
+                extractArticleKeys(queryResponse.getArticles()),
                 extractSourcePaths(queryResponse.getSources()),
                 "[]",
                 queryResponse.getReviewStatus() == null ? ReviewStatus.PASSED.name() : queryResponse.getReviewStatus(),
@@ -128,6 +129,7 @@ public class PendingQueryService implements PendingQueryManager {
                 pendingQueryRecord.getQuestion(),
                 revisedAnswer,
                 pendingQueryRecord.getSelectedConceptIds(),
+                pendingQueryRecord.getSelectedArticleKeys(),
                 pendingQueryRecord.getSourceFilePaths(),
                 correctionsJson,
                 pendingQueryRecord.getReviewStatus(),
@@ -201,6 +203,23 @@ public class PendingQueryService implements PendingQueryManager {
             conceptIds.add(articleResponse.getConceptId());
         }
         return conceptIds;
+    }
+
+    /**
+     * 提取文章唯一键。
+     *
+     * @param articleResponses 命中文章列表
+     * @return 文章唯一键列表
+     */
+    private List<String> extractArticleKeys(List<QueryArticleResponse> articleResponses) {
+        List<String> articleKeys = new ArrayList<String>();
+        for (QueryArticleResponse articleResponse : articleResponses) {
+            if (articleResponse.getArticleKey() == null || articleResponse.getArticleKey().isBlank()) {
+                continue;
+            }
+            articleKeys.add(articleResponse.getArticleKey());
+        }
+        return articleKeys;
     }
 
     /**
@@ -289,7 +308,10 @@ public class PendingQueryService implements PendingQueryManager {
         List<QueryArticleHit> evidenceHits = new ArrayList<QueryArticleHit>();
         evidenceHits.addAll(buildCorrectionEvidenceHits(pendingQueryRecord.getCorrectionsJson()));
         evidenceHits.add(buildLatestCorrectionHit(correction, pendingQueryRecord.getCorrectionsJson()));
-        evidenceHits.addAll(loadArticleEvidenceHits(pendingQueryRecord.getSelectedConceptIds()));
+        evidenceHits.addAll(loadArticleEvidenceHits(
+                pendingQueryRecord.getSelectedArticleKeys(),
+                pendingQueryRecord.getSelectedConceptIds()
+        ));
         evidenceHits.addAll(loadSourceEvidenceHits(pendingQueryRecord.getSourceFilePaths()));
         return evidenceHits;
     }
@@ -348,11 +370,19 @@ public class PendingQueryService implements PendingQueryManager {
     /**
      * 加载文章层证据。
      *
+     * @param articleKeys 文章唯一键列表
      * @param conceptIds 概念标识列表
      * @return 文章命中列表
      */
-    private List<QueryArticleHit> loadArticleEvidenceHits(List<String> conceptIds) {
+    private List<QueryArticleHit> loadArticleEvidenceHits(List<String> articleKeys, List<String> conceptIds) {
         List<QueryArticleHit> articleHits = new ArrayList<QueryArticleHit>();
+        for (String articleKey : articleKeys) {
+            articleJdbcRepository.findByArticleKey(articleKey)
+                    .ifPresent(articleRecord -> articleHits.add(toArticleHit(articleRecord)));
+        }
+        if (!articleHits.isEmpty()) {
+            return articleHits;
+        }
         for (String conceptId : conceptIds) {
             articleJdbcRepository.findByConceptId(conceptId)
                     .ifPresent(articleRecord -> articleHits.add(toArticleHit(articleRecord)));
@@ -403,6 +433,8 @@ public class PendingQueryService implements PendingQueryManager {
     private QueryArticleHit toArticleHit(ArticleRecord articleRecord) {
         return new QueryArticleHit(
                 QueryEvidenceType.ARTICLE,
+                articleRecord.getSourceId(),
+                articleRecord.getArticleKey(),
                 articleRecord.getConceptId(),
                 articleRecord.getTitle(),
                 articleRecord.getContent(),

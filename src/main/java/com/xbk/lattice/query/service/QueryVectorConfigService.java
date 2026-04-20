@@ -39,6 +39,8 @@ public class QueryVectorConfigService {
 
     private final ApplicationEventPublisher applicationEventPublisher;
 
+    private final QueryCacheStore queryCacheStore;
+
     /**
      * 创建 Query 向量配置服务。
      *
@@ -50,13 +52,15 @@ public class QueryVectorConfigService {
             QueryVectorConfigJdbcRepository queryVectorConfigJdbcRepository,
             LlmModelProfileJdbcRepository llmModelProfileJdbcRepository,
             LlmProviderConnectionJdbcRepository llmProviderConnectionJdbcRepository,
-            ApplicationEventPublisher applicationEventPublisher
+            ApplicationEventPublisher applicationEventPublisher,
+            QueryCacheStore queryCacheStore
     ) {
         this.querySearchProperties = querySearchProperties;
         this.queryVectorConfigJdbcRepository = queryVectorConfigJdbcRepository;
         this.llmModelProfileJdbcRepository = llmModelProfileJdbcRepository;
         this.llmProviderConnectionJdbcRepository = llmProviderConnectionJdbcRepository;
         this.applicationEventPublisher = applicationEventPublisher;
+        this.queryCacheStore = queryCacheStore;
     }
 
     /**
@@ -112,6 +116,9 @@ public class QueryVectorConfigService {
                 existing.map(QueryVectorConfigRecord::getUpdatedAt).orElse(null)
         ));
         apply(saved);
+        if (shouldEvictQueryCache(beforeState, saved)) {
+            queryCacheStore.evictAll();
+        }
         boolean rebuildRecommended = shouldRecommendRebuild(beforeState, saved);
         String rebuildReason = buildRebuildReason(beforeState, saved, rebuildRecommended);
         if (!Objects.equals(beforeState.getEmbeddingModelProfileId(), saved.getEmbeddingModelProfileId())) {
@@ -228,6 +235,20 @@ public class QueryVectorConfigService {
             return "已启用向量检索，建议执行一次“重建向量索引”为历史文章补齐 article_vector_index。";
         }
         return "embedding profile 已变更，建议执行一次“重建向量索引”以刷新现有 article_vector_index。";
+    }
+
+    /**
+     * 判断是否需要清空查询缓存。
+     *
+     * @param beforeState 变更前状态
+     * @param savedRecord 保存后的记录
+     * @return 是否需要清空
+     */
+    private boolean shouldEvictQueryCache(QueryVectorConfigState beforeState, QueryVectorConfigRecord savedRecord) {
+        if (beforeState.isVectorEnabled() != savedRecord.isVectorEnabled()) {
+            return true;
+        }
+        return !Objects.equals(beforeState.getEmbeddingModelProfileId(), savedRecord.getEmbeddingModelProfileId());
     }
 
     /**

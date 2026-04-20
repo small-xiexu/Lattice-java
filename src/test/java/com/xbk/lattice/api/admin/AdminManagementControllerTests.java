@@ -1,6 +1,8 @@
 package com.xbk.lattice.api.admin;
 
 import com.xbk.lattice.compiler.service.CompileApplicationFacade;
+import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
+import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.ContributionJdbcRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -14,6 +16,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.OffsetDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -55,6 +59,9 @@ class AdminManagementControllerTests {
     @Autowired
     private ContributionJdbcRepository contributionJdbcRepository;
 
+    @Autowired
+    private ArticleJdbcRepository articleJdbcRepository;
+
     /**
      * 验证管理侧可浏览文章列表与详情。
      *
@@ -71,7 +78,10 @@ class AdminManagementControllerTests {
                 .andExpect(jsonPath("$.items[0].articleKey").value("legacy-default--payment-timeout"))
                 .andExpect(jsonPath("$.items[0].conceptId").value("payment-timeout"))
                 .andExpect(jsonPath("$.items[0].title").value("Payment Timeout"))
+                .andExpect(jsonPath("$.items[0].sourceCount").value(1))
+                .andExpect(jsonPath("$.items[0].primarySourcePath").value("payment/analyze.json"))
                 .andExpect(jsonPath("$.items[0].primarySourceName").value("payment/analyze.json"))
+                .andExpect(jsonPath("$.items[0].sourcePaths[0]").value("payment/analyze.json"))
                 .andExpect(jsonPath("$.items[0].lifecycle").value("ACTIVE"));
 
         mockMvc.perform(get("/api/v1/admin/articles/payment-timeout"))
@@ -79,7 +89,52 @@ class AdminManagementControllerTests {
                 .andExpect(jsonPath("$.articleKey").value("legacy-default--payment-timeout"))
                 .andExpect(jsonPath("$.conceptId").value("payment-timeout"))
                 .andExpect(jsonPath("$.summary").value("Handles payment timeout recovery"))
+                .andExpect(jsonPath("$.sourceCount").value(1))
+                .andExpect(jsonPath("$.primarySourcePath").value("payment/analyze.json"))
                 .andExpect(jsonPath("$.sourcePaths[0]").value("payment/analyze.json"));
+    }
+
+    /**
+     * 验证管理侧列表支持来源文件搜索，并可返回多来源聚合条目。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldSearchArticlesBySourcePathAndExposeTraceabilityFields() throws Exception {
+        resetTables();
+        prepareArticleFixtures();
+
+        mockMvc.perform(get("/api/v1/admin/articles").queryParam("query", "payment_retry_policy.xlsx"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(1))
+                .andExpect(jsonPath("$.items[0].articleKey").value("knowledge-schema--payments"))
+                .andExpect(jsonPath("$.items[0].sourceCount").value(4))
+                .andExpect(jsonPath("$.items[0].primarySourcePath").value("payments/PaymentRetryPolicy.java"))
+                .andExpect(jsonPath("$.items[0].sourcePaths[1]").value("docs/payment/PaymentRetryPolicy.md"))
+                .andExpect(jsonPath("$.items[0].sourcePaths[2]").value("excel/payment_retry_policy.xlsx"))
+                .andExpect(jsonPath("$.items[0].sourcePaths[3]").value("pdf/payment-retry-policy.pdf"));
+
+        mockMvc.perform(get("/api/v1/admin/articles").queryParam("query", "RetryHelper.java"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(1))
+                .andExpect(jsonPath("$.items[0].articleKey").value("retry-helper"))
+                .andExpect(jsonPath("$.items[0].sourceCount").value(1))
+                .andExpect(jsonPath("$.items[0].primarySourcePath").value("src/main/java/com/xbk/lattice/RetryHelper.java"));
+
+        mockMvc.perform(get("/api/v1/admin/articles").queryParam("query", "quick-start.md"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(1))
+                .andExpect(jsonPath("$.items[0].articleKey").value("quick-start"))
+                .andExpect(jsonPath("$.items[0].sourceCount").value(1))
+                .andExpect(jsonPath("$.items[0].primarySourcePath").value("docs/quick-start.md"));
+
+        mockMvc.perform(get("/api/v1/admin/articles/knowledge-schema--payments"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.articleKey").value("knowledge-schema--payments"))
+                .andExpect(jsonPath("$.sourceCount").value(4))
+                .andExpect(jsonPath("$.primarySourcePath").value("payments/PaymentRetryPolicy.java"))
+                .andExpect(jsonPath("$.sourcePaths[2]").value("excel/payment_retry_policy.xlsx"))
+                .andExpect(jsonPath("$.sourcePaths[3]").value("pdf/payment-retry-policy.pdf"));
     }
 
     /**
@@ -178,6 +233,68 @@ class AdminManagementControllerTests {
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_admin_manage_test.contributions");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_admin_manage_test.source_files CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_admin_manage_test.articles CASCADE");
+    }
+
+    /**
+     * 准备内容列表理解性验证所需的多来源与单来源文章数据。
+     */
+    private void prepareArticleFixtures() {
+        articleJdbcRepository.upsert(new ArticleRecord(
+                null,
+                "knowledge-schema--payments",
+                "knowledge-schema--payments",
+                "knowledge-schema--payments",
+                "Payment retry policy body",
+                "ACTIVE",
+                OffsetDateTime.parse("2026-04-20T10:15:30+08:00"),
+                List.of(
+                        "payments/PaymentRetryPolicy.java",
+                        "docs/payment/PaymentRetryPolicy.md",
+                        "excel/payment_retry_policy.xlsx",
+                        "pdf/payment-retry-policy.pdf"
+                ),
+                "{\"domain\":\"payments\"}",
+                "",
+                List.of("retry", "payment"),
+                List.of(),
+                List.of(),
+                "medium",
+                "pending"
+        ));
+        articleJdbcRepository.upsert(new ArticleRecord(
+                null,
+                "retry-helper",
+                "retry-helper",
+                "Retry Helper",
+                "Retry helper body",
+                "ACTIVE",
+                OffsetDateTime.parse("2026-04-20T09:30:00+08:00"),
+                List.of("src/main/java/com/xbk/lattice/RetryHelper.java"),
+                "{\"domain\":\"payments\"}",
+                "Handles retry helper logic",
+                List.of("retry"),
+                List.of(),
+                List.of(),
+                "high",
+                "passed"
+        ));
+        articleJdbcRepository.upsert(new ArticleRecord(
+                null,
+                "quick-start",
+                "quick-start",
+                "Quick Start",
+                "Quick start body",
+                "ACTIVE",
+                OffsetDateTime.parse("2026-04-20T08:45:00+08:00"),
+                List.of("docs/quick-start.md"),
+                "{\"domain\":\"guide\"}",
+                "Quick start summary",
+                List.of("guide"),
+                List.of(),
+                List.of(),
+                "high",
+                "passed"
+        ));
     }
 
     /**

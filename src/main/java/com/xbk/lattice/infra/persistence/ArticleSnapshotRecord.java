@@ -14,6 +14,10 @@ public class ArticleSnapshotRecord {
 
     private final long snapshotId;
 
+    private final Long sourceId;
+
+    private final String articleKey;
+
     private final String conceptId;
 
     private final String title;
@@ -66,6 +70,8 @@ public class ArticleSnapshotRecord {
      */
     public ArticleSnapshotRecord(
             long snapshotId,
+            Long sourceId,
+            String articleKey,
             String conceptId,
             String title,
             String content,
@@ -83,6 +89,8 @@ public class ArticleSnapshotRecord {
             OffsetDateTime capturedAt
     ) {
         this.snapshotId = snapshotId;
+        this.sourceId = sourceId;
+        this.articleKey = articleKey;
         this.conceptId = conceptId;
         this.title = title;
         this.content = content;
@@ -101,12 +109,90 @@ public class ArticleSnapshotRecord {
     }
 
     /**
+     * 创建兼容旧调用的文章快照记录。
+     *
+     * @param snapshotId 快照标识
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param content 正文
+     * @param lifecycle 生命周期
+     * @param compiledAt 编译时间
+     * @param sourcePaths 来源路径
+     * @param metadataJson 元数据 JSON
+     * @param summary 摘要
+     * @param referentialKeywords 参照关键词
+     * @param dependsOn 上游依赖
+     * @param related 相关概念
+     * @param confidence 置信度
+     * @param reviewStatus 审查状态
+     * @param snapshotReason 快照原因
+     * @param capturedAt 快照时间
+     */
+    public ArticleSnapshotRecord(
+            long snapshotId,
+            String conceptId,
+            String title,
+            String content,
+            String lifecycle,
+            OffsetDateTime compiledAt,
+            List<String> sourcePaths,
+            String metadataJson,
+            String summary,
+            List<String> referentialKeywords,
+            List<String> dependsOn,
+            List<String> related,
+            String confidence,
+            String reviewStatus,
+            String snapshotReason,
+            OffsetDateTime capturedAt
+    ) {
+        this(
+                snapshotId,
+                null,
+                conceptId,
+                conceptId,
+                title,
+                content,
+                lifecycle,
+                compiledAt,
+                sourcePaths,
+                metadataJson,
+                summary,
+                referentialKeywords,
+                dependsOn,
+                related,
+                confidence,
+                reviewStatus,
+                snapshotReason,
+                capturedAt
+        );
+    }
+
+    /**
      * 获取快照标识。
      *
      * @return 快照标识
      */
     public long getSnapshotId() {
         return snapshotId;
+    }
+
+    /**
+     * 获取资料源主键。
+     *
+     * @return 资料源主键
+     */
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    /**
+     * 获取文章唯一键。
+     *
+     * @return 文章唯一键
+     */
+    public String getArticleKey() {
+        return articleKey;
     }
 
     /**
@@ -242,5 +328,40 @@ public class ArticleSnapshotRecord {
      */
     public OffsetDateTime getCapturedAt() {
         return capturedAt;
+    }
+
+    /**
+     * 根据文章记录创建快照。
+     *
+     * @param articleRecord 文章记录
+     * @param snapshotReason 快照原因
+     * @param capturedAt 快照时间
+     * @return 快照记录
+     */
+    public static ArticleSnapshotRecord fromArticle(
+            ArticleRecord articleRecord,
+            String snapshotReason,
+            OffsetDateTime capturedAt
+    ) {
+        return new ArticleSnapshotRecord(
+                -1L,
+                articleRecord.getSourceId(),
+                articleRecord.getArticleKey(),
+                articleRecord.getConceptId(),
+                articleRecord.getTitle(),
+                articleRecord.getContent(),
+                articleRecord.getLifecycle(),
+                articleRecord.getCompiledAt(),
+                articleRecord.getSourcePaths(),
+                articleRecord.getMetadataJson(),
+                articleRecord.getSummary(),
+                articleRecord.getReferentialKeywords(),
+                articleRecord.getDependsOn(),
+                articleRecord.getRelated(),
+                articleRecord.getConfidence(),
+                articleRecord.getReviewStatus(),
+                snapshotReason,
+                capturedAt
+        );
     }
 }

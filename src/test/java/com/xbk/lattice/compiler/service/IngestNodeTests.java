@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -96,6 +97,7 @@ class IngestNodeTests {
         Path assetsDir = Files.createDirectories(tempDir.resolve("assets"));
         Files.writeString(docsDir.resolve("notes.txt"), "plain-text", StandardCharsets.UTF_8);
         Files.writeString(docsDir.resolve("application.properties"), "timeout=30", StandardCharsets.UTF_8);
+        Files.writeString(docsDir.resolve("rules.csv"), "code,meaning\n1210,refund", StandardCharsets.UTF_8);
         Files.writeString(docsDir.resolve("style.css"), ".box { color: red; }", StandardCharsets.UTF_8);
         Files.writeString(docsDir.resolve("page.html"), "<html><body>hello</body></html>", StandardCharsets.UTF_8);
         Files.writeString(docsDir.resolve("run.sh"), "echo hello", StandardCharsets.UTF_8);
@@ -108,7 +110,7 @@ class IngestNodeTests {
         IngestNode ingestNode = new IngestNode(properties);
         List<RawSource> rawSources = ingestNode.ingest(tempDir);
 
-        assertThat(rawSources).hasSize(7);
+        assertThat(rawSources).hasSize(8);
         assertThat(rawSources)
                 .extracting(RawSource::getRelativePath)
                 .containsExactly(
@@ -116,6 +118,7 @@ class IngestNodeTests {
                         "docs/application.properties",
                         "docs/notes.txt",
                         "docs/page.html",
+                        "docs/rules.csv",
                         "docs/run.sh",
                         "docs/style.css",
                         "docs/worker.py"
@@ -123,6 +126,12 @@ class IngestNodeTests {
         RawSource imageSource = rawSources.get(0);
         assertThat(imageSource.getFormat()).isEqualTo("png");
         assertThat(imageSource.getContent()).isEqualTo("[Image file: assets/diagram.png]");
+        RawSource csvSource = rawSources.stream()
+                .filter(rawSource -> "csv".equals(rawSource.getFormat()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(csvSource.getContent()).contains("code,meaning");
+        assertThat(csvSource.getContent()).contains("1210,refund");
     }
 
     /**
@@ -137,10 +146,12 @@ class IngestNodeTests {
         Path pdfPath = docsDir.resolve("timeout.pdf");
         Path excelPath = docsDir.resolve("codes.xlsx");
         Path wordPath = docsDir.resolve("brief.docx");
+        Path legacyWordPath = docsDir.resolve("legacy-brief.doc");
         Path pptPath = docsDir.resolve("briefing.pptx");
         writeSimplePdf(pdfPath, "Payment timeout retry = 3");
         writeSimpleWorkbook(excelPath);
         writeSimpleWord(wordPath);
+        writeLegacyWord(legacyWordPath);
         writeSimplePresentation(pptPath);
 
         CompilerProperties properties = new CompilerProperties();
@@ -149,7 +160,7 @@ class IngestNodeTests {
         IngestNode ingestNode = new IngestNode(properties);
         List<RawSource> rawSources = ingestNode.ingest(tempDir);
 
-        assertThat(rawSources).hasSize(4);
+        assertThat(rawSources).hasSize(5);
         RawSource pdfSource = rawSources.stream()
                 .filter(rawSource -> "pdf".equals(rawSource.getFormat()))
                 .findFirst()
@@ -160,6 +171,10 @@ class IngestNodeTests {
                 .orElseThrow();
         RawSource wordSource = rawSources.stream()
                 .filter(rawSource -> "docx".equals(rawSource.getFormat()))
+                .findFirst()
+                .orElseThrow();
+        RawSource legacyWordSource = rawSources.stream()
+                .filter(rawSource -> "doc".equals(rawSource.getFormat()))
                 .findFirst()
                 .orElseThrow();
         RawSource pptSource = rawSources.stream()
@@ -181,6 +196,10 @@ class IngestNodeTests {
         assertThat(wordSource.getMetadataJson()).contains("paragraphCount");
         assertThat(wordSource.getContent()).contains("Payment timeout recovery");
         assertThat(wordSource.getContent()).contains("retry=3");
+        assertThat(legacyWordSource.getRelativePath()).isEqualTo("docs/legacy-brief.doc");
+        assertThat(legacyWordSource.getMetadataJson()).contains("legacyWord");
+        assertThat(legacyWordSource.getContent()).contains("Legacy DOC payment timeout");
+        assertThat(legacyWordSource.getContent()).contains("retry=3");
         assertThat(pptSource.getRelativePath()).isEqualTo("docs/briefing.pptx");
         assertThat(pptSource.getMetadataJson()).contains("slideCount");
         assertThat(pptSource.getContent()).contains("=== Slide: 1 ===");
@@ -252,6 +271,19 @@ class IngestNodeTests {
             try (OutputStream outputStream = Files.newOutputStream(wordPath)) {
                 document.write(outputStream);
             }
+        }
+    }
+
+    /**
+     * 写入旧版 Word 测试文件。
+     *
+     * @param legacyWordPath Word 路径
+     * @throws IOException IO 异常
+     */
+    private void writeLegacyWord(Path legacyWordPath) throws IOException {
+        try (InputStream inputStream = getClass().getResourceAsStream("/documentparse/legacy-word.doc")) {
+            assertThat(inputStream).isNotNull();
+            Files.copy(inputStream, legacyWordPath);
         }
     }
 

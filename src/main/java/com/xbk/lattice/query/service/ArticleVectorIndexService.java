@@ -103,7 +103,7 @@ public class ArticleVectorIndexService {
         String configuredModelName = getConfiguredModelName();
         int configuredExpectedDimensions = configuredVectorEmbeddingService.getConfiguredExpectedDimensions();
         String configuredIndexVersion = buildIndexVersion(configuredProfileId, configuredExpectedDimensions);
-        Optional<ArticleVectorRecord> existingRecord = articleVectorJdbcRepository.findByConceptId(articleRecord.getConceptId());
+        Optional<ArticleVectorRecord> existingRecord = articleVectorJdbcRepository.findByArticleKey(articleRecord.getArticleKey());
         if (shouldSkipIndexing(
                 existingRecord,
                 contentHash,
@@ -121,6 +121,7 @@ public class ArticleVectorIndexService {
                 return;
             }
             articleVectorJdbcRepository.upsert(new ArticleVectorRecord(
+                    articleRecord.getArticleKey(),
                     articleRecord.getConceptId(),
                     configuredProfileId,
                     configuredModelName,

@@ -81,7 +81,9 @@ public class ArticleChunkVectorIndexService {
         if (articleRecord == null || !isIndexingAvailable() || articleChunkJdbcRepository == null) {
             return;
         }
-        List<ArticleChunkRecord> chunkRecords = articleChunkJdbcRepository.findByConceptId(articleRecord.getConceptId());
+        List<ArticleChunkRecord> chunkRecords = hasText(articleRecord.getArticleKey())
+                ? articleChunkJdbcRepository.findByArticleKey(articleRecord.getArticleKey())
+                : articleChunkJdbcRepository.findByConceptId(articleRecord.getConceptId());
         if (chunkRecords.isEmpty()) {
             return;
         }
@@ -206,5 +208,15 @@ public class ArticleChunkVectorIndexService {
         catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("sha-256 is not available", ex);
         }
+    }
+
+    /**
+     * 判断文本是否有效。
+     *
+     * @param value 文本
+     * @return 是否有效
+     */
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

@@ -11,6 +11,8 @@ import java.time.OffsetDateTime;
  */
 public class ArticleVectorRecord {
 
+    private final String articleKey;
+
     private final String conceptId;
 
     private final Long modelProfileId;
@@ -47,7 +49,7 @@ public class ArticleVectorRecord {
             float[] embedding,
             OffsetDateTime updatedAt
     ) {
-        this(conceptId, modelProfileId, null, embeddingDimensions, indexVersion, contentHash, embedding, updatedAt);
+        this(conceptId, conceptId, modelProfileId, null, embeddingDimensions, indexVersion, contentHash, embedding, updatedAt);
     }
 
     /**
@@ -72,6 +74,58 @@ public class ArticleVectorRecord {
             float[] embedding,
             OffsetDateTime updatedAt
     ) {
+        this(conceptId, conceptId, modelProfileId, modelName, embeddingDimensions, indexVersion, contentHash, embedding, updatedAt);
+    }
+
+    /**
+     * 创建文章向量索引记录。
+     *
+     * @param conceptId 概念标识
+     * @param modelProfileId 模型配置主键
+     * @param embeddingDimensions 向量维度
+     * @param indexVersion 索引版本
+     * @param contentHash 内容哈希
+     * @param embedding embedding 向量
+     * @param updatedAt 更新时间
+     */
+    public ArticleVectorRecord(
+            String articleKey,
+            String conceptId,
+            Long modelProfileId,
+            int embeddingDimensions,
+            String indexVersion,
+            String contentHash,
+            float[] embedding,
+            OffsetDateTime updatedAt
+    ) {
+        this(articleKey, conceptId, modelProfileId, null, embeddingDimensions, indexVersion, contentHash, embedding, updatedAt);
+    }
+
+    /**
+     * 创建文章向量索引记录。
+     *
+     * @param articleKey 文章唯一键
+     * @param conceptId 概念标识
+     * @param modelProfileId 模型配置主键
+     * @param modelName 模型名称
+     * @param embeddingDimensions 向量维度
+     * @param indexVersion 索引版本
+     * @param contentHash 内容哈希
+     * @param embedding embedding 向量
+     * @param updatedAt 更新时间
+     */
+    public ArticleVectorRecord(
+            String articleKey,
+            String conceptId,
+            Long modelProfileId,
+            String modelName,
+            int embeddingDimensions,
+            String indexVersion,
+            String contentHash,
+            float[] embedding,
+            OffsetDateTime updatedAt
+    ) {
+        this.articleKey = articleKey;
         this.conceptId = conceptId;
         this.modelProfileId = modelProfileId;
         this.modelName = modelName;
@@ -80,6 +134,15 @@ public class ArticleVectorRecord {
         this.contentHash = contentHash;
         this.embedding = embedding;
         this.updatedAt = updatedAt;
+    }
+
+    /**
+     * 获取文章唯一键。
+     *
+     * @return 文章唯一键
+     */
+    public String getArticleKey() {
+        return articleKey;
     }
 
     /**

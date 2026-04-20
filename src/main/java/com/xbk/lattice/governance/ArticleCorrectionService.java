@@ -2,6 +2,7 @@ package com.xbk.lattice.governance;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xbk.lattice.article.service.ArticleIdentityResolver;
 import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
@@ -46,6 +47,8 @@ public class ArticleCorrectionService {
 
     private final ArticleSnapshotJdbcRepository articleSnapshotJdbcRepository;
 
+    private final ArticleIdentityResolver articleIdentityResolver;
+
     private final DependencyGraphService dependencyGraphService;
 
     private final LlmGateway llmGateway;
@@ -54,6 +57,33 @@ public class ArticleCorrectionService {
 
     /**
      * 创建文章纠错服务。
+     *
+     * @param articleJdbcRepository 文章仓储
+     * @param sourceFileJdbcRepository 源文件仓储
+     * @param articleSnapshotJdbcRepository 文章快照仓储
+     * @param articleIdentityResolver 文章身份解析服务
+     * @param dependencyGraphService 依赖图服务
+     * @param llmGateway LLM 网关
+     */
+    @Autowired
+    public ArticleCorrectionService(
+            ArticleJdbcRepository articleJdbcRepository,
+            SourceFileJdbcRepository sourceFileJdbcRepository,
+            ArticleSnapshotJdbcRepository articleSnapshotJdbcRepository,
+            ArticleIdentityResolver articleIdentityResolver,
+            DependencyGraphService dependencyGraphService,
+            LlmGateway llmGateway
+    ) {
+        this.articleJdbcRepository = articleJdbcRepository;
+        this.sourceFileJdbcRepository = sourceFileJdbcRepository;
+        this.articleSnapshotJdbcRepository = articleSnapshotJdbcRepository;
+        this.articleIdentityResolver = articleIdentityResolver;
+        this.dependencyGraphService = dependencyGraphService;
+        this.llmGateway = llmGateway;
+    }
+
+    /**
+     * 创建兼容旧构造方式的文章纠错服务。
      *
      * @param articleJdbcRepository 文章仓储
      * @param sourceFileJdbcRepository 源文件仓储
@@ -68,11 +98,14 @@ public class ArticleCorrectionService {
             DependencyGraphService dependencyGraphService,
             LlmGateway llmGateway
     ) {
-        this.articleJdbcRepository = articleJdbcRepository;
-        this.sourceFileJdbcRepository = sourceFileJdbcRepository;
-        this.articleSnapshotJdbcRepository = articleSnapshotJdbcRepository;
-        this.dependencyGraphService = dependencyGraphService;
-        this.llmGateway = llmGateway;
+        this(
+                articleJdbcRepository,
+                sourceFileJdbcRepository,
+                articleSnapshotJdbcRepository,
+                articleJdbcRepository == null ? null : new ArticleIdentityResolver(articleJdbcRepository),
+                dependencyGraphService,
+                llmGateway
+        );
     }
 
     /**
@@ -94,13 +127,41 @@ public class ArticleCorrectionService {
      */
     @Transactional(rollbackFor = Exception.class)
     public ArticleCorrectionResult correct(String conceptId, String correctionSummary) {
-        Optional<ArticleRecord> optionalArticleRecord = articleJdbcRepository.findByConceptId(conceptId);
-        if (optionalArticleRecord.isEmpty()) {
+        ArticleRecord articleRecord = articleIdentityResolver == null
+                ? null
+                : articleIdentityResolver.require(conceptId, null);
+        if (articleRecord == null) {
             throw new IllegalArgumentException("概念不存在: " + conceptId);
         }
+        return doCorrect(articleRecord, correctionSummary);
+    }
 
-        ArticleRecord articleRecord = optionalArticleRecord.orElseThrow();
-        List<SourceExcerpt> sourceExcerpts = collectSourceExcerpts(articleRecord.getSourcePaths());
+    /**
+     * 执行文章纠错。
+     *
+     * @param articleId 文章唯一键或概念标识
+     * @param sourceId 可选资料源主键
+     * @param correctionSummary 纠错摘要
+     * @return 纠错结果
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ArticleCorrectionResult correct(String articleId, Long sourceId, String correctionSummary) {
+        if (sourceId == null) {
+            return correct(articleId, correctionSummary);
+        }
+        ArticleRecord articleRecord = articleIdentityResolver.require(articleId, sourceId);
+        return doCorrect(articleRecord, correctionSummary);
+    }
+
+    /**
+     * 对已解析文章执行纠错主流程。
+     *
+     * @param articleRecord 目标文章
+     * @param correctionSummary 纠错摘要
+     * @return 纠错结果
+     */
+    private ArticleCorrectionResult doCorrect(ArticleRecord articleRecord, String correctionSummary) {
+        List<SourceExcerpt> sourceExcerpts = collectSourceExcerpts(articleRecord);
         String validationJson = llmGateway.compile(
                 "cross-validate",
                 LatticePrompts.SYSTEM_CROSS_VALIDATE,
@@ -113,8 +174,7 @@ public class ArticleCorrectionService {
                 buildApplyCorrectionPrompt(articleRecord, correctionSummary, validationResult)
         );
 
-        ArticleRecord updatedRecord = new ArticleRecord(
-                articleRecord.getConceptId(),
+        ArticleRecord updatedRecord = articleRecord.copy(
                 articleRecord.getTitle(),
                 revisedContent,
                 articleRecord.getLifecycle(),
@@ -130,48 +190,45 @@ public class ArticleCorrectionService {
         );
         articleJdbcRepository.upsert(updatedRecord);
 
-        ArticleSnapshotRecord snapshotRecord = new ArticleSnapshotRecord(
-                -1L,
-                updatedRecord.getConceptId(),
-                updatedRecord.getTitle(),
-                updatedRecord.getContent(),
-                updatedRecord.getLifecycle(),
-                updatedRecord.getCompiledAt(),
-                updatedRecord.getSourcePaths(),
-                updatedRecord.getMetadataJson(),
-                updatedRecord.getSummary(),
-                updatedRecord.getReferentialKeywords(),
-                updatedRecord.getDependsOn(),
-                updatedRecord.getRelated(),
-                updatedRecord.getConfidence(),
-                updatedRecord.getReviewStatus(),
+        articleSnapshotJdbcRepository.save(ArticleSnapshotRecord.fromArticle(
+                updatedRecord,
                 "correction",
                 OffsetDateTime.now()
-        );
-        articleSnapshotJdbcRepository.save(snapshotRecord);
-        captureRepoSnapshot(conceptId);
+        ));
+        captureRepoSnapshot(updatedRecord);
 
         return new ArticleCorrectionResult(
+                updatedRecord.getSourceId(),
+                updatedRecord.getArticleKey(),
                 updatedRecord.getConceptId(),
                 revisedContent,
-                collectDownstreamIds(conceptId),
+                collectDownstreamIds(updatedRecord.getConceptId()),
                 validationResult.supported
         );
     }
 
-    private void captureRepoSnapshot(String conceptId) {
+    private void captureRepoSnapshot(ArticleRecord articleRecord) {
         if (repoSnapshotService == null) {
             return;
         }
-        repoSnapshotService.snapshot("governance.correct", "conceptId=" + conceptId, null);
+        String articleIdentity = articleRecord.getArticleKey() == null || articleRecord.getArticleKey().isBlank()
+                ? articleRecord.getConceptId()
+                : articleRecord.getArticleKey();
+        repoSnapshotService.snapshot("governance.correct", "articleId=" + articleIdentity, null);
     }
 
-    private List<SourceExcerpt> collectSourceExcerpts(List<String> sourcePaths) {
+    private List<SourceExcerpt> collectSourceExcerpts(ArticleRecord articleRecord) {
         List<SourceExcerpt> excerpts = new ArrayList<SourceExcerpt>();
+        List<String> sourcePaths = articleRecord.getSourcePaths();
         int limit = Math.min(sourcePaths.size(), 3);
         for (int index = 0; index < limit; index++) {
             String sourcePath = sourcePaths.get(index);
-            Optional<SourceFileRecord> optionalSourceFileRecord = sourceFileJdbcRepository.findByPath(sourcePath);
+            Optional<SourceFileRecord> optionalSourceFileRecord = articleRecord.getSourceId() == null
+                    ? sourceFileJdbcRepository.findByPath(sourcePath)
+                    : sourceFileJdbcRepository.findBySourceIdAndRelativePath(articleRecord.getSourceId(), sourcePath);
+            if (optionalSourceFileRecord.isEmpty()) {
+                optionalSourceFileRecord = sourceFileJdbcRepository.findByPath(sourcePath);
+            }
             if (optionalSourceFileRecord.isEmpty()) {
                 continue;
             }

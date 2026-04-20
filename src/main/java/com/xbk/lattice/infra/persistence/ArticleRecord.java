@@ -349,4 +349,54 @@ public class ArticleRecord {
     public String getReviewStatus() {
         return reviewStatus;
     }
+
+    /**
+     * 基于当前文章复制一份保留 source-aware 标识的新记录。
+     *
+     * @param title 标题
+     * @param content 内容
+     * @param lifecycle 生命周期
+     * @param compiledAt 编译时间
+     * @param sourcePaths 来源路径
+     * @param metadataJson 元数据 JSON
+     * @param summary 摘要
+     * @param referentialKeywords 明确性关键词
+     * @param dependsOn 依赖概念
+     * @param related 相关概念
+     * @param confidence 置信度
+     * @param reviewStatus 审查状态
+     * @return 新文章记录
+     */
+    public ArticleRecord copy(
+            String title,
+            String content,
+            String lifecycle,
+            OffsetDateTime compiledAt,
+            List<String> sourcePaths,
+            String metadataJson,
+            String summary,
+            List<String> referentialKeywords,
+            List<String> dependsOn,
+            List<String> related,
+            String confidence,
+            String reviewStatus
+    ) {
+        return new ArticleRecord(
+                sourceId,
+                articleKey,
+                conceptId,
+                title,
+                content,
+                lifecycle,
+                compiledAt,
+                sourcePaths,
+                metadataJson,
+                summary,
+                referentialKeywords,
+                dependsOn,
+                related,
+                confidence,
+                reviewStatus
+        );
+    }
 }

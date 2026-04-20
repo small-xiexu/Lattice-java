@@ -11,6 +11,10 @@ import java.util.List;
  */
 public class ArticleCorrectionResult {
 
+    private final Long sourceId;
+
+    private final String articleKey;
+
     private final String conceptId;
 
     private final String revisedContent;
@@ -28,15 +32,44 @@ public class ArticleCorrectionResult {
      * @param validationSupported 源文件是否支持本次纠错
      */
     public ArticleCorrectionResult(
+            Long sourceId,
+            String articleKey,
             String conceptId,
             String revisedContent,
             List<String> downstreamIds,
             boolean validationSupported
     ) {
+        this.sourceId = sourceId;
+        this.articleKey = articleKey;
         this.conceptId = conceptId;
         this.revisedContent = revisedContent;
         this.downstreamIds = downstreamIds;
         this.validationSupported = validationSupported;
+    }
+
+    /**
+     * 创建兼容旧调用的文章纠错结果。
+     *
+     * @param conceptId 概念标识
+     * @param revisedContent 修正后的完整文章
+     * @param downstreamIds 下游受影响概念标识
+     * @param validationSupported 源文件是否支持本次纠错
+     */
+    public ArticleCorrectionResult(
+            String conceptId,
+            String revisedContent,
+            List<String> downstreamIds,
+            boolean validationSupported
+    ) {
+        this(null, conceptId, conceptId, revisedContent, downstreamIds, validationSupported);
+    }
+
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    public String getArticleKey() {
+        return articleKey;
     }
 
     public String getConceptId() {

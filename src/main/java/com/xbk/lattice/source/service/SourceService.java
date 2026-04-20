@@ -2,6 +2,8 @@ package com.xbk.lattice.source.service;
 
 import com.xbk.lattice.source.domain.KnowledgeSource;
 import com.xbk.lattice.source.domain.KnowledgeSourcePage;
+import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
+import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import com.xbk.lattice.source.infra.KnowledgeSourceJdbcRepository;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -23,8 +25,14 @@ public class SourceService {
 
     private final KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository;
 
-    public SourceService(KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository) {
+    private final SourceFileJdbcRepository sourceFileJdbcRepository;
+
+    public SourceService(
+            KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository,
+            SourceFileJdbcRepository sourceFileJdbcRepository
+    ) {
         this.knowledgeSourceJdbcRepository = knowledgeSourceJdbcRepository;
+        this.sourceFileJdbcRepository = sourceFileJdbcRepository;
     }
 
     public List<KnowledgeSource> listSources() {
@@ -68,6 +76,16 @@ public class SourceService {
 
     public Optional<KnowledgeSource> findBySourceCode(String sourceCode) {
         return knowledgeSourceJdbcRepository.findBySourceCode(sourceCode);
+    }
+
+    /**
+     * 查询资料源下的源文件列表。
+     *
+     * @param sourceId 资料源主键
+     * @return 源文件列表
+     */
+    public List<SourceFileRecord> listSourceFiles(Long sourceId) {
+        return sourceFileJdbcRepository.findBySourceId(sourceId);
     }
 
     @Transactional(rollbackFor = Exception.class)

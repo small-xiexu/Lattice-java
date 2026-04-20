@@ -1,0 +1,49 @@
+#!/usr/bin/env sh
+
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+JAVA_BIN=${JAVA_BIN:-java}
+MAVEN_BIN=${MAVEN_BIN:-mvn}
+BOOT_MAIN_CLASS=com.xbk.lattice.cli.LatticeCliMain
+
+find_boot_jar() {
+    if [ ! -d "$REPO_ROOT/target" ]; then
+        return 1
+    fi
+    find "$REPO_ROOT/target" -maxdepth 1 -type f -name 'lattice-java-*.jar' \
+        ! -name '*.jar.original' \
+        ! -name 'original-*.jar' \
+        | sort \
+        | head -n 1
+}
+
+build_boot_jar() {
+    echo "[lattice-cli] 未找到可执行 jar，正在构建..." >&2
+    if [ -n "${LATTICE_MAVEN_SETTINGS:-}" ]; then
+        (
+            cd "$REPO_ROOT"
+            "$MAVEN_BIN" -s "$LATTICE_MAVEN_SETTINGS" -q -DskipTests package
+        )
+        return
+    fi
+    (
+        cd "$REPO_ROOT"
+        "$MAVEN_BIN" -q -DskipTests package
+    )
+}
+
+BOOT_JAR=$(find_boot_jar || true)
+if [ -z "$BOOT_JAR" ]; then
+    build_boot_jar
+    BOOT_JAR=$(find_boot_jar || true)
+fi
+
+if [ -z "$BOOT_JAR" ]; then
+    echo "[lattice-cli] 构建完成后仍未找到可执行 jar，请先检查 Maven 输出。" >&2
+    exit 1
+fi
+
+exec "$JAVA_BIN" -Dloader.main="$BOOT_MAIN_CLASS" -cp "$BOOT_JAR" \
+    org.springframework.boot.loader.launch.PropertiesLauncher "$@"

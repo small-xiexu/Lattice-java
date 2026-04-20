@@ -1,5 +1,6 @@
 package com.xbk.lattice.query.service;
 
+import com.xbk.lattice.article.service.ArticleIdentityResolver;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
@@ -21,7 +22,7 @@ import java.util.Optional;
 @Profile("jdbc")
 public class KnowledgeLookupService {
 
-    private final ArticleJdbcRepository articleJdbcRepository;
+    private final ArticleIdentityResolver articleIdentityResolver;
 
     private final SourceFileJdbcRepository sourceFileJdbcRepository;
 
@@ -35,7 +36,7 @@ public class KnowledgeLookupService {
             ArticleJdbcRepository articleJdbcRepository,
             SourceFileJdbcRepository sourceFileJdbcRepository
     ) {
-        this.articleJdbcRepository = articleJdbcRepository;
+        this.articleIdentityResolver = new ArticleIdentityResolver(articleJdbcRepository);
         this.sourceFileJdbcRepository = sourceFileJdbcRepository;
     }
 
@@ -46,15 +47,14 @@ public class KnowledgeLookupService {
      * @return 知识详情结果
      */
     public KnowledgeLookupResult get(String id) {
-        Optional<ArticleRecord> articleRecord = articleJdbcRepository.findByArticleKey(id);
-        if (articleRecord.isEmpty()) {
-            articleRecord = articleJdbcRepository.findByConceptId(id);
-        }
+        Optional<ArticleRecord> articleRecord = articleIdentityResolver.resolve(id);
         if (articleRecord.isPresent()) {
             ArticleRecord record = articleRecord.get();
             return new KnowledgeLookupResult(
                     true,
                     "article",
+                    record.getSourceId(),
+                    record.getArticleKey(),
                     record.getConceptId(),
                     record.getTitle(),
                     record.getContent(),
@@ -68,6 +68,8 @@ public class KnowledgeLookupService {
             return new KnowledgeLookupResult(
                     true,
                     "source",
+                    record.getSourceId(),
+                    null,
                     record.getFilePath(),
                     record.getFilePath(),
                     record.getContentText(),

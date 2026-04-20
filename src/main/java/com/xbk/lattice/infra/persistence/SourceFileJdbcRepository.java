@@ -122,6 +122,28 @@ public class SourceFileJdbcRepository {
         return jdbcTemplate.query(sql, this::mapSourceFileRecord);
     }
 
+    /**
+     * 查询指定资料源下的全部源文件记录。
+     *
+     * @param sourceId 资料源主键
+     * @return 源文件记录列表
+     */
+    public List<SourceFileRecord> findBySourceId(Long sourceId) {
+        if (jdbcTemplate == null || sourceId == null) {
+            return List.of();
+        }
+
+        String sql = """
+                select id, source_id, file_path, relative_path, source_sync_run_id, content_preview,
+                       format, file_size, content_text, metadata_json::text as metadata_json,
+                       is_verbatim, raw_path
+                from source_files
+                where source_id = ?
+                order by relative_path asc, id asc
+                """;
+        return jdbcTemplate.query(sql, this::mapSourceFileRecord, sourceId);
+    }
+
     private SourceFileRecord upsertSourceAwareRecord(SourceFileRecord sourceFileRecord) {
         String sql = """
                 insert into source_files (

@@ -77,6 +77,18 @@ public class AdminUploadController {
     }
 
     /**
+     * 查询最近同步运行列表。
+     *
+     * @param limit 返回数量
+     * @return 最近同步运行
+     */
+    @GetMapping("/source-runs")
+    public List<SourceSyncRunDetail> listRecentRuns(@RequestParam(defaultValue = "10") Integer limit) {
+        int resolvedLimit = limit == null ? 10 : Math.max(1, Math.min(limit.intValue(), 50));
+        return sourceUploadService.listRecentRunDetails(resolvedLimit);
+    }
+
+    /**
      * 对 WAIT_CONFIRM 运行执行人工确认。
      *
      * @param runId 运行主键

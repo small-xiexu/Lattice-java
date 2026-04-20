@@ -134,6 +134,16 @@ public class SourceSyncService {
         return sourceSyncRunJdbcRepository.findBySourceId(sourceId);
     }
 
+    /**
+     * 查询最近的同步运行。
+     *
+     * @param limit 返回数量
+     * @return 最近运行列表
+     */
+    public List<SourceSyncRun> listRecentRuns(int limit) {
+        return sourceSyncRunJdbcRepository.findRecent(limit);
+    }
+
     private boolean isTerminal(String status) {
         return "SUCCEEDED".equals(status)
                 || "FAILED".equals(status)

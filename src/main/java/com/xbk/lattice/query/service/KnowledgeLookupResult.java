@@ -15,6 +15,10 @@ public class KnowledgeLookupResult {
 
     private final String type;
 
+    private final Long sourceId;
+
+    private final String articleKey;
+
     private final String id;
 
     private final String title;
@@ -39,6 +43,8 @@ public class KnowledgeLookupResult {
     public KnowledgeLookupResult(
             boolean found,
             String type,
+            Long sourceId,
+            String articleKey,
             String id,
             String title,
             String content,
@@ -47,11 +53,36 @@ public class KnowledgeLookupResult {
     ) {
         this.found = found;
         this.type = type;
+        this.sourceId = sourceId;
+        this.articleKey = articleKey;
         this.id = id;
         this.title = title;
         this.content = content;
         this.sourcePaths = sourcePaths;
         this.metadataJson = metadataJson;
+    }
+
+    /**
+     * 创建兼容旧调用的查询结果。
+     *
+     * @param found 是否找到
+     * @param type 记录类型
+     * @param id 记录标识
+     * @param title 标题
+     * @param content 内容
+     * @param sourcePaths 来源路径
+     * @param metadataJson 元数据 JSON
+     */
+    public KnowledgeLookupResult(
+            boolean found,
+            String type,
+            String id,
+            String title,
+            String content,
+            List<String> sourcePaths,
+            String metadataJson
+    ) {
+        this(found, type, null, null, id, title, content, sourcePaths, metadataJson);
     }
 
     /**
@@ -61,7 +92,7 @@ public class KnowledgeLookupResult {
      * @return 未找到结果
      */
     public static KnowledgeLookupResult notFound(String id) {
-        return new KnowledgeLookupResult(false, "unknown", id, "", "", List.of(), "{}");
+        return new KnowledgeLookupResult(false, "unknown", null, null, id, "", "", List.of(), "{}");
     }
 
     /**
@@ -80,6 +111,24 @@ public class KnowledgeLookupResult {
      */
     public String getType() {
         return type;
+    }
+
+    /**
+     * 获取资料源主键。
+     *
+     * @return 资料源主键
+     */
+    public Long getSourceId() {
+        return sourceId;
+    }
+
+    /**
+     * 获取文章唯一键。
+     *
+     * @return 文章唯一键
+     */
+    public String getArticleKey() {
+        return articleKey;
     }
 
     /**

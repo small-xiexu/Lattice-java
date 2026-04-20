@@ -129,6 +129,27 @@ public class ArticleChunkVectorJdbcRepository {
     }
 
     /**
+     * 把 chunk 向量列对齐到目标维度。
+     *
+     * @param targetDimensions 目标维度
+     */
+    public void alignEmbeddingColumnDimensions(int targetDimensions) {
+        if (jdbcTemplate == null || targetDimensions <= 0) {
+            return;
+        }
+
+        String vectorTypeName = resolveVectorTypeName();
+        if (vectorTypeName.isBlank()) {
+            return;
+        }
+
+        jdbcTemplate.execute(
+                "alter table article_chunk_vector_index alter column embedding type "
+                        + vectorTypeName + "(" + targetDimensions + ")"
+        );
+    }
+
+    /**
      * 返回当前分块向量索引最近更新时间。
      *
      * @return 最近更新时间
@@ -169,6 +190,8 @@ public class ArticleChunkVectorJdbcRepository {
         return jdbcTemplate.query(
                 """
                         select vector_index.article_id,
+                               article.source_id,
+                               article.article_key,
                                vector_index.concept_id,
                                article.title,
                                article.content,
@@ -206,6 +229,8 @@ public class ArticleChunkVectorJdbcRepository {
     private ArticleChunkVectorHit mapHit(ResultSet resultSet, int rowNum) throws SQLException {
         return new ArticleChunkVectorHit(
                 resultSet.getLong("article_id"),
+                readLong(resultSet, "source_id"),
+                resultSet.getString("article_key"),
                 resultSet.getString("concept_id"),
                 resultSet.getString("title"),
                 resultSet.getString("content"),
@@ -229,6 +254,11 @@ public class ArticleChunkVectorJdbcRepository {
             sourcePaths.add(String.valueOf(value));
         }
         return sourcePaths;
+    }
+
+    private Long readLong(ResultSet resultSet, String columnName) throws SQLException {
+        Object value = resultSet.getObject(columnName);
+        return value == null ? null : resultSet.getLong(columnName);
     }
 
     private String resolveVectorTypeName() {

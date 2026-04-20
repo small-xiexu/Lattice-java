@@ -32,7 +32,7 @@ import java.util.Set;
 public class DocumentParseRouter {
 
     private static final Set<String> TEXT_FORMATS = new HashSet<String>(Arrays.asList(
-            "md", "txt", "markdown", "java", "xml", "properties",
+            "md", "txt", "markdown", "csv", "java", "xml", "properties",
             "yml", "yaml", "json", "vue", "js", "css", "html", "sh", "py"
     ));
 

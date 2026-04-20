@@ -131,8 +131,7 @@ public class LinkEnhancementService {
         boolean updated = !articleRecord.getContent().equals(relatedResult.content);
         ArticleRecord updatedRecord = null;
         if (updated) {
-            updatedRecord = new ArticleRecord(
-                    articleRecord.getConceptId(),
+            updatedRecord = articleRecord.copy(
                     articleRecord.getTitle(),
                     relatedResult.content,
                     articleRecord.getLifecycle(),

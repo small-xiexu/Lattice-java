@@ -8,6 +8,8 @@ import com.xbk.lattice.cli.command.QueryCommand;
 import com.xbk.lattice.cli.command.RollbackCommand;
 import com.xbk.lattice.cli.command.SearchCommand;
 import com.xbk.lattice.cli.command.ServeCommand;
+import com.xbk.lattice.cli.command.SourceListCommand;
+import com.xbk.lattice.cli.command.SourceSyncCommand;
 import com.xbk.lattice.cli.command.StatusCommand;
 import com.xbk.lattice.cli.command.HistoryCommand;
 import com.xbk.lattice.cli.command.VaultExportCommand;
@@ -44,6 +46,8 @@ public final class LatticeCliMain {
         commandLine.addSubcommand("query", new QueryCommand());
         commandLine.addSubcommand("search", new SearchCommand());
         commandLine.addSubcommand("status", new StatusCommand());
+        commandLine.addSubcommand("source-list", new SourceListCommand());
+        commandLine.addSubcommand("source-sync", new SourceSyncCommand());
         commandLine.addSubcommand("lint", new LintCommand());
         commandLine.addSubcommand("history", new HistoryCommand());
         commandLine.addSubcommand("diff", new DiffCommand());

@@ -213,6 +213,11 @@ class AnswerGenerationServiceTests {
         public Long getExpire(String key) {
             return 1L;
         }
+
+        @Override
+        public void deleteByPrefix(String keyPrefix) {
+            values.keySet().removeIf(key -> key.startsWith(keyPrefix));
+        }
     }
 
 }

@@ -1,26 +1,27 @@
 (function () {
+    // 负责管理员设置页的数据加载与交互，不承载开发者接入页逻辑。
     const LLM_BINDING_ROLE_OPTIONS = {
         compile: [
             {
                 value: "writer",
                 label: "内容生成",
                 stage: "第 1 步",
-                summary: "先根据资料生成知识初稿",
-                description: "负责把原始资料整理成可入库的知识初稿，决定结构、信息覆盖范围和首版表达。"
+                summary: "按资料生成知识初稿",
+                description: "负责首版入库内容，先把资料整理成可入库的知识条目。"
             },
             {
                 value: "reviewer",
                 label: "内容复核",
                 stage: "第 2 步",
-                summary: "检查初稿是否准确、完整",
-                description: "负责核对初稿是否忠于资料、有没有遗漏重点，以及结构和结论是否可靠。"
+                summary: "检查事实和覆盖范围",
+                description: "核对内容是否忠于资料，是否漏掉关键信息。"
             },
             {
                 value: "fixer",
                 label: "自动修正",
                 stage: "第 3 步",
-                summary: "根据复核意见回写修正版",
-                description: "当复核发现问题时，负责按问题单修正文稿，让内容回到可继续入库的状态。"
+                summary: "按复核意见回写",
+                description: "根据问题清单修正文稿，让内容回到可入库状态。"
             }
         ],
         query: [
@@ -28,22 +29,22 @@
                 value: "answer",
                 label: "直接回答",
                 stage: "第 1 步",
-                summary: "基于检索结果生成首版回答",
-                description: "负责根据命中的知识内容先给出第一版答案，是问答链路里真正面向用户的主回答者。"
+                summary: "基于检索结果生成回答",
+                description: "负责产出首版回答，是问答链路里的主输出模型。"
             },
             {
                 value: "reviewer",
                 label: "答案复核",
                 stage: "第 2 步",
-                summary: "检查回答是否有偏差或遗漏",
-                description: "负责核查答案是否和证据一致、有没有答偏、答漏，帮助系统发现潜在问题。"
+                summary: "检查回答与证据是否一致",
+                description: "发现答偏、答漏或引用不稳的地方。"
             },
             {
                 value: "rewrite",
                 label: "答案润色",
                 stage: "第 3 步",
-                summary: "按复核意见重写更稳妥的回答",
-                description: "当复核未通过时，负责根据复核意见重写答案，让最终结果更准确、更自然。"
+                summary: "按复核意见重写回答",
+                description: "在需要时生成更稳妥的最终答复。"
             }
         ]
     };
@@ -59,13 +60,31 @@
         llmBindings: [],
         llmBindingFlowExpanded: false,
         documentParseConnections: [],
-        documentParseSettings: null
+        documentParseSettings: null,
+        helpState: {
+            lastSaveType: "",
+            lastSaveSucceeded: false,
+            lastTestType: "",
+            lastTestFailed: false,
+            bindingRecentlyChanged: false,
+            documentParseTestFailed: false
+        }
     };
 
     document.addEventListener("DOMContentLoaded", function () {
+        if (!isSettingsEntryActive()) {
+            return;
+        }
         bindEvents();
         loadAiConfig(false);
     });
+
+    function isSettingsEntryActive() {
+        if (!window.AdminSections || typeof window.AdminSections.getActiveEntry !== "function") {
+            return true;
+        }
+        return window.AdminSections.getActiveEntry() === "settings";
+    }
 
     function bindEvents() {
         document.getElementById("refresh-ai").addEventListener("click", function () {
@@ -101,11 +120,12 @@
         document.getElementById("reset-document-parse-connection").addEventListener("click", resetDocumentParseConnectionForm);
         document.getElementById("save-document-parse-settings").addEventListener("click", saveDocumentParseSettings);
         document.getElementById("document-parse-provider-type").addEventListener("change", syncDocumentParseEndpointSuggestion);
+        document.addEventListener("click", handleSettingsHelpActionClick);
     }
 
     async function loadAiConfig(showSuccessFeedback) {
         if (showSuccessFeedback) {
-            setStatus("正在刷新 AI 接入配置...", "info");
+            setStatus("正在刷新管理员设置...", "info");
         }
         try {
             const responses = await Promise.all([
@@ -134,12 +154,14 @@
             renderDocumentParseSettingsSummary(state.documentParseSettings);
             syncLlmModelKindForm();
             syncDocumentParseEndpointSuggestion();
+            renderSettingsHelpCard();
+            syncSettingsFaqOpenState();
             if (showSuccessFeedback) {
-                setStatus("AI 接入配置已刷新", "success");
+                setStatus("管理员设置已刷新", "success");
             }
         }
         catch (error) {
-            showError("加载 AI 接入配置失败", error);
+            showError("加载管理员设置失败", error);
         }
     }
 
@@ -165,9 +187,19 @@
                     apiKey: apiKey
                 })
             });
+            updateSettingsHelpState({
+                lastTestType: "llm-connection",
+                lastTestFailed: !result.success,
+                documentParseTestFailed: false
+            });
             setStatus(result.message || "连接测试已完成", result.success ? "success" : "danger");
         }
         catch (error) {
+            updateSettingsHelpState({
+                lastTestType: "llm-connection",
+                lastTestFailed: true,
+                documentParseTestFailed: false
+            });
             showError("测试连接失败", error);
         }
         finally {
@@ -206,9 +238,19 @@
                 method: "POST",
                 body: JSON.stringify(payload)
             });
+            updateSettingsHelpState({
+                lastTestType: "llm-model",
+                lastTestFailed: !result.success,
+                documentParseTestFailed: false
+            });
             setStatus(result.message || "模型测试已完成", result.success ? "success" : "danger");
         }
         catch (error) {
+            updateSettingsHelpState({
+                lastTestType: "llm-model",
+                lastTestFailed: true,
+                documentParseTestFailed: false
+            });
             showError("测试模型失败", error);
         }
         finally {
@@ -239,6 +281,12 @@
                     : "/api/v1/admin/llm/connections", {
                 method: id ? "PUT" : "POST",
                 body: JSON.stringify(payload)
+            });
+            updateSettingsHelpState({
+                lastSaveType: "llm-connection",
+                lastSaveSucceeded: true,
+                lastTestFailed: false,
+                documentParseTestFailed: false
             });
             setStatus(id ? "连接已更新" : "连接已创建", "success");
             resetLlmConnectionForm();
@@ -277,6 +325,12 @@
                 method: id ? "PUT" : "POST",
                 body: JSON.stringify(payload)
             });
+            updateSettingsHelpState({
+                lastSaveType: "llm-model",
+                lastSaveSucceeded: true,
+                lastTestFailed: false,
+                documentParseTestFailed: false
+            });
             setStatus(id ? "模型已更新" : "模型已创建", "success");
             resetLlmModelForm();
             await loadAiConfig(false);
@@ -305,6 +359,13 @@
                 method: id ? "PUT" : "POST",
                 body: JSON.stringify(payload)
             });
+            updateSettingsHelpState({
+                lastSaveType: "llm-binding",
+                lastSaveSucceeded: true,
+                lastTestFailed: false,
+                documentParseTestFailed: false,
+                bindingRecentlyChanged: true
+            });
             setStatus(id ? "角色绑定已更新" : "角色绑定已创建", "success");
             resetLlmBindingForm();
             await loadAiConfig(false);
@@ -322,11 +383,11 @@
         const endpointPath = document.getElementById("document-parse-endpoint-path").value.trim();
         const credential = document.getElementById("document-parse-credential").value.trim();
         if (!baseUrl && !connectionId) {
-            setStatus("请先填写文档解析接口地址，再测试连接", "warning");
+            setStatus("请先填写识别服务接口地址，再测试连接", "warning");
             return;
         }
         button.disabled = true;
-        setStatus("正在测试文档解析连接...", "info");
+        setStatus("正在测试识别服务连接...", "info");
         try {
             const result = await fetchJson("/api/v1/admin/document-parse/connections/test", {
                 method: "POST",
@@ -338,10 +399,20 @@
                     credential: credential
                 })
             });
-            setStatus(result.message || "文档解析连接测试已完成", result.success ? "success" : "danger");
+            updateSettingsHelpState({
+                lastTestType: "document-parse",
+                lastTestFailed: !result.success,
+                documentParseTestFailed: !result.success
+            });
+            setStatus(result.message || "识别服务连接测试已完成", result.success ? "success" : "danger");
         }
         catch (error) {
-            showError("测试文档解析连接失败", error);
+            updateSettingsHelpState({
+                lastTestType: "document-parse",
+                lastTestFailed: true,
+                documentParseTestFailed: true
+            });
+            showError("测试识别服务连接失败", error);
         }
         finally {
             button.disabled = false;
@@ -359,14 +430,14 @@
             enabled: document.getElementById("document-parse-connection-enabled").checked
         };
         if (!payload.connectionCode || !payload.baseUrl) {
-            setStatus("请填写文档解析连接名称和接口地址", "warning");
+            setStatus("请填写识别服务连接名称和接口地址", "warning");
             return;
         }
         if (!payload.endpointPath) {
             payload.endpointPath = getDocumentParseDefaultEndpoint(payload.providerType);
         }
         if (!id && !payload.credential) {
-            setStatus("新增文档解析连接时必须填写访问凭证", "warning");
+            setStatus("新增识别服务连接时必须填写访问凭证", "warning");
             return;
         }
         try {
@@ -376,12 +447,18 @@
                 method: id ? "PUT" : "POST",
                 body: JSON.stringify(payload)
             });
-            setStatus(id ? "文档解析连接已更新" : "文档解析连接已创建", "success");
+            updateSettingsHelpState({
+                lastSaveType: "document-parse-connection",
+                lastSaveSucceeded: true,
+                lastTestFailed: false,
+                documentParseTestFailed: false
+            });
+            setStatus(id ? "识别服务连接已更新" : "识别服务连接已创建", "success");
             resetDocumentParseConnectionForm();
             await loadAiConfig(false);
         }
         catch (error) {
-            showError("保存文档解析连接失败", error);
+            showError("保存识别服务连接失败", error);
         }
     }
 
@@ -400,11 +477,17 @@
                 method: "PUT",
                 body: JSON.stringify(payload)
             });
-            setStatus("文档解析设置已更新", "success");
+            updateSettingsHelpState({
+                lastSaveType: "document-parse-settings",
+                lastSaveSucceeded: true,
+                lastTestFailed: false,
+                documentParseTestFailed: false
+            });
+            setStatus("识别策略已更新", "success");
             await loadAiConfig(false);
         }
         catch (error) {
-            showError("保存文档解析设置失败", error);
+            showError("保存识别策略失败", error);
         }
     }
 
@@ -460,19 +543,19 @@
     }
 
     async function deleteDocumentParseConnection(id) {
-        if (!window.confirm("将删除该文档解析连接，确认继续吗？")) {
+        if (!window.confirm("将删除该识别服务连接，确认继续吗？")) {
             return;
         }
         try {
             await fetchJson("/api/v1/admin/document-parse/connections/" + encodeURIComponent(id), {
                 method: "DELETE"
             });
-            setStatus("文档解析连接已删除", "success");
+            setStatus("识别服务连接已删除", "success");
             resetDocumentParseConnectionForm();
             await loadAiConfig(false);
         }
         catch (error) {
-            showError("删除文档解析连接失败", error);
+            showError("删除识别服务连接失败", error);
         }
     }
 
@@ -846,7 +929,7 @@
     function renderDocumentParseConnectionList(items) {
         const container = document.getElementById("document-parse-connection-list");
         if (!items || items.length === 0) {
-            container.innerHTML = "<div class='job-card'><p class='item-summary'>还没有文档解析连接，可以先添加一个 OCR / Document AI 供应商。</p></div>";
+            container.innerHTML = "<div class='job-card'><p class='item-summary'>还没有识别服务连接，可以先添加一个 OCR / Document AI 供应商。</p></div>";
             return;
         }
         container.innerHTML = "<table class='simple-table'>"
@@ -883,17 +966,17 @@
         const container = document.getElementById("document-parse-settings-summary");
         const effectiveSettings = settings || {};
         container.innerHTML = "<div class='job-card'>"
-                + "<p class='item-summary'>默认连接："
+                + "<p class='item-summary'>默认识别连接："
                 + escapeHtml(resolveDocumentParseConnectionLabel(effectiveSettings.defaultConnectionId))
                 + "</p>"
-                + "<p class='job-meta-line'>图片 OCR："
+                + "<p class='job-meta-line'>图片识别（OCR）："
                 + escapeHtml(effectiveSettings.imageOcrEnabled ? "启用" : "关闭")
-                + "｜扫描 PDF OCR："
+                + "｜扫描 PDF 识别（OCR）："
                 + escapeHtml(effectiveSettings.scannedPdfOcrEnabled ? "启用" : "关闭")
-                + "｜OCR 后整理："
+                + "｜识别后整理："
                 + escapeHtml(effectiveSettings.cleanupEnabled ? "启用" : "关闭")
                 + "</p>"
-                + "<p class='job-meta-line'>后整理模型："
+                + "<p class='job-meta-line'>识别后整理模型："
                 + escapeHtml(resolveModelLabel(effectiveSettings.cleanupModelProfileId))
                 + "</p>"
                 + "</div>";
@@ -1061,7 +1144,7 @@
         });
         if (!response.ok) {
             const text = await response.text();
-            throw new Error(text || ("HTTP " + response.status));
+            throw new Error(buildErrorMessage(response.status, text));
         }
         const contentType = response.headers.get("content-type") || "";
         if (contentType.indexOf("application/json") >= 0) {
@@ -1070,14 +1153,183 @@
         return response.text();
     }
 
+    function buildErrorMessage(status, rawText) {
+        const fallback = "HTTP " + status;
+        const text = String(rawText || "").trim();
+        if (!text) {
+            return fallback;
+        }
+        try {
+            const payload = JSON.parse(text);
+            if (payload.message) {
+                return payload.message;
+            }
+            if (payload.error && payload.path) {
+                return fallback + " " + payload.error + "（" + payload.path + "）";
+            }
+            if (payload.error) {
+                return fallback + " " + payload.error;
+            }
+            if (payload.path) {
+                return fallback + "（" + payload.path + "）";
+            }
+        }
+        catch (error) {
+            // 原始响应不是 JSON 时，直接走文本兜底。
+        }
+        return text.length > 180 ? text.slice(0, 180) + "..." : text;
+    }
+
+    function handleSettingsHelpActionClick(event) {
+        const trigger = event.target.closest("[data-settings-help-action]");
+        if (!trigger) {
+            return;
+        }
+        const action = trigger.dataset.settingsHelpAction;
+        if (action === "go-management") {
+            window.location.assign("/admin");
+            return;
+        }
+        if (action === "go-ask") {
+            window.location.assign("/admin/ask");
+            return;
+        }
+        if (action === "open-settings-llm"
+                || action === "open-settings-parse"
+                || action === "open-settings-sources"
+                || action === "open-settings-overview") {
+            const tabName = action.replace("open-", "");
+            if (window.AdminTabs && typeof window.AdminTabs.activate === "function") {
+                window.AdminTabs.activate("admin-console", tabName);
+            }
+        }
+    }
+
+    function updateSettingsHelpState(patch) {
+        state.helpState = Object.assign({}, state.helpState, patch || {});
+        renderSettingsHelpCard();
+        syncSettingsFaqOpenState();
+    }
+
+    function deriveSettingsHelpState() {
+        const helpState = state.helpState || {};
+        if (helpState.documentParseTestFailed) {
+            return {
+                tone: "danger",
+                title: "识别服务连接测试失败，先查基础信息",
+                description: "先检查 Base URL、接口路径、访问凭证和供应商类型；如果普通文本导入没问题，只是扫描件或图片失败，优先从 OCR / 文档识别排查。",
+                actions: [
+                    {label: "去 OCR / 文档识别", action: "open-settings-parse", className: "primary-btn"},
+                    {label: "返回概览", action: "open-settings-overview", className: "ghost-btn"}
+                ],
+                faqKey: "parse-test-failed"
+            };
+        }
+        if (helpState.lastTestFailed) {
+            return {
+                tone: "danger",
+                title: "连接或模型测试失败，先查必填项",
+                description: "先检查接口地址、凭证和供应商类型是否完整，再判断是不是模型本身不可用。不要一上来就把问题归因为整条链路都坏了。",
+                actions: [
+                    {label: "去模型与角色", action: "open-settings-llm", className: "primary-btn"},
+                    {label: "返回概览", action: "open-settings-overview", className: "ghost-btn"}
+                ],
+                faqKey: "parse-test-failed"
+            };
+        }
+        if (helpState.bindingRecentlyChanged) {
+            return {
+                tone: "warning",
+                title: "角色绑定已更新，建议用新任务验证",
+                description: "角色绑定改动只会影响后续新任务，不会立刻切到正在运行中的同步、编译或问答。改完后请用一个新任务验证，而不是只看保存成功提示。",
+                actions: [
+                    {label: "去知识库管理", action: "go-management", className: "primary-btn"},
+                    {label: "去模型与角色", action: "open-settings-llm", className: "ghost-btn"}
+                ],
+                faqKey: "binding-change"
+            };
+        }
+        if (helpState.lastSaveSucceeded) {
+            return {
+                tone: "warning",
+                title: "配置已保存，但只会影响新任务",
+                description: "如果你刚改完就期待当前任务马上变化，很容易误判成“配置没生效”。先回知识库管理或知识问答，用新任务验证改动是否生效。",
+                actions: [
+                    {label: "去知识库管理", action: "go-management", className: "primary-btn"},
+                    {label: "去知识问答", action: "go-ask", className: "ghost-btn"}
+                ],
+                faqKey: "saved-not-applied"
+            };
+        }
+        return {
+            tone: "info",
+            title: "看不懂字段时，先不要改",
+            description: "大多数日常问题并不需要动这里。普通用户如果只是想导资料、看结果、直接提问，应该优先回知识库管理或知识问答，而不是停留在后台配置页。",
+            actions: [
+                {label: "返回知识库管理", action: "go-management", className: "primary-btn"},
+                {label: "返回概览", action: "open-settings-overview", className: "ghost-btn"}
+            ],
+            faqKey: "default-warning"
+        };
+    }
+
+    function renderSettingsHelpCard() {
+        const container = document.getElementById("settings-help-card");
+        if (!container) {
+            return;
+        }
+        const helpState = deriveSettingsHelpState();
+        container.setAttribute("data-help-tone", helpState.tone || "info");
+        container.innerHTML = "<p class='help-card-eyebrow'>配置影响范围</p>"
+                + "<h2 class='help-card-title'>" + escapeHtml(helpState.title || "先看这里") + "</h2>"
+                + "<p class='help-card-description'>" + escapeHtml(helpState.description || "") + "</p>"
+                + renderSettingsHelpActions(helpState.actions || []);
+    }
+
+    function renderSettingsHelpActions(actions) {
+        if (!actions || actions.length === 0) {
+            return "";
+        }
+        return "<div class='help-action-row'>"
+                + actions.map(function (item) {
+                    return "<button class='" + escapeHtml(item.className || "ghost-btn")
+                            + "' type='button' data-settings-help-action='" + escapeHtml(item.action || "") + "'>"
+                            + escapeHtml(item.label || "继续查看")
+                            + "</button>";
+                }).join("")
+                + "</div>";
+    }
+
+    function syncSettingsFaqOpenState() {
+        const container = document.getElementById("settings-faq-list");
+        if (!container) {
+            return;
+        }
+        const helpState = deriveSettingsHelpState();
+        const panels = Array.from(container.querySelectorAll("[data-help-faq-key]"));
+        if (panels.length === 0) {
+            return;
+        }
+        const target = panels.find(function (panel) {
+            return panel.dataset.helpFaqKey === helpState.faqKey;
+        }) || panels[0];
+        panels.forEach(function (panel) {
+            panel.open = panel === target;
+        });
+    }
+
     function setStatus(message, tone) {
-        const target = document.getElementById("ai-page-feedback");
+        const target = document.getElementById("settings-page-notice")
+                || document.getElementById("ai-page-feedback");
         if (!target) {
             return;
         }
         target.hidden = !message;
         target.textContent = message || "";
-        target.className = "panel-feedback" + (tone ? " " + tone : "");
+        const baseClass = target.id === "settings-page-notice"
+                ? "page-notice"
+                : "panel-feedback";
+        target.className = baseClass + (tone ? " " + tone : "");
     }
 
     function showError(prefix, error) {
