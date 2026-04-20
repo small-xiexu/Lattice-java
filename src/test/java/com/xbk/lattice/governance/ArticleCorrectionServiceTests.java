@@ -349,6 +349,10 @@ class ArticleCorrectionServiceTests {
         public Long getExpire(String key) {
             return null;
         }
+
+        @Override
+        public void deleteByPrefix(String keyPrefix) {
+        }
     }
 
 }

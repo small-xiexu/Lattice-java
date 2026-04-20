@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * DocumentParseRouter 集成测试
  *
- * 职责：验证 `.doc`、图片 OCR 与扫描 PDF OCR 的组件级解析行为
+ * 职责：验证 `.doc`、`.csv`、图片 OCR 与扫描 PDF OCR 的组件级解析行为
  *
  * @author xiexu
  */
@@ -74,13 +74,13 @@ class DocumentParseRouterIntegrationTests {
     }
 
     /**
-     * 验证 `.doc` 会走直读，图片与扫描 PDF 会走 OCR 分支。
+     * 验证 `.doc`、`.csv` 会走对应解析链，图片与扫描 PDF 会走 OCR 分支。
      *
      * @param tempDir 临时目录
      * @throws Exception 测试异常
      */
     @Test
-    void shouldParseDocAndRouteImageAndScannedPdfThroughOcr(@TempDir Path tempDir) throws Exception {
+    void shouldParseDocCsvAndRouteImageAndScannedPdfThroughOcr(@TempDir Path tempDir) throws Exception {
         resetTables();
         AtomicReference<String> capturedAuthorization = new AtomicReference<String>("");
         int port = startOcrServer(capturedAuthorization);
@@ -124,12 +124,15 @@ class DocumentParseRouterIntegrationTests {
             assertThat(inputStream).isNotNull();
             Files.copy(inputStream, legacyDocPath);
         }
+        Path csvPath = docsDir.resolve("rules.csv");
+        Files.writeString(csvPath, "businessSubTypeCode,meaning\n1210,refund", StandardCharsets.UTF_8);
         Path imagePath = imagesDir.resolve("receipt.png");
         Files.write(imagePath, new byte[]{1, 2, 3, 4, 5});
         Path scannedPdfPath = docsDir.resolve("scanned.pdf");
         writeBlankPdf(scannedPdfPath);
 
         RawSource docSource = documentParseRouter.parseRawSource(tempDir, legacyDocPath);
+        RawSource csvSource = documentParseRouter.parseRawSource(tempDir, csvPath);
         RawSource imageSource = documentParseRouter.parseRawSource(tempDir, imagePath);
         RawSource pdfSource = documentParseRouter.parseRawSource(tempDir, scannedPdfPath);
 
@@ -139,6 +142,13 @@ class DocumentParseRouterIntegrationTests {
         assertThat(docSource.getParseProvider()).isEqualTo("poi_hwpf");
         assertThat(docSource.getContent()).contains("Legacy DOC payment timeout");
         assertThat(docSource.getContent()).contains("retry=3");
+
+        assertThat(csvSource).isNotNull();
+        assertThat(csvSource.getFormat()).isEqualTo("csv");
+        assertThat(csvSource.getParseMode()).isEqualTo("text_read");
+        assertThat(csvSource.getParseProvider()).isEqualTo("filesystem");
+        assertThat(csvSource.getContent()).contains("businessSubTypeCode,meaning");
+        assertThat(csvSource.getContent()).contains("1210,refund");
 
         assertThat(imageSource).isNotNull();
         assertThat(imageSource.getParseMode()).isEqualTo("ocr_image");

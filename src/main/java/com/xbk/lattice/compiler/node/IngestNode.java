@@ -2,6 +2,7 @@ package com.xbk.lattice.compiler.node;
 
 import com.xbk.lattice.compiler.config.CompilerProperties;
 import com.xbk.lattice.compiler.domain.RawSource;
+import com.xbk.lattice.documentparse.extractor.DocTextExtractor;
 import com.xbk.lattice.documentparse.extractor.ExcelTextExtractor;
 import com.xbk.lattice.documentparse.extractor.PdfTextExtractor;
 import com.xbk.lattice.documentparse.extractor.PptTextExtractor;
@@ -33,13 +34,13 @@ public class IngestNode {
 
     private static final Set<String> SUPPORTED_TEXT_FORMATS = Collections.unmodifiableSet(
             new HashSet<String>(Arrays.asList(
-                    "md", "txt", "markdown", "java", "xml", "properties",
+                    "md", "txt", "markdown", "csv", "java", "xml", "properties",
                     "yml", "yaml", "json", "vue", "js", "css", "html", "sh", "py"
             ))
     );
 
     private static final Set<String> SUPPORTED_DOCUMENT_FORMATS = Collections.unmodifiableSet(
-            new HashSet<String>(Arrays.asList("pdf", "xlsx", "xls", "docx", "pptx"))
+            new HashSet<String>(Arrays.asList("pdf", "xlsx", "xls", "docx", "doc", "pptx"))
     );
 
     private static final Set<String> SUPPORTED_IMAGE_FORMATS = Collections.unmodifiableSet(
@@ -58,6 +59,8 @@ public class IngestNode {
 
     private final WordTextExtractor wordTextExtractor;
 
+    private final DocTextExtractor docTextExtractor;
+
     private final PptTextExtractor pptTextExtractor;
 
     /**
@@ -70,6 +73,7 @@ public class IngestNode {
         this.pdfTextExtractor = new PdfTextExtractor();
         this.excelTextExtractor = new ExcelTextExtractor();
         this.wordTextExtractor = new WordTextExtractor();
+        this.docTextExtractor = new DocTextExtractor();
         this.pptTextExtractor = new PptTextExtractor();
     }
 
@@ -140,6 +144,9 @@ public class IngestNode {
         }
         if ("docx".equals(format)) {
             return readWordSource(sourceDir, path);
+        }
+        if ("doc".equals(format)) {
+            return readLegacyWordSource(sourceDir, path);
         }
         if ("pptx".equals(format)) {
             return readPptSource(sourceDir, path);
@@ -265,6 +272,38 @@ public class IngestNode {
         }
         catch (IOException ex) {
             log.warn("Failed to extract Word path: {}", path, ex);
+            return null;
+        }
+    }
+
+    /**
+     * 读取旧版 Word 源文件。
+     *
+     * @param sourceDir 源目录
+     * @param path Word 路径
+     * @return 原始源文件；无可提取正文时返回 null
+     */
+    private RawSource readLegacyWordSource(Path sourceDir, Path path) {
+        try {
+            SourceExtractionResult extractionResult = docTextExtractor.extract(path);
+            if (extractionResult == null) {
+                log.warn("Legacy Word has no extractable text path: {}", path);
+                return null;
+            }
+            String relativePath = normalizePath(sourceDir.relativize(path));
+            long fileSize = Files.size(path);
+            return RawSource.extracted(
+                    relativePath,
+                    trimContent(extractionResult.getContent()),
+                    "doc",
+                    fileSize,
+                    extractionResult.getMetadataJson(),
+                    extractionResult.isVerbatim(),
+                    relativePath
+            );
+        }
+        catch (IOException ex) {
+            log.warn("Failed to extract legacy Word path: {}", path, ex);
             return null;
         }
     }

@@ -139,6 +139,11 @@ class QueryFacadeServiceVectorTests {
         public void put(String cacheKey, QueryResponse queryResponse) {
             cachedResponse = queryResponse;
         }
+
+        @Override
+        public void evictAll() {
+            cachedResponse = null;
+        }
     }
 
     /**

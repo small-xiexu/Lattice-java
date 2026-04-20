@@ -1,8 +1,10 @@
 package com.xbk.lattice.compiler.service;
 
+import com.xbk.lattice.api.query.QueryResponse;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
+import com.xbk.lattice.query.service.QueryCacheStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,6 +53,9 @@ class CompilePipelineServiceTests {
 
     @Autowired
     private ArticleChunkJdbcRepository articleChunkJdbcRepository;
+
+    @Autowired
+    private QueryCacheStore queryCacheStore;
 
     /**
      * 验证源目录可按 groupKey 编译成 article 并落表。
@@ -193,9 +198,29 @@ class CompilePipelineServiceTests {
     }
 
     /**
+     * 验证 full compile 完成后会清理旧的 query cache。
+     *
+     * @param tempDir 临时目录
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldEvictQueryCacheAfterFullCompile(@TempDir Path tempDir) throws IOException {
+        resetCompileTables();
+        queryCacheStore.put("为什么订单服务要走消息队列", new QueryResponse("旧缓存答案", List.of(), List.of(), null, "PASSED"));
+
+        Path paymentDir = Files.createDirectories(tempDir.resolve("payment"));
+        Files.writeString(paymentDir.resolve("order.md"), "order-flow", StandardCharsets.UTF_8);
+
+        compilePipelineService.compile(tempDir);
+
+        assertThat(queryCacheStore.get("为什么订单服务要走消息队列")).isEmpty();
+    }
+
+    /**
      * 重置编译相关测试表，避免测试之间相互污染。
      */
     private void resetCompileTables() {
+        queryCacheStore.evictAll();
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.repo_snapshot_items");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.repo_snapshots RESTART IDENTITY CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.source_files CASCADE");

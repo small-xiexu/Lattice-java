@@ -164,7 +164,8 @@ public class AdminArticleQueryService {
                 || contains(articleRecord.getConceptId(), normalizedQuery)
                 || contains(articleRecord.getTitle(), normalizedQuery)
                 || contains(articleRecord.getSummary(), normalizedQuery)
-                || contains(articleRecord.getContent(), normalizedQuery);
+                || contains(articleRecord.getContent(), normalizedQuery)
+                || containsAny(articleRecord.getSourcePaths(), normalizedQuery);
     }
 
     /**
@@ -176,6 +177,25 @@ public class AdminArticleQueryService {
      */
     private boolean contains(String value, String normalizedQuery) {
         return value != null && value.toLowerCase(Locale.ROOT).contains(normalizedQuery);
+    }
+
+    /**
+     * 判断任一来源路径是否包含关键字。
+     *
+     * @param values 来源路径列表
+     * @param normalizedQuery 规范化关键字
+     * @return 是否包含
+     */
+    private boolean containsAny(List<String> values, String normalizedQuery) {
+        if (values == null || values.isEmpty()) {
+            return false;
+        }
+        for (String value : values) {
+            if (contains(value, normalizedQuery)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

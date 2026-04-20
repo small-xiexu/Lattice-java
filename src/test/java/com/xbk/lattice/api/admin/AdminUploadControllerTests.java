@@ -15,6 +15,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -122,6 +123,73 @@ class AdminUploadControllerTests {
                 sourceId
         );
         assertThat(snapshotCount).isEqualTo(1);
+    }
+
+    /**
+     * 验证统一上传会接收 `.doc` 与 `.csv` 并落入主编译链。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldAcceptLegacyDocAndCsvViaUnifiedUpload() throws Exception {
+        resetTables();
+        MockMultipartFile legacyDocFile;
+        try (InputStream inputStream = getClass().getResourceAsStream("/documentparse/legacy-word.doc")) {
+            assertThat(inputStream).isNotNull();
+            legacyDocFile = new MockMultipartFile(
+                    "files",
+                    "payments/legacy-word.doc",
+                    "application/msword",
+                    inputStream.readAllBytes()
+            );
+        }
+        MockMultipartFile csvFile = new MockMultipartFile(
+                "files",
+                "payments/rules.csv",
+                "text/csv",
+                """
+                        businessSubTypeCode,meaning
+                        1210,refund
+                        """.getBytes(StandardCharsets.UTF_8)
+        );
+
+        String responseBody = mockMvc.perform(multipart("/api/v1/admin/uploads")
+                        .file(legacyDocFile)
+                        .file(csvFile))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPILE_QUEUED"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        Long runId = readLong(responseBody, "runId");
+
+        compileJobService.processNextQueuedJob();
+
+        mockMvc.perform(get("/api/v1/admin/source-runs/" + runId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.compileJobStatus").value("SUCCEEDED"));
+
+        Integer docCount = jdbcTemplate.queryForObject(
+                """
+                        select count(*)
+                        from lattice_phase_e_upload_test.source_files
+                        where format = 'doc'
+                          and content_text like '%Legacy DOC payment timeout%'
+                        """,
+                Integer.class
+        );
+        Integer csvCount = jdbcTemplate.queryForObject(
+                """
+                        select count(*)
+                        from lattice_phase_e_upload_test.source_files
+                        where format = 'csv'
+                          and content_text like '%businessSubTypeCode,meaning%'
+                        """,
+                Integer.class
+        );
+        assertThat(docCount).isEqualTo(1);
+        assertThat(csvCount).isEqualTo(1);
     }
 
     /**

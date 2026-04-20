@@ -172,6 +172,49 @@ class QueryGraphOrchestratorTests {
     }
 
     /**
+     * 验证“当前证据不足”这类负向答案不会写入缓存。
+     */
+    @Test
+    void shouldNotCacheEvidenceInsufficientAnswerEvenWhenReviewPasses() {
+        QueryArticleHit articleHit = new QueryArticleHit(
+                "inventory-async",
+                "Inventory Async",
+                "订单服务通过消息队列异步通知库存服务",
+                "{\"description\":\"订单与库存通过异步事件解耦\"}",
+                List.of("adr/order-inventory-mq.md"),
+                9.5D
+        );
+        TrackingAnswerGenerationService answerGenerationService = new TrackingAnswerGenerationService(
+                "当前证据不足，暂无法确认为什么必须走消息队列。",
+                "当前证据不足，暂无法确认为什么必须走消息队列。"
+        );
+        InMemoryQueryCacheStore queryCacheStore = new InMemoryQueryCacheStore();
+        QueryReviewProperties queryReviewProperties = new QueryReviewProperties();
+        queryReviewProperties.setRewriteEnabled(false);
+        QueryGraphOrchestrator queryGraphOrchestrator = new QueryGraphOrchestrator(
+                new FixedFtsSearchService(List.of(articleHit)),
+                new FixedRefKeySearchService(List.of()),
+                new FixedSourceSearchService(List.of()),
+                new FixedContributionSearchService(List.of()),
+                new FixedVectorSearchService(List.of()),
+                new RrfFusionService(),
+                answerGenerationService,
+                queryCacheStore,
+                new ReviewerAgent(
+                        new SequencedReviewerGateway("{\"pass\":true,\"issues\":[]}"),
+                        new ReviewResultParser()
+                ),
+                queryReviewProperties
+        );
+
+        QueryResponse queryResponse = queryGraphOrchestrator.execute("为什么订单服务要走消息队列");
+
+        assertThat(queryResponse.getAnswer()).contains("当前证据不足");
+        assertThat(queryResponse.getReviewStatus()).isEqualTo("PASSED");
+        assertThat(queryCacheStore.getCachedResponse()).isEmpty();
+    }
+
+    /**
      * 追踪生成与重写次数的答案服务替身。
      *
      * @author xiexu
@@ -429,6 +472,11 @@ class QueryGraphOrchestratorTests {
         @Override
         public void put(String cacheKey, QueryResponse queryResponse) {
             cachedResponse = queryResponse;
+        }
+
+        @Override
+        public void evictAll() {
+            cachedResponse = null;
         }
 
         /**

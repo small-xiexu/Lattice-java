@@ -16,6 +16,7 @@ import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.query.service.ArticleChunkVectorIndexService;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
+import com.xbk.lattice.query.service.QueryCacheStore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
@@ -60,6 +61,8 @@ public class CompilePipelineService {
     private final ArticleChunkVectorIndexService articleChunkVectorIndexService;
 
     private final IncrementalCompileService incrementalCompileService;
+
+    private QueryCacheStore queryCacheStore;
 
     /**
      * 创建编译节点能力服务。
@@ -389,6 +392,16 @@ public class CompilePipelineService {
     }
 
     /**
+     * 注入查询缓存存储。
+     *
+     * @param queryCacheStore 查询缓存存储
+     */
+    @Autowired(required = false)
+    void setQueryCacheStore(QueryCacheStore queryCacheStore) {
+        this.queryCacheStore = queryCacheStore;
+    }
+
+    /**
      * 编译源目录并落盘文章。
      *
      * @param sourceDir 源目录
@@ -411,6 +424,7 @@ public class CompilePipelineService {
             synthesisArtifactsService.generateAll(mergedConcepts);
         }
         articlePersistSupport.captureRepoSnapshot("compile.full", sourceDir, persistedCount);
+        evictQueryCacheIfNeeded(persistedCount);
         CompileResult compileResult = new CompileResult(persistedCount, jobId);
         log.info(
                 "Compile completed sourceDir: {}, jobId: {}, persistedCount: {}",
@@ -430,6 +444,7 @@ public class CompilePipelineService {
     CompileResult retry(String jobId) {
         int persistedCount = commitPendingConcepts(jobId, null);
         articlePersistSupport.captureRepoSnapshot("compile.retry", null, persistedCount);
+        evictQueryCacheIfNeeded(persistedCount);
         return new CompileResult(persistedCount, jobId);
     }
 
@@ -441,7 +456,9 @@ public class CompilePipelineService {
      * @throws IOException IO 异常
      */
     CompileResult incrementalCompile(Path sourceDir) throws IOException {
-        return incrementalCompileService.incrementalCompile(sourceDir);
+        CompileResult compileResult = incrementalCompileService.incrementalCompile(sourceDir);
+        evictQueryCacheIfNeeded(compileResult.getPersistedCount());
+        return compileResult;
     }
 
     /**
@@ -661,6 +678,18 @@ public class CompilePipelineService {
             persistedCount++;
         }
         return persistedCount;
+    }
+
+    /**
+     * 在编译写入成功后清理查询缓存。
+     *
+     * @param persistedCount 已落库文章数
+     */
+    private void evictQueryCacheIfNeeded(int persistedCount) {
+        if (persistedCount <= 0 || queryCacheStore == null) {
+            return;
+        }
+        queryCacheStore.evictAll();
     }
 
     /**

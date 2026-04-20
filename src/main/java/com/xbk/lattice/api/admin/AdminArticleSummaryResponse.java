@@ -1,5 +1,7 @@
 package com.xbk.lattice.api.admin;
 
+import java.util.List;
+
 /**
  * 管理侧文章摘要响应
  *
@@ -27,6 +29,10 @@ public class AdminArticleSummaryResponse {
 
     private final int sourceCount;
 
+    private final String primarySourcePath;
+
+    private final List<String> sourcePaths;
+
     private final String primarySourceName;
 
     /**
@@ -41,6 +47,8 @@ public class AdminArticleSummaryResponse {
      * @param compiledAt 编译时间
      * @param summary 摘要
      * @param sourceCount 来源数量
+     * @param primarySourcePath 首个来源路径
+     * @param sourcePaths 完整来源路径列表
      * @param primarySourceName 首个来源文件名
      */
     public AdminArticleSummaryResponse(
@@ -53,6 +61,8 @@ public class AdminArticleSummaryResponse {
             String compiledAt,
             String summary,
             int sourceCount,
+            String primarySourcePath,
+            List<String> sourcePaths,
             String primarySourceName
     ) {
         this.sourceId = sourceId;
@@ -64,6 +74,8 @@ public class AdminArticleSummaryResponse {
         this.compiledAt = compiledAt;
         this.summary = summary;
         this.sourceCount = sourceCount;
+        this.primarySourcePath = primarySourcePath;
+        this.sourcePaths = sourcePaths;
         this.primarySourceName = primarySourceName;
     }
 
@@ -146,6 +158,24 @@ public class AdminArticleSummaryResponse {
      */
     public int getSourceCount() {
         return sourceCount;
+    }
+
+    /**
+     * 获取首个来源路径。
+     *
+     * @return 首个来源路径
+     */
+    public String getPrimarySourcePath() {
+        return primarySourcePath;
+    }
+
+    /**
+     * 获取完整来源路径列表。
+     *
+     * @return 完整来源路径列表
+     */
+    public List<String> getSourcePaths() {
+        return sourcePaths;
     }
 
     /**

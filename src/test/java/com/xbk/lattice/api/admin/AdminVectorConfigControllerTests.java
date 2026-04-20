@@ -1,6 +1,8 @@
 package com.xbk.lattice.api.admin;
 
+import com.xbk.lattice.api.query.QueryResponse;
 import com.xbk.lattice.llm.service.LlmSecretCryptoService;
+import com.xbk.lattice.query.service.QueryCacheStore;
 import com.xbk.lattice.query.service.QuerySearchProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,6 +10,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -56,6 +60,9 @@ class AdminVectorConfigControllerTests {
     @Autowired
     private LlmSecretCryptoService llmSecretCryptoService;
 
+    @Autowired
+    private QueryCacheStore queryCacheStore;
+
     /**
      * 验证默认返回 application.yml / 环境变量中的向量配置。
      *
@@ -84,6 +91,7 @@ class AdminVectorConfigControllerTests {
     @Test
     void shouldPersistVectorConfigAndApplyToRuntimeImmediately() throws Exception {
         resetTables();
+        queryCacheStore.put("cached-question", new QueryResponse("cached", List.of(), List.of(), null, "PASSED"));
 
         mockMvc.perform(put("/api/v1/admin/vector/config")
                         .contentType(APPLICATION_JSON)
@@ -105,6 +113,7 @@ class AdminVectorConfigControllerTests {
 
         assertThat(querySearchProperties.getVector().isEnabled()).isTrue();
         assertThat(querySearchProperties.getVector().getEmbeddingModelProfileId()).isEqualTo(Long.valueOf(2L));
+        assertThat(queryCacheStore.get("cached-question")).isEmpty();
 
         mockMvc.perform(get("/api/v1/admin/vector/status"))
                 .andExpect(status().isOk())

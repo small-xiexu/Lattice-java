@@ -264,6 +264,10 @@ class PropagateExecutionServiceTests {
         public Long getExpire(String key) {
             return null;
         }
+
+        @Override
+        public void deleteByPrefix(String keyPrefix) {
+        }
     }
 
 }

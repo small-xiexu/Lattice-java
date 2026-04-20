@@ -142,6 +142,8 @@ class VectorJdbcRepositoryOperatorTests {
         jdbcTemplate.execute("""
                 CREATE TABLE articles (
                     id BIGINT PRIMARY KEY,
+                    source_id BIGINT,
+                    article_key VARCHAR(256) NOT NULL UNIQUE,
                     concept_id VARCHAR(128) NOT NULL UNIQUE,
                     title TEXT NOT NULL,
                     content TEXT NOT NULL,
@@ -152,7 +154,8 @@ class VectorJdbcRepositoryOperatorTests {
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE article_vector_index (
-                    concept_id VARCHAR(128) PRIMARY KEY,
+                    article_key VARCHAR(256) PRIMARY KEY,
+                    concept_id VARCHAR(128) NOT NULL,
                     model_profile_id BIGINT NOT NULL,
                     embedding_dimensions INTEGER NOT NULL,
                     index_version VARCHAR(64) NOT NULL,
@@ -172,6 +175,8 @@ class VectorJdbcRepositoryOperatorTests {
         jdbcTemplate.execute("""
                 CREATE TABLE articles (
                     id BIGINT PRIMARY KEY,
+                    source_id BIGINT,
+                    article_key VARCHAR(256) NOT NULL UNIQUE,
                     concept_id VARCHAR(128) NOT NULL UNIQUE,
                     title TEXT NOT NULL,
                     content TEXT NOT NULL,
@@ -221,10 +226,12 @@ class VectorJdbcRepositoryOperatorTests {
         jdbcTemplate.update(
                 """
                         INSERT INTO articles (
-                            id, concept_id, title, content, metadata_json, source_paths, compiled_at
-                        ) VALUES (?, ?, ?, ?, cast(? as jsonb), ARRAY['refund/status.md'], now())
+                            id, source_id, article_key, concept_id, title, content, metadata_json, source_paths, compiled_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, cast(? as jsonb), ARRAY['refund/status.md'], now())
                         """,
                 articleId,
+                null,
+                conceptId,
                 conceptId,
                 title,
                 content,

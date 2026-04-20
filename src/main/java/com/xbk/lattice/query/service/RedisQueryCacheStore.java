@@ -82,6 +82,14 @@ public class RedisQueryCacheStore implements QueryCacheStore {
     }
 
     /**
+     * 清空当前前缀下的全部查询缓存。
+     */
+    @Override
+    public void evictAll() {
+        redisKeyValueStore.deleteByPrefix(queryCacheProperties.getKeyPrefix());
+    }
+
+    /**
      * 构建 Redis 缓存键。
      *
      * @param cacheKey 业务缓存键

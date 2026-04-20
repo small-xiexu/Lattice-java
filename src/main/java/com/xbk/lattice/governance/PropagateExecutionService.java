@@ -9,6 +9,7 @@ import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotRecord;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,8 +45,10 @@ public class PropagateExecutionService {
      *
      * @param articleJdbcRepository 文章仓储
      * @param articleSnapshotJdbcRepository 快照仓储
+     * @param articleIdentityResolver 文章身份解析器
      * @param llmGateway LLM 网关
      */
+    @Autowired
     public PropagateExecutionService(
             ArticleJdbcRepository articleJdbcRepository,
             ArticleSnapshotJdbcRepository articleSnapshotJdbcRepository,

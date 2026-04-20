@@ -5,6 +5,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.Set;
 
 /**
  * 基于 StringRedisTemplate 的键值存储
@@ -60,5 +61,22 @@ public class StringRedisKeyValueStore implements RedisKeyValueStore {
     @Override
     public Long getExpire(String key) {
         return stringRedisTemplate.getExpire(key);
+    }
+
+    /**
+     * 删除指定前缀下的全部键。
+     *
+     * @param keyPrefix Redis 键前缀
+     */
+    @Override
+    public void deleteByPrefix(String keyPrefix) {
+        if (keyPrefix == null || keyPrefix.isBlank()) {
+            return;
+        }
+        Set<String> keys = stringRedisTemplate.keys(keyPrefix + "*");
+        if (keys == null || keys.isEmpty()) {
+            return;
+        }
+        stringRedisTemplate.delete(keys);
     }
 }

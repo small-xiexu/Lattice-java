@@ -36,12 +36,22 @@ public class AdminPageController {
     }
 
     /**
-     * 转发 AI 接入页。
+     * 转发管理员设置页。
      *
      * @return 静态页面路径
      */
-    @GetMapping({"/admin/ai", "/admin/ai/"})
-    public String ai() {
-        return "forward:/admin/ai.html";
+    @GetMapping({"/admin/settings", "/admin/settings/"})
+    public String settings() {
+        return "forward:/admin/settings.html";
+    }
+
+    /**
+     * 转发开发者接入页。
+     *
+     * @return 静态页面路径
+     */
+    @GetMapping({"/admin/developer-access", "/admin/developer-access/"})
+    public String developerAccess() {
+        return "forward:/admin/settings.html";
     }
 }

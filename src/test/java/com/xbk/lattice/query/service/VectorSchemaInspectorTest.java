@@ -95,6 +95,20 @@ class VectorSchemaInspectorTest {
                         @Override
                         public void publishEvent(Object event) {
                         }
+                    },
+                    new QueryCacheStore() {
+                        @Override
+                        public Optional<com.xbk.lattice.api.query.QueryResponse> get(String cacheKey) {
+                            return Optional.empty();
+                        }
+
+                        @Override
+                        public void put(String cacheKey, com.xbk.lattice.api.query.QueryResponse queryResponse) {
+                        }
+
+                        @Override
+                        public void evictAll() {
+                        }
                     }
             );
             this.state = state;

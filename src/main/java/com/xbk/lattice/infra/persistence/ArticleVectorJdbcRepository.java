@@ -130,6 +130,30 @@ public class ArticleVectorJdbcRepository {
     }
 
     /**
+     * 把 embedding 列对齐到目标维度。
+     *
+     * <p>当切换到不同维度的 embedding profile 且历史索引已清空后，
+     * 需要先调整 pgvector 列维度，后续重建才能成功写入。</p>
+     *
+     * @param targetDimensions 目标维度
+     */
+    public void alignEmbeddingColumnDimensions(int targetDimensions) {
+        if (jdbcTemplate == null || targetDimensions <= 0) {
+            return;
+        }
+
+        String vectorTypeName = resolveVectorTypeName();
+        if (vectorTypeName.isBlank()) {
+            return;
+        }
+
+        jdbcTemplate.execute(
+                "alter table article_vector_index alter column embedding type "
+                        + vectorTypeName + "(" + targetDimensions + ")"
+        );
+    }
+
+    /**
      * 返回当前向量索引最近更新时间。
      *
      * @return 最近更新时间

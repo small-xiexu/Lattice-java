@@ -1,9 +1,11 @@
 package com.xbk.lattice.api.admin;
 
+import com.xbk.lattice.api.query.QueryResponse;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.llm.service.LlmSecretCryptoService;
 import com.xbk.lattice.query.service.EmbeddingClientFactory;
+import com.xbk.lattice.query.service.QueryCacheStore;
 import com.xbk.lattice.query.service.EmbeddingRouteResolution;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.document.Document;
@@ -75,6 +77,9 @@ class AdminVectorIndexControllerTests {
     @Autowired
     private LlmSecretCryptoService llmSecretCryptoService;
 
+    @Autowired
+    private QueryCacheStore queryCacheStore;
+
     /**
      * 验证管理侧接口可返回向量索引状态摘要。
      *
@@ -84,7 +89,7 @@ class AdminVectorIndexControllerTests {
     void shouldExposeVectorStatusViaAdminApi() throws Exception {
         resetTables();
         ensureVectorInfrastructure();
-        seedEmbeddingProfile();
+        seedEmbeddingProfile(1536);
         articleJdbcRepository.upsert(createArticleRecord("payment-timeout"));
 
         mockMvc.perform(get("/api/v1/admin/vector/status"))
@@ -112,7 +117,7 @@ class AdminVectorIndexControllerTests {
     void shouldRebuildVectorIndexViaAdminApi() throws Exception {
         resetTables();
         ensureVectorInfrastructure();
-        seedEmbeddingProfile();
+        seedEmbeddingProfile(1536);
         articleJdbcRepository.upsert(createArticleRecord("payment-timeout"));
         insertLegacyVectorRecord("payment-timeout", "legacy-embedding-model", "legacy-hash");
 
@@ -135,6 +140,50 @@ class AdminVectorIndexControllerTests {
                 Long.class
         );
         assertThat(modelProfileId).isEqualTo(Long.valueOf(1L));
+    }
+
+    /**
+     * 验证当当前 embedding profile 维度与 schema 不一致时，
+     * 勾选 truncateFirst 的重建会先修复向量列维度，再完成索引重建。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldAlignVectorSchemaDimensionsDuringTruncateRebuild() throws Exception {
+        resetTables();
+        ensureVectorInfrastructure();
+        seedEmbeddingProfile(1024);
+        articleJdbcRepository.upsert(createArticleRecord("payment-timeout"));
+        queryCacheStore.put(
+                "为什么订单服务不直接同步调用库存服务，而要走消息队列？",
+                new QueryResponse("旧缓存答案", List.of(), List.of(), null, "PASSED")
+        );
+
+        mockMvc.perform(get("/api/v1/admin/vector/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.configuredExpectedDimensions").value(1024))
+                .andExpect(jsonPath("$.schemaDimensions").value(1536))
+                .andExpect(jsonPath("$.dimensionsMatch").value(false));
+
+        mockMvc.perform(post("/api/v1/admin/vector/rebuild")
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"truncateFirst\":true,\"operator\":\"tester\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.targetArticleCount").value(1))
+                .andExpect(jsonPath("$.indexedArticleCount").value(1))
+                .andExpect(jsonPath("$.indexedChunkCount").value(1))
+                .andExpect(jsonPath("$.truncateFirst").value(true));
+
+        mockMvc.perform(get("/api/v1/admin/vector/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.configuredExpectedDimensions").value(1024))
+                .andExpect(jsonPath("$.schemaDimensions").value(1024))
+                .andExpect(jsonPath("$.dimensionsMatch").value(true))
+                .andExpect(jsonPath("$.indexedArticleCount").value(1));
+
+        assertThat(findEmbeddingColumnType("article_vector_index")).isEqualTo("vector(1024)");
+        assertThat(findEmbeddingColumnType("article_chunk_vector_index")).isEqualTo("vector(1024)");
+        assertThat(queryCacheStore.get("为什么订单服务不直接同步调用库存服务，而要走消息队列？")).isEmpty();
     }
 
     /**
@@ -180,16 +229,18 @@ class AdminVectorIndexControllerTests {
         jdbcTemplate.update(
                 """
                         insert into lattice_b8_vector_admin_test.article_vector_index (
-                            concept_id, model_profile_id, embedding_dimensions, index_version, content_hash, embedding, updated_at
-                        ) values (?, ?, ?, ?, ?, cast(? as public.vector), now())
-                        on conflict (concept_id) do update
-                        set model_profile_id = excluded.model_profile_id,
+                            article_key, concept_id, model_profile_id, embedding_dimensions, index_version, content_hash, embedding, updated_at
+                        ) values (?, ?, ?, ?, ?, ?, cast(? as public.vector), now())
+                        on conflict (article_key) do update
+                        set concept_id = excluded.concept_id,
+                            model_profile_id = excluded.model_profile_id,
                             embedding_dimensions = excluded.embedding_dimensions,
                             index_version = excluded.index_version,
                             content_hash = excluded.content_hash,
                             embedding = excluded.embedding,
                             updated_at = excluded.updated_at
                         """,
+                conceptId,
                 conceptId,
                 Long.valueOf(1L),
                 Integer.valueOf(1536),
@@ -232,7 +283,7 @@ class AdminVectorIndexControllerTests {
     /**
      * 写入测试用 embedding profile。
      */
-    private void seedEmbeddingProfile() {
+    private void seedEmbeddingProfile(int expectedDimensions) {
         String encryptedApiKey = llmSecretCryptoService.encrypt("sk-test-openai");
         String maskedApiKey = llmSecretCryptoService.mask("sk-test-openai");
         jdbcTemplate.update(
@@ -263,12 +314,38 @@ class AdminVectorIndexControllerTests {
                 Long.valueOf(1L),
                 "test-embedding-model",
                 "EMBEDDING",
-                Integer.valueOf(1536),
+                Integer.valueOf(expectedDimensions),
                 false,
                 true,
                 "tester",
                 "tester"
         );
+    }
+
+    private String findEmbeddingColumnType(String tableName) {
+        String columnType = jdbcTemplate.queryForObject(
+                """
+                        select format_type(a.atttypid, a.atttypmod)
+                        from pg_attribute a
+                        join pg_class c on c.oid = a.attrelid
+                        join pg_namespace n on n.oid = c.relnamespace
+                        where n.nspname = 'lattice_b8_vector_admin_test'
+                          and c.relname = ?
+                          and a.attname = 'embedding'
+                          and a.attnum > 0
+                          and not a.attisdropped
+                        """,
+                String.class,
+                tableName
+        );
+        if (columnType == null) {
+            return "";
+        }
+        int vectorIndex = columnType.lastIndexOf("vector(");
+        if (vectorIndex < 0) {
+            return columnType;
+        }
+        return columnType.substring(vectorIndex);
     }
 
     /**
@@ -289,7 +366,7 @@ class AdminVectorIndexControllerTests {
         @Bean
         @Primary
         public EmbeddingModel embeddingModel() {
-            return new FixedEmbeddingModel();
+            return new FixedEmbeddingModel(1536);
         }
 
         /**
@@ -310,7 +387,10 @@ class AdminVectorIndexControllerTests {
                  */
                 @Override
                 public EmbeddingModel getOrCreate(EmbeddingRouteResolution routeResolution) {
-                    return new FixedEmbeddingModel();
+                    int dimensions = routeResolution.getExpectedDimensions() == null
+                            ? 1536
+                            : routeResolution.getExpectedDimensions().intValue();
+                    return new FixedEmbeddingModel(dimensions);
                 }
             };
         }
@@ -322,6 +402,12 @@ class AdminVectorIndexControllerTests {
      * @author xiexu
      */
     private static class FixedEmbeddingModel implements EmbeddingModel {
+
+        private final int dimensions;
+
+        private FixedEmbeddingModel(int dimensions) {
+            this.dimensions = dimensions;
+        }
 
         /**
          * 执行 embedding 请求。
@@ -348,10 +434,10 @@ class AdminVectorIndexControllerTests {
         /**
          * 创建固定维度 embedding。
          *
-         * @return 1536 维 embedding
+         * @return 固定维度 embedding
          */
         private float[] createEmbedding() {
-            float[] embedding = new float[1536];
+            float[] embedding = new float[dimensions];
             for (int index = 0; index < embedding.length; index++) {
                 embedding[index] = 0.15F + (index % 11) * 0.01F;
             }

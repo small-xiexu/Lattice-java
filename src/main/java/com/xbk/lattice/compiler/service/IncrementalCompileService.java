@@ -784,8 +784,7 @@ public class IncrementalCompileService {
                 : frontmatterValues.getReviewStatus();
         String title = frontmatterValues.getTitle().isBlank() ? existingArticle.getTitle() : frontmatterValues.getTitle();
 
-        return new ArticleRecord(
-                existingArticle.getConceptId(),
+        return existingArticle.copy(
                 title,
                 markdownContent,
                 existingArticle.getLifecycle(),

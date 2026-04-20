@@ -249,7 +249,8 @@ class AdminGovernanceApiIntegrationTests {
                 .andExpect(jsonPath("$.vaultDir").value(vaultDir.toString()))
                 .andExpect(jsonPath("$.writtenFiles").isNumber());
 
-        assertThat(Files.exists(vaultDir.resolve("concepts/payment-timeout.md"))).isTrue();
+        Path conceptFile = resolveSingleConceptFile(vaultDir);
+        assertThat(Files.exists(conceptFile)).isTrue();
     }
 
     /**
@@ -269,8 +270,9 @@ class AdminGovernanceApiIntegrationTests {
                         .content("{\"vaultDir\":\"" + escapeJson(vaultDir.toString()) + "\"}"))
                 .andExpect(status().isOk());
 
+        Path conceptFile = resolveSingleConceptFile(vaultDir);
         Files.writeString(
-                vaultDir.resolve("concepts/payment-timeout.md"),
+                conceptFile,
                 """
                         ---
                         title: "Payment Timeout Updated"
@@ -316,6 +318,15 @@ class AdminGovernanceApiIntegrationTests {
                 StandardCharsets.UTF_8
         );
         compileApplicationFacade.compile(tempDir, false, null);
+    }
+
+    private Path resolveSingleConceptFile(Path vaultDir) throws Exception {
+        try (java.util.stream.Stream<Path> stream = Files.list(vaultDir.resolve("concepts"))) {
+            return stream
+                    .filter(path -> path.getFileName().toString().endsWith(".md"))
+                    .findFirst()
+                    .orElseThrow();
+        }
     }
 
     /**

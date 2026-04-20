@@ -50,6 +50,15 @@ public class QueryGraphDefinitionFactory {
 
     private static final int TOP_K = 8;
 
+    private static final List<String> NON_CACHEABLE_ANSWER_MARKERS = List.of(
+            "当前证据不足",
+            "证据不足",
+            "暂无法确认",
+            "无法确认",
+            "暂无足够证据",
+            "没有足够证据"
+    );
+
     private static final String CHANNEL_FTS = "fts";
 
     private static final String CHANNEL_REFKEY = "refkey";
@@ -416,9 +425,11 @@ public class QueryGraphDefinitionFactory {
     private Map<String, Object> cacheResponse(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
         QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
         QueryResponse queryResponse = buildSuccessResponse(state);
-        queryCacheStore.put(state.getNormalizedQuestion(), queryResponse);
         String responseRef = queryWorkingSetStore.saveResponse(state.getQueryId(), queryResponse);
-        state.setCachedResponseRef(responseRef);
+        if (shouldCacheResponse(queryResponse)) {
+            queryCacheStore.put(state.getNormalizedQuestion(), queryResponse);
+            state.setCachedResponseRef(responseRef);
+        }
         state.setFinalResponseRef(responseRef);
         return queryGraphStateMapper.toDeltaMap(state);
     }
@@ -458,6 +469,31 @@ public class QueryGraphDefinitionFactory {
                 null,
                 state.getReviewStatus()
         );
+    }
+
+    /**
+     * 判断当前响应是否适合写入 query cache。
+     *
+     * @param queryResponse 查询响应
+     * @return 是否允许写缓存
+     */
+    private boolean shouldCacheResponse(QueryResponse queryResponse) {
+        if (queryResponse == null) {
+            return false;
+        }
+        String answer = queryResponse.getAnswer();
+        if (answer == null || answer.isBlank()) {
+            return false;
+        }
+        if (queryResponse.getSources().isEmpty() && queryResponse.getArticles().isEmpty()) {
+            return false;
+        }
+        for (String marker : NON_CACHEABLE_ANSWER_MARKERS) {
+            if (answer.contains(marker)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private String buildRewriteGuidance(ReviewResult reviewResult) {

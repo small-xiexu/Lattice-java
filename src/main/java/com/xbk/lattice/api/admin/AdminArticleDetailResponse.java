@@ -31,6 +31,10 @@ public class AdminArticleDetailResponse {
 
     private final String confidence;
 
+    private final int sourceCount;
+
+    private final String primarySourcePath;
+
     private final List<String> sourcePaths;
 
     private final List<String> referentialKeywords;
@@ -54,6 +58,8 @@ public class AdminArticleDetailResponse {
      * @param summary 摘要
      * @param reviewStatus 审查状态
      * @param confidence 置信度
+     * @param sourceCount 来源数量
+     * @param primarySourcePath 首个来源路径
      * @param sourcePaths 来源路径
      * @param referentialKeywords 明确性关键词
      * @param dependsOn 依赖关系
@@ -71,6 +77,8 @@ public class AdminArticleDetailResponse {
             String summary,
             String reviewStatus,
             String confidence,
+            int sourceCount,
+            String primarySourcePath,
             List<String> sourcePaths,
             List<String> referentialKeywords,
             List<String> dependsOn,
@@ -87,6 +95,8 @@ public class AdminArticleDetailResponse {
         this.summary = summary;
         this.reviewStatus = reviewStatus;
         this.confidence = confidence;
+        this.sourceCount = sourceCount;
+        this.primarySourcePath = primarySourcePath;
         this.sourcePaths = sourcePaths;
         this.referentialKeywords = referentialKeywords;
         this.dependsOn = dependsOn;
@@ -182,6 +192,24 @@ public class AdminArticleDetailResponse {
      */
     public String getConfidence() {
         return confidence;
+    }
+
+    /**
+     * 获取来源数量。
+     *
+     * @return 来源数量
+     */
+    public int getSourceCount() {
+        return sourceCount;
+    }
+
+    /**
+     * 获取首个来源路径。
+     *
+     * @return 首个来源路径
+     */
+    public String getPrimarySourcePath() {
+        return primarySourcePath;
     }
 
     /**

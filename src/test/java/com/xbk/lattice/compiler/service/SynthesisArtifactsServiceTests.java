@@ -135,6 +135,10 @@ class SynthesisArtifactsServiceTests {
         public Long getExpire(String key) {
             return null;
         }
+
+        @Override
+        public void deleteByPrefix(String keyPrefix) {
+        }
     }
 
     private static class FakeSynthesisArtifactStore implements SynthesisArtifactStore {

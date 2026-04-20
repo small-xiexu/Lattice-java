@@ -4,6 +4,8 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.List;
 
 /**
@@ -58,5 +60,37 @@ public class ArticleSourceRefJdbcRepository {
                     refRecord.getRefLabel()
             );
         }
+    }
+
+    /**
+     * 查询文章当前已有的全部来源关联。
+     *
+     * @param articleKey 文章唯一键
+     * @return 来源关联列表
+     */
+    public List<ArticleSourceRefRecord> findByArticleKey(String articleKey) {
+        if (jdbcTemplate == null || articleKey == null || articleKey.isBlank()) {
+            return List.of();
+        }
+        return jdbcTemplate.query(
+                """
+                        select article_key, source_id, source_file_id, ref_type, ref_label
+                        from article_source_refs
+                        where article_key = ?
+                        order by created_at asc, id asc
+                        """,
+                this::mapRecord,
+                articleKey
+        );
+    }
+
+    private ArticleSourceRefRecord mapRecord(ResultSet resultSet, int rowNum) throws SQLException {
+        return new ArticleSourceRefRecord(
+                resultSet.getString("article_key"),
+                resultSet.getLong("source_id"),
+                resultSet.getLong("source_file_id"),
+                resultSet.getString("ref_type"),
+                resultSet.getString("ref_label")
+        );
     }
 }

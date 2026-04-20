@@ -35,4 +35,11 @@ public interface RedisKeyValueStore {
      * @return TTL 秒数
      */
     Long getExpire(String key);
+
+    /**
+     * 删除指定前缀下的全部键。
+     *
+     * @param keyPrefix Redis 键前缀
+     */
+    void deleteByPrefix(String keyPrefix);
 }

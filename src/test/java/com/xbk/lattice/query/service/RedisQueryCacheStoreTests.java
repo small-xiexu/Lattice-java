@@ -58,6 +58,37 @@ class RedisQueryCacheStoreTests {
     }
 
     /**
+     * 验证可按前缀清空查询缓存。
+     */
+    @Test
+    void shouldEvictAllQueryCacheByPrefix() {
+        FakeRedisKeyValueStore fakeRedisKeyValueStore = new FakeRedisKeyValueStore();
+        QueryCacheProperties properties = new QueryCacheProperties();
+        properties.setKeyPrefix("llm:query:cache:");
+        properties.setTtlSeconds(3600);
+
+        RedisQueryCacheStore redisQueryCacheStore = new RedisQueryCacheStore(
+                fakeRedisKeyValueStore,
+                new ObjectMapper(),
+                properties
+        );
+        QueryResponse queryResponse = new QueryResponse(
+                "cached",
+                List.of(),
+                List.of(),
+                null,
+                "PASSED"
+        );
+
+        redisQueryCacheStore.put("question-a", queryResponse);
+        redisQueryCacheStore.put("question-b", queryResponse);
+        redisQueryCacheStore.evictAll();
+
+        assertThat(redisQueryCacheStore.get("question-a")).isEmpty();
+        assertThat(redisQueryCacheStore.get("question-b")).isEmpty();
+    }
+
+    /**
      * Redis 键值存储测试替身。
      *
      * 职责：记录字符串值与 TTL，便于验证 Redis 查询缓存行为
@@ -103,6 +134,12 @@ class RedisQueryCacheStoreTests {
         @Override
         public Long getExpire(String key) {
             return ttlSeconds.get(key);
+        }
+
+        @Override
+        public void deleteByPrefix(String keyPrefix) {
+            values.keySet().removeIf(key -> key.startsWith(keyPrefix));
+            ttlSeconds.keySet().removeIf(key -> key.startsWith(keyPrefix));
         }
     }
 }

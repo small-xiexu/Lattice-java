@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -70,6 +71,12 @@ public class AdminArticleController {
         List<ArticleRecord> articleRecords = adminArticleQueryService.list(query, lifecycle, sourceId);
         List<AdminArticleSummaryResponse> items = new ArrayList<AdminArticleSummaryResponse>();
         for (ArticleRecord articleRecord : articleRecords) {
+            List<String> sourcePaths = articleRecord.getSourcePaths() == null
+                    ? Collections.<String>emptyList()
+                    : articleRecord.getSourcePaths();
+            String compiledAt = articleRecord.getCompiledAt() == null ? null : articleRecord.getCompiledAt().toString();
+            int resolvedSourceCount = sourcePaths.size();
+            String primarySourcePath = sourcePaths.isEmpty() ? null : sourcePaths.get(0);
             items.add(new AdminArticleSummaryResponse(
                     articleRecord.getSourceId(),
                     articleRecord.getArticleKey(),
@@ -77,10 +84,12 @@ public class AdminArticleController {
                     articleRecord.getTitle(),
                     articleRecord.getLifecycle(),
                     articleRecord.getReviewStatus(),
-                    articleRecord.getCompiledAt() == null ? null : articleRecord.getCompiledAt().toString(),
+                    compiledAt,
                     articleRecord.getSummary(),
-                    articleRecord.getSourcePaths().size(),
-                    articleRecord.getSourcePaths().isEmpty() ? null : articleRecord.getSourcePaths().get(0)
+                    resolvedSourceCount,
+                    primarySourcePath,
+                    sourcePaths,
+                    primarySourcePath
             ));
         }
         return new AdminArticleListResponse(items.size(), items);
@@ -99,6 +108,12 @@ public class AdminArticleController {
             @RequestParam(required = false) Long sourceId
     ) {
         ArticleRecord articleRecord = adminArticleQueryService.get(articleId, sourceId);
+        List<String> sourcePaths = articleRecord.getSourcePaths() == null
+                ? Collections.<String>emptyList()
+                : articleRecord.getSourcePaths();
+        String compiledAt = articleRecord.getCompiledAt() == null ? null : articleRecord.getCompiledAt().toString();
+        int resolvedSourceCount = sourcePaths.size();
+        String primarySourcePath = sourcePaths.isEmpty() ? null : sourcePaths.get(0);
         return new AdminArticleDetailResponse(
                 articleRecord.getSourceId(),
                 articleRecord.getArticleKey(),
@@ -106,11 +121,13 @@ public class AdminArticleController {
                 articleRecord.getTitle(),
                 articleRecord.getContent(),
                 articleRecord.getLifecycle(),
-                articleRecord.getCompiledAt() == null ? null : articleRecord.getCompiledAt().toString(),
+                compiledAt,
                 articleRecord.getSummary(),
                 articleRecord.getReviewStatus(),
                 articleRecord.getConfidence(),
-                articleRecord.getSourcePaths(),
+                resolvedSourceCount,
+                primarySourcePath,
+                sourcePaths,
                 articleRecord.getReferentialKeywords(),
                 articleRecord.getDependsOn(),
                 articleRecord.getRelated(),
