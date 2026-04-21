@@ -1,6 +1,4 @@
 (function () {
-    const ADMIN_ENTRY_GROUP = "admin-console";
-    const DEVELOPER_ENTRY_PANEL = "developer-access-entry";
     const DEVELOPER_SECTION_GROUP = "developer-access-sections";
     const DEFAULT_TOAST_DURATION_MS = 2400;
     const state = {
@@ -10,10 +8,7 @@
     };
 
     document.addEventListener("DOMContentLoaded", function () {
-        if (!document.querySelector("[data-tab-panel='developer-access-entry']")) {
-            return;
-        }
-        if (!isDeveloperEntryActive()) {
+        if (!document.querySelector("[data-tab-group='developer-access-sections']")) {
             return;
         }
         computeContext();
@@ -23,19 +18,12 @@
         applyInitialRoute();
     });
 
-    function isDeveloperEntryActive() {
-        if (!window.AdminSections || typeof window.AdminSections.getActiveEntry !== "function") {
-            return false;
-        }
-        return window.AdminSections.getActiveEntry() === "developer-access";
-    }
-
     function bindEvents() {
         bindIfPresent("refresh-developer-access", "click", function () {
             computeContext();
             renderDeveloperAccess();
             refreshHealthStatus();
-            showToast("开发者接入信息已刷新", "success");
+            showToast("开发接入信息已刷新", "success");
         });
         bindIfPresent("refresh-ai", "click", function () {
             computeContext();
@@ -355,7 +343,6 @@
         }
         window.requestAnimationFrame(function () {
             if (window.AdminTabs && typeof window.AdminTabs.activate === "function") {
-                window.AdminTabs.activate(ADMIN_ENTRY_GROUP, DEVELOPER_ENTRY_PANEL);
                 if (targetTab) {
                     window.AdminTabs.activate(DEVELOPER_SECTION_GROUP, targetTab);
                 }
@@ -395,7 +382,6 @@
         const developerSectionTab = resolveDeveloperSectionTab(sectionId);
         const section = document.getElementById(sectionId);
         if (window.AdminTabs && typeof window.AdminTabs.activate === "function") {
-            window.AdminTabs.activate(ADMIN_ENTRY_GROUP, DEVELOPER_ENTRY_PANEL);
             if (developerSectionTab) {
                 window.AdminTabs.activate(DEVELOPER_SECTION_GROUP, developerSectionTab);
             }

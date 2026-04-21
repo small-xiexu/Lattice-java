@@ -5,6 +5,7 @@
         knowledgeReady: false,
         knowledgeProcessing: false,
         knowledgeWaitingConfirm: false,
+        hasSubmitted: false,
         lastQueryFailed: false,
         lastQueryError: "",
         lastAnswerHasCitation: false,
@@ -54,6 +55,8 @@
             setStatus("当前知识库还没有可用资料，请先上传并处理文档", "warning");
             return;
         }
+        state.hasSubmitted = true;
+        toggleAskResultExperience(true);
         renderLoadingState();
         setStatus("正在生成回答...", "info");
         state.lastQueryFailed = false;
@@ -120,6 +123,7 @@
         state.lastSupportSourceCount = 0;
         state.lastEvidenceSourceCount = 0;
         state.lastEvidenceWeak = false;
+        state.hasSubmitted = false;
         resetAnswerExperience();
         renderReadinessCard();
         renderResultGuide();
@@ -143,11 +147,12 @@
             renderMetricCard("复核状态", "未执行", "主链在生成回答前就已经中断。", "warning")
         ].join("");
         document.getElementById("ask-answer-support").innerHTML = "<strong>回答依据</strong><p>这次没有成功拿到可用来源。先判断是知识库未准备好，还是服务 / 配置层面的问题。</p>";
-        document.getElementById("ask-source-summary").innerHTML = "<strong>证据分层</strong><p>本次没有返回可展示的证据。优先先看报错，再决定是回知识库管理还是去管理员设置。</p>";
+        document.getElementById("ask-source-summary").innerHTML = "<strong>证据分层</strong><p>本次没有返回可展示的证据。优先先看报错，再决定是回工作台还是去系统配置。</p>";
         document.getElementById("ask-sources").innerHTML = "<div class='job-card'><p class='item-summary'>本次未能加载引用来源。</p></div>";
     }
 
     function resetAnswerExperience() {
+        toggleAskResultExperience(false);
         document.getElementById("ask-answer").innerHTML = "<p>还没有回答，先输入一个问题。</p>";
         document.getElementById("ask-answer-metrics").innerHTML = [
             renderMetricCard("结果类型", "等待提问", "提交问题后，这里会显示这次结果更接近“可直接用”还是“证据仍偏弱”。", "info"),
@@ -157,6 +162,17 @@
         document.getElementById("ask-answer-support").innerHTML = "<strong>回答依据</strong><p>提交问题后，这里会显示这次回答最直接依赖的来源，以及是否已经形成稳定引用。</p>";
         document.getElementById("ask-source-summary").innerHTML = "<strong>证据分层</strong><p>这里会区分“回答直接引用的来源”和“本次检索命中的补充证据”，避免所有来源平铺在一起。</p>";
         document.getElementById("ask-sources").innerHTML = "<div class='job-card'><p class='item-summary'>还没有引用来源，先提交一个问题。</p></div>";
+    }
+
+    function toggleAskResultExperience(visible) {
+        const resultPanel = document.getElementById("ask-result-panel");
+        const sourcePanel = document.getElementById("ask-source-panel");
+        if (resultPanel) {
+            resultPanel.hidden = !visible;
+        }
+        if (sourcePanel) {
+            sourcePanel.hidden = !visible;
+        }
     }
 
     function renderReadiness(overview, jobs) {
@@ -180,7 +196,7 @@
         if ((status.articleCount || 0) === 0 || (status.sourceFileCount || 0) === 0) {
             canAsk = false;
             askButton.disabled = true;
-            hint.textContent = "当前还没有可用资料，请先去“知识库管理”上传文档并等待处理完成。";
+            hint.textContent = "当前还没有可用资料，请先去“工作台”上传文档并等待处理完成。";
             renderReadinessCard();
             syncAskFaqOpenState();
             return;
@@ -242,7 +258,7 @@
         }
         let tone = "info";
         let title = "正在检查知识库是否已经准备就绪";
-        let description = "页面会根据知识库状态、最近同步运行和本次问答结果，告诉你现在应该直接提问、等待处理完成，还是先回知识库管理。";
+        let description = "页面会根据知识库状态、最近同步运行和本次问答结果，告诉你现在应该直接提问、等待处理完成，还是先回工作台。";
         let actions = [
             {label: "查看知识库状态", action: "refresh-readiness", className: "secondary-btn"}
         ];
@@ -250,18 +266,18 @@
         if (state.lastQueryFailed) {
             tone = "danger";
             title = "这次提问失败了";
-            description = "先判断是知识库未准备好，还是服务或配置问题。如果是资料相关问题，优先回知识库管理；如果是模型连接或解析问题，再去管理员设置。";
+            description = "先判断是知识库未准备好，还是服务或配置问题。如果是资料相关问题，优先回工作台；如果是模型连接或解析问题，再去系统配置。";
             actions = [
-                {label: "去知识库管理", action: "go-management", className: "primary-btn"},
-                {label: "去管理员设置", action: "go-settings", className: "ghost-btn"}
+                {label: "回工作台", action: "go-management", className: "primary-btn"},
+                {label: "去系统配置", action: "go-settings", className: "ghost-btn"}
             ];
         }
         else if (!state.knowledgeReady) {
             tone = "warning";
             title = "当前还不能稳定提问";
-            description = "知识库里还没有可用内容，或者资料还没有真正进入可问答状态。先回知识库管理确认资料是否已经成功入库。";
+            description = "知识库里还没有可用内容，或者资料还没有真正进入可问答状态。先回工作台确认资料是否已经成功入库。";
             actions = [
-                {label: "去知识库管理", action: "go-management", className: "primary-btn"},
+                {label: "回工作台", action: "go-management", className: "primary-btn"},
                 {label: "刷新知识库状态", action: "refresh-readiness", className: "ghost-btn"}
             ];
         }
@@ -306,20 +322,20 @@
             return;
         }
         let title = "这次结果怎么看";
-        let description = "提交一个问题后，这里会告诉你本次结果更像是“可以继续看直接来源”，还是“应该先回知识库管理检查资料”。";
+        let description = "提交一个问题后，这里会告诉你本次结果更像是“可以继续看直接来源”，还是“应该先回工作台检查资料”。";
         let actions = [];
 
         if (state.lastQueryFailed) {
             title = "这次没有成功返回结果";
             description = "先看顶部报错信息，再判断是知识库没准备好，还是模型连接、文档解析或后台配置有问题。";
             actions = [
-                {label: "去知识库管理", action: "go-management", className: "secondary-btn"},
-                {label: "去管理员设置", action: "go-settings", className: "ghost-btn"}
+                {label: "回工作台", action: "go-management", className: "secondary-btn"},
+                {label: "去系统配置", action: "go-settings", className: "ghost-btn"}
             ];
         }
         else if (!state.lastAnswerEmpty && !state.lastEvidenceWeak && state.lastAnswerHasCitation) {
             title = "这次回答已经带了稳定来源";
-            description = "先看“回答依据”里的直接来源，再往下看补充检索证据。若答案仍不准，再回知识库管理核对对应资料是否缺失或过旧。";
+            description = "先看“回答依据”里的直接来源，再往下看补充检索证据。若答案仍不准，再回工作台核对对应资料是否缺失或过旧。";
             actions = [
                 {label: "去已入库内容", action: "go-articles", className: "secondary-btn"}
             ];
@@ -329,7 +345,7 @@
             description = "优先检查资料是否真的已经入库，以及这次是否只有检索命中、没有直接来源。证据不足时，不要把回答内容直接当成确定结论。";
             actions = [
                 {label: "去已入库内容", action: "go-articles", className: "secondary-btn"},
-                {label: "回知识库管理", action: "go-management", className: "ghost-btn"}
+                {label: "回工作台", action: "go-management", className: "ghost-btn"}
             ];
         }
 
@@ -466,7 +482,7 @@
                     citationCount > 0 ? citationCount + " 条来源" : "未命中来源",
                     citationCount > 0
                             ? "这次共整理出 " + citationCount + " 条可展示来源。"
-                            : "当前没有稳定命中的来源，需要先回知识库管理排查。",
+                            : "当前没有稳定命中的来源，需要先回工作台排查。",
                     citationCount > 0 ? "info" : "danger"
             )
         ];
@@ -497,7 +513,7 @@
         container.innerHTML = "<strong>回答依据</strong>"
                 + "<p>这次没有成功拿到稳定来源。"
                 + escapeHtml(reviewMeta.label ? "复核状态：" + reviewMeta.label + "。" : "")
-                + "优先回知识库管理确认对应资料是否真的已经入库。</p>";
+                + "优先回工作台确认对应资料是否真的已经入库。</p>";
     }
 
     function renderSourceSummary(result, searchItems, responseSources) {
@@ -515,7 +531,7 @@
                     + "<p>这次只有补充检索命中，没有稳定的直接来源。当前更适合把结果当成“继续追资料的线索”，而不是最终结论。</p>";
             return;
         }
-        container.innerHTML = "<strong>证据分层</strong><p>本次没有返回可展示的证据。优先先看报错或回知识库管理确认资料入库状态。</p>";
+        container.innerHTML = "<strong>证据分层</strong><p>本次没有返回可展示的证据。优先先看报错或回工作台确认资料入库状态。</p>";
     }
 
     function renderSources(searchItems, responseSources) {

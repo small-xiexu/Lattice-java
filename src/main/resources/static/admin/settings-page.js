@@ -135,7 +135,7 @@
 
     async function loadAiConfig(showSuccessFeedback) {
         if (showSuccessFeedback) {
-            setStatus("正在刷新管理员设置...", "info");
+            setStatus("正在刷新系统配置...", "info");
         }
         try {
             const responses = await Promise.all([
@@ -177,14 +177,15 @@
             syncLlmModelKindForm();
             syncVectorProfilePreview();
             syncDocumentParseEndpointSuggestion();
+            renderSettingsOverviewBoard();
             renderSettingsHelpCard();
             syncSettingsFaqOpenState();
             if (showSuccessFeedback) {
-                setStatus("管理员设置已刷新", "success");
+                setStatus("系统配置已刷新", "success");
             }
         }
         catch (error) {
-            showError("加载管理员设置失败", error);
+            showError("加载系统配置失败", error);
         }
     }
 
@@ -411,6 +412,7 @@
             renderVectorStatusSummary(state.vectorStatus || {});
             renderVectorMaintenanceCard();
             syncVectorProfilePreview();
+            renderSettingsOverviewBoard();
             renderSettingsHelpCard();
             syncSettingsFaqOpenState();
             setStatus("向量状态已刷新", "success");
@@ -508,6 +510,7 @@
             fillRetrievalConfigForm(result || {});
             renderRetrievalConfigSummary(result || {});
             document.getElementById("retrieval-config-result").textContent = JSON.stringify(result, null, 2);
+            renderSettingsOverviewBoard();
             renderSettingsHelpCard();
             syncSettingsFaqOpenState();
             setStatus("检索配置已刷新", "success");
@@ -577,6 +580,7 @@
             renderVectorStatusSummary(state.vectorStatus || {});
             renderVectorMaintenanceCard();
             syncVectorProfilePreview();
+            renderSettingsOverviewBoard();
             renderSettingsHelpCard();
             syncSettingsFaqOpenState();
             setStatus(successMessage, "success");
@@ -1217,7 +1221,7 @@
         const currentValue = String(selectedId || select.value || "");
         const embeddingModels = getEmbeddingModels();
         if (embeddingModels.length === 0) {
-            select.innerHTML = "<option value=''>请先在“模型与角色”里创建启用中的向量模型</option>";
+            select.innerHTML = "<option value=''>请先在“模型与向量”里创建启用中的向量模型</option>";
             return;
         }
         select.innerHTML = embeddingModels.map(function (item) {
@@ -1354,6 +1358,200 @@
         ].join("");
     }
 
+    function renderSettingsOverviewBoard() {
+        const container = document.getElementById("settings-overview-board");
+        if (!container) {
+            return;
+        }
+        const items = [
+            deriveModelVectorOverview(),
+            deriveParseOverview(),
+            deriveMaintenanceOverview()
+        ];
+        container.innerHTML = items.map(renderSettingsOverviewCard).join("");
+    }
+
+    function renderSettingsOverviewCard(item) {
+        return "<article class='entry-card decision-card decision-card-" + escapeHtml(item.tone || "info") + "'>"
+                + "<div class='entry-card-head'>"
+                + "<span class='label'>" + escapeHtml(item.module || "模块") + "</span>"
+                + "<span class='pill'>" + escapeHtml(item.status || "待判断") + "</span>"
+                + "</div>"
+                + "<h3 class='entry-card-title'>" + escapeHtml(item.title || "") + "</h3>"
+                + "<p class='entry-card-copy'>" + escapeHtml(item.description || "") + "</p>"
+                + "<p class='decision-card-note'>验证去向：" + escapeHtml(item.verifyHint || "按当前流程继续验证") + "</p>"
+                + "<div class='entry-card-actions'>"
+                + "<button class='primary-btn' type='button' data-settings-help-action='"
+                + escapeHtml(item.action || "go-management") + "'>"
+                + escapeHtml(item.actionLabel || "继续处理")
+                + "</button>"
+                + renderSettingsOverviewSecondaryAction(item)
+                + "</div>"
+                + "</article>";
+    }
+
+    function renderSettingsOverviewSecondaryAction(item) {
+        if (!item.secondaryHref || !item.secondaryLabel) {
+            return "";
+        }
+        return "<a class='ghost-link' href='" + escapeHtml(item.secondaryHref) + "'>"
+                + escapeHtml(item.secondaryLabel)
+                + "</a>";
+    }
+
+    function deriveModelVectorOverview() {
+        const enabledBindings = (state.llmBindings || []).filter(function (item) {
+            return !!item.enabled;
+        });
+        const chatModels = getBindingModels();
+        const embeddingModels = getEmbeddingModels();
+        const vectorState = resolveVectorMaintenanceState();
+        if (chatModels.length === 0 || enabledBindings.length === 0) {
+            return {
+                module: "模型与向量",
+                status: "待配置",
+                tone: "warning",
+                title: "先补齐可用模型，再决定向量是否启用",
+                description: "当前还没有稳定的问答模型链路。先准备连接、模型和角色绑定，再进入向量配置向导。",
+                action: "open-settings-llm",
+                actionLabel: "去模型与向量",
+                verifyHint: "知识问答",
+                secondaryHref: "/admin/ask",
+                secondaryLabel: "去知识问答"
+            };
+        }
+        if (embeddingModels.length === 0) {
+            return {
+                module: "模型与向量",
+                status: "缺少向量模型",
+                tone: "warning",
+                title: "对话模型可用，但还没有可选的 Embedding 模型",
+                description: "先补一个启用中的向量模型，页面才能继续判断当前维度是否兼容、是否需要重建。",
+                action: "open-settings-llm",
+                actionLabel: "去模型与向量",
+                verifyHint: "知识问答",
+                secondaryHref: "/admin/ask",
+                secondaryLabel: "去知识问答"
+            };
+        }
+        if (vectorState.tone === "danger") {
+            return {
+                module: "模型与向量",
+                status: "必须重建",
+                tone: "danger",
+                title: vectorState.title,
+                description: vectorState.description,
+                action: "open-settings-llm",
+                actionLabel: "去模型与向量",
+                verifyHint: "先重建，再去知识问答",
+                secondaryHref: "/admin/ask",
+                secondaryLabel: "去知识问答"
+            };
+        }
+        if (vectorState.tone === "warning") {
+            return {
+                module: "模型与向量",
+                status: "待补齐",
+                tone: "warning",
+                title: "模型已具备基础能力，向量链路还差最后一步",
+                description: vectorState.description,
+                action: "open-settings-llm",
+                actionLabel: "去模型与向量",
+                verifyHint: "知识问答",
+                secondaryHref: "/admin/ask",
+                secondaryLabel: "去知识问答"
+            };
+        }
+        return {
+            module: "模型与向量",
+            status: "已就绪",
+            tone: "success",
+            title: "模型与向量链路已具备可用基线",
+            description: "连接、角色绑定和向量状态都已满足基础要求，下一步优先回知识问答复测真实问题。",
+            action: "open-settings-llm",
+            actionLabel: "去模型与向量",
+            verifyHint: "知识问答",
+            secondaryHref: "/admin/ask",
+            secondaryLabel: "去知识问答"
+        };
+    }
+
+    function deriveParseOverview() {
+        const settings = state.documentParseSettings || {};
+        const enabledConnections = (state.documentParseConnections || []).filter(function (item) {
+            return !!item.enabled;
+        });
+        if (enabledConnections.length === 0) {
+            return {
+                module: "OCR / 文档识别",
+                status: "待配置",
+                tone: "warning",
+                title: "还没有可用的识别连接",
+                description: "普通文本导入通常不受影响，但扫描 PDF、图片和复杂文档识别会受限。需要时先补默认识别连接。",
+                action: "open-settings-parse",
+                actionLabel: "去 OCR / 文档识别",
+                verifyHint: "工作台导入",
+                secondaryHref: "/admin",
+                secondaryLabel: "回工作台"
+            };
+        }
+        if (!settings.defaultConnectionId) {
+            return {
+                module: "OCR / 文档识别",
+                status: "待指定",
+                tone: "warning",
+                title: "识别连接已存在，但还没有默认连接",
+                description: "先指定默认识别连接，再决定是否启用图片 OCR、扫描 PDF OCR 和识别后整理。",
+                action: "open-settings-parse",
+                actionLabel: "去 OCR / 文档识别",
+                verifyHint: "工作台导入",
+                secondaryHref: "/admin",
+                secondaryLabel: "回工作台"
+            };
+        }
+        return {
+            module: "OCR / 文档识别",
+            status: "已配置",
+            tone: "success",
+            title: "当前已有可用的默认识别连接",
+            description: "如遇到扫描件、图片或复杂 PDF 识别异常，再进入这里继续排查；普通文本导入无需频繁调整。",
+            action: "open-settings-parse",
+            actionLabel: "去 OCR / 文档识别",
+            verifyHint: "工作台导入",
+            secondaryHref: "/admin",
+            secondaryLabel: "回工作台"
+        };
+    }
+
+    function deriveMaintenanceOverview() {
+        if (state.helpState && state.helpState.retrievalRecentlyChanged) {
+            return {
+                module: "高级维护",
+                status: "待验证",
+                tone: "warning",
+                title: "检索配置刚更新，建议立即复测",
+                description: "优先用新的中文“为什么 / 原因”类问题验证效果，不要只看保存成功提示就判断问题已经收敛。",
+                action: "open-settings-sources",
+                actionLabel: "去高级维护",
+                verifyHint: "知识问答",
+                secondaryHref: "/admin/ask",
+                secondaryLabel: "去知识问答"
+            };
+        }
+        return {
+            module: "高级维护",
+            status: "按需使用",
+            tone: "info",
+            title: "这里只保留低频维护与运维动作",
+            description: "向量配置已经上移到“模型与向量”。这里只保留检索调参、服务器目录资料源和知识切片重建。",
+            action: "open-settings-sources",
+            actionLabel: "去高级维护",
+            verifyHint: "工作台或知识问答",
+            secondaryHref: "/admin",
+            secondaryLabel: "回工作台"
+        };
+    }
+
     function getBindingModels() {
         return (state.llmModels || []).filter(function (item) {
             return item.enabled && item.modelKind !== "EMBEDDING";
@@ -1436,7 +1634,7 @@
             return {
                 tone: "warning",
                 title: "还没有可用的向量配置",
-                description: "先去“模型与角色”准备一个启用中的向量模型，再回到这里选择 embedding profile。",
+                description: "先去“模型与向量”准备一个启用中的向量模型，再回到这里选择 embedding profile。",
                 nextSteps: ["先建向量模型", "再保存向量配置"]
             };
         }
@@ -1575,7 +1773,7 @@
         const selectedModel = findModelById(document.getElementById("vector-config-profile-id").value);
         if (!selectedModel) {
             container.innerHTML = "<strong>当前选择说明</strong>"
-                    + "<p>还没有选中可用的 embedding profile。先在“模型与角色”里准备启用中的向量模型，再回来继续。</p>";
+                    + "<p>还没有选中可用的 embedding profile。先在“模型与向量”里准备启用中的向量模型，再回来继续。</p>";
             return;
         }
         const selectedDimensions = selectedModel.expectedDimensions ? Number(selectedModel.expectedDimensions) : 0;
@@ -1767,17 +1965,24 @@
         }
         if (action === "open-settings-llm"
                 || action === "open-settings-parse"
-                || action === "open-settings-sources"
-                || action === "open-settings-overview") {
+                || action === "open-settings-sources") {
             const tabName = action.replace("open-", "");
             if (window.AdminTabs && typeof window.AdminTabs.activate === "function") {
                 window.AdminTabs.activate("admin-console", tabName);
+            }
+            return;
+        }
+        if (action === "scroll-settings-overview") {
+            const target = document.getElementById("settings-overview-board");
+            if (target && typeof target.scrollIntoView === "function") {
+                target.scrollIntoView({behavior: "smooth", block: "start"});
             }
         }
     }
 
     function updateSettingsHelpState(patch) {
         state.helpState = Object.assign({}, state.helpState, patch || {});
+        renderSettingsOverviewBoard();
         renderSettingsHelpCard();
         syncSettingsFaqOpenState();
     }
@@ -1791,7 +1996,7 @@
                 description: "先检查 Base URL、接口路径、访问凭证和供应商类型；如果普通文本导入没问题，只是扫描件或图片失败，优先从 OCR / 文档识别排查。",
                 actions: [
                     {label: "去 OCR / 文档识别", action: "open-settings-parse", className: "primary-btn"},
-                    {label: "返回概览", action: "open-settings-overview", className: "ghost-btn"}
+                    {label: "回工作台", action: "go-management", className: "ghost-btn"}
                 ],
                 faqKey: "parse-test-failed"
             };
@@ -1802,8 +2007,8 @@
                 title: "连接或模型测试失败，先查必填项",
                 description: "先检查接口地址、凭证和供应商类型是否完整，再判断是不是模型本身不可用。不要一上来就把问题归因为整条链路都坏了。",
                 actions: [
-                    {label: "去模型与角色", action: "open-settings-llm", className: "primary-btn"},
-                    {label: "返回概览", action: "open-settings-overview", className: "ghost-btn"}
+                    {label: "去模型与向量", action: "open-settings-llm", className: "primary-btn"},
+                    {label: "回工作台", action: "go-management", className: "ghost-btn"}
                 ],
                 faqKey: "parse-test-failed"
             };
@@ -1819,7 +2024,7 @@
                 title: vectorMaintenanceState.title,
                 description: vectorMaintenanceState.description,
                 actions: [
-                    {label: "去向量检索与重建", action: "open-settings-sources", className: "primary-btn"},
+                    {label: "去模型与向量", action: "open-settings-llm", className: "primary-btn"},
                     {label: "去知识问答复测", action: "go-ask", className: "ghost-btn"}
                 ],
                 faqKey: "vector-maintenance"
@@ -1831,8 +2036,8 @@
                 title: "角色绑定已更新，建议用新任务验证",
                 description: "角色绑定改动只会影响后续新任务，不会立刻切到正在运行中的同步、编译或问答。改完后请用一个新任务验证，而不是只看保存成功提示。",
                 actions: [
-                    {label: "去知识库管理", action: "go-management", className: "primary-btn"},
-                    {label: "去模型与角色", action: "open-settings-llm", className: "ghost-btn"}
+                    {label: "回工作台", action: "go-management", className: "primary-btn"},
+                    {label: "去模型与向量", action: "open-settings-llm", className: "ghost-btn"}
                 ],
                 faqKey: "binding-change"
             };
@@ -1853,9 +2058,9 @@
             return {
                 tone: "warning",
                 title: "配置已保存，但只会影响新任务",
-                description: "如果你刚改完就期待当前任务马上变化，很容易误判成“配置没生效”。先回知识库管理或知识问答，用新任务验证改动是否生效。",
+                description: "如果你刚改完就期待当前任务马上变化，很容易误判成“配置没生效”。先回工作台或知识问答，用新任务验证改动是否生效。",
                 actions: [
-                    {label: "去知识库管理", action: "go-management", className: "primary-btn"},
+                    {label: "回工作台", action: "go-management", className: "primary-btn"},
                     {label: "去知识问答", action: "go-ask", className: "ghost-btn"}
                 ],
                 faqKey: "saved-not-applied"
@@ -1864,10 +2069,10 @@
         return {
             tone: "info",
             title: "看不懂字段时，先不要改",
-            description: "大多数日常问题并不需要动这里。普通用户如果只是想导资料、看结果、直接提问，应该优先回知识库管理或知识问答，而不是停留在后台配置页。",
+            description: "大多数日常问题并不需要动这里。普通用户如果只是想导资料、看结果、直接提问，应该优先回工作台或知识问答，而不是停留在系统配置页。",
             actions: [
-                {label: "返回知识库管理", action: "go-management", className: "primary-btn"},
-                {label: "返回概览", action: "open-settings-overview", className: "ghost-btn"}
+                {label: "返回工作台", action: "go-management", className: "primary-btn"},
+                {label: "去模型与向量", action: "open-settings-llm", className: "ghost-btn"}
             ],
             faqKey: "default-warning"
         };

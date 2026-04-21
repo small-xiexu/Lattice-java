@@ -4,24 +4,23 @@
     const DEVELOPER_ENTRY = "developer-access";
     const DEVELOPER_ENTRY_PANEL = "developer-access-entry";
     const SETTINGS_TABS = [
-        "settings-overview",
         "settings-llm",
         "settings-parse",
         "settings-sources"
     ];
     const ENTRY_META = {
         settings: {
-            documentTitle: "邪修智库｜管理员设置",
-            sidebarTitle: "管理员设置",
-            sidebarCopy: "普通用户只看知识库管理和知识问答。这里集中放管理员才会用到的模型、OCR、高级资料源接入和后台维护动作；开发者接入已拆成单独入口。",
-            brandKicker: "邪修智库 · 管理员设置",
+            documentTitle: "邪修智库｜系统配置",
+            sidebarTitle: "系统配置",
+            sidebarCopy: "先判断哪一项未就绪，再进入对应模块。这里集中处理模型与向量、OCR / 文档识别和高级维护；开发接入已拆成独立入口。",
+            brandKicker: "邪修智库 · 系统配置",
             refreshLabel: "刷新配置"
         },
         "developer-access": {
-            documentTitle: "邪修智库｜开发者接入",
-            sidebarTitle: "开发者接入",
-            sidebarCopy: "这里集中放 CLI、HTTP API、MCP 的接入模板、首次验证步骤和 FAQ，避免把技术接入埋在管理员设置里面。",
-            brandKicker: "邪修智库 · 开发者接入",
+            documentTitle: "邪修智库｜开发接入",
+            sidebarTitle: "开发接入",
+            sidebarCopy: "这里集中放 CLI、HTTP API、MCP 的接入模板、首次验证步骤和 FAQ，避免把技术接入混进日常系统配置。",
+            brandKicker: "邪修智库 · 开发接入",
             refreshLabel: "刷新接入信息"
         }
     };
@@ -53,7 +52,16 @@
         const meta = ENTRY_META[normalizedEntry];
         document.body.setAttribute("data-admin-entry", normalizedEntry);
         document.querySelectorAll("[data-entry-only]").forEach(function (element) {
-            element.hidden = element.dataset.entryOnly !== normalizedEntry;
+            const matchesEntry = element.dataset.entryOnly === normalizedEntry;
+            if (!matchesEntry) {
+                element.hidden = true;
+                element.dataset.entryHiddenBySections = "true";
+                return;
+            }
+            if (element.dataset.entryHiddenBySections === "true") {
+                element.hidden = false;
+                delete element.dataset.entryHiddenBySections;
+            }
         });
         document.querySelectorAll("[data-admin-nav]").forEach(function (element) {
             element.classList.toggle("active", element.dataset.adminNav === normalizedEntry);

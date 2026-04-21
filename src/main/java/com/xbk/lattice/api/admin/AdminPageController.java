@@ -52,6 +52,6 @@ public class AdminPageController {
      */
     @GetMapping({"/admin/developer-access", "/admin/developer-access/"})
     public String developerAccess() {
-        return "forward:/admin/settings.html";
+        return "forward:/admin/developer-access.html";
     }
 }

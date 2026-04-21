@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>邪修智库｜开发接入</title>
+    <link rel="stylesheet" href="/admin/admin.css?v=20260421-starbucks-polish-4">
+</head>
+<body>
+<div class="app-shell">
+    <div class="app-window">
+        <aside class="sidebar">
+            <div class="mac-controls" aria-hidden="true">
+                <span class="mac-dot red"></span>
+                <span class="mac-dot yellow"></span>
+                <span class="mac-dot green"></span>
+            </div>
+
+            <section class="sidebar-section">
+                <p class="sidebar-kicker">邪修智库</p>
+                <h1 class="sidebar-title">开发接入</h1>
+                <p class="sidebar-copy">这里集中放 CLI、HTTP API、MCP 的接入模板、首次验证步骤和 FAQ，避免把技术接入混进日常系统配置。</p>
+            </section>
+
+            <nav class="nav-stack">
+                <a class="nav-card" href="/admin">
+                    <span class="nav-card-title">工作台</span>
+                    <span class="nav-card-copy">导入资料、跟踪同步、查看入库结果。</span>
+                </a>
+                <a class="nav-card" href="/admin/ask">
+                    <span class="nav-card-title">知识问答</span>
+                    <span class="nav-card-copy">基于已入库内容直接提问并查看引用。</span>
+                </a>
+                <a class="nav-card" href="/admin/settings">
+                    <span class="nav-card-title">系统配置</span>
+                    <span class="nav-card-copy">模型与向量、OCR、高级维护和验证去向。</span>
+                </a>
+                <a class="nav-card active" href="/admin/developer-access">
+                    <span class="nav-card-title">开发接入</span>
+                    <span class="nav-card-copy">CLI、HTTP API、MCP 接入模板和首次验证说明。</span>
+                </a>
+            </nav>
+        </aside>
+
+        <div class="workspace">
+            <header class="workspace-topbar">
+                <div class="brand-copy">
+                    <p class="brand-kicker">邪修智库 · 开发接入</p>
+                </div>
+                <div class="topbar-actions">
+                    <button id="refresh-developer-access" class="secondary-btn" type="button">刷新接入信息</button>
+                </div>
+            </header>
+
+            <main class="workspace-main">
+                <section class="panel">
+                    <div id="developer-first-step-note" class="help-inline-note">
+                        <strong>10 秒拿到第一段接入模板</strong>
+                        <p>先看当前服务地址、MCP 地址和服务状态，再从 MCP、CLI、HTTP API 里选一个入口。完整说明和 FAQ 都留在后面，不挡首屏。</p>
+                    </div>
+                </section>
+
+                <div class="tab-shell" data-tab-group="developer-access-sections" data-tab-query-key="tab">
+                    <section class="panel tab-nav-panel">
+                        <div class="panel-title-row">
+                            <div>
+                                <h2>快速入口</h2>
+                                <p>先选你当前要处理的接入方式，再去对应标签直接复制模板和验证步骤。</p>
+                            </div>
+                            <div class="help-action-row">
+                                <a class="secondary-btn" href="/admin">回工作台</a>
+                                <a class="ghost-link" href="/admin/ask">去知识问答</a>
+                            </div>
+                        </div>
+                        <div class="sub-tabs top-gap" role="tablist" aria-label="开发接入二级标签">
+                            <button class="tab-btn active" type="button" role="tab" aria-selected="true" data-tab-trigger="developer-access-overview">接入概览</button>
+                            <button class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="developer-access-mcp">MCP</button>
+                            <button class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="developer-access-cli">CLI</button>
+                            <button class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="developer-access-http">HTTP API</button>
+                            <button class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="developer-access-faq">FAQ</button>
+                        </div>
+                    </section>
+
+                    <section class="tab-panel active" data-tab-panel="developer-access-overview">
+                        <section class="panel">
+                            <div class="panel-title-row">
+                                <div>
+                                    <h2>当前接入信息</h2>
+                                    <p>本页示例会根据你当前访问的服务地址自动生成，复制后通常不需要手动拼接地址。</p>
+                                </div>
+                            </div>
+                            <div class="page-notice info top-gap">当前服务地址和 MCP 地址会按你正在访问的后台地址实时生成，不会写死开发验收端口。</div>
+                            <div class="metric-grid top-gap developer-access-metrics">
+                                <article class="metric-card">
+                                    <span class="label">当前服务地址</span>
+                                    <p id="developer-base-url" class="value developer-value">加载中...</p>
+                                    <p class="note">CLI、HTTP API 和健康检查都基于这个地址生成。</p>
+                                    <div class="button-row wrap developer-card-actions">
+                                        <button class="secondary-btn" type="button" data-copy-template="service-url">复制当前服务地址</button>
+                                    </div>
+                                </article>
+
+                                <article class="metric-card">
+                                    <span class="label">当前 MCP 地址</span>
+                                    <p id="developer-mcp-url" class="value developer-value">加载中...</p>
+                                    <p class="note">页面会自动补齐 <code>/mcp</code>，不需要你再手动拼接。</p>
+                                    <div class="button-row wrap developer-card-actions">
+                                        <button class="secondary-btn" type="button" data-copy-template="mcp-url">复制 MCP 地址</button>
+                                    </div>
+                                </article>
+
+                                <article class="metric-card">
+                                    <span class="label">当前服务状态</span>
+                                    <div class="developer-status-row">
+                                        <span id="developer-service-status" class="badge warning">检查中</span>
+                                    </div>
+                                    <p id="developer-service-status-note" class="note">正在通过 <code>/actuator/health</code> 检查服务状态。</p>
+                                </article>
+                            </div>
+                        </section>
+
+                        <section class="panel">
+                            <div class="panel-title-row">
+                                <div>
+                                    <h2>先选入口，再复制模板</h2>
+                                    <p>把最常用的 3 个入口直接放在这里，不需要先翻 FAQ。</p>
+                                </div>
+                            </div>
+                            <div class="entry-grid top-gap">
+                                <article class="entry-card developer-nav-card">
+                                    <div class="entry-card-head">
+                                        <span class="label">MCP 快速接入</span>
+                                        <span class="pill">AI 客户端</span>
+                                    </div>
+                                    <h3 class="entry-card-title">适合 Claude Desktop、Codex 类客户端和支持 MCP 的工具</h3>
+                                    <p class="entry-card-copy">主推当前 MCP 地址和 STDIO Bridge 模式，先连通工具列表，再调业务工具。</p>
+                                    <div class="entry-card-actions">
+                                        <button class="primary-btn" type="button" data-tab-open="developer-access-mcp">去 MCP 标签</button>
+                                    </div>
+                                </article>
+
+                                <article class="entry-card developer-nav-card">
+                                    <div class="entry-card-head">
+                                        <span class="label">CLI 快速接入</span>
+                                        <span class="pill">脚本 / 运维</span>
+                                    </div>
+                                    <h3 class="entry-card-title">适合命令行调试、自测脚本、批处理任务和巡检</h3>
+                                    <p class="entry-card-copy">直接复制状态检查、首次问答、资料源列表和资料源同步命令即可开始。</p>
+                                    <div class="entry-card-actions">
+                                        <button class="primary-btn" type="button" data-tab-open="developer-access-cli">去 CLI 标签</button>
+                                    </div>
+                                </article>
+
+                                <article class="entry-card developer-nav-card">
+                                    <div class="entry-card-head">
+                                        <span class="label">HTTP API 接入</span>
+                                        <span class="pill">系统集成</span>
+                                    </div>
+                                    <h3 class="entry-card-title">适合业务系统、自建管理平台和服务编排</h3>
+                                    <p class="entry-card-copy">先确认基础地址和入口选择，再用健康检查和 query API 做最小验证。</p>
+                                    <div class="entry-card-actions">
+                                        <button class="secondary-btn" type="button" data-tab-open="developer-access-http">去 HTTP API 标签</button>
+                                    </div>
+                                </article>
+                            </div>
+                        </section>
+
+                        <section class="panel">
+                            <div class="panel-title-row">
+                                <div>
+                                    <h2>常用模板</h2>
+                                    <p>入口选定后，直接复制一份最小可运行模板；只有卡住时再继续往下看完整接入说明。</p>
+                                </div>
+                            </div>
+                            <div class="developer-fastlane-grid top-gap">
+                                <article class="quick-copy-card">
+                                    <p class="template-kicker">MCP 优先</p>
+                                    <h3>客户端配置</h3>
+                                    <p class="developer-mini-copy">适合 Claude Desktop、Codex 类客户端和支持 MCP 的工具，先接通后看工具列表。</p>
+                                    <pre class="code-view compact" data-developer-template="mcp-http-config">加载中...</pre>
+                                    <div class="button-row wrap">
+                                        <button class="primary-btn" type="button" data-copy-template="mcp-http-config">复制 MCP 配置</button>
+                                        <button class="ghost-btn" type="button" data-developer-scroll="developer-mcp-anchor">看完整接入</button>
+                                    </div>
+                                </article>
+
+                                <article class="quick-copy-card">
+                                    <p class="template-kicker">CLI 验证</p>
+                                    <h3>状态检查命令</h3>
+                                    <p class="developer-mini-copy">适合脚本、自测和运维同学，先用一条 `status` 命令确认服务和知识库状态。</p>
+                                    <pre class="code-view compact" data-developer-template="cli-status-command">加载中...</pre>
+                                    <div class="button-row wrap">
+                                        <button class="primary-btn" type="button" data-copy-template="cli-status-command">复制 CLI 命令</button>
+                                        <button class="ghost-btn" type="button" data-developer-scroll="developer-cli-anchor">看完整接入</button>
+                                    </div>
+                                </article>
+
+                                <article class="quick-copy-card">
+                                    <p class="template-kicker">HTTP API</p>
+                                    <h3>最小请求示例</h3>
+                                    <p class="developer-mini-copy">适合业务系统或服务编排，先确认健康检查和最小 query 请求能跑通。</p>
+                                    <pre class="code-view compact" data-developer-template="http-api-example">加载中...</pre>
+                                    <div class="button-row wrap">
+                                        <button class="primary-btn" type="button" data-copy-template="http-api-example">复制 HTTP 示例</button>
+                                        <button class="ghost-btn" type="button" data-developer-scroll="developer-http-anchor">看完整接入</button>
+                                    </div>
+                                </article>
+                            </div>
+                        </section>
+                    </section>
+
+                    <section id="developer-mcp-anchor" class="tab-panel developer-anchor" data-tab-panel="developer-access-mcp" hidden>
+                        <section class="panel">
+                            <div class="panel-title-row">
+                                <div>
+                                    <h2>MCP 快速接入</h2>
+                                    <p>适合 Claude Desktop、Codex 类客户端或其他支持 MCP 的工具。下面的配置会自动带入当前 MCP 地址，复制后通常可以直接使用。</p>
+                                </div>
+                            </div>
+                            <div class="page-notice warning top-gap">注意：调用 lattice_query 后，结果会进入待确认生命周期。如果客户端没有继续 confirm、correct 或 discard，pending 记录会保留。</div>
+
+                            <div class="tab-shell top-gap" data-tab-group="developer-mcp">
+                                <div class="sub-tabs" role="tablist" aria-label="MCP 快速接入标签">
+                                    <button class="tab-btn active" type="button" role="tab" aria-selected="true" data-tab-trigger="developer-mcp-http">HTTP 直连</button>
+                                    <button class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="developer-mcp-bridge">STDIO Bridge</button>
+                                    <button class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="developer-mcp-verify">首次验证</button>
+                                </div>
+
+                                <section class="tab-panel active" data-tab-panel="developer-mcp-http">
+                                    <div class="developer-template-grid">
+                                        <details class="advanced-panel access-template-card">
+                                            <summary>
+                                                <div class="access-template-summary">
+                                                    <div>
+                                                        <span class="pill">HTTP 直连</span>
+                                                        <h3 class="access-template-title">复制 MCP HTTP 配置</h3>
+                                                    </div>
+                                                    <p class="access-template-copy">适合支持远端 HTTP MCP 的客户端或连接器界面。不同客户端字段名略有差异，但核心信息就是类型与当前 MCP URL。</p>
+                                                </div>
+                                            </summary>
+                                            <div class="advanced-panel-body">
+                                                <div class="access-template-meta">
+                                                    <span class="surface-chip">当前 MCP 地址已自动填入</span>
+                                                    <span class="surface-chip">你只需要改显示名称</span>
+                                                    <span class="surface-chip">接通后先看工具列表</span>
+                                                </div>
+                                                <pre class="code-view top-gap" data-developer-template="mcp-http-config">加载中...</pre>
+                                                <div class="button-row wrap top-gap">
+                                                    <button class="primary-btn" type="button" data-copy-template="mcp-http-config">复制 MCP HTTP 配置</button>
+                                                    <button class="ghost-btn" type="button" data-copy-template="mcp-url">复制当前 MCP 地址</button>
+                                                </div>
+                                            </div>
+                                        </details>
+                                    </div>
+                                </section>
+
+                                <section class="tab-panel" data-tab-panel="developer-mcp-bridge" hidden>
+                                    <div class="developer-template-grid">
+                                        <details class="advanced-panel access-template-card">
+                                            <summary>
+                                                <div class="access-template-summary">
+                                                    <div>
+                                                        <span class="pill">STDIO Bridge</span>
+                                                        <h3 class="access-template-title">复制 STDIO Bridge 配置</h3>
+                                                    </div>
+                                                    <p class="access-template-copy">适合只支持本地 STDIO MCP 的客户端。Bridge 会把远端 HTTP MCP 包成一个本地 STDIO 进程。</p>
+                                                </div>
+                                            </summary>
+                                            <div class="advanced-panel-body">
+                                                <div class="access-template-meta">
+                                                    <span class="surface-chip">当前 MCP 地址已自动填入</span>
+                                                    <span class="surface-chip">你只需要改本地仓库路径</span>
+                                                    <span class="surface-chip">本地脚本会走 bin/lattice-mcp-bridge</span>
+                                                </div>
+                                                <pre class="code-view top-gap" data-developer-template="mcp-bridge-config">加载中...</pre>
+                                                <div class="button-row wrap top-gap">
+                                                    <button class="primary-btn" type="button" data-copy-template="mcp-bridge-config">复制 STDIO Bridge 配置</button>
+                                                    <button class="ghost-btn" type="button" data-copy-template="bridge-command">复制 Bridge 命令</button>
+                                                </div>
+                                            </div>
+                                        </details>
+                                    </div>
+                                </section>
+
+                                <section class="tab-panel" data-tab-panel="developer-mcp-verify" hidden>
+                                    <div class="developer-template-grid">
+                                        <details class="advanced-panel access-template-card" open>
+                                            <summary>
+                                                <div class="access-template-summary">
+                                                    <div>
+                                                        <span class="pill">首次验证</span>
+                                                        <h3 class="access-template-title">复制 MCP 验证步骤</h3>
+                                                    </div>
+                                                    <p class="access-template-copy">先确认 tools/list 和 lattice_status，再调用 lattice_query；如果返回 pending 相关信息，记得继续闭环。</p>
+                                                </div>
+                                            </summary>
+                                            <div class="advanced-panel-body">
+                                                <div class="access-template-meta">
+                                                    <span class="surface-chip">成功后应先看到工具列表</span>
+                                                    <span class="surface-chip">再调用业务工具</span>
+                                                </div>
+                                                <pre class="code-view top-gap" data-developer-template="mcp-verify-steps">加载中...</pre>
+                                                <div class="button-row wrap top-gap">
+                                                    <button class="primary-btn" type="button" data-copy-template="mcp-verify-steps">复制 MCP 验证步骤</button>
+                                                </div>
+                                            </div>
+                                        </details>
+                                    </div>
+                                </section>
+                            </div>
+                        </section>
+                    </section>
+
+                    <section id="developer-cli-anchor" class="tab-panel developer-anchor" data-tab-panel="developer-access-cli" hidden>
+                        <section class="panel">
+                            <div class="panel-title-row">
+                                <div>
+                                    <h2>CLI 快速接入</h2>
+                                    <p>适合命令行、自测脚本、批处理和运维任务。下面的命令会自动带入当前服务地址，复制后可直接执行。</p>
+                                </div>
+                            </div>
+
+                            <div class="tab-shell top-gap" data-tab-group="developer-cli">
+                                <div class="sub-tabs" role="tablist" aria-label="CLI 快速接入标签">
+                                    <button class="tab-btn active" type="button" role="tab" aria-selected="true" data-tab-trigger="developer-cli-once">单次执行</button>
+                                    <button class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="developer-cli-env">环境变量模式</button>
+                                    <button class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="developer-cli-advanced">高级模式</button>
+                                    <button class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="developer-cli-verify">首次验证</button>
+                                </div>
+
+                                <section class="tab-panel active" data-tab-panel="developer-cli-once">
+                                    <div class="developer-template-grid developer-template-grid-double">
+                                        <details class="advanced-panel access-template-card">
+                                            <summary>
+                                                <div class="access-template-summary">
+                                                    <div>
+                                                        <span class="pill">状态检查</span>
+                                                        <h3 class="access-template-title">复制状态检查命令</h3>
+                                                    </div>
+                                                    <p class="access-template-copy">执行成功后应返回知识库总览状态、质量指标和 pending 摘要。</p>
+                                                </div>
+                                            </summary>
+                                            <div class="advanced-panel-body">
+                                                <pre class="code-view" data-developer-template="cli-status-command">加载中...</pre>
+                                                <div class="button-row wrap top-gap">
+                                                    <button class="primary-btn" type="button" data-copy-template="cli-status-command">复制状态检查命令</button>
+                                                </div>
+                                            </div>
+                                        </details>
+
+                                        <details class="advanced-panel access-template-card">
+                                            <summary>
+                                                <div class="access-template-summary">
+                                                    <div>
+                                                        <span class="pill">首次问答</span>
+                                                        <h3 class="access-template-title">复制首次问答命令</h3>
+                                                    </div>
+                                                    <p class="access-template-copy">执行成功后应返回 answer、引用来源和 reviewStatus 等结果。</p>
+                                                </div>
+                                            </summary>
+                                            <div class="advanced-panel-body">
+                                                <pre class="code-view" data-developer-template="cli-query-command">加载中...</pre>
+                                                <div class="button-row wrap top-gap">
+                                                    <button class="primary-btn" type="button" data-copy-template="cli-query-command">复制首次问答命令</button>
+                                                </div>
+                                            </div>
+                                        </details>
+
+                                        <details class="advanced-panel access-template-card">
+                                            <summary>
+                                                <div class="access-template-summary">
+                                                    <div>
+                                                        <span class="pill">资料源列表</span>
+                                                        <h3 class="access-template-title">复制资料源列表命令</h3>
+                                                    </div>
+                                                    <p class="access-template-copy">执行成功后应返回资料源分页数据，便于继续找 sourceId。</p>
+                                                </div>
+                                            </summary>
+                                            <div class="advanced-panel-body">
+                                                <pre class="code-view" data-developer-template="cli-source-list-command">加载中...</pre>
+                                                <div class="button-row wrap top-gap">
+                                                    <button class="primary-btn" type="button" data-copy-template="cli-source-list-command">复制资料源列表命令</button>
+                                                </div>
+                                            </div>
+                                        </details>
+
+                                        <details class="advanced-panel access-template-card">
+                                            <summary>
+                                                <div class="access-template-summary">
+                                                    <div>
+                                                        <span class="pill">资料源同步</span>
+                                                        <h3 class="access-template-title">复制资料源同步命令</h3>
+                                                    </div>
+                                                    <p class="access-template-copy">你只需要把 <code>--source-id</code> 换成真实资料源 ID，执行成功后会返回本次同步详情。</p>
+                                                </div>
+                                            </summary>
+                                            <div class="advanced-panel-body">
+                                                <pre class="code-view" data-developer-template="cli-source-sync-command">加载中...</pre>
+                                                <div class="button-row wrap top-gap">
+                                                    <button class="primary-btn" type="button" data-copy-template="cli-source-sync-command">复制资料源同步命令</button>
+                                                </div>
+                                            </div>
+                                        </details>
+                                    </div>
+                                </section>
+
+                                <section class="tab-panel" data-tab-panel="developer-cli-env" hidden>
+                                    <div class="developer-template-grid">
+                                        <details class="advanced-panel access-template-card" open>
+                                            <summary>
+                                                <div class="access-template-summary">
+                                                    <div>
+                                                        <span class="pill">环境变量模式</span>
+                                                        <h3 class="access-template-title">复制环境变量示例</h3>
+                                                    </div>
+                                                    <p class="access-template-copy">适合脚本里反复调用 CLI。先写一次 <code>LATTICE_SERVER_URL</code>，后面的命令就不用反复写 <code>--server</code>。</p>
+                                                </div>
+                                            </summary>
+                                            <div class="advanced-panel-body">
+                                                <div class="access-template-meta">
+                                                    <span class="surface-chip">只需要改服务地址时可不改任何其他参数</span>
+                                                    <span class="surface-chip">适合批处理脚本</span>
+                                                </div>
+                                                <pre class="code-view top-gap" data-developer-template="cli-env-example">加载中...</pre>
+                                                <div class="button-row wrap top-gap">
+                                                    <button class="primary-btn" type="button" data-copy-template="cli-env-example">复制环境变量示例</button>
+                                                </div>
+                                            </div>
+                                        </details>
+                                    </div>
+                                </section>
+
+                                <section class="tab-panel" data-tab-panel="developer-cli-advanced" hidden>
+                                    <div class="developer-template-grid developer-template-grid-double">
+                                        <details class="advanced-panel access-template-card">
+                                            <summary>
+                                                <div class="access-template-summary">
+                                                    <div>
+                                                        <span class="pill">高级模式</span>
+                                                        <h3 class="access-template-title">源码仓库里的 CLI 启动命令</h3>
+                                                    </div>
+                                                    <p class="access-template-copy">如果你暂时不使用官方脚本，也可以直接用 Spring Boot 可执行 jar 启动 CLI。</p>
+                                                </div>
+                                            </summary>
+                                            <div class="advanced-panel-body">
+                                                <pre class="code-view" data-developer-template="cli-advanced-command">加载中...</pre>
+                                                <div class="button-row wrap top-gap">
+                                                    <button class="primary-btn" type="button" data-copy-template="cli-advanced-command">复制高级模式命令</button>
+                                                </div>
+                                            </div>
+                                        </details>
+
+                                        <details class="advanced-panel access-template-card">
+                                            <summary>
+                                                <div class="access-template-summary">
+                                                    <div>
+                                                        <span class="pill">Bridge 备用命令</span>
+                                                        <h3 class="access-template-title">源码仓库里的 MCP Bridge 启动命令</h3>
+                                                    </div>
+                                                    <p class="access-template-copy">当你想确认 bridge 本身是否工作，或需要排查脚本包装问题时，可以直接执行这个命令。</p>
+                                                </div>
+                                            </summary>
+                                            <div class="advanced-panel-body">
+                                                <pre class="code-view" data-developer-template="mcp-bridge-advanced-command">加载中...</pre>
+                                                <div class="button-row wrap top-gap">
+                                                    <button class="primary-btn" type="button" data-copy-template="mcp-bridge-advanced-command">复制 Bridge 高级命令</button>
+                                                </div>
+                                            </div>
+                                        </details>
+                                    </div>
+                                </section>
+
+                                <section class="tab-panel" data-tab-panel="developer-cli-verify" hidden>
+                                    <div class="developer-template-grid">
+                                        <details class="advanced-panel access-template-card" open>
+                                            <summary>
+                                                <div class="access-template-summary">
+                                                    <div>
+                                                        <span class="pill">首次验证</span>
+                                                        <h3 class="access-template-title">复制 CLI 验证步骤</h3>
+                                                    </div>
+                                                    <p class="access-template-copy">先跑 <code>status</code> 再跑 <code>query</code>，这样更容易判断是服务不可达、命令不可用，还是问答结果异常。</p>
+                                                </div>
+                                            </summary>
+                                            <div class="advanced-panel-body">
+                                                <pre class="code-view" data-developer-template="cli-verify-steps">加载中...</pre>
+                                                <div class="button-row wrap top-gap">
+                                                    <button class="primary-btn" type="button" data-copy-template="cli-verify-steps">复制 CLI 验证步骤</button>
+                                                </div>
+                                            </div>
+                                        </details>
+                                    </div>
+                                </section>
+                            </div>
+                        </section>
+                    </section>
+
+                    <section id="developer-http-anchor" class="tab-panel developer-anchor" data-tab-panel="developer-access-http" hidden>
+                        <section class="panel">
+                            <div class="panel-title-row">
+                                <div>
+                                    <h2>HTTP API 接入</h2>
+                                    <p>如果你是在接业务系统、管理平台或服务编排，优先考虑 HTTP API。一期先保留最小入口判断和最小验证示例，不在这里堆太多接口细节。</p>
+                                </div>
+                            </div>
+                            <div class="developer-http-grid top-gap">
+                                <article class="sub-panel developer-http-card">
+                                    <h3>这条入口适合谁</h3>
+                                    <div class="access-template-meta top-gap">
+                                        <span class="surface-chip">接 AI 客户端：优先 MCP</span>
+                                        <span class="surface-chip">接脚本与命令行：优先 CLI</span>
+                                        <span class="surface-chip">接业务系统：优先 HTTP API</span>
+                                    </div>
+                                    <p class="muted top-gap">如果你的目标是把知识库能力接到现有业务流程里，HTTP API 会比 CLI 或 MCP 更稳定、更容易做服务编排。</p>
+                                </article>
+
+                                <article class="sub-panel developer-http-card">
+                                    <h3>最小验证示例</h3>
+                                    <pre class="code-view top-gap" data-developer-template="http-api-example">加载中...</pre>
+                                    <div class="button-row wrap top-gap">
+                                        <button class="primary-btn" type="button" data-copy-template="http-api-example">复制 HTTP API 示例</button>
+                                    </div>
+                                </article>
+                            </div>
+                        </section>
+                    </section>
+
+                    <section id="developer-faq-anchor" class="tab-panel developer-anchor" data-tab-panel="developer-access-faq" hidden>
+                        <section class="panel">
+                            <div class="panel-title-row">
+                                <div>
+                                    <h2>常见问题</h2>
+                                    <p>默认折叠展示，只回答第一次接入最容易卡住的地方。</p>
+                                </div>
+                            </div>
+                            <div class="developer-faq-list top-gap">
+                                <details class="advanced-panel">
+                                    <summary>普通用户需要看这个页面吗</summary>
+                                    <div class="advanced-panel-body">
+                                        <p class="muted">通常不需要。普通用户主要用工作台和知识问答；这个页面是给脚本、自建系统和 AI 客户端接入使用的。</p>
+                                    </div>
+                                </details>
+
+                                <details class="advanced-panel">
+                                    <summary>CLI、HTTP API、MCP 有什么区别</summary>
+                                    <div class="advanced-panel-body">
+                                        <p class="muted">CLI 适合脚本和命令行；HTTP API 适合系统集成；MCP 适合 Claude Desktop、Codex 类客户端和其他支持 MCP 的工具。</p>
+                                    </div>
+                                </details>
+
+                                <details class="advanced-panel">
+                                    <summary>为什么 MCP query 后还会有待处理记录</summary>
+                                    <div class="advanced-panel-body">
+                                        <p class="muted">因为 MCP 的 <code>lattice_query</code> 会像其他 query 入口一样进入待确认生命周期。若客户端没有继续 confirm、correct 或 discard，pending 记录会保留，这是当前产品语义的一部分。</p>
+                                    </div>
+                                </details>
+
+                                <details class="advanced-panel">
+                                    <summary>第一次接入应该先试哪一个</summary>
+                                    <div class="advanced-panel-body">
+                                        <p class="muted">接 AI 客户端先试 MCP 的工具列表与 <code>lattice_status</code>；接脚本先试 CLI 的 <code>status</code>；接系统集成先试 HTTP API 的健康检查和 query 示例。</p>
+                                    </div>
+                                </details>
+
+                                <details class="advanced-panel">
+                                    <summary>这些入口是不是三套不同系统</summary>
+                                    <div class="advanced-panel-body">
+                                        <p class="muted">不是。它们共用同一套后端能力，只是面向不同使用方式提供不同入口，因此语义应该尽量保持一致。</p>
+                                    </div>
+                                </details>
+                            </div>
+                        </section>
+                    </section>
+                </div>
+            </main>
+        </div>
+    </div>
+</div>
+<script src="/admin/admin-tabs.js?v=20260419-tabs-1"></script>
+<script src="/admin/developer-access.js?v=20260420-developer-access-3"></script>
+</body>
+</html>

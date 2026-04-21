@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>邪修智库｜知识问答</title>
-    <link rel="stylesheet" href="/admin/admin.css?v=20260421-openai-regression-1">
+    <link rel="stylesheet" href="/admin/admin.css?v=20260421-starbucks-polish-4">
 </head>
 <body>
 <div class="app-shell">
@@ -19,12 +19,12 @@
             <section class="sidebar-section">
                 <p class="sidebar-kicker">邪修智库</p>
                 <h1 class="sidebar-title">知识问答</h1>
-                <p class="sidebar-copy">用户只需要把问题说清楚，邪修智库（Lattice-java）会返回回答、直接依据和检索证据，不再关心模型路由和 token 配额。</p>
+                <p class="sidebar-copy">把问题说清楚，系统会优先给出最终答案，再展示直接证据和补充来源，不把解释文案放在答案前面。</p>
             </section>
 
             <nav class="nav-stack">
                 <a class="nav-card" href="/admin">
-                    <span class="nav-card-title">知识库管理</span>
+                    <span class="nav-card-title">工作台</span>
                     <span class="nav-card-copy">上传资料、目录同步、查看入库状态。</span>
                 </a>
                 <a class="nav-card active" href="/admin/ask">
@@ -32,11 +32,11 @@
                     <span class="nav-card-copy">直接提问，获得面向用户的最终回答。</span>
                 </a>
                 <a class="nav-card" href="/admin/settings">
-                    <span class="nav-card-title">管理员设置</span>
-                    <span class="nav-card-copy">模型、OCR、资料源维护和后台说明。</span>
+                    <span class="nav-card-title">系统配置</span>
+                    <span class="nav-card-copy">模型与向量、OCR、高级维护和验证去向。</span>
                 </a>
                 <a class="nav-card" href="/admin/developer-access">
-                    <span class="nav-card-title">开发者接入</span>
+                    <span class="nav-card-title">开发接入</span>
                     <span class="nav-card-copy">CLI、HTTP API、MCP 接入模板和验证说明。</span>
                 </a>
             </nav>
@@ -46,52 +46,27 @@
         <div class="workspace">
             <header class="workspace-topbar">
                 <div class="brand-copy">
-                    <p class="brand-kicker">邪修智库 · 问答台</p>
+                    <p class="brand-kicker">邪修智库 · 知识问答</p>
                 </div>
                 <div class="topbar-actions">
                     <button id="refresh-qa-status" class="secondary-btn" type="button">刷新状态</button>
-                    <a class="ghost-link subtle-link" href="/admin/settings">管理员设置</a>
+                    <a class="ghost-link subtle-link" href="/admin/settings">系统配置</a>
                 </div>
             </header>
 
             <main class="workspace-main">
                 <section id="page-notice" class="page-notice" hidden aria-live="polite"></section>
 
-                <section class="hero-panel">
-                    <div class="hero-grid">
-                        <div class="hero-copy">
-                            <p class="hero-eyebrow">邪修智库问答</p>
-                            <h2 class="hero-title">直接提问，基于知识库返回答案</h2>
-                            <p class="hero-description">这个页面只做一件事：把问题变成回答，并让你一眼看懂“这次有没有稳定证据、该不该直接相信、下一步要不要回知识库排查”。</p>
-                        </div>
-
-                        <div class="hero-side">
-                            <div class="hero-metric">
-                                <span class="hero-metric-label">可提问状态</span>
-                                <p id="ask-ready-hint" class="hero-metric-copy">正在检查知识库状态...</p>
-                            </div>
-
-                            <div class="hero-metric">
-                                <span class="hero-metric-label">当前体验目标</span>
-                                <p class="hero-metric-value">问完就有结果</p>
-                                <p class="hero-metric-copy">不让普通用户思考模型、Agent 或知识库选择器。</p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section id="ask-help-card" class="panel help-state-card" data-help-tone="info">
-                    <p class="help-card-eyebrow">可否开始提问</p>
-                    <h2 class="help-card-title">正在检查知识库是否已经准备就绪</h2>
-                    <p class="help-card-description">页面会根据知识库状态、最近同步运行和本次问答结果，告诉你现在应该直接提问、等待处理完成，还是先回知识库管理。</p>
-                </section>
-
-                <section class="panel panel-grid panel-grid-two">
-                    <div class="sub-panel">
+                <section class="ask-hero-grid">
+                    <section class="panel ask-composer-panel ask-composer-card">
                         <div class="panel-title-row">
                             <div>
-                                <h2>开始提问</h2>
-                                <p>前期只有一个知识库，不需要额外选择，直接问就可以。</p>
+                                <h2>直接提问</h2>
+                                <p id="ask-ready-hint">正在检查知识库状态...</p>
+                            </div>
+                            <div class="help-action-row">
+                                <a class="secondary-btn" href="/admin">回工作台</a>
+                                <a class="ghost-link" href="/admin/settings">去系统配置</a>
                             </div>
                         </div>
                         <div class="form-grid top-gap">
@@ -101,32 +76,38 @@
                             </label>
                         </div>
                         <div class="button-row wrap top-gap">
-                            <button id="submit-question" class="primary-btn" type="button">提问</button>
+                            <button id="submit-question" class="primary-btn" type="button">立即提问</button>
                             <button id="clear-question" class="ghost-btn" type="button">清空</button>
                         </div>
-                    </div>
+                    </section>
 
-                    <div class="sub-panel">
-                            <div class="panel-title-row">
-                                <div>
-                                    <h2>回答结果</h2>
-                                    <p>这里只展示最终回答，并同步告诉你这次答案的证据态、复核态和最直接的支撑来源。</p>
-                                </div>
-                            </div>
-                        <div id="ask-result-guide" class="help-inline-note top-gap">
-                            <strong>这次结果怎么看</strong>
-                            <p>提交一个问题后，这里会告诉你本次结果更像是“可以继续看引用”，还是“应该先回知识库管理检查资料”。</p>
-                        </div>
-                        <div id="ask-answer-metrics" class="metric-grid compact top-gap"></div>
-                        <div id="ask-answer-support" class="help-inline-note top-gap">
-                            <strong>回答依据</strong>
-                            <p>提交问题后，这里会显示这次回答最直接依赖的来源，以及是否已经形成稳定引用。</p>
-                        </div>
-                        <div id="ask-answer" class="answer-box answer-markdown top-gap">还没有回答，先输入一个问题。</div>
-                    </div>
+                    <aside id="ask-help-card" class="panel help-state-card ask-readiness-card" data-help-tone="info">
+                        <p class="help-card-eyebrow">当前问答状态</p>
+                        <h2 class="help-card-title">正在检查知识库是否已经准备就绪</h2>
+                        <p class="help-card-description">这里只保留一条必要判断：现在能不能直接问；如果不能，是该回工作台补资料，还是去系统配置排查。</p>
+                    </aside>
                 </section>
 
-                <section class="panel">
+                <section id="ask-result-panel" class="panel ask-result-panel" hidden>
+                    <div class="panel-title-row">
+                        <div>
+                            <h2>最终答案</h2>
+                            <p>先看回答正文，再决定是否继续往下看证据和补充来源。</p>
+                        </div>
+                    </div>
+                    <div id="ask-answer" class="answer-box answer-markdown top-gap">还没有回答，先输入一个问题。</div>
+                    <div id="ask-result-guide" class="result-judgement-strip top-gap">
+                        <strong>这次结果怎么看</strong>
+                        <p>提交一个问题后，这里会告诉你本次结果更像是“可以继续看直接来源”，还是“应该先回工作台检查资料”。</p>
+                    </div>
+                    <div id="ask-answer-support" class="help-inline-note top-gap">
+                        <strong>回答依据</strong>
+                        <p>提交问题后，这里会优先显示这次回答最直接依赖的来源，以及是否已经形成稳定引用。</p>
+                    </div>
+                    <div id="ask-answer-metrics" class="metric-grid compact top-gap"></div>
+                </section>
+
+                <section id="ask-source-panel" class="panel" hidden>
                     <div class="panel-title-row">
                         <div>
                             <h2>引用来源</h2>
@@ -148,16 +129,16 @@
                     <div class="panel-title-row">
                         <div>
                             <h2>提问卡住时先看这里</h2>
-                            <p>优先回答“为什么不能问”“为什么没有引用”“报错后先回哪里”这些最常见的使用问题。</p>
+                            <p>FAQ 默认收起来，只在你卡住时再展开看“为什么不能问”“为什么没有引用”“报错后先回哪里”。</p>
                         </div>
                     </div>
                     <div id="ask-faq-list" class="help-faq-list top-gap">
-                        <details class="advanced-panel" data-help-faq-key="not-ready" open>
+                        <details class="advanced-panel" data-help-faq-key="not-ready">
                             <summary>为什么现在不能提问，或者页面提示知识库还没准备好</summary>
                             <div class="advanced-panel-body">
-                                <p class="muted">通常是因为知识库还没有可用内容，或者同步运行还没完成。先回“知识库管理”页面确认资料是否已经成功入库，再回来提问；如果资料都还没处理完，这里通常也不会稳定出结果。</p>
+                                <p class="muted">通常是因为知识库还没有可用内容，或者同步运行还没完成。先回“工作台”确认资料是否已经成功入库，再回来提问；如果资料都还没处理完，这里通常也不会稳定出结果。</p>
                                 <div class="help-action-row">
-                                    <a class="secondary-btn" href="/admin">去知识库管理</a>
+                                    <a class="secondary-btn" href="/admin">回工作台</a>
                                 </div>
                             </div>
                         </details>
@@ -165,7 +146,7 @@
                         <details class="advanced-panel" data-help-faq-key="no-citation">
                             <summary>为什么回答没有引用来源</summary>
                             <div class="advanced-panel-body">
-                                <p class="muted">先看这次问题是否真的命中了知识库内容。如果答案区有内容但引用为空，优先怀疑检索命中不稳或资料本身还没整理好；这时回“知识库管理”确认对应资料是否存在、标题是否可搜到，会比盲目重问更有效。</p>
+                                <p class="muted">先看这次问题是否真的命中了知识库内容。如果答案区有内容但引用为空，优先怀疑检索命中不稳或资料本身还没整理好；这时回“工作台”确认对应资料是否存在、标题是否可搜到，会比盲目重问更有效。</p>
                                 <div class="help-action-row">
                                     <a class="secondary-btn" href="/admin?tab=knowledge-articles">去已入库内容</a>
                                 </div>
@@ -175,9 +156,9 @@
                         <details class="advanced-panel" data-help-faq-key="answer-quality">
                             <summary>为什么答案不准确或者不完整</summary>
                             <div class="advanced-panel-body">
-                                <p class="muted">先换成更具体的问题，把产品名、流程名、文档名带上；如果还是不准，说明知识库里可能缺资料、旧资料未更新，或者导入后的内容质量不够好。这类问题优先回知识库管理页检查资料，不是先改提问技巧。</p>
+                                <p class="muted">先换成更具体的问题，把产品名、流程名、文档名带上；如果还是不准，说明知识库里可能缺资料、旧资料未更新，或者导入后的内容质量不够好。这类问题优先回工作台检查资料，不是先改提问技巧。</p>
                                 <div class="help-action-row">
-                                    <a class="secondary-btn" href="/admin">回知识库管理</a>
+                                    <a class="secondary-btn" href="/admin">回工作台</a>
                                 </div>
                             </div>
                         </details>
@@ -185,10 +166,10 @@
                         <details class="advanced-panel" data-help-faq-key="query-failed">
                             <summary>提问时报错了，应该先看哪里</summary>
                             <div class="advanced-panel-body">
-                                <p class="muted">先看页面顶部提示信息，再判断是“知识库没准备好”还是“服务不可用”。如果是内容相关问题，回知识库管理页看最近同步运行；如果是模型、解析或后台配置问题，再去管理员设置，不要一上来就在多个页面来回切。</p>
+                                <p class="muted">先看页面顶部提示信息，再判断是“知识库没准备好”还是“服务不可用”。如果是内容相关问题，回工作台看最近同步运行；如果是模型、解析或后台配置问题，再去系统配置，不要一上来就在多个页面来回切。</p>
                                 <div class="help-action-row">
-                                    <a class="secondary-btn" href="/admin">去知识库管理</a>
-                                    <a class="ghost-link" href="/admin/settings">去管理员设置</a>
+                                    <a class="secondary-btn" href="/admin">回工作台</a>
+                                    <a class="ghost-link" href="/admin/settings">去系统配置</a>
                                 </div>
                             </div>
                         </details>
@@ -196,7 +177,7 @@
                         <details class="advanced-panel" data-help-faq-key="stale-answer">
                             <summary>为什么刚更新资料，答案还是旧的</summary>
                             <div class="advanced-panel-body">
-                                <p class="muted">资料改动后通常需要重新同步或重新进入可问答状态，结果不会立刻变化。先去知识库管理确认最近同步运行是否完成，再回来重新提问。</p>
+                                <p class="muted">资料改动后通常需要重新同步或重新进入可问答状态，结果不会立刻变化。先回工作台确认最近同步运行是否完成，再回来重新提问。</p>
                                 <div class="help-action-row">
                                     <a class="secondary-btn" href="/admin?tab=knowledge-runs">查看最近同步运行</a>
                                 </div>

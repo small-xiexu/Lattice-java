@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>邪修智库｜知识库管理</title>
-    <link rel="stylesheet" href="/admin/admin.css?v=20260421-openai-regression-1">
+    <title>邪修智库｜工作台</title>
+    <link rel="stylesheet" href="/admin/admin.css?v=20260421-starbucks-polish-4">
 </head>
 <body>
 <div class="app-shell">
@@ -18,13 +18,13 @@
 
             <section class="sidebar-section">
                 <p class="sidebar-kicker">邪修智库</p>
-                <h1 class="sidebar-title">知识库管理</h1>
+                <h1 class="sidebar-title">工作台</h1>
                 <p class="sidebar-copy">基于 Lattice-java 的知识工作台，把复杂参数收起来，让用户只处理导入资料、查看状态和发起提问这些核心动作。</p>
             </section>
 
             <nav class="nav-stack">
                 <a class="nav-card active" href="/admin">
-                    <span class="nav-card-title">知识库管理</span>
+                    <span class="nav-card-title">工作台</span>
                     <span class="nav-card-copy">导入资料、同步目录、查看任务与入库内容。</span>
                 </a>
                 <a class="nav-card" href="/admin/ask">
@@ -32,11 +32,11 @@
                     <span class="nav-card-copy">直接提问，查看最终回答和引用来源。</span>
                 </a>
                 <a class="nav-card" href="/admin/settings">
-                    <span class="nav-card-title">管理员设置</span>
-                    <span class="nav-card-copy">模型、OCR、高级资料源接入和后台说明。</span>
+                    <span class="nav-card-title">系统配置</span>
+                    <span class="nav-card-copy">模型与向量、OCR、高级维护和验证去向。</span>
                 </a>
                 <a class="nav-card" href="/admin/developer-access">
-                    <span class="nav-card-title">开发者接入</span>
+                    <span class="nav-card-title">开发接入</span>
                     <span class="nav-card-copy">CLI、HTTP API、MCP 接入模板和验证说明。</span>
                 </a>
             </nav>
@@ -50,88 +50,55 @@
                 </div>
                 <div class="topbar-actions">
                     <button id="refresh-page" class="secondary-btn" type="button">刷新页面</button>
-                    <button id="refresh-health" class="ghost-btn" type="button">刷新健康</button>
+                    <a class="ghost-link" href="/admin/ask">去知识问答</a>
                 </div>
             </header>
 
             <main class="workspace-main">
                 <section id="page-notice" class="page-notice" hidden aria-live="polite"></section>
 
-                <div class="tab-shell" data-tab-group="knowledge-console">
-                    <section class="hero-panel">
-                        <div class="hero-grid">
-                            <div class="hero-copy">
-                                <p class="hero-eyebrow">邪修智库工作台</p>
-                                <h2 class="hero-title">导入资料后即可开始问答</h2>
-                                <p class="hero-description">这个页面只保留文件上传、Git 仓库导入、同步状态查看和内容浏览这些关键动作，不再让用户面对温度、超时、路由标签这类配置噪音。</p>
-                                <div class="hero-actions">
-                                    <button id="refresh-summary" class="primary-btn" type="button">刷新状态</button>
-                                    <button class="ghost-btn" type="button" data-tab-open="knowledge-upload">去资料导入</button>
-                                    <a class="ghost-link" href="/admin/ask">直接去提问</a>
+                <div class="tab-shell" data-tab-group="knowledge-console" data-tab-query-key="tab">
+                    <section class="panel workbench-status-panel">
+                        <div class="workbench-hero-grid">
+                            <div class="workbench-hero-copy">
+                                <p class="hero-eyebrow">先导入资料，再开始问答</p>
+                                <h2 class="hero-title">把资料放进来，邪修智库就会把它整理成可问的知识库</h2>
+                                <p class="hero-description">先上传资料，再看处理进度；资料准备好后，直接去知识问答验证结果。不要先陷在配置页里。</p>
+                                <div class="button-row wrap">
+                                    <button class="primary-btn" type="button" data-tab-open="knowledge-upload">立即导入资料</button>
+                                    <button class="secondary-btn" type="button" data-tab-open="knowledge-runs">查看处理进度</button>
+                                    <a class="ghost-link" href="/admin/ask">去知识问答</a>
                                 </div>
                             </div>
 
-                            <div class="hero-side">
+                            <div class="workbench-hero-side">
                                 <div class="hero-metric" aria-live="polite">
                                     <span class="hero-metric-label">服务健康</span>
                                     <div class="health-inline">
                                         <span id="health-indicator" class="badge warning">检查中</span>
                                     </div>
                                     <p id="health-indicator-note" class="health-note">页面会直接显示服务状态</p>
+                                    <div class="button-row wrap workbench-status-actions">
+                                        <button id="refresh-summary" class="secondary-btn" type="button">刷新知识库状态</button>
+                                        <button id="refresh-health" class="ghost-btn" type="button">刷新服务状态</button>
+                                    </div>
                                 </div>
 
-                                <div class="hero-metric">
-                                    <span class="hero-metric-label">当前工作方式</span>
-                                    <p class="hero-metric-value">导入后即可问答</p>
-                                    <p class="hero-metric-copy">先把资料导入知识库，再进入问答页直接使用。</p>
+                                <div id="knowledge-help-card" class="help-state-card" data-help-tone="info">
+                                    <p class="help-card-eyebrow">现在该怎么做</p>
+                                    <h3 class="help-card-title">正在整理知识库状态</h3>
+                                    <p class="help-card-description">页面会根据资料、同步运行和已入库内容，告诉你下一步应该去资料导入、最近同步运行还是知识问答。</p>
                                 </div>
                             </div>
-                        </div>
-                    </section>
-
-                    <section class="panel help-intro-card">
-                        <div class="help-card-copy">
-                            <p class="help-card-eyebrow">第一次来先看这里</p>
-                            <h2 class="help-card-title">先确认资料有没有真正进入可问答状态</h2>
-                            <p class="help-card-description">这个页面只负责导入、同步和确认资料是否已经进入知识库。不处理模型配置，也不负责排查问答质量；看不懂配置时，不要先去管理员设置。</p>
-                        </div>
-                        <div class="help-action-row">
-                            <button class="primary-btn" type="button" data-tab-open="knowledge-upload">上传资料</button>
-                            <button class="ghost-btn" type="button" data-tab-open="knowledge-runs">查看最近同步运行</button>
-                            <a class="ghost-link" href="/admin/ask">去知识问答</a>
                         </div>
                     </section>
 
                     <section class="panel tab-nav-panel">
-                        <div class="panel-title-row">
-                            <div>
-                                <h2>资料库管理</h2>
-                                <p>把任务拆成几个清晰分区：先看状态，再导入资料，再看同步结果，最后查看已入库内容。</p>
-                            </div>
-                        </div>
-                        <div class="sub-tabs top-gap" role="tablist" aria-label="资料库管理二级标签">
-                            <button id="knowledge-tab-status" class="tab-btn active" type="button" role="tab" aria-selected="true" data-tab-trigger="knowledge-status">当前状态</button>
-                            <button id="knowledge-tab-upload" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="knowledge-upload">资料导入</button>
+                        <div class="sub-tabs top-gap" role="tablist" aria-label="工作台二级标签">
+                            <button id="knowledge-tab-upload" class="tab-btn active" type="button" role="tab" aria-selected="true" data-tab-trigger="knowledge-upload">资料导入</button>
                             <button id="knowledge-tab-runs" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="knowledge-runs">最近同步运行</button>
                             <button id="knowledge-tab-articles" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="knowledge-articles">已入库内容</button>
                         </div>
-                    </section>
-
-                    <section class="tab-panel active" data-tab-panel="knowledge-status">
-                        <section class="panel">
-                            <div class="panel-title-row">
-                                <div>
-                                    <h2>当前状态</h2>
-                                    <p>前期只有一个知识库，先把资料导进去，再确认处理结果是否完成。</p>
-                                </div>
-                            </div>
-                            <div id="summary-cards" class="metric-grid top-gap"></div>
-                            <div id="knowledge-help-card" class="help-state-card top-gap" data-help-tone="info">
-                                <p class="help-card-eyebrow">现在该怎么做</p>
-                                <h3 class="help-card-title">正在整理知识库状态</h3>
-                                <p class="help-card-description">页面会根据资料、同步运行和已入库内容，告诉你下一步应该去资料导入、最近同步运行还是知识问答。</p>
-                            </div>
-                        </section>
                     </section>
 
                     <section class="tab-panel" data-tab-panel="knowledge-upload" hidden>
@@ -284,6 +251,16 @@
                                 </article>
                             </div>
                         </section>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-title-row">
+                            <div>
+                                <h2>简化状态摘要</h2>
+                                <p>当你需要判断“现在能不能直接问”时，再看这一屏摘要，不让它抢在导入动作前面。</p>
+                            </div>
+                        </div>
+                        <div id="summary-cards" class="metric-grid top-gap"></div>
                     </section>
 
                     <section class="tab-panel" data-tab-panel="knowledge-runs" hidden>
@@ -440,39 +417,30 @@
                         </section>
                     </section>
 
-                    <section class="panel">
-                        <div class="developer-home-card">
-                            <div class="developer-home-copy">
-                                <p class="import-entry-kicker">Developer Access</p>
-                                <h2 class="developer-home-title">如果你是开发者，再去单独的接入页</h2>
-                                <p class="developer-home-description">普通使用者停留在“资料导入、最近同步运行、已入库内容、知识问答”这几块就够了。只有在要接 CLI、HTTP API 或 MCP 时，再去独立的“开发者接入”入口复制模板。</p>
-                                <div class="developer-home-highlights">
-                                    <span class="pill">普通用户不用先看</span>
-                                    <span class="pill">接入模板已独立</span>
-                                    <span class="pill">当前地址自动带入</span>
-                                </div>
+                    <section class="panel compact-entry-panel">
+                        <div class="panel-title-row">
+                            <div>
+                                <h2>开发接入</h2>
+                                <p>只有在要接 CLI、HTTP API 或 MCP 时，才需要进入独立的开发接入页复制模板。</p>
                             </div>
-                            <div class="developer-home-actions">
-                                <p class="developer-home-note">推荐开发者先走 MCP 或 CLI 的首次验证，再按需要接业务系统。</p>
-                                <a class="secondary-btn" href="/admin/developer-access">进入开发者接入</a>
-                            </div>
+                            <a class="secondary-btn" href="/admin/developer-access">去开发接入</a>
                         </div>
                     </section>
 
                     <section class="panel">
                         <div class="panel-title-row">
                             <div>
-                                <h2>遇到问题先看这里</h2>
-                                <p>优先解决“第一次该做什么”“为什么导入后还不能用”“什么时候该去别的页面”这三类高频问题。</p>
+                                <h2>遇到问题再展开 FAQ</h2>
+                                <p>FAQ 默认收起来，只在你卡住时再看“第一步做什么”“为什么导入后还不能用”“什么时候该去别的页面”。</p>
                             </div>
                         </div>
                         <div id="knowledge-faq-list" class="help-faq-list top-gap">
-                            <details class="advanced-panel" data-help-faq-key="first-steps" open>
+                            <details class="advanced-panel" data-help-faq-key="first-steps">
                                 <summary>第一次进入这个页面先做什么</summary>
                                 <div class="advanced-panel-body">
-                                    <p class="muted">先看“当前状态”确认服务和知识库有没有准备好，再去“资料导入”上传文件或接 Git 仓库；导入后切到“最近同步运行”看处理进度，最后再到“已入库内容”确认结果。</p>
+                                    <p class="muted">先看首屏状态判断当前能不能直接问；如果还不能问，就先去“资料导入”上传文件或接 Git 仓库；导入后切到“最近同步运行”看处理进度，最后再到“已入库内容”确认结果。</p>
                                     <div class="help-action-row">
-                                        <button class="secondary-btn" type="button" data-tab-open="knowledge-status">查看当前状态</button>
+                                        <button id="scroll-workbench-top" class="secondary-btn" type="button">回到首屏状态</button>
                                         <button class="ghost-btn" type="button" data-tab-open="knowledge-upload">去资料导入</button>
                                     </div>
                                 </div>
@@ -511,12 +479,12 @@
                             </details>
 
                             <details class="advanced-panel" data-help-faq-key="go-settings">
-                                <summary>什么时候该去管理员设置</summary>
+                                <summary>什么时候该去系统配置</summary>
                                 <div class="advanced-panel-body">
-                                    <p class="muted">普通导入、同步和查看结果都留在这个页面；只有在需要改模型、OCR、服务器目录资料源时才去“管理员设置”。如果你要接 CLI、HTTP API 或 MCP，再去“开发者接入”。</p>
+                                    <p class="muted">普通导入、同步和查看结果都留在工作台；只有在需要改模型与向量、OCR、服务器目录资料源时才去“系统配置”。如果你要接 CLI、HTTP API 或 MCP，再去“开发接入”。</p>
                                     <div class="help-action-row">
-                                        <a class="secondary-btn" href="/admin/settings">去管理员设置</a>
-                                        <a class="ghost-link" href="/admin/developer-access">去开发者接入</a>
+                                        <a class="secondary-btn" href="/admin/settings">去系统配置</a>
+                                        <a class="ghost-link" href="/admin/developer-access">去开发接入</a>
                                     </div>
                                 </div>
                             </details>

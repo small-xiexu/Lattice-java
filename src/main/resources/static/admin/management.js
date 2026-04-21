@@ -35,6 +35,7 @@
         bindIfPresent("refresh-page", "click", refreshPage);
         bindIfPresent("refresh-summary", "click", refreshSummary);
         bindIfPresent("refresh-health", "click", refreshHealth);
+        bindIfPresent("scroll-workbench-top", "click", scrollToWorkbenchTop);
         bindIfPresent("refresh-jobs", "click", loadRecentRuns);
         bindIfPresent("refresh-sources", "click", loadSources);
         bindIfPresent("search-articles", "click", loadArticles);
@@ -508,6 +509,13 @@
         window.AdminTabs.activate("knowledge-console", tabName);
     }
 
+    function scrollToWorkbenchTop() {
+        const target = document.querySelector(".workbench-status-panel");
+        if (target && typeof target.scrollIntoView === "function") {
+            target.scrollIntoView({behavior: "smooth", block: "start"});
+        }
+    }
+
     function consumeInitialRoute() {
         if (typeof window === "undefined" || !window.location || typeof URLSearchParams !== "function") {
             return;
@@ -536,7 +544,10 @@
 
     function normalizeKnowledgeTab(tabName) {
         const normalized = String(tabName || "").trim();
-        const allowedTabs = ["knowledge-status", "knowledge-upload", "knowledge-runs", "knowledge-articles"];
+        if (normalized === "knowledge-status") {
+            return "knowledge-upload";
+        }
+        const allowedTabs = ["knowledge-upload", "knowledge-runs", "knowledge-articles"];
         return allowedTabs.includes(normalized) ? normalized : null;
     }
 
@@ -1039,9 +1050,12 @@
             return;
         }
         const action = trigger.dataset.knowledgeHelpAction;
-        if (action === "knowledge-upload" || action === "knowledge-runs" || action === "knowledge-articles"
-                || action === "knowledge-status") {
+        if (action === "knowledge-upload" || action === "knowledge-runs" || action === "knowledge-articles") {
             activateKnowledgeTab(action);
+            return;
+        }
+        if (action === "knowledge-status" || action === "workbench-top") {
+            scrollToWorkbenchTop();
             return;
         }
         if (action === "go-ask") {
@@ -1067,7 +1081,7 @@
                 title: "正在整理知识库状态",
                 description: "页面会先拉取总览、同步运行和已入库内容，再告诉你现在应该去哪个区块继续操作。",
                 actions: [
-                    {label: "查看当前状态", action: "knowledge-status", className: "secondary-btn"}
+                    {label: "回到首屏状态", action: "workbench-top", className: "secondary-btn"}
                 ],
                 faqKey: "first-steps"
             };
@@ -1134,7 +1148,7 @@
                 description: "先上传一批文件或接入 Git 仓库。只有资料真正入库后，知识问答页才会稳定返回结果。",
                 actions: [
                     {label: "上传资料", action: "knowledge-upload", className: "primary-btn"},
-                    {label: "查看当前状态", action: "knowledge-status", className: "ghost-btn"}
+                    {label: "回到首屏状态", action: "workbench-top", className: "ghost-btn"}
                 ],
                 faqKey: "first-steps"
             };

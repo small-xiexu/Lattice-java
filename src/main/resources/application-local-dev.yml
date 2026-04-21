@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_local_dev}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+  flyway:
+    enabled: ${SPRING_FLYWAY_ENABLED:true}
+    schemas: ${SPRING_FLYWAY_SCHEMAS:lattice_local_dev}
+    default-schema: ${SPRING_FLYWAY_DEFAULT_SCHEMA:lattice_local_dev}
+    create-schemas: true
+  web:
+    resources:
+      chain:
+        cache: false
+      cache:
+        period: 0
+  devtools:
+    livereload:
+      enabled: true
+    restart:
+      enabled: true
+      additional-paths:
+        - src/main/resources/static
+        - src/main/resources
+
+server:
+  port: ${SERVER_PORT:18082}

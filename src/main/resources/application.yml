@@ -3,6 +3,9 @@ spring:
     name: lattice-app
   profiles:
     default: jdbc
+    group:
+      local-dev:
+        - jdbc
   servlet:
     multipart:
       max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:20MB}
