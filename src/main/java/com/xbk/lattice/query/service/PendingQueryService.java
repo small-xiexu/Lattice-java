@@ -83,8 +83,12 @@ public class PendingQueryService implements PendingQueryManager {
     @Override
     public PendingQueryRecord createPendingQuery(String question, QueryResponse queryResponse) {
         OffsetDateTime now = OffsetDateTime.now();
+        String queryId = queryResponse.getQueryId();
+        if (queryId == null || queryId.isBlank()) {
+            queryId = UUID.randomUUID().toString();
+        }
         PendingQueryRecord pendingQueryRecord = new PendingQueryRecord(
-                UUID.randomUUID().toString(),
+                queryId,
                 question,
                 queryResponse.getAnswer(),
                 extractConceptIds(queryResponse.getArticles()),

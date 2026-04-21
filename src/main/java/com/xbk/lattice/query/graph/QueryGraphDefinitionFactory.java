@@ -238,9 +238,10 @@ public class QueryGraphDefinitionFactory {
         QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
         QueryResponse cachedResponse = queryCacheStore.get(state.getNormalizedQuestion()).orElse(null);
         if (cachedResponse != null) {
+            QueryResponse responseForCurrentQuery = withQueryId(cachedResponse, state.getQueryId());
             state.setCacheHit(true);
-            state.setCachedResponseRef(queryWorkingSetStore.saveResponse(state.getQueryId(), cachedResponse));
-            state.setReviewStatus(cachedResponse.getReviewStatus());
+            state.setCachedResponseRef(queryWorkingSetStore.saveResponse(state.getQueryId(), responseForCurrentQuery));
+            state.setReviewStatus(responseForCurrentQuery.getReviewStatus());
         }
         else {
             state.setCacheHit(false);
@@ -427,7 +428,7 @@ public class QueryGraphDefinitionFactory {
         QueryResponse queryResponse = buildSuccessResponse(state);
         String responseRef = queryWorkingSetStore.saveResponse(state.getQueryId(), queryResponse);
         if (shouldCacheResponse(queryResponse)) {
-            queryCacheStore.put(state.getNormalizedQuestion(), queryResponse);
+            queryCacheStore.put(state.getNormalizedQuestion(), withoutQueryId(queryResponse));
             state.setCachedResponseRef(responseRef);
         }
         state.setFinalResponseRef(responseRef);
@@ -445,7 +446,7 @@ public class QueryGraphDefinitionFactory {
         }
         QueryResponse queryResponse;
         if (!state.isHasFusedHits()) {
-            queryResponse = new QueryResponse("未找到相关知识", List.of(), List.of(), null, null);
+            queryResponse = new QueryResponse("未找到相关知识", List.of(), List.of(), state.getQueryId(), null);
         }
         else {
             queryResponse = buildSuccessResponse(state);
@@ -466,8 +467,28 @@ public class QueryGraphDefinitionFactory {
                 answer,
                 toSourceResponses(fusedHits),
                 toArticleResponses(fusedHits),
-                null,
+                state.getQueryId(),
                 state.getReviewStatus()
+        );
+    }
+
+    private QueryResponse withQueryId(QueryResponse queryResponse, String queryId) {
+        return new QueryResponse(
+                queryResponse.getAnswer(),
+                queryResponse.getSources(),
+                queryResponse.getArticles(),
+                queryId,
+                queryResponse.getReviewStatus()
+        );
+    }
+
+    private QueryResponse withoutQueryId(QueryResponse queryResponse) {
+        return new QueryResponse(
+                queryResponse.getAnswer(),
+                queryResponse.getSources(),
+                queryResponse.getArticles(),
+                null,
+                queryResponse.getReviewStatus()
         );
     }
 

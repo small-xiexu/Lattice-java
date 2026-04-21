@@ -215,6 +215,52 @@ class QueryGraphOrchestratorTests {
     }
 
     /**
+     * 验证缓存命中时会为当前请求重新绑定 queryId，而不是复用旧请求的 queryId。
+     */
+    @Test
+    void shouldRebindQueryIdWhenReturningCachedResponse() {
+        QueryArticleHit articleHit = new QueryArticleHit(
+                "payment-timeout",
+                "Payment Timeout",
+                "retry=3",
+                "{\"description\":\"Handles payment timeout recovery\"}",
+                List.of("payment/analyze.json"),
+                10.0D
+        );
+        TrackingAnswerGenerationService answerGenerationService = new TrackingAnswerGenerationService(
+                "结论：retry=3",
+                "结论：retry=3"
+        );
+        InMemoryQueryCacheStore queryCacheStore = new InMemoryQueryCacheStore();
+        QueryReviewProperties queryReviewProperties = new QueryReviewProperties();
+        queryReviewProperties.setRewriteEnabled(false);
+        QueryGraphOrchestrator queryGraphOrchestrator = new QueryGraphOrchestrator(
+                new FixedFtsSearchService(List.of(articleHit)),
+                new FixedRefKeySearchService(List.of()),
+                new FixedSourceSearchService(List.of()),
+                new FixedContributionSearchService(List.of()),
+                new FixedVectorSearchService(List.of()),
+                new RrfFusionService(),
+                answerGenerationService,
+                queryCacheStore,
+                new ReviewerAgent(
+                        new SequencedReviewerGateway("{\"pass\":true,\"issues\":[]}"),
+                        new ReviewResultParser()
+                ),
+                queryReviewProperties
+        );
+
+        QueryResponse firstResponse = queryGraphOrchestrator.execute("payment timeout retry=3", "query-001");
+        QueryResponse secondResponse = queryGraphOrchestrator.execute("payment timeout retry=3", "query-002");
+
+        QueryResponse cachedResponse = queryCacheStore.getCachedResponse().orElseThrow();
+        assertThat(firstResponse.getQueryId()).isEqualTo("query-001");
+        assertThat(secondResponse.getQueryId()).isEqualTo("query-002");
+        assertThat(secondResponse.getQueryId()).isNotEqualTo(firstResponse.getQueryId());
+        assertThat(cachedResponse.getQueryId()).isNull();
+    }
+
+    /**
      * 追踪生成与重写次数的答案服务替身。
      *
      * @author xiexu

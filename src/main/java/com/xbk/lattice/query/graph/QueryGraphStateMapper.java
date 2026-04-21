@@ -34,6 +34,9 @@ public class QueryGraphStateMapper {
         state.setNormalizedQuestion(readString(stateMap, QueryGraphStateKeys.NORMALIZED_QUESTION));
         state.setLlmScopeType(readString(stateMap, QueryGraphStateKeys.LLM_SCOPE_TYPE));
         state.setLlmScopeId(readString(stateMap, QueryGraphStateKeys.LLM_SCOPE_ID));
+        state.setTraceId(readString(stateMap, QueryGraphStateKeys.TRACE_ID));
+        state.setSpanId(readString(stateMap, QueryGraphStateKeys.SPAN_ID));
+        state.setRootTraceId(readString(stateMap, QueryGraphStateKeys.ROOT_TRACE_ID));
         state.setCacheHit(readBoolean(stateMap, QueryGraphStateKeys.CACHE_HIT));
         state.setHasFusedHits(readBoolean(stateMap, QueryGraphStateKeys.HAS_FUSED_HITS));
         state.setRetrievedHitGroupsRef(readString(stateMap, QueryGraphStateKeys.RETRIEVED_HIT_GROUPS_REF));
@@ -73,6 +76,9 @@ public class QueryGraphStateMapper {
         values.put(QueryGraphStateKeys.NORMALIZED_QUESTION, state.getNormalizedQuestion());
         values.put(QueryGraphStateKeys.LLM_SCOPE_TYPE, state.getLlmScopeType());
         values.put(QueryGraphStateKeys.LLM_SCOPE_ID, state.getLlmScopeId());
+        values.put(QueryGraphStateKeys.TRACE_ID, state.getTraceId());
+        values.put(QueryGraphStateKeys.SPAN_ID, state.getSpanId());
+        values.put(QueryGraphStateKeys.ROOT_TRACE_ID, state.getRootTraceId());
         values.put(QueryGraphStateKeys.CACHE_HIT, state.isCacheHit());
         values.put(QueryGraphStateKeys.HAS_FUSED_HITS, state.isHasFusedHits());
         values.put(QueryGraphStateKeys.RETRIEVED_HIT_GROUPS_REF, state.getRetrievedHitGroupsRef());

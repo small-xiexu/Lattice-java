@@ -2,6 +2,7 @@ package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.infra.persistence.CompileJobJdbcRepository;
 import com.xbk.lattice.infra.persistence.CompileJobRecord;
+import com.xbk.lattice.observability.StructuredEventLogger;
 import com.xbk.lattice.source.domain.KnowledgeSource;
 import com.xbk.lattice.source.infra.KnowledgeSourceJdbcRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -11,7 +12,9 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -35,6 +38,8 @@ public class CompileJobService {
 
     private final KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository;
 
+    private final StructuredEventLogger structuredEventLogger;
+
     /**
      * 创建编译作业服务。
      *
@@ -44,11 +49,13 @@ public class CompileJobService {
     public CompileJobService(
             CompileJobJdbcRepository compileJobJdbcRepository,
             CompileOrchestratorRegistry compileOrchestratorRegistry,
-            KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository
+            KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository,
+            StructuredEventLogger structuredEventLogger
     ) {
         this.compileJobJdbcRepository = compileJobJdbcRepository;
         this.compileOrchestratorRegistry = compileOrchestratorRegistry;
         this.knowledgeSourceJdbcRepository = knowledgeSourceJdbcRepository;
+        this.structuredEventLogger = structuredEventLogger;
     }
 
     /**
@@ -106,6 +113,7 @@ public class CompileJobService {
                 null
         );
         compileJobJdbcRepository.save(compileJobRecord);
+        logCompileSubmitted(compileJobRecord);
         if (async) {
             return getRequiredJob(compileJobRecord.getJobId());
         }
@@ -235,6 +243,22 @@ public class CompileJobService {
 
     private KnowledgeSource resolveKnowledgeSourceByCode(String sourceCode) {
         return knowledgeSourceJdbcRepository.findBySourceCode(sourceCode).orElse(null);
+    }
+
+    private void logCompileSubmitted(CompileJobRecord compileJobRecord) {
+        if (structuredEventLogger == null || compileJobRecord == null) {
+            return;
+        }
+        Map<String, Object> fields = new LinkedHashMap<String, Object>();
+        fields.put("scene", "compile");
+        fields.put("status", compileJobRecord.getStatus());
+        fields.put("compileJobId", compileJobRecord.getJobId());
+        fields.put("sourceId", compileJobRecord.getSourceId());
+        fields.put("sourceSyncRunId", compileJobRecord.getSourceSyncRunId());
+        fields.put("sourceDir", compileJobRecord.getSourceDir());
+        fields.put("incremental", compileJobRecord.isIncremental());
+        fields.put("orchestrationMode", compileJobRecord.getOrchestrationMode());
+        structuredEventLogger.info("compile_submitted", fields);
     }
 
     /**

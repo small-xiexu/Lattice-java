@@ -22,6 +22,12 @@ public class QueryGraphState {
 
     private String llmScopeId;
 
+    private String traceId;
+
+    private String spanId;
+
+    private String rootTraceId;
+
     private boolean cacheHit;
 
     private boolean hasFusedHits;

@@ -1,21 +1,30 @@
 package com.xbk.lattice.api.query;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.service.CompileApplicationFacade;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -41,7 +50,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "lattice.compiler.batch-max-chars=200"
 })
 @AutoConfigureMockMvc
+@ExtendWith(OutputCaptureExtension.class)
 class QueryControllerTests {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Autowired
     private MockMvc mockMvc;
@@ -84,6 +96,7 @@ class QueryControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"question\":\"payment timeout retry=3 是什么配置\"}"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.queryId").isNotEmpty())
                 .andExpect(jsonPath("$.answer").value(org.hamcrest.Matchers.containsString("retry=3")))
                 .andExpect(jsonPath("$.sources[0].conceptId").value("payment-timeout"))
                 .andExpect(jsonPath("$.sources[0].sourcePaths[0]").value("payment/analyze.json"))
@@ -173,6 +186,71 @@ class QueryControllerTests {
     }
 
     /**
+     * 验证查询接口会输出最小结构化问答事件。
+     *
+     * @param tempDir 临时目录
+     * @param output 控制台输出
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldEmitStructuredQueryLifecycleEvents(@TempDir Path tempDir, CapturedOutput output) throws Exception {
+        truncateKnowledgeTables();
+
+        Path paymentDir = Files.createDirectories(tempDir.resolve("payment"));
+        Files.writeString(
+                paymentDir.resolve("analyze.json"),
+                "{"
+                        + "\"concepts\":["
+                        + "{\"id\":\"payment-routing\",\"title\":\"Payment Routing\","
+                        + "\"description\":\"支付路由总览\","
+                        + "\"snippets\":[\"route=standard\"],"
+                        + "\"sections\":[{\"heading\":\"Routing Rules\",\"content\":[\"route=standard\"],\"sources\":[\"payment/analyze.json#routing-rules\"]}]"
+                        + "}"
+                        + "]"
+                        + "}",
+                StandardCharsets.UTF_8
+        );
+        Files.writeString(
+                paymentDir.resolve("context.md"),
+                """
+                        # Settlement Window
+
+                        settle_window=45m
+                        当支付网关返回 delayed-settlement 时，结算窗口固定为 45 分钟。
+                        """,
+                StandardCharsets.UTF_8
+        );
+        compileApplicationFacade.compile(tempDir, false, null);
+
+        MvcResult mvcResult = mockMvc.perform(post("/api/v1/query")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\":\"settle_window=45m 是什么配置\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.queryId").isNotEmpty())
+                .andReturn();
+
+        String responseBody = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String queryId = extractJsonValue(responseBody, "queryId");
+        List<JsonNode> structuredEvents = parseStructuredEvents(output.getOut());
+        JsonNode queryReceivedEvent = findStructuredEvent(structuredEvents, "query_received", "queryId", queryId);
+        JsonNode llmStartedEvent = findStructuredEvent(structuredEvents, "llm_call_started", "queryId", queryId);
+        JsonNode llmSucceededEvent = findStructuredEvent(structuredEvents, "llm_call_succeeded", "queryId", queryId);
+        JsonNode queryCompletedEvent = findStructuredEvent(structuredEvents, "query_completed", "queryId", queryId);
+
+        assertThat(queryReceivedEvent).isNotNull();
+        assertThat(llmStartedEvent).isNotNull();
+        assertThat(llmSucceededEvent).isNotNull();
+        assertThat(queryCompletedEvent).isNotNull();
+        assertThat(queryReceivedEvent.path("traceId").asText()).isNotBlank();
+        assertThat(llmStartedEvent.path("traceId").asText()).isEqualTo(queryReceivedEvent.path("traceId").asText());
+        assertThat(llmSucceededEvent.path("traceId").asText()).isEqualTo(queryReceivedEvent.path("traceId").asText());
+        assertThat(queryCompletedEvent.path("traceId").asText()).isEqualTo(queryReceivedEvent.path("traceId").asText());
+        assertThat(llmStartedEvent.path("spanId").asText()).isNotBlank();
+        assertThat(llmSucceededEvent.path("status").asText()).isEqualTo("SUCCEEDED");
+        assertThat(queryCompletedEvent.path("status").asText()).isEqualTo("SUCCEEDED");
+    }
+
+    /**
      * 清理查询相关表数据，避免测试之间互相污染。
      */
     private void truncateKnowledgeTables() {
@@ -180,5 +258,40 @@ class QueryControllerTests {
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b2_query_test.contributions");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b2_query_test.source_files CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b2_query_test.articles CASCADE");
+    }
+
+    private String extractJsonValue(String responseBody, String fieldName) throws Exception {
+        JsonNode responseJson = OBJECT_MAPPER.readTree(responseBody);
+        return responseJson.path(fieldName).asText();
+    }
+
+    private List<JsonNode> parseStructuredEvents(String output) throws Exception {
+        List<JsonNode> events = new ArrayList<JsonNode>();
+        for (String line : output.split("\\R")) {
+            String trimmedLine = line.trim();
+            if (!trimmedLine.startsWith("{") || !trimmedLine.contains("\"eventName\"")) {
+                continue;
+            }
+            events.add(OBJECT_MAPPER.readTree(trimmedLine));
+        }
+        return events;
+    }
+
+    private JsonNode findStructuredEvent(
+            List<JsonNode> events,
+            String eventName,
+            String correlationField,
+            String correlationValue
+    ) {
+        for (JsonNode event : events) {
+            if (!eventName.equals(event.path("eventName").asText())) {
+                continue;
+            }
+            if (!correlationValue.equals(event.path(correlationField).asText())) {
+                continue;
+            }
+            return event;
+        }
+        return null;
     }
 }

@@ -9,6 +9,7 @@ import com.xbk.lattice.llm.service.LlmCallResult;
 import com.xbk.lattice.llm.service.LlmClient;
 import com.xbk.lattice.llm.service.LlmClientFactory;
 import com.xbk.lattice.llm.service.LlmRouteResolution;
+import com.xbk.lattice.observability.StructuredEventLogger;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatProperties;
@@ -25,7 +26,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -66,6 +69,10 @@ public class LlmGateway {
 
     private final String reviewBootstrapApiKey;
 
+    private final StructuredEventLogger structuredEventLogger;
+
+    private final Object budgetLock = new Object();
+
     private double spentUsd;
 
     /**
@@ -80,6 +87,7 @@ public class LlmGateway {
      * @param llmProperties LLM 配置
      * @param llmClientFactory LLM 客户端工厂
      * @param executionLlmSnapshotService 运行时快照服务
+     * @param structuredEventLogger 结构化事件日志器
      */
     @Autowired
     public LlmGateway(
@@ -93,7 +101,8 @@ public class LlmGateway {
             RedisKeyValueStore redisKeyValueStore,
             LlmProperties llmProperties,
             LlmClientFactory llmClientFactory,
-            ExecutionLlmSnapshotService executionLlmSnapshotService
+            ExecutionLlmSnapshotService executionLlmSnapshotService,
+            StructuredEventLogger structuredEventLogger
     ) {
         this(
                 new ChatModelLlmClient(openAiChatModel),
@@ -110,7 +119,8 @@ public class LlmGateway {
                 openAiBaseUrl,
                 openAiApiKey,
                 anthropicConnectionProperties.getBaseUrl(),
-                anthropicConnectionProperties.getApiKey()
+                anthropicConnectionProperties.getApiKey(),
+                structuredEventLogger
         );
     }
 
@@ -138,7 +148,39 @@ public class LlmGateway {
                 "",
                 "",
                 "",
-                ""
+                "",
+                null
+        );
+    }
+
+    /**
+     * 创建 LLM 网关（带结构化日志的测试构造器）。
+     *
+     * @param compileClient 编译模型客户端
+     * @param reviewClient 审查模型客户端
+     * @param redisKeyValueStore Redis 键值存储
+     * @param llmProperties LLM 配置
+     * @param structuredEventLogger 结构化事件日志器
+     */
+    LlmGateway(
+            LlmClient compileClient,
+            LlmClient reviewClient,
+            RedisKeyValueStore redisKeyValueStore,
+            LlmProperties llmProperties,
+            StructuredEventLogger structuredEventLogger
+    ) {
+        this(
+                compileClient,
+                reviewClient,
+                redisKeyValueStore,
+                llmProperties,
+                null,
+                null,
+                "",
+                "",
+                "",
+                "",
+                structuredEventLogger
         );
     }
 
@@ -155,6 +197,7 @@ public class LlmGateway {
      * @param compileBootstrapApiKey 编译 fallback API Key
      * @param reviewBootstrapBaseUrl 审查 fallback 地址
      * @param reviewBootstrapApiKey 审查 fallback API Key
+     * @param structuredEventLogger 结构化事件日志器
      */
     LlmGateway(
             LlmClient compileClient,
@@ -166,7 +209,8 @@ public class LlmGateway {
             String compileBootstrapBaseUrl,
             String compileBootstrapApiKey,
             String reviewBootstrapBaseUrl,
-            String reviewBootstrapApiKey
+            String reviewBootstrapApiKey,
+            StructuredEventLogger structuredEventLogger
     ) {
         this.compileClient = compileClient;
         this.reviewClient = reviewClient;
@@ -178,6 +222,7 @@ public class LlmGateway {
         this.compileBootstrapApiKey = compileBootstrapApiKey;
         this.reviewBootstrapBaseUrl = reviewBootstrapBaseUrl;
         this.reviewBootstrapApiKey = reviewBootstrapApiKey;
+        this.structuredEventLogger = structuredEventLogger;
         this.spentUsd = 0.0D;
     }
 
@@ -362,7 +407,9 @@ public class LlmGateway {
      * @return 已累计成本
      */
     double getSpentUsd() {
-        return spentUsd;
+        synchronized (budgetLock) {
+            return spentUsd;
+        }
     }
 
     /**
@@ -389,18 +436,29 @@ public class LlmGateway {
         }
         ensureBudgetAvailable();
         String truncatedUserPrompt = truncateUserPromptIfNecessary(systemPrompt, userPrompt, purpose);
-        LlmCallResult llmCallResult = llmClient.call(systemPrompt, truncatedUserPrompt);
-        double estimatedCost = estimateCostUsd(routeResolution, llmCallResult);
-        if (spentUsd + estimatedCost > llmProperties.getBudgetUsd()) {
-            throw new BudgetExceededException("LLM budget exceeded");
+        long startedAtNs = System.nanoTime();
+        logLlmEvent("llm_call_started", routeResolution, purpose, "STARTED", startedAtNs, null, null, null);
+        try {
+            LlmCallResult llmCallResult = llmClient.call(systemPrompt, truncatedUserPrompt);
+            double estimatedCost = estimateCostUsd(routeResolution, llmCallResult);
+            synchronized (budgetLock) {
+                if (spentUsd + estimatedCost > llmProperties.getBudgetUsd()) {
+                    throw new BudgetExceededException("LLM budget exceeded");
+                }
+                spentUsd += estimatedCost;
+            }
+            redisKeyValueStore.set(
+                    cacheKey,
+                    llmCallResult.getContent(),
+                    Duration.ofSeconds(llmProperties.getCacheTtlSeconds())
+            );
+            logLlmEvent("llm_call_succeeded", routeResolution, purpose, "SUCCEEDED", startedAtNs, llmCallResult, Double.valueOf(estimatedCost), null);
+            return llmCallResult.getContent();
         }
-        spentUsd += estimatedCost;
-        redisKeyValueStore.set(
-                cacheKey,
-                llmCallResult.getContent(),
-                Duration.ofSeconds(llmProperties.getCacheTtlSeconds())
-        );
-        return llmCallResult.getContent();
+        catch (RuntimeException exception) {
+            logLlmEvent("llm_call_failed", routeResolution, purpose, "FAILED", startedAtNs, null, null, exception);
+            throw exception;
+        }
     }
 
     /**
@@ -444,9 +502,68 @@ public class LlmGateway {
      * 确认预算尚未耗尽。
      */
     private void ensureBudgetAvailable() {
-        if (spentUsd >= llmProperties.getBudgetUsd()) {
-            throw new BudgetExceededException("LLM budget exceeded");
+        synchronized (budgetLock) {
+            if (spentUsd >= llmProperties.getBudgetUsd()) {
+                throw new BudgetExceededException("LLM budget exceeded");
+            }
         }
+    }
+
+    private void logLlmEvent(
+            String eventName,
+            LlmRouteResolution routeResolution,
+            String purpose,
+            String status,
+            long startedAtNs,
+            LlmCallResult llmCallResult,
+            Double estimatedCost,
+            Throwable throwable
+    ) {
+        if (structuredEventLogger == null) {
+            return;
+        }
+        Map<String, Object> fields = buildLlmEventFields(routeResolution, purpose, status, startedAtNs);
+        if (llmCallResult != null) {
+            fields.put("inputTokens", llmCallResult.getInputTokens());
+            fields.put("outputTokens", llmCallResult.getOutputTokens());
+        }
+        if (estimatedCost != null) {
+            fields.put("estimatedCostUsd", estimatedCost);
+        }
+        if (throwable != null) {
+            fields.put("error", throwable.getMessage());
+            structuredEventLogger.error(eventName, fields, throwable);
+            return;
+        }
+        structuredEventLogger.info(eventName, fields);
+    }
+
+    private Map<String, Object> buildLlmEventFields(
+            LlmRouteResolution routeResolution,
+            String purpose,
+            String status,
+            long startedAtNs
+    ) {
+        Map<String, Object> fields = new LinkedHashMap<String, Object>();
+        if (routeResolution != null) {
+            fields.put("scene", routeResolution.getScene());
+            fields.put("agentRole", routeResolution.getAgentRole());
+            fields.put("scopeType", routeResolution.getScopeType());
+            fields.put("scopeId", routeResolution.getScopeId());
+            fields.put("routeLabel", routeResolution.getRouteLabel());
+            fields.put("providerType", routeResolution.getProviderType());
+            fields.put("modelName", routeResolution.getModelName());
+            if (ExecutionLlmSnapshotService.QUERY_SCOPE_TYPE.equals(routeResolution.getScopeType())) {
+                fields.put("queryId", routeResolution.getScopeId());
+            }
+            if (ExecutionLlmSnapshotService.COMPILE_SCOPE_TYPE.equals(routeResolution.getScopeType())) {
+                fields.put("compileJobId", routeResolution.getScopeId());
+            }
+        }
+        fields.put("purpose", purpose);
+        fields.put("status", status);
+        fields.put("latencyMs", Long.valueOf((System.nanoTime() - startedAtNs) / 1_000_000L));
+        return fields;
     }
 
     /**
@@ -517,7 +634,7 @@ public class LlmGateway {
 
     private LlmRouteResolution resolveScopedRoute(String scopeId, String scene, String agentRole) {
         if (executionLlmSnapshotService == null || scopeId == null || scopeId.isBlank() || scene == null || scene.isBlank()) {
-            return resolveBootstrapRoute(scene, agentRole);
+            return resolveBootstrapRoute(scene, agentRole, scopeId);
         }
         String scopeType = resolveScopeType(scene);
         Optional<LlmRouteResolution> routeResolution = executionLlmSnapshotService.resolveRoute(scopeType, scopeId, scene, agentRole);
@@ -525,14 +642,19 @@ public class LlmGateway {
             return routeResolution.orElseThrow();
         }
         if (executionLlmSnapshotService.isBootstrapEnabled()) {
-            return resolveBootstrapRoute(scene, agentRole);
+            return resolveBootstrapRoute(scene, agentRole, scopeId);
         }
         throw new IllegalStateException("No llm route configured for " + scene + "/" + agentRole + " scopeId=" + scopeId);
     }
 
     private LlmRouteResolution resolveBootstrapRoute(String scene, String agentRole) {
+        return resolveBootstrapRoute(scene, agentRole, null);
+    }
+
+    private LlmRouteResolution resolveBootstrapRoute(String scene, String agentRole, String scopeId) {
+        LlmRouteResolution bootstrapRoute;
         if (executionLlmSnapshotService != null) {
-            return executionLlmSnapshotService.bootstrapRoute(
+            bootstrapRoute = executionLlmSnapshotService.bootstrapRoute(
                     normalizeScene(scene),
                     normalizeAgentRole(agentRole),
                     compileBootstrapBaseUrl,
@@ -541,30 +663,81 @@ public class LlmGateway {
                     reviewBootstrapApiKey
             );
         }
-        String normalizedRole = normalizeAgentRole(agentRole);
-        if (ROLE_REVIEWER.equals(normalizedRole)) {
-            return new LlmRouteResolution(
-                    resolveScopeType(scene),
-                    null,
-                    normalizeScene(scene),
-                    normalizedRole,
-                    null,
-                    null,
-                    Integer.valueOf(0),
-                    normalizeModelName(llmProperties.getReviewerModel()),
-                    normalizeProviderType(llmProperties.getReviewerModel()),
-                    reviewBootstrapBaseUrl,
-                    reviewBootstrapApiKey,
-                    llmProperties.getReviewerModel(),
-                    null,
-                    null,
-                    null,
-                    "{}",
-                    llmProperties.getPricing().getReviewerInputPricePer1kTokens(),
-                    llmProperties.getPricing().getReviewerOutputPricePer1kTokens(),
-                    false
-            );
+        else {
+            String normalizedRole = normalizeAgentRole(agentRole);
+            if (ROLE_REVIEWER.equals(normalizedRole)) {
+                bootstrapRoute = createBootstrapReviewerRoute(scene, normalizedRole);
+            }
+            else {
+                bootstrapRoute = createBootstrapCompileRoute(scene, normalizedRole);
+            }
         }
+        return attachScopeIfNecessary(bootstrapRoute, scene, scopeId);
+    }
+
+    private LlmRouteResolution attachScopeIfNecessary(
+            LlmRouteResolution routeResolution,
+            String scene,
+            String scopeId
+    ) {
+        if (routeResolution == null || scopeId == null || scopeId.isBlank()) {
+            return routeResolution;
+        }
+        if (scopeId.equals(routeResolution.getScopeId())) {
+            return routeResolution;
+        }
+        String effectiveScopeType = routeResolution.getScopeType();
+        if (effectiveScopeType == null || effectiveScopeType.isBlank()) {
+            effectiveScopeType = resolveScopeType(scene);
+        }
+        return new LlmRouteResolution(
+                effectiveScopeType,
+                scopeId,
+                routeResolution.getScene(),
+                routeResolution.getAgentRole(),
+                routeResolution.getBindingId(),
+                routeResolution.getSnapshotId(),
+                routeResolution.getSnapshotVersion(),
+                routeResolution.getRouteLabel(),
+                routeResolution.getProviderType(),
+                routeResolution.getBaseUrl(),
+                routeResolution.getApiKey(),
+                routeResolution.getModelName(),
+                routeResolution.getTemperature(),
+                routeResolution.getMaxTokens(),
+                routeResolution.getTimeoutSeconds(),
+                routeResolution.getExtraOptionsJson(),
+                routeResolution.getInputPricePer1kTokens(),
+                routeResolution.getOutputPricePer1kTokens(),
+                routeResolution.isSnapshotBacked()
+        );
+    }
+
+    private LlmRouteResolution createBootstrapReviewerRoute(String scene, String normalizedRole) {
+        return new LlmRouteResolution(
+                resolveScopeType(scene),
+                null,
+                normalizeScene(scene),
+                normalizedRole,
+                null,
+                null,
+                Integer.valueOf(0),
+                normalizeModelName(llmProperties.getReviewerModel()),
+                normalizeProviderType(llmProperties.getReviewerModel()),
+                reviewBootstrapBaseUrl,
+                reviewBootstrapApiKey,
+                llmProperties.getReviewerModel(),
+                null,
+                null,
+                null,
+                "{}",
+                llmProperties.getPricing().getReviewerInputPricePer1kTokens(),
+                llmProperties.getPricing().getReviewerOutputPricePer1kTokens(),
+                false
+        );
+    }
+
+    private LlmRouteResolution createBootstrapCompileRoute(String scene, String normalizedRole) {
         return new LlmRouteResolution(
                 resolveScopeType(scene),
                 null,

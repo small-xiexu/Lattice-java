@@ -13,6 +13,7 @@ import com.xbk.lattice.query.graph.QueryGraphStateMapper;
 import com.xbk.lattice.query.graph.QueryWorkingSetStore;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -131,13 +132,27 @@ public class QueryGraphOrchestrator {
      * @return 查询响应
      */
     public QueryResponse execute(String question) {
-        String queryId = UUID.randomUUID().toString();
+        return execute(question, UUID.randomUUID().toString());
+    }
+
+    /**
+     * 按指定 queryId 执行查询图。
+     *
+     * @param question 查询问题
+     * @param queryId 查询标识
+     * @return 查询响应
+     */
+    public QueryResponse execute(String question, String queryId) {
+        String effectiveQueryId = (queryId == null || queryId.isBlank()) ? UUID.randomUUID().toString() : queryId;
         try {
             QueryGraphState initialState = new QueryGraphState();
-            initialState.setQueryId(queryId);
+            initialState.setQueryId(effectiveQueryId);
             initialState.setQuestion(question);
             initialState.setLlmScopeType(ExecutionLlmSnapshotService.QUERY_SCOPE_TYPE);
-            initialState.setLlmScopeId(queryId);
+            initialState.setLlmScopeId(effectiveQueryId);
+            initialState.setTraceId(resolveCurrentMdcValue("traceId"));
+            initialState.setSpanId(resolveCurrentMdcValue("spanId"));
+            initialState.setRootTraceId(resolveRootTraceId(initialState.getTraceId()));
             initialState.setRewriteAttemptCount(0);
             initialState.setMaxRewriteRounds(queryReviewProperties.getMaxRewriteRounds());
             freezeSnapshotsFailOpen(initialState);
@@ -158,7 +173,7 @@ public class QueryGraphOrchestrator {
             throw new IllegalStateException("query graph execute failed", ex);
         }
         finally {
-            queryWorkingSetStore.deleteByQueryId(queryId);
+            queryWorkingSetStore.deleteByQueryId(effectiveQueryId);
         }
     }
 
@@ -188,6 +203,22 @@ public class QueryGraphOrchestrator {
             log.warn("Freeze llm snapshots failed for query {}, continue with bootstrap fallback",
                     state.getLlmScopeId(), exception);
         }
+    }
+
+    private String resolveRootTraceId(String traceId) {
+        String rootTraceId = resolveCurrentMdcValue("rootTraceId");
+        if (rootTraceId != null && !rootTraceId.isBlank()) {
+            return rootTraceId;
+        }
+        return traceId;
+    }
+
+    private String resolveCurrentMdcValue(String key) {
+        String value = MDC.get(key);
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value;
     }
 
     /**

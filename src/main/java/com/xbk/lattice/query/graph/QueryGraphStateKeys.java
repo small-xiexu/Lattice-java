@@ -21,6 +21,12 @@ public final class QueryGraphStateKeys {
 
     public static final String LLM_SCOPE_ID = "llmScopeId";
 
+    public static final String TRACE_ID = "traceId";
+
+    public static final String SPAN_ID = "spanId";
+
+    public static final String ROOT_TRACE_ID = "rootTraceId";
+
     public static final String CACHE_HIT = "cacheHit";
 
     public static final String HAS_FUSED_HITS = "hasFusedHits";

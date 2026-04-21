@@ -3,6 +3,7 @@ package com.xbk.lattice.compiler.service;
 import com.xbk.lattice.compiler.config.LlmProperties;
 import com.xbk.lattice.llm.service.LlmCallResult;
 import com.xbk.lattice.llm.service.LlmClient;
+import com.xbk.lattice.observability.StructuredEventLogger;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,18 +26,19 @@ public class TestLlmStubConfiguration {
     /**
      * 提供测试专用 LLM 网关。
      *
+     * @param structuredEventLogger 结构化事件日志器
      * @return 测试专用 LLM 网关
      */
     @Bean
     @Primary
-    public LlmGateway testLlmGateway() {
+    public LlmGateway testLlmGateway(StructuredEventLogger structuredEventLogger) {
         LlmProperties llmProperties = new LlmProperties();
         llmProperties.setCompileModel("stub-compile");
         llmProperties.setReviewerModel("stub-review");
         llmProperties.setBudgetUsd(1_000_000D);
         llmProperties.setCacheTtlSeconds(60L);
         llmProperties.setCacheKeyPrefix("test:llm:");
-        return new StubLlmGateway(llmProperties);
+        return new StubLlmGateway(llmProperties, structuredEventLogger);
     }
 
     /**
@@ -52,9 +54,10 @@ public class TestLlmStubConfiguration {
          * 创建测试专用网关。
          *
          * @param llmProperties LLM 配置
+         * @param structuredEventLogger 结构化事件日志器
          */
-        private StubLlmGateway(LlmProperties llmProperties) {
-            super(new NoOpLlmClient(), new NoOpLlmClient(), new NoOpRedisKeyValueStore(), llmProperties);
+        private StubLlmGateway(LlmProperties llmProperties, StructuredEventLogger structuredEventLogger) {
+            super(new NoOpLlmClient(), new NoOpLlmClient(), new NoOpRedisKeyValueStore(), llmProperties, structuredEventLogger);
         }
 
         /**

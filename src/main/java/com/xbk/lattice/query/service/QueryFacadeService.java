@@ -1,9 +1,16 @@
 package com.xbk.lattice.query.service;
 
 import com.xbk.lattice.api.query.QueryResponse;
+import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
+import com.xbk.lattice.observability.StructuredEventLogger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * 查询门面服务
@@ -20,6 +27,8 @@ public class QueryFacadeService {
 
     private final PendingQueryManager pendingQueryManager;
 
+    private final StructuredEventLogger structuredEventLogger;
+
     /**
      * 创建查询门面服务。
      *
@@ -29,10 +38,12 @@ public class QueryFacadeService {
     @Autowired
     public QueryFacadeService(
             QueryGraphOrchestrator queryGraphOrchestrator,
-            PendingQueryManager pendingQueryManager
+            PendingQueryManager pendingQueryManager,
+            StructuredEventLogger structuredEventLogger
     ) {
         this.queryGraphOrchestrator = queryGraphOrchestrator;
         this.pendingQueryManager = pendingQueryManager;
+        this.structuredEventLogger = structuredEventLogger;
     }
 
     /**
@@ -74,6 +85,7 @@ public class QueryFacadeService {
                 new QueryReviewProperties()
         );
         this.pendingQueryManager = pendingQueryManager;
+        this.structuredEventLogger = null;
     }
 
     /**
@@ -117,11 +129,20 @@ public class QueryFacadeService {
      * @return 查询响应
      */
     public QueryResponse query(String question) {
-        QueryResponse baseResponse = queryGraphOrchestrator.execute(question);
-        if (!shouldAttachPendingQuery(baseResponse)) {
-            return baseResponse;
+        String queryId = UUID.randomUUID().toString();
+        logQueryReceived(queryId, question);
+        try {
+            QueryResponse baseResponse = queryGraphOrchestrator.execute(question, queryId);
+            QueryResponse finalResponse = shouldAttachPendingQuery(baseResponse)
+                    ? attachPendingQuery(question, baseResponse)
+                    : baseResponse;
+            logQueryCompleted(finalResponse, "SUCCEEDED", null);
+            return finalResponse;
         }
-        return attachPendingQuery(question, baseResponse);
+        catch (RuntimeException exception) {
+            logQueryCompleted(new QueryResponse(null, List.of(), List.of(), queryId, null), "FAILED", exception);
+            throw exception;
+        }
     }
 
     /**
@@ -150,5 +171,40 @@ public class QueryFacadeService {
      */
     private boolean shouldAttachPendingQuery(QueryResponse queryResponse) {
         return !(queryResponse.getSources().isEmpty() && queryResponse.getArticles().isEmpty());
+    }
+
+    private void logQueryReceived(String queryId, String question) {
+        if (structuredEventLogger == null) {
+            return;
+        }
+        Map<String, Object> fields = new LinkedHashMap<String, Object>();
+        fields.put("scene", ExecutionLlmSnapshotService.QUERY_SCENE);
+        fields.put("status", "RECEIVED");
+        fields.put("queryId", queryId);
+        fields.put("scopeType", ExecutionLlmSnapshotService.QUERY_SCOPE_TYPE);
+        fields.put("scopeId", queryId);
+        fields.put("questionLength", question == null ? 0 : question.length());
+        structuredEventLogger.info("query_received", fields);
+    }
+
+    private void logQueryCompleted(QueryResponse queryResponse, String status, Throwable throwable) {
+        if (structuredEventLogger == null || queryResponse == null) {
+            return;
+        }
+        Map<String, Object> fields = new LinkedHashMap<String, Object>();
+        fields.put("scene", ExecutionLlmSnapshotService.QUERY_SCENE);
+        fields.put("status", status);
+        fields.put("queryId", queryResponse.getQueryId());
+        fields.put("scopeType", ExecutionLlmSnapshotService.QUERY_SCOPE_TYPE);
+        fields.put("scopeId", queryResponse.getQueryId());
+        fields.put("reviewStatus", queryResponse.getReviewStatus());
+        fields.put("sourceCount", queryResponse.getSources() == null ? 0 : queryResponse.getSources().size());
+        fields.put("articleCount", queryResponse.getArticles() == null ? 0 : queryResponse.getArticles().size());
+        if (throwable != null) {
+            fields.put("error", throwable.getMessage());
+            structuredEventLogger.error("query_completed", fields, throwable);
+            return;
+        }
+        structuredEventLogger.info("query_completed", fields);
     }
 }

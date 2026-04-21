@@ -1,12 +1,17 @@
 package com.xbk.lattice.api.admin;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.service.CompileJobService;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
@@ -17,6 +22,8 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -46,7 +53,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "lattice.compiler.jobs.worker-enabled=false"
 })
 @AutoConfigureMockMvc
+@ExtendWith(OutputCaptureExtension.class)
 class AdminCompileJobControllerTests {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Autowired
     private MockMvc mockMvc;
@@ -101,6 +111,42 @@ class AdminCompileJobControllerTests {
                 .andExpect(jsonPath("$.orchestrationMode").value("state_graph"));
 
         assertThat(articleJdbcRepository.findByConceptId("payment-timeout")).isPresent();
+    }
+
+    /**
+     * 验证管理侧提交编译作业时会输出 compile_submitted 结构化事件。
+     *
+     * @param tempDir 临时目录
+     * @param output 控制台输出
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldEmitStructuredCompileSubmittedEvent(@TempDir Path tempDir, CapturedOutput output) throws Exception {
+        resetTables();
+        Path sourceDir = prepareSourceDirectory(tempDir);
+
+        String responseBody = mockMvc.perform(post("/api/v1/admin/compile/jobs")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{"
+                                + "\"sourceDir\":\"" + escapeJson(sourceDir.toString()) + "\","
+                                + "\"async\":true,"
+                                + "\"orchestrationMode\":\"state_graph\""
+                                + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("QUEUED"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        String jobId = extractJsonValue(responseBody, "jobId");
+
+        List<JsonNode> structuredEvents = parseStructuredEvents(output.getOut());
+        JsonNode compileSubmittedEvent = findStructuredEvent(structuredEvents, "compile_submitted", "compileJobId", jobId);
+
+        assertThat(compileSubmittedEvent).isNotNull();
+        assertThat(compileSubmittedEvent.path("status").asText()).isEqualTo("QUEUED");
+        assertThat(compileSubmittedEvent.path("scene").asText()).isEqualTo("compile");
+        assertThat(compileSubmittedEvent.path("traceId").asText()).isNotBlank();
+        assertThat(compileSubmittedEvent.path("rootTraceId").asText()).isEqualTo(compileSubmittedEvent.path("traceId").asText());
     }
 
     /**
@@ -297,6 +343,36 @@ class AdminCompileJobControllerTests {
             throw new IllegalStateException("field value not closed: " + fieldName);
         }
         return json.substring(valueStartIndex, valueEndIndex);
+    }
+
+    private List<JsonNode> parseStructuredEvents(String output) throws Exception {
+        List<JsonNode> events = new ArrayList<JsonNode>();
+        for (String line : output.split("\\R")) {
+            String trimmedLine = line.trim();
+            if (!trimmedLine.startsWith("{") || !trimmedLine.contains("\"eventName\"")) {
+                continue;
+            }
+            events.add(OBJECT_MAPPER.readTree(trimmedLine));
+        }
+        return events;
+    }
+
+    private JsonNode findStructuredEvent(
+            List<JsonNode> events,
+            String eventName,
+            String correlationField,
+            String correlationValue
+    ) {
+        for (JsonNode event : events) {
+            if (!eventName.equals(event.path("eventName").asText())) {
+                continue;
+            }
+            if (!correlationValue.equals(event.path(correlationField).asText())) {
+                continue;
+            }
+            return event;
+        }
+        return null;
     }
 
     /**
