@@ -934,20 +934,3 @@ CREATE INDEX IF NOT EXISTS idx_repo_snapshot_items_snapshot
 
 CREATE INDEX IF NOT EXISTS idx_repo_snapshot_items_entity
     ON repo_snapshot_items (entity_type, entity_id);
-
-DO $$
-BEGIN
-    IF to_regclass(current_schema() || '.flyway_schema_history') IS NOT NULL THEN
-        EXECUTE 'COMMENT ON TABLE flyway_schema_history IS ''Flyway 迁移历史表''';
-        EXECUTE 'COMMENT ON COLUMN flyway_schema_history.installed_rank IS ''迁移执行顺序''';
-        EXECUTE 'COMMENT ON COLUMN flyway_schema_history.version IS ''迁移版本号''';
-        EXECUTE 'COMMENT ON COLUMN flyway_schema_history.description IS ''迁移描述''';
-        EXECUTE 'COMMENT ON COLUMN flyway_schema_history.type IS ''迁移类型''';
-        EXECUTE 'COMMENT ON COLUMN flyway_schema_history.script IS ''迁移脚本名称''';
-        EXECUTE 'COMMENT ON COLUMN flyway_schema_history.checksum IS ''迁移校验和''';
-        EXECUTE 'COMMENT ON COLUMN flyway_schema_history.installed_by IS ''执行迁移的数据库用户''';
-        EXECUTE 'COMMENT ON COLUMN flyway_schema_history.installed_on IS ''迁移安装时间''';
-        EXECUTE 'COMMENT ON COLUMN flyway_schema_history.execution_time IS ''迁移执行耗时（毫秒）''';
-        EXECUTE 'COMMENT ON COLUMN flyway_schema_history.success IS ''迁移是否执行成功''';
-    END IF;
-END $$;
