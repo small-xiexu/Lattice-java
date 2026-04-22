@@ -19,6 +19,10 @@ import java.util.List;
 @Profile("jdbc")
 public class SynthesisArtifactsService {
 
+    private static final String COMPILE_SCENE = "compile";
+
+    private static final String WRITER_ROLE = "writer";
+
     private final LlmGateway llmGateway;
 
     private final SynthesisArtifactStore synthesisArtifactStore;
@@ -40,11 +44,21 @@ public class SynthesisArtifactsService {
      * @param mergedConcepts 合并概念列表
      */
     public void generateAll(List<MergedConcept> mergedConcepts) {
+        generateAll(null, mergedConcepts);
+    }
+
+    /**
+     * 在指定编译作业作用域下生成全部合成产物。
+     *
+     * @param scopeId 编译作业标识
+     * @param mergedConcepts 合并概念列表
+     */
+    public void generateAll(String scopeId, List<MergedConcept> mergedConcepts) {
         String conceptSummary = buildConceptSummary(mergedConcepts);
-        saveArtifact("index", "Knowledge Base Index", LatticePrompts.SYSTEM_COMPILE_INDEX, conceptSummary);
-        saveArtifact("timeline", "Knowledge Timeline", LatticePrompts.SYSTEM_COMPILE_TIMELINE, conceptSummary);
-        saveArtifact("tradeoffs", "Knowledge Trade-offs", LatticePrompts.SYSTEM_COMPILE_TRADEOFFS, conceptSummary);
-        saveArtifact("gaps", "Knowledge Gaps", LatticePrompts.SYSTEM_COMPILE_GAPS, conceptSummary);
+        saveArtifact(scopeId, "index", "Knowledge Base Index", LatticePrompts.SYSTEM_COMPILE_INDEX, conceptSummary);
+        saveArtifact(scopeId, "timeline", "Knowledge Timeline", LatticePrompts.SYSTEM_COMPILE_TIMELINE, conceptSummary);
+        saveArtifact(scopeId, "tradeoffs", "Knowledge Trade-offs", LatticePrompts.SYSTEM_COMPILE_TRADEOFFS, conceptSummary);
+        saveArtifact(scopeId, "gaps", "Knowledge Gaps", LatticePrompts.SYSTEM_COMPILE_GAPS, conceptSummary);
     }
 
     /**
@@ -55,8 +69,14 @@ public class SynthesisArtifactsService {
      * @param systemPrompt 系统提示词
      * @param conceptSummary 概念摘要
      */
-    private void saveArtifact(String artifactType, String title, String systemPrompt, String conceptSummary) {
-        String content = tryGenerateArtifact(artifactType, systemPrompt, conceptSummary);
+    private void saveArtifact(
+            String scopeId,
+            String artifactType,
+            String title,
+            String systemPrompt,
+            String conceptSummary
+    ) {
+        String content = tryGenerateArtifact(scopeId, artifactType, systemPrompt, conceptSummary);
         if (content == null || content.isBlank()) {
             content = buildFallbackArtifact(title, conceptSummary);
         }
@@ -76,9 +96,30 @@ public class SynthesisArtifactsService {
      * @param conceptSummary 概念摘要
      * @return 生成结果；失败时返回 null
      */
-    private String tryGenerateArtifact(String artifactType, String systemPrompt, String conceptSummary) {
+    private String tryGenerateArtifact(
+            String scopeId,
+            String artifactType,
+            String systemPrompt,
+            String conceptSummary
+    ) {
         try {
-            return llmGateway.compile("synthesis-" + artifactType, systemPrompt, conceptSummary);
+            if (scopeId != null && !scopeId.isBlank()) {
+                return llmGateway.generateTextWithScope(
+                        scopeId,
+                        COMPILE_SCENE,
+                        WRITER_ROLE,
+                        "synthesis-" + artifactType,
+                        systemPrompt,
+                        conceptSummary
+                );
+            }
+            return llmGateway.generateText(
+                    COMPILE_SCENE,
+                    WRITER_ROLE,
+                    "synthesis-" + artifactType,
+                    systemPrompt,
+                    conceptSummary
+            );
         }
         catch (RuntimeException ex) {
             return null;

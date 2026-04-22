@@ -2,6 +2,7 @@ package com.xbk.lattice.vault.snapshot;
 
 import com.xbk.lattice.compiler.service.SynthesisArtifactJdbcStore;
 import com.xbk.lattice.compiler.service.SynthesisArtifactRecord;
+import com.xbk.lattice.governance.repo.RepoBaselineResult;
 import com.xbk.lattice.governance.repo.RepoRollbackResult;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
@@ -114,6 +115,37 @@ class VaultSnapshotServiceTests {
                 .contains("# Index baseline");
         assertThat(vaultGitService.headCommitId(vaultDir)).isNotBlank();
         assertThat(latestSnapshots.get(0).getTriggerEvent()).isEqualTo("rollback");
+    }
+
+    /**
+     * 验证可通过显式 baseline 入口建立带 gitCommit 的 repo snapshot，并在无内容变化时复用当前 HEAD。
+     *
+     * @param tempDir 临时目录
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldCreateGitBackedBaselineSnapshot(@TempDir Path tempDir) throws Exception {
+        resetTables();
+        Path vaultDir = tempDir.resolve("vault");
+
+        Long sourceId = createManagedSourceId();
+        seedBaselineState(sourceId);
+
+        RepoBaselineResult firstBaseline = vaultSnapshotService.createBaselineSnapshot(vaultDir, "baseline");
+        RepoBaselineResult secondBaseline = vaultSnapshotService.createBaselineSnapshot(vaultDir, "baseline-repeat");
+        List<RepoSnapshotRecord> snapshots = repoSnapshotJdbcRepository.findRecent(10);
+
+        assertThat(firstBaseline.getSnapshotId()).isPositive();
+        assertThat(firstBaseline.getGitCommit()).isNotBlank();
+        assertThat(firstBaseline.isCreatedNewCommit()).isTrue();
+        assertThat(firstBaseline.getArticleCount()).isEqualTo(1);
+        assertThat(firstBaseline.getWrittenFiles()).isPositive();
+        assertThat(secondBaseline.getSnapshotId()).isGreaterThan(firstBaseline.getSnapshotId());
+        assertThat(secondBaseline.getGitCommit()).isEqualTo(firstBaseline.getGitCommit());
+        assertThat(secondBaseline.isCreatedNewCommit()).isFalse();
+        assertThat(vaultGitService.headCommitId(vaultDir)).isEqualTo(firstBaseline.getGitCommit());
+        assertThat(snapshots).hasSize(2);
+        assertThat(snapshots).allMatch(snapshot -> snapshot.getGitCommit() != null && !snapshot.getGitCommit().isBlank());
     }
 
     private void seedBaselineState(Long sourceId) {

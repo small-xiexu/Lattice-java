@@ -36,7 +36,13 @@ class LlmGatewayMaxInputCharsTests {
         String systemPrompt = "system";
         String userPrompt = "x".repeat(70000);
 
-        String result = llmGateway.compile(systemPrompt, userPrompt);
+        String result = llmGateway.generateText(
+                "compile",
+                "writer",
+                "compile",
+                systemPrompt,
+                userPrompt
+        );
 
         assertThat(result).isEqualTo("compiled");
         assertThat(compileClient.getLastUserPrompt()).contains("[... 内容已截断，超出单次调用字符限制 ...]");

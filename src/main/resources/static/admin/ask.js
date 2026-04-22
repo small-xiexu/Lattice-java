@@ -10,6 +10,9 @@
         lastQueryError: "",
         lastAnswerHasCitation: false,
         lastAnswerEmpty: true,
+        lastAnswerOutcome: "",
+        lastGenerationMode: "",
+        lastModelExecutionStatus: "",
         lastReviewStatus: "",
         lastQueryId: "",
         lastSupportSourceCount: 0,
@@ -81,6 +84,9 @@
             renderGlobalResult(queryResponse);
             state.lastQueryFailed = false;
             state.lastQueryError = "";
+            state.lastAnswerOutcome = queryResponse.answerOutcome || "";
+            state.lastGenerationMode = queryResponse.generationMode || "";
+            state.lastModelExecutionStatus = queryResponse.modelExecutionStatus || "";
             state.lastReviewStatus = queryResponse.reviewStatus || "";
             state.lastQueryId = queryResponse.queryId || "";
             state.lastAnswerHasCitation = hasAskCitations(searchItems, responseSources);
@@ -98,6 +104,9 @@
             renderGlobalResultError("知识问答失败", error);
             state.lastQueryFailed = true;
             state.lastQueryError = error && error.message ? error.message : "";
+            state.lastAnswerOutcome = "";
+            state.lastGenerationMode = "";
+            state.lastModelExecutionStatus = "";
             state.lastReviewStatus = "";
             state.lastQueryId = "";
             state.lastAnswerHasCitation = false;
@@ -116,6 +125,9 @@
         document.getElementById("ask-question").value = "";
         state.lastQueryFailed = false;
         state.lastQueryError = "";
+        state.lastAnswerOutcome = "";
+        state.lastGenerationMode = "";
+        state.lastModelExecutionStatus = "";
         state.lastReviewStatus = "";
         state.lastQueryId = "";
         state.lastAnswerHasCitation = false;
@@ -133,7 +145,7 @@
 
     function renderLoadingState() {
         document.getElementById("ask-answer").innerHTML = "<p>正在生成回答...</p>";
-        document.getElementById("ask-answer-metrics").innerHTML = "<div class='job-card'><p class='item-summary'>正在判断这次回答的证据态和复核态...</p></div>";
+        document.getElementById("ask-answer-metrics").innerHTML = "<div class='job-card'><p class='item-summary'>正在判断这次回答的结果态、模型态、证据态和复核态...</p></div>";
         document.getElementById("ask-answer-support").innerHTML = "<strong>回答依据</strong><p>正在整理本次回答最直接依赖的来源...</p>";
         document.getElementById("ask-source-summary").innerHTML = "<strong>证据分层</strong><p>正在区分直接支撑来源和补充检索命中...</p>";
         document.getElementById("ask-sources").innerHTML = "<div class='job-card'><p class='item-summary'>正在整理引用来源...</p></div>";
@@ -142,7 +154,9 @@
     function renderFailureState() {
         document.getElementById("ask-answer").innerHTML = "<p>暂时无法生成回答，请稍后再试。</p>";
         document.getElementById("ask-answer-metrics").innerHTML = [
-            renderMetricCard("结果类型", "回答失败", "本次没有拿到可用答案，请先看顶部报错信息。", "danger"),
+            renderMetricCard("回答状态", "回答失败", "本次没有拿到可用答案，请先看顶部报错信息。", "danger"),
+            renderMetricCard("生成方式", "未生成", "主链在返回结果前已经中断，没有可展示的生成方式。", "danger"),
+            renderMetricCard("模型执行", "未执行", "本次没有拿到可展示的模型执行状态。", "warning"),
             renderMetricCard("证据状态", "未返回", "这次没有成功拿到可展示的直接来源或检索证据。", "danger"),
             renderMetricCard("复核状态", "未执行", "主链在生成回答前就已经中断。", "warning")
         ].join("");
@@ -155,7 +169,9 @@
         toggleAskResultExperience(false);
         document.getElementById("ask-answer").innerHTML = "<p>还没有回答，先输入一个问题。</p>";
         document.getElementById("ask-answer-metrics").innerHTML = [
-            renderMetricCard("结果类型", "等待提问", "提交问题后，这里会显示这次结果更接近“可直接用”还是“证据仍偏弱”。", "info"),
+            renderMetricCard("回答状态", "等待提问", "提交问题后，这里会显示这次是“回答成功”“证据不足”“无相关知识”还是“部分答案”。", "info"),
+            renderMetricCard("生成方式", "等待返回", "会区分这次答案是模型生成、规则直出，还是模型失败后的降级结果。", "info"),
+            renderMetricCard("模型执行", "等待返回", "如果主链返回 modelExecutionStatus，这里会同步标出来。", "info"),
             renderMetricCard("证据状态", "等待命中", "会区分“直接支撑回答”的来源和“补充检索命中”的资料。", "info"),
             renderMetricCard("复核状态", "等待返回", "如果主链返回 reviewStatus，这里会同步标出来。", "info")
         ].join("");
@@ -386,7 +402,18 @@
 
     function shouldTreatAsEvidenceWeak(result, searchItems, responseSources) {
         const answer = String(result && result.answer ? result.answer : "").trim();
+        const answerOutcome = normalizeStatusValue(result && result.answerOutcome);
+        const generationMode = normalizeStatusValue(result && result.generationMode);
+        const modelExecutionStatus = normalizeStatusValue(result && result.modelExecutionStatus);
         if (!answer) {
+            return true;
+        }
+        if (answerOutcome === "INSUFFICIENT_EVIDENCE"
+                || answerOutcome === "NO_RELEVANT_KNOWLEDGE"
+                || answerOutcome === "PARTIAL_ANSWER") {
+            return true;
+        }
+        if (generationMode === "FALLBACK" || modelExecutionStatus === "FAILED") {
             return true;
         }
         if (containsWeakAnswerMarker(answer)) {
@@ -451,17 +478,29 @@
     }
 
     function renderAnswerMetrics(result, searchItems, responseSources) {
+        const answerMeta = getAnswerOutcomeMeta(result && result.answerOutcome);
+        const generationMeta = getGenerationModeMeta(result && result.generationMode);
+        const modelExecutionMeta = getModelExecutionStatusMeta(result && result.modelExecutionStatus, result && result.generationMode);
         const reviewMeta = getReviewStatusMeta(result && result.reviewStatus);
         const citationCount = uniqueSourceCount(searchItems, responseSources);
-        const evidenceWeak = shouldTreatAsEvidenceWeak(result || {}, searchItems, responseSources);
         const metrics = [
             renderMetricCard(
-                    "结果类型",
-                    evidenceWeak ? "证据待确认" : "可继续使用",
-                    evidenceWeak
-                            ? "这次有回答，但仍需要结合下方来源继续判断。"
-                            : "这次回答已经带了可继续追溯的来源。",
-                    evidenceWeak ? "warning" : "success"
+                    "回答状态",
+                    answerMeta.label,
+                    answerMeta.note,
+                    answerMeta.tone
+            ),
+            renderMetricCard(
+                    "生成方式",
+                    generationMeta.label,
+                    generationMeta.note,
+                    generationMeta.tone
+            ),
+            renderMetricCard(
+                    "模型执行",
+                    modelExecutionMeta.label,
+                    modelExecutionMeta.note,
+                    modelExecutionMeta.tone
             ),
             renderMetricCard(
                     "证据状态",
@@ -494,9 +533,10 @@
         const primaryLabels = (responseSources || []).map(function (item) {
             return item.title || item.conceptId || "未命名来源";
         }).slice(0, 4);
+        const answerMeta = getAnswerOutcomeMeta(result && result.answerOutcome);
         if (primaryLabels.length > 0) {
             container.innerHTML = "<strong>回答依据</strong>"
-                    + "<p>这次回答已经直接挂上了以下来源，你可以先从这里判断答案是否站得住：</p>"
+                    + "<p>这次回答状态为“" + escapeHtml(answerMeta.label) + "”，并且已经直接挂上了以下来源，你可以先从这里判断答案是否站得住：</p>"
                     + "<div class='help-action-row'>"
                     + primaryLabels.map(function (label) {
                         return "<span class='pill'>" + escapeHtml(label) + "</span>";
@@ -506,32 +546,39 @@
         }
         if ((searchItems || []).length > 0) {
             container.innerHTML = "<strong>回答依据</strong>"
-                    + "<p>这次虽然命中了资料，但还没有形成稳定的“直接来源”。请优先往下看补充检索证据，再决定这次回答能不能直接采信。</p>";
+                    + "<p>这次回答状态为“" + escapeHtml(answerMeta.label) + "”，虽然命中了资料，但还没有形成稳定的“直接来源”。请优先往下看补充检索证据，再决定这次回答能不能直接采信。</p>";
             return;
         }
         const reviewMeta = getReviewStatusMeta(result && result.reviewStatus);
         container.innerHTML = "<strong>回答依据</strong>"
-                + "<p>这次没有成功拿到稳定来源。"
+                + "<p>这次回答状态为“" + escapeHtml(answerMeta.label) + "”，且没有成功拿到稳定来源。"
                 + escapeHtml(reviewMeta.label ? "复核状态：" + reviewMeta.label + "。" : "")
                 + "优先回工作台确认对应资料是否真的已经入库。</p>";
     }
 
     function renderSourceSummary(result, searchItems, responseSources) {
         const container = document.getElementById("ask-source-summary");
+        const answerMeta = getAnswerOutcomeMeta(result && result.answerOutcome);
         const reviewMeta = getReviewStatusMeta(result && result.reviewStatus);
         if ((responseSources || []).length > 0) {
             container.innerHTML = "<strong>证据分层</strong>"
-                    + "<p>先看“直接支撑本次回答”的来源，再看“补充检索命中”的资料。当前复核状态："
+                    + "<p>先看“直接支撑本次回答”的来源，再看“补充检索命中”的资料。当前回答状态："
+                    + escapeHtml(answerMeta.label)
+                    + "；复核状态："
                     + escapeHtml(reviewMeta.label)
                     + "。</p>";
             return;
         }
         if ((searchItems || []).length > 0) {
             container.innerHTML = "<strong>证据分层</strong>"
-                    + "<p>这次只有补充检索命中，没有稳定的直接来源。当前更适合把结果当成“继续追资料的线索”，而不是最终结论。</p>";
+                    + "<p>这次只有补充检索命中，没有稳定的直接来源。当前回答状态是“"
+                    + escapeHtml(answerMeta.label)
+                    + "”，更适合把结果当成“继续追资料的线索”，而不是最终结论。</p>";
             return;
         }
-        container.innerHTML = "<strong>证据分层</strong><p>本次没有返回可展示的证据。优先先看报错或回工作台确认资料入库状态。</p>";
+        container.innerHTML = "<strong>证据分层</strong><p>本次回答状态是“"
+                + escapeHtml(answerMeta.label)
+                + "”，但没有返回可展示的证据。优先先看报错或回工作台确认资料入库状态。</p>";
     }
 
     function renderSources(searchItems, responseSources) {
@@ -664,8 +711,98 @@
                 + "</article>";
     }
 
+    function normalizeStatusValue(value) {
+        return String(value || "").trim().toUpperCase();
+    }
+
+    function getAnswerOutcomeMeta(value) {
+        const normalized = normalizeStatusValue(value);
+        const mapping = {
+            SUCCESS: {
+                label: "回答成功",
+                note: "这次已经拿到了可直接阅读的答案，优先继续结合直接来源确认细节。",
+                tone: "success"
+            },
+            INSUFFICIENT_EVIDENCE: {
+                label: "证据不足",
+                note: "当前知识库里有相关资料，但还不足以支撑完整结论，需要继续补资料或人工判断。",
+                tone: "warning"
+            },
+            NO_RELEVANT_KNOWLEDGE: {
+                label: "无相关知识",
+                note: "当前知识库没有命中可直接回答这个问题的资料，优先先补知识。",
+                tone: "warning"
+            },
+            PARTIAL_ANSWER: {
+                label: "部分答案",
+                note: "这次只拿到了部分可用信息，仍需要结合来源继续判断。",
+                tone: "warning"
+            }
+        };
+        return mapping[normalized] || {
+            label: normalized ? normalized : "未标注",
+            note: normalized ? "当前返回了 answerOutcome，但还没有专门的人话说明。" : "这次没有返回额外的回答状态。",
+            tone: normalized ? "warning" : "info"
+        };
+    }
+
+    function getGenerationModeMeta(value) {
+        const normalized = normalizeStatusValue(value);
+        const mapping = {
+            LLM: {
+                label: "模型生成",
+                note: "答案来自主链模型生成，通常要继续结合来源判断是否可靠。",
+                tone: "success"
+            },
+            RULE_BASED: {
+                label: "规则直出",
+                note: "这次没有走模型生成，而是直接使用规则或已有证据拼出了结果。",
+                tone: "info"
+            },
+            FALLBACK: {
+                label: "降级结果",
+                note: "主链没有拿到稳定的结构化输出，当前结果来自降级兜底。",
+                tone: "warning"
+            }
+        };
+        return mapping[normalized] || {
+            label: normalized ? normalized : "未标注",
+            note: normalized ? "当前返回了 generationMode，但还没有专门的人话说明。" : "这次没有返回额外的生成方式。",
+            tone: normalized ? "warning" : "info"
+        };
+    }
+
+    function getModelExecutionStatusMeta(value, generationMode) {
+        const normalized = normalizeStatusValue(value);
+        const normalizedGenerationMode = normalizeStatusValue(generationMode);
+        const mapping = {
+            SUCCESS: {
+                label: "模型执行成功",
+                note: "模型这次成功返回了结果，当前可以重点看答案状态和来源状态。",
+                tone: "success"
+            },
+            SKIPPED: {
+                label: "未调用模型",
+                note: normalizedGenerationMode === "RULE_BASED"
+                        ? "这次直接走了规则路径，没有消耗模型调用。"
+                        : "这次没有执行模型调用。",
+                tone: "info"
+            },
+            FAILED: {
+                label: "模型失败已降级",
+                note: "模型执行没有拿到稳定结果，系统已经降级为兜底答案，请谨慎使用。",
+                tone: "warning"
+            }
+        };
+        return mapping[normalized] || {
+            label: normalized ? normalized : "未标注",
+            note: normalized ? "当前返回了 modelExecutionStatus，但还没有专门的人话说明。" : "这次没有返回额外的模型执行状态。",
+            tone: normalized ? "warning" : "info"
+        };
+    }
+
     function getReviewStatusMeta(value) {
-        const normalized = String(value || "").trim().toUpperCase();
+        const normalized = normalizeStatusValue(value);
         const mapping = {
             PASSED: {
                 label: "已复核通过",

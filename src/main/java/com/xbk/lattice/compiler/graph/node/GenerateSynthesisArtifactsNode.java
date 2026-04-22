@@ -45,7 +45,7 @@ public class GenerateSynthesisArtifactsNode extends AbstractCompileGraphNode {
     public Map<String, Object> execute(OverAllState overAllState) {
         CompileGraphState state = state(overAllState);
         if (state.isSynthesisRequired() && state.getPersistedCount() > 0) {
-            articlePersistSupport.generateGraphSynthesisArtifacts();
+            articlePersistSupport.generateGraphSynthesisArtifacts(state.getJobId());
         }
         return delta(state);
     }

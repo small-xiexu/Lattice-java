@@ -24,4 +24,4 @@ spring:
         - src/main/resources
 
 server:
-  port: ${SERVER_PORT:18082}
+  port: ${SERVER_PORT:8080}

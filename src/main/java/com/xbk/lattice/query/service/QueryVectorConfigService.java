@@ -2,11 +2,13 @@ package com.xbk.lattice.query.service;
 
 import com.xbk.lattice.infra.persistence.QueryVectorConfigJdbcRepository;
 import com.xbk.lattice.infra.persistence.QueryVectorConfigRecord;
+import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.llm.domain.LlmModelProfile;
 import com.xbk.lattice.llm.domain.LlmProviderConnection;
 import com.xbk.lattice.llm.infra.LlmModelProfileJdbcRepository;
 import com.xbk.lattice.llm.infra.LlmProviderConnectionJdbcRepository;
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -41,6 +43,8 @@ public class QueryVectorConfigService {
 
     private final QueryCacheStore queryCacheStore;
 
+    private LlmGateway llmGateway;
+
     /**
      * 创建 Query 向量配置服务。
      *
@@ -61,6 +65,16 @@ public class QueryVectorConfigService {
         this.llmProviderConnectionJdbcRepository = llmProviderConnectionJdbcRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.queryCacheStore = queryCacheStore;
+    }
+
+    /**
+     * 注入 LLM 网关。
+     *
+     * @param llmGateway LLM 网关
+     */
+    @Autowired(required = false)
+    void setLlmGateway(LlmGateway llmGateway) {
+        this.llmGateway = llmGateway;
     }
 
     /**
@@ -118,6 +132,9 @@ public class QueryVectorConfigService {
         apply(saved);
         if (shouldEvictQueryCache(beforeState, saved)) {
             queryCacheStore.evictAll();
+            if (llmGateway != null) {
+                llmGateway.evictPromptCache();
+            }
         }
         boolean rebuildRecommended = shouldRecommendRebuild(beforeState, saved);
         String rebuildReason = buildRebuildReason(beforeState, saved, rebuildRecommended);

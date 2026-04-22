@@ -138,19 +138,24 @@ public final class LatticePrompts {
 
             Output a JSON object:
             {
-              "passed": true/false,
+              "approved": true/false,
+              "rewriteRequired": true/false,
+              "riskLevel": "LOW|MEDIUM|HIGH",
               "issues": [
                 {
-                  "type": "missing_referential|false_provenance|value_mismatch|conceptual_distortion",
-                  "severity": "high|medium|low",
-                  "description": "问题描述（中文）",
-                  "location": "文章中的位置或源文件中的位置",
-                  "fix_suggestion": "修复建议（中文）"
+                  "category": "missing_referential|false_provenance|value_mismatch|conceptual_distortion",
+                  "severity": "HIGH|MEDIUM|LOW",
+                  "description": "问题描述（中文）"
                 }
-              ]
+              ],
+              "userFacingRewriteHints": [
+                "给编译器看的修订提示（中文）"
+              ],
+              "cacheWritePolicy": "WRITE|SKIP_WRITE|EVICT_AFTER_READ"
             }
 
-            If no issues found, return {"passed": true, "issues": []}.
+            If no issues found, return {"approved": true, "rewriteRequired": false, "riskLevel": "LOW", "issues": [], "userFacingRewriteHints": [], "cacheWritePolicy": "WRITE"}.
+            If issues found, approved must be false, rewriteRequired must be true, and cacheWritePolicy should default to SKIP_WRITE.
             Be strict but fair. Only flag genuine issues, not stylistic preferences.
             """;
 

@@ -33,6 +33,10 @@ import java.util.Set;
 @Profile("jdbc")
 public class LintFixService {
 
+    private static final String COMPILE_SCENE = "compile";
+
+    private static final String WRITER_ROLE = "writer";
+
     private final ArticleJdbcRepository articleJdbcRepository;
 
     private final ArticleSnapshotJdbcRepository articleSnapshotJdbcRepository;
@@ -142,7 +146,9 @@ public class LintFixService {
             }
             ArticleRecord articleRecord = optionalArticleRecord.orElseThrow();
             try {
-                String fixedContent = llmGateway.compile(
+                String fixedContent = llmGateway.generateText(
+                        COMPILE_SCENE,
+                        WRITER_ROLE,
                         "lint-fix",
                         LatticePrompts.SYSTEM_LINT_FIX,
                         buildPrompt(articleRecord, entry.getValue())

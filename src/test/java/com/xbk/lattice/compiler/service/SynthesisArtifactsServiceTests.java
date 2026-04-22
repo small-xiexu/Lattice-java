@@ -9,9 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -68,6 +66,34 @@ class SynthesisArtifactsServiceTests {
         assertThat(synthesisArtifactStore.records.get(0).getContent()).contains("Payment Timeout");
     }
 
+    /**
+     * 验证带作用域的合成产物生成会复用 compile job 的冻结路由。
+     */
+    @Test
+    void shouldGenerateSynthesisArtifactsWithScopedRoute() {
+        FakeSynthesisArtifactStore synthesisArtifactStore = new FakeSynthesisArtifactStore();
+        RecordingScopedGateway llmGateway = new RecordingScopedGateway();
+        SynthesisArtifactsService synthesisArtifactsService = new SynthesisArtifactsService(
+                llmGateway,
+                synthesisArtifactStore
+        );
+
+        synthesisArtifactsService.generateAll(
+                "job-123",
+                List.of(new MergedConcept(
+                        "payment-timeout",
+                        "Payment Timeout",
+                        "Handles timeout recovery",
+                        List.of("payment/a.md"),
+                        List.of("snippet")
+                ))
+        );
+
+        assertThat(synthesisArtifactStore.records).hasSize(4);
+        assertThat(llmGateway.getScopedInvocations()).isEqualTo(4);
+        assertThat(llmGateway.getBootstrapInvocations()).isZero();
+    }
+
     private LlmGateway createLlmGateway(String compileResponse) {
         LlmProperties llmProperties = new LlmProperties();
         llmProperties.setCompileModel("openai");
@@ -117,6 +143,86 @@ class SynthesisArtifactsServiceTests {
         @Override
         public LlmCallResult call(String systemPrompt, String userPrompt) {
             throw new IllegalStateException("llm failed");
+        }
+    }
+
+    private static class RecordingScopedGateway extends LlmGateway {
+
+        private int scopedInvocations;
+
+        private int bootstrapInvocations;
+
+        private RecordingScopedGateway() {
+            super(
+                    new StaticLlmClient("ignored"),
+                    new StaticLlmClient("{}"),
+                    new NoopRedisKeyValueStore(),
+                    createStaticLlmProperties()
+            );
+        }
+
+        /**
+         * 记录不带作用域的调用。
+         *
+         * @param scene 场景
+         * @param agentRole Agent 角色
+         * @param purpose 调用用途
+         * @param systemPrompt 系统提示词
+         * @param userPrompt 用户提示词
+         * @return 固定文本
+         */
+        @Override
+        public String generateText(
+                String scene,
+                String agentRole,
+                String purpose,
+                String systemPrompt,
+                String userPrompt
+        ) {
+            bootstrapInvocations++;
+            return "bootstrap";
+        }
+
+        /**
+         * 记录带作用域的调用。
+         *
+         * @param scopeId 作用域标识
+         * @param scene 场景
+         * @param agentRole Agent 角色
+         * @param purpose 调用用途
+         * @param systemPrompt 系统提示词
+         * @param userPrompt 用户提示词
+         * @return 固定文本
+         */
+        @Override
+        public String generateTextWithScope(
+                String scopeId,
+                String scene,
+                String agentRole,
+                String purpose,
+                String systemPrompt,
+                String userPrompt
+        ) {
+            scopedInvocations++;
+            return "scoped";
+        }
+
+        private int getScopedInvocations() {
+            return scopedInvocations;
+        }
+
+        private int getBootstrapInvocations() {
+            return bootstrapInvocations;
+        }
+
+        private static LlmProperties createStaticLlmProperties() {
+            LlmProperties llmProperties = new LlmProperties();
+            llmProperties.setCompileModel("openai");
+            llmProperties.setReviewerModel("anthropic");
+            llmProperties.setBudgetUsd(10.0D);
+            llmProperties.setCacheTtlSeconds(3600L);
+            llmProperties.setCacheKeyPrefix("llm:test:");
+            return llmProperties;
         }
     }
 

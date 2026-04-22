@@ -70,6 +70,14 @@ public class QueryGraphState {
 
     private String reviewStatus;
 
+    private String answerOutcome;
+
+    private String generationMode;
+
+    private String modelExecutionStatus;
+
+    private boolean answerCacheable;
+
     private int rewriteAttemptCount;
 
     private int maxRewriteRounds;

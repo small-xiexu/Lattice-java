@@ -1,10 +1,10 @@
 package com.xbk.lattice.governance;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.article.service.ArticleIdentityResolver;
 import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
+import com.xbk.lattice.governance.domain.CrossValidatePayload;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
@@ -12,6 +12,7 @@ import com.xbk.lattice.infra.persistence.ArticleSnapshotJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
+import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -41,6 +42,12 @@ public class ArticleCorrectionService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
+    private static final String COMPILE_SCENE = "compile";
+
+    private static final String WRITER_ROLE = "writer";
+
+    private static final String ADMIN_CORRECTION_SCOPE_PREFIX = "admin-correction";
+
     private final ArticleJdbcRepository articleJdbcRepository;
 
     private final SourceFileJdbcRepository sourceFileJdbcRepository;
@@ -52,6 +59,8 @@ public class ArticleCorrectionService {
     private final DependencyGraphService dependencyGraphService;
 
     private final LlmGateway llmGateway;
+
+    private ExecutionLlmSnapshotService executionLlmSnapshotService;
 
     private RepoSnapshotService repoSnapshotService;
 
@@ -119,6 +128,18 @@ public class ArticleCorrectionService {
     }
 
     /**
+     * 注入运行时快照服务。
+     *
+     * 职责：让 Admin 纠错在无 compile job 的场景下也优先复用当前绑定路由，而不是直接落回 bootstrap 默认路由。
+     *
+     * @param executionLlmSnapshotService 运行时快照服务
+     */
+    @Autowired(required = false)
+    void setExecutionLlmSnapshotService(ExecutionLlmSnapshotService executionLlmSnapshotService) {
+        this.executionLlmSnapshotService = executionLlmSnapshotService;
+    }
+
+    /**
      * 执行文章纠错。
      *
      * @param conceptId 概念标识
@@ -162,16 +183,18 @@ public class ArticleCorrectionService {
      */
     private ArticleCorrectionResult doCorrect(ArticleRecord articleRecord, String correctionSummary) {
         List<SourceExcerpt> sourceExcerpts = collectSourceExcerpts(articleRecord);
-        String validationJson = llmGateway.compile(
+        String validationJson = generateWriterText(
+                articleRecord,
                 "cross-validate",
                 LatticePrompts.SYSTEM_CROSS_VALIDATE,
                 buildCrossValidatePrompt(articleRecord, correctionSummary, sourceExcerpts)
         );
-        ValidationResult validationResult = parseValidationResult(validationJson);
-        String revisedContent = llmGateway.compile(
+        CrossValidatePayload validationPayload = parseValidationResult(validationJson);
+        String revisedContent = generateWriterText(
+                articleRecord,
                 "apply-correction",
                 LatticePrompts.SYSTEM_APPLY_CORRECTION,
-                buildApplyCorrectionPrompt(articleRecord, correctionSummary, validationResult)
+                buildApplyCorrectionPrompt(articleRecord, correctionSummary, validationPayload)
         );
 
         ArticleRecord updatedRecord = articleRecord.copy(
@@ -203,8 +226,47 @@ public class ArticleCorrectionService {
                 updatedRecord.getConceptId(),
                 revisedContent,
                 collectDownstreamIds(updatedRecord.getConceptId()),
-                validationResult.supported
+                validationPayload.isSupported()
         );
+    }
+
+    private String generateWriterText(
+            ArticleRecord articleRecord,
+            String purpose,
+            String systemPrompt,
+            String userPrompt
+    ) {
+        String correctionScopeId = resolveCorrectionScopeId(articleRecord);
+        ExecutionLlmSnapshotService snapshotService = this.executionLlmSnapshotService;
+        if (snapshotService == null || correctionScopeId == null || correctionScopeId.isBlank()) {
+            return llmGateway.generateText(COMPILE_SCENE, WRITER_ROLE, purpose, systemPrompt, userPrompt);
+        }
+        snapshotService.freezeSnapshots(
+                ExecutionLlmSnapshotService.COMPILE_SCOPE_TYPE,
+                correctionScopeId,
+                COMPILE_SCENE
+        );
+        return llmGateway.generateTextWithScope(
+                correctionScopeId,
+                COMPILE_SCENE,
+                WRITER_ROLE,
+                purpose,
+                systemPrompt,
+                userPrompt
+        );
+    }
+
+    private String resolveCorrectionScopeId(ArticleRecord articleRecord) {
+        if (articleRecord == null) {
+            return null;
+        }
+        String sourcePart = articleRecord.getSourceId() == null
+                ? "no-source"
+                : String.valueOf(articleRecord.getSourceId());
+        String conceptPart = articleRecord.getConceptId() == null || articleRecord.getConceptId().isBlank()
+                ? "unknown-concept"
+                : articleRecord.getConceptId().trim();
+        return ADMIN_CORRECTION_SCOPE_PREFIX + ":" + sourcePart + ":" + conceptPart;
     }
 
     private void captureRepoSnapshot(ArticleRecord articleRecord) {
@@ -262,28 +324,31 @@ public class ArticleCorrectionService {
     private String buildApplyCorrectionPrompt(
             ArticleRecord articleRecord,
             String correctionSummary,
-            ValidationResult validationResult
+            CrossValidatePayload validationPayload
     ) {
         StringBuilder builder = new StringBuilder();
         builder.append("概念ID：").append(articleRecord.getConceptId()).append("\n");
         builder.append("用户纠正摘要：").append(correctionSummary).append("\n");
-        builder.append("源文件是否支持：").append(validationResult.supported).append("\n");
-        if (validationResult.evidence != null && !validationResult.evidence.isBlank()) {
-            builder.append("证据摘要：").append(validationResult.evidence).append("\n");
+        builder.append("源文件是否支持：").append(validationPayload.isSupported()).append("\n");
+        if (!validationPayload.getEvidence().isBlank()) {
+            builder.append("证据摘要：").append(validationPayload.getEvidence()).append("\n");
         }
         builder.append("\n原始文章：\n").append(articleRecord.getContent());
         return builder.toString();
     }
 
-    private ValidationResult parseValidationResult(String validationJson) {
+    /**
+     * 解析交叉验证结构化载荷。
+     *
+     * @param validationJson 原始 JSON
+     * @return 交叉验证载荷
+     */
+    private CrossValidatePayload parseValidationResult(String validationJson) {
         try {
-            JsonNode rootNode = OBJECT_MAPPER.readTree(validationJson);
-            boolean supported = rootNode.path("supported").asBoolean(false);
-            String evidence = rootNode.path("evidence").asText(null);
-            return new ValidationResult(supported, evidence);
+            return OBJECT_MAPPER.readValue(validationJson, CrossValidatePayload.class);
         }
         catch (Exception ex) {
-            return new ValidationResult(false, null);
+            return CrossValidatePayload.unsupported();
         }
     }
 
@@ -340,18 +405,6 @@ public class ArticleCorrectionService {
         private SourceExcerpt(String path, String content) {
             this.path = path;
             this.content = content;
-        }
-    }
-
-    private static class ValidationResult {
-
-        private final boolean supported;
-
-        private final String evidence;
-
-        private ValidationResult(boolean supported, String evidence) {
-            this.supported = supported;
-            this.evidence = evidence;
         }
     }
 

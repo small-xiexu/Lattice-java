@@ -98,6 +98,9 @@ class QueryControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.queryId").isNotEmpty())
                 .andExpect(jsonPath("$.answer").value(org.hamcrest.Matchers.containsString("retry=3")))
+                .andExpect(jsonPath("$.answerOutcome").isNotEmpty())
+                .andExpect(jsonPath("$.generationMode").isNotEmpty())
+                .andExpect(jsonPath("$.modelExecutionStatus").isNotEmpty())
                 .andExpect(jsonPath("$.sources[0].conceptId").value("payment-timeout"))
                 .andExpect(jsonPath("$.sources[0].sourcePaths[0]").value("payment/analyze.json"))
                 .andExpect(jsonPath("$.articles[0].conceptId").value("payment-timeout"))
@@ -233,8 +236,8 @@ class QueryControllerTests {
         String queryId = extractJsonValue(responseBody, "queryId");
         List<JsonNode> structuredEvents = parseStructuredEvents(output.getOut());
         JsonNode queryReceivedEvent = findStructuredEvent(structuredEvents, "query_received", "queryId", queryId);
-        JsonNode llmStartedEvent = findStructuredEvent(structuredEvents, "llm_call_started", "queryId", queryId);
-        JsonNode llmSucceededEvent = findStructuredEvent(structuredEvents, "llm_call_succeeded", "queryId", queryId);
+        JsonNode llmStartedEvent = findStructuredEvent(structuredEvents, "llm_raw_call_started", "queryId", queryId);
+        JsonNode llmSucceededEvent = findStructuredEvent(structuredEvents, "llm_raw_call_succeeded", "queryId", queryId);
         JsonNode queryCompletedEvent = findStructuredEvent(structuredEvents, "query_completed", "queryId", queryId);
 
         assertThat(queryReceivedEvent).isNotNull();
@@ -248,6 +251,9 @@ class QueryControllerTests {
         assertThat(llmStartedEvent.path("spanId").asText()).isNotBlank();
         assertThat(llmSucceededEvent.path("status").asText()).isEqualTo("SUCCEEDED");
         assertThat(queryCompletedEvent.path("status").asText()).isEqualTo("SUCCEEDED");
+        assertThat(queryCompletedEvent.path("answerOutcome").asText()).isNotBlank();
+        assertThat(queryCompletedEvent.path("generationMode").asText()).isNotBlank();
+        assertThat(queryCompletedEvent.path("modelExecutionStatus").asText()).isNotBlank();
     }
 
     /**

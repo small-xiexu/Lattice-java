@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.article.service.ArticleIdentityResolver;
 import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
+import com.xbk.lattice.governance.domain.PropagationCheckPayload;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotJdbcRepository;
@@ -31,6 +32,10 @@ import java.util.Optional;
 public class PropagateExecutionService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    private static final String COMPILE_SCENE = "compile";
+
+    private static final String WRITER_ROLE = "writer";
 
     private final ArticleJdbcRepository articleJdbcRepository;
 
@@ -104,14 +109,18 @@ public class PropagateExecutionService {
 
         for (ArticleRecord downstreamArticle : downstreamArticles) {
             String correctionSummary = extractCorrectionSummary(downstreamArticle.getMetadataJson(), rootConceptId);
-            String checkJson = llmGateway.compile(
+            String checkJson = llmGateway.generateText(
+                    COMPILE_SCENE,
+                    WRITER_ROLE,
                     "check-propagation",
                     LatticePrompts.SYSTEM_CHECK_PROPAGATION_NEEDED,
                     buildCheckPrompt(rootArticle, downstreamArticle, correctionSummary)
             );
-            boolean affected = parseBoolean(checkJson, "affected");
-            if (affected) {
-                String updatedContent = llmGateway.compile(
+            PropagationCheckPayload checkPayload = parsePropagationCheckPayload(checkJson);
+            if (checkPayload.isAffected()) {
+                String updatedContent = llmGateway.generateText(
+                        COMPILE_SCENE,
+                        WRITER_ROLE,
                         "apply-propagation",
                         LatticePrompts.SYSTEM_APPLY_PROPAGATION,
                         buildApplyPrompt(rootArticle, downstreamArticle, correctionSummary)
@@ -166,12 +175,18 @@ public class PropagateExecutionService {
         return "";
     }
 
-    private boolean parseBoolean(String json, String fieldName) {
+    /**
+     * 解析传播影响检查结构化载荷。
+     *
+     * @param json 原始 JSON
+     * @return 传播影响检查载荷
+     */
+    private PropagationCheckPayload parsePropagationCheckPayload(String json) {
         try {
-            return OBJECT_MAPPER.readTree(json).path(fieldName).asBoolean(false);
+            return OBJECT_MAPPER.readValue(json, PropagationCheckPayload.class);
         }
         catch (Exception ex) {
-            return false;
+            return PropagationCheckPayload.unaffected();
         }
     }
 

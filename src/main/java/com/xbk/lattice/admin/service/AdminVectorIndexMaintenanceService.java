@@ -3,6 +3,7 @@ package com.xbk.lattice.admin.service;
 import com.xbk.lattice.api.admin.AdminVectorIndexRebuildRequest;
 import com.xbk.lattice.api.admin.AdminVectorIndexRebuildResponse;
 import com.xbk.lattice.api.admin.AdminVectorIndexStatusResponse;
+import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
@@ -17,6 +18,7 @@ import com.xbk.lattice.query.service.SearchCapabilityService;
 import com.xbk.lattice.query.service.VectorSchemaInspection;
 import com.xbk.lattice.query.service.VectorSchemaInspector;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,6 +59,8 @@ public class AdminVectorIndexMaintenanceService {
 
     private final QueryCacheStore queryCacheStore;
 
+    private LlmGateway llmGateway;
+
     /**
      * 创建管理侧向量索引维护服务。
      *
@@ -88,6 +92,16 @@ public class AdminVectorIndexMaintenanceService {
         this.articleChunkVectorIndexService = articleChunkVectorIndexService;
         this.vectorSchemaInspector = vectorSchemaInspector;
         this.queryCacheStore = queryCacheStore;
+    }
+
+    /**
+     * 注入 LLM 网关。
+     *
+     * @param llmGateway LLM 网关
+     */
+    @Autowired(required = false)
+    void setLlmGateway(LlmGateway llmGateway) {
+        this.llmGateway = llmGateway;
     }
 
     /**
@@ -182,6 +196,9 @@ public class AdminVectorIndexMaintenanceService {
         String operator = normalizeOperator(effectiveRequest.getOperator());
         OffsetDateTime rebuiltAt = articleVectorJdbcRepository.findLatestUpdatedAt().orElse(OffsetDateTime.now());
         queryCacheStore.evictAll();
+        if (llmGateway != null) {
+            llmGateway.evictPromptCache();
+        }
         log.info(
                 "Vector index rebuild finished. truncateFirst: {}, targetArticleCount: {}, indexedArticleCount: {}, indexedChunkCount: {}, configuredModelName: {}, operator: {}",
                 effectiveRequest.isTruncateFirst(),

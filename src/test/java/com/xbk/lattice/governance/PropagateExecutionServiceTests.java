@@ -88,6 +88,43 @@ class PropagateExecutionServiceTests {
         assertThat(compileClient.getUserPrompts()).hasSize(3);
     }
 
+    /**
+     * 验证传播判断载荷不可解析时，会回退为“不受影响”，并继续清理 upstream 标记。
+     */
+    @Test
+    void shouldFallbackToUnaffectedWhenPropagationCheckJsonIsInvalid() throws Exception {
+        FakeArticleJdbcRepository articleJdbcRepository = new FakeArticleJdbcRepository(List.of(
+                article(
+                        "payment-config",
+                        "# Payment Config\n\n重试策略现已是 retry=5。",
+                        "{}"
+                ),
+                article(
+                        "payment-timeout",
+                        "# Payment Timeout\n\n当前仍写 retry=3。",
+                        "{\"upstream_corrections\":[{\"from\":\"payment-config\",\"summary\":\"重试策略改为 retry=5\"}]}"
+                )
+        ));
+        FakeArticleSnapshotJdbcRepository articleSnapshotJdbcRepository = new FakeArticleSnapshotJdbcRepository();
+        CapturingLlmClient compileClient = new CapturingLlmClient("not-json-response");
+        PropagateExecutionService propagateExecutionService = new PropagateExecutionService(
+                articleJdbcRepository,
+                articleSnapshotJdbcRepository,
+                newLlmGateway(compileClient)
+        );
+
+        PropagationExecutionResult result = propagateExecutionService.executePropagation("payment-config");
+
+        assertThat(result.getProcessed()).isEqualTo(1);
+        assertThat(result.getUpdated()).isEqualTo(0);
+        assertThat(result.getSkipped()).isEqualTo(1);
+        assertThat(articleJdbcRepository.getLastUpserted()).isNull();
+        assertThat(articleJdbcRepository.findByConceptId("payment-timeout").orElseThrow().getMetadataJson())
+                .doesNotContain("payment-config");
+        assertThat(articleSnapshotJdbcRepository.getSavedRecords()).isEmpty();
+        assertThat(compileClient.getUserPrompts()).hasSize(1);
+    }
+
     private ArticleRecord article(String conceptId, String content, String metadataJson) {
         return new ArticleRecord(
                 conceptId,

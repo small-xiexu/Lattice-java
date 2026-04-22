@@ -20,6 +20,10 @@ import java.util.List;
 @Profile("jdbc")
 public class ReviewFixService {
 
+    private static final String COMPILE_SCENE = "compile";
+
+    private static final String FIXER_ROLE = "fixer";
+
     private final LlmGateway llmGateway;
 
     /**
@@ -78,8 +82,14 @@ public class ReviewFixService {
                     %s
                     """.formatted(issueList, articleContent, truncatedSources);
             return scopeId == null || scopeId.isBlank()
-                    ? llmGateway.compile("review-fix", LatticePrompts.SYSTEM_REVIEW_FIX, userPrompt)
-                    : llmGateway.compileWithScope(
+                    ? llmGateway.generateText(
+                            COMPILE_SCENE,
+                            FIXER_ROLE,
+                            "review-fix",
+                            LatticePrompts.SYSTEM_REVIEW_FIX,
+                            userPrompt
+                    )
+                    : llmGateway.generateTextWithScope(
                             scopeId,
                             scene,
                             agentRole,

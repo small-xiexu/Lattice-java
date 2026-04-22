@@ -285,7 +285,10 @@ flowchart LR
 
 ## 当前状态
 
-截至 **2026-04-18** 的真实验收，项目主链路已经跑通：
+截至 **2026-04-22** 的当前文档口径，项目主链路已经跑通：
+
+- `2026-04-18` 已完成主轮真实验收
+- `2026-04-22` 已补做 `ChatClient + Advisor` Query / Compile 真链路 smoke
 
 - 独立 schema 启动
 - 管理员设置页配置
@@ -304,16 +307,18 @@ flowchart LR
 - compile / query 已共享统一连接、模型、Agent 绑定与快照能力
 - `/admin`、`/admin/ask`、`/admin/settings`、`/admin/developer-access` 已是分离页面
 - Query 侧 `answer / reviewer / rewrite` 已真实冻结到 `execution_llm_snapshots`
+- `2026-04-22` 的补充 smoke 已确认 Query 真链路可返回 `queryId / answerOutcome / generationMode / modelExecutionStatus`
+- `2026-04-22` 的补充 smoke 已确认 Compile 真链路中的 `synthesis-*` 与向量刷新可复用编译作业冻结路由
 - CLI remote 已补验 `compile / status / search / query / vault-export`
 - MCP HTTP 端点已真实跑通 `initialize / tools/list / lattice_status / lattice_query`
 
 当前已知限制包括：
 
-- 某些真实 embedding 网关下，向量检索仍可能因 embeddings 接口异常而降级
-- Admin 文章纠错接口还没有在当前网关组合下完成最新一轮全量验收
-- 整库 repo diff / rollback 还没有完成最新一轮完整真实回归
+- 某些真实 embedding 网关下，向量检索仍可能因 embeddings 接口异常而降级；该限制依赖具体网关组合，不代表所有真实验收配置
+- `2026-04-22` 在 `http://127.0.0.1:18082` 真实探测 `POST /api/v1/admin/articles/ops/correct` 仍稳定返回 `500 / COMPILE_IO_ERROR`；根因已定位为当前 `compile.writer` 绑定命中 README 演示连接 `http://127.0.0.1:19999`，连接测试返回 `Connection refused`
+- `2026-04-22` 已补验整库 repo snapshot history 与 Vault 导出；但 live `repo diff` 对最新快照仍返回 `400`，原因是当前 compile / governance 生成的 repo snapshot 仍是 `gitCommit=null`，而 live `repo rollback` 由于会直接改写共享 `lattice` 数据，本轮未在当前实例上执行
 
-更细的样本、命令、日志和限制说明，请看 [`docs/项目全流程真实验收手册.md`](docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md)。
+更细的样本、命令、日志和限制说明，请看 [`docs/项目全流程真实验收手册.md`](docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md)；如果要继续推进当前修复工作，请直接看 [`docs/plans/Admin纠错绑定修复与Repo基线补齐实施清单.md`](docs/plans/Admin%E7%BA%A0%E9%94%99%E7%BB%91%E5%AE%9A%E4%BF%AE%E5%A4%8D%E4%B8%8ERepo%E5%9F%BA%E7%BA%BF%E8%A1%A5%E9%BD%90%E5%AE%9E%E6%96%BD%E6%B8%85%E5%8D%95.md)。
 
 ---
 
@@ -384,9 +389,9 @@ mvn -q -s .codex/maven-settings.xml spring-boot:run
 
 - [`docs/项目全流程真实验收手册.md`](docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md)
 
-### 想知道开发者接入页是怎么设计和实现的
+### 想知道当前正在推进什么
 
-- [`docs/开发者接入页面实施清单.md`](docs/%E5%BC%80%E5%8F%91%E8%80%85%E6%8E%A5%E5%85%A5%E9%A1%B5%E9%9D%A2%E5%AE%9E%E6%96%BD%E6%B8%85%E5%8D%95.md)
+- [`docs/plans/Admin纠错绑定修复与Repo基线补齐实施清单.md`](docs/plans/Admin%E7%BA%A0%E9%94%99%E7%BB%91%E5%AE%9A%E4%BF%AE%E5%A4%8D%E4%B8%8ERepo%E5%9F%BA%E7%BA%BF%E8%A1%A5%E9%BD%90%E5%AE%9E%E6%96%BD%E6%B8%85%E5%8D%95.md)
 
 ### 想知道数据库对象和实体关系
 

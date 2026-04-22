@@ -4,6 +4,10 @@ import com.xbk.lattice.compiler.config.LlmProperties;
 import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.llm.service.LlmCallResult;
 import com.xbk.lattice.llm.service.LlmClient;
+import com.xbk.lattice.query.domain.AnswerOutcome;
+import com.xbk.lattice.query.domain.GenerationMode;
+import com.xbk.lattice.query.domain.ModelExecutionStatus;
+import com.xbk.lattice.query.domain.QueryAnswerPayload;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
@@ -24,23 +28,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AnswerGenerationServiceTests {
 
     /**
-     * 验证答案生成会把 article/source/contribution 多路证据组织进 Prompt，并返回 LLM Markdown。
+     * 验证答案生成会把 article/source/contribution 多路证据组织进 Prompt，并解析结构化结果。
      *
      * @throws Exception 反射构造异常
      */
     @Test
-    void shouldGenerateMarkdownAnswerFromMultiRouteEvidence() throws Exception {
+    void shouldGenerateStructuredAnswerPayloadFromMultiRouteEvidence() throws Exception {
         RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
-                # Payment Answer
-
-                - settle_window=45m
-                - refund-manual-review 需要人工复核
+                {
+                  "answerMarkdown":"# Payment Answer\\n\\n- settle_window=45m\\n- refund-manual-review 需要人工复核",
+                  "answerOutcome":"SUCCESS",
+                  "answerCacheable":true
+                }
                 """);
         AnswerGenerationService answerGenerationService = new AnswerGenerationService(
-                createGateway(recordingLlmClient)
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
         );
 
-        String answer = answerGenerationService.generate(
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
                 "settle_window=45m 和 refund-manual-review 分别代表什么",
                 List.of(
                         new QueryArticleHit(
@@ -73,8 +78,13 @@ class AnswerGenerationServiceTests {
                 )
         );
 
-        assertThat(answer).startsWith("# Payment Answer");
-        assertThat(recordingLlmClient.getLastSystemPrompt()).contains("Markdown");
+        assertThat(answerPayload.getAnswerMarkdown()).startsWith("# Payment Answer");
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.LLM);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SUCCESS);
+        assertThat(answerPayload.isAnswerCacheable()).isTrue();
+        assertThat(recordingLlmClient.getLastSystemPrompt()).contains("answerMarkdown");
+        assertThat(recordingLlmClient.getLastSystemPrompt()).contains("只能输出 JSON");
         assertThat(recordingLlmClient.getLastUserPrompt()).contains("ARTICLE EVIDENCE");
         assertThat(recordingLlmClient.getLastUserPrompt()).contains("Payment Routing");
         assertThat(recordingLlmClient.getLastUserPrompt()).contains("SOURCE EVIDENCE");
@@ -84,13 +94,220 @@ class AnswerGenerationServiceTests {
     }
 
     /**
+     * 验证结构化输出失败时，会 fail-open 到旧文本路径并收敛为 fallback 语义。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldFailOpenToLegacyTextWhenStructuredPayloadParsingFails() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                # Legacy Answer
+
+                - settle_window=45m
+                """);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "settle_window=45m 是什么",
+                List.of(
+                        new QueryArticleHit(
+                                QueryEvidenceType.ARTICLE,
+                                "payment-routing",
+                                "Payment Routing",
+                                "route=standard",
+                                "{\"description\":\"支付路由总览\"}",
+                                List.of("payment/analyze.json"),
+                                3.0
+                        ),
+                        new QueryArticleHit(
+                                QueryEvidenceType.SOURCE,
+                                "payment/context.md#0",
+                                "payment/context.md",
+                                "settle_window=45m",
+                                "{\"filePath\":\"payment/context.md\"}",
+                                List.of("payment/context.md"),
+                                2.0
+                        )
+                )
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).startsWith("# Legacy Answer");
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.PARTIAL_ANSWER);
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.FAILED);
+        assertThat(answerPayload.isAnswerCacheable()).isFalse();
+    }
+
+    /**
+     * 验证稳定结构化答案会写入 L1 prompt cache，并在下一次请求复用缓存。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldWritePromptCacheForStableStructuredAnswerAndReuseCachedRawPayload() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                {
+                  "answerMarkdown":"# Stable Answer\\n\\n- settle_window=45m",
+                  "answerOutcome":"SUCCESS",
+                  "answerCacheable":true
+                }
+                """);
+        GatewayFixture gatewayFixture = createGatewayFixture(recordingLlmClient);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(gatewayFixture.getLlmGateway());
+
+        QueryAnswerPayload firstPayload = answerGenerationService.generatePayload(
+                "settle_window=45m 是什么",
+                buildMultiRouteEvidence()
+        );
+        QueryAnswerPayload secondPayload = answerGenerationService.generatePayload(
+                "settle_window=45m 是什么",
+                buildMultiRouteEvidence()
+        );
+
+        assertThat(firstPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(secondPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(recordingLlmClient.getCallCount()).isEqualTo(1);
+        assertThat(gatewayFixture.getRedisKeyValueStore().values).hasSize(1);
+    }
+
+    /**
+     * 验证非结构化旧文本结果不会写入 L1 prompt cache。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldSkipPromptCacheWhenStructuredAnswerFallsBackToLegacyText() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                # Legacy Answer
+
+                - settle_window=45m
+                """);
+        GatewayFixture gatewayFixture = createGatewayFixture(recordingLlmClient);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(gatewayFixture.getLlmGateway());
+
+        QueryAnswerPayload firstPayload = answerGenerationService.generatePayload(
+                "settle_window=45m 是什么",
+                buildMultiRouteEvidence()
+        );
+        QueryAnswerPayload secondPayload = answerGenerationService.generatePayload(
+                "settle_window=45m 是什么",
+                buildMultiRouteEvidence()
+        );
+
+        assertThat(firstPayload.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
+        assertThat(secondPayload.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
+        assertThat(recordingLlmClient.getCallCount()).isEqualTo(2);
+        assertThat(gatewayFixture.getRedisKeyValueStore().values).isEmpty();
+    }
+
+    /**
+     * 验证 review rewrite 的结构化成功结果也会写入 L1 prompt cache。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldWritePromptCacheForStructuredRewriteFromReview() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                {
+                  "answerMarkdown":"# Rewritten Answer\\n\\n- timeout=30s",
+                  "answerOutcome":"SUCCESS",
+                  "answerCacheable":true
+                }
+                """);
+        GatewayFixture gatewayFixture = createGatewayFixture(recordingLlmClient);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(gatewayFixture.getLlmGateway());
+
+        QueryAnswerPayload firstPayload = answerGenerationService.rewriteFromReviewPayload(
+                "query-1",
+                "query",
+                "rewrite",
+                "timeout 配置是多少",
+                "旧答案",
+                "请补齐 timeout 的明确值",
+                buildMultiRouteEvidence()
+        );
+        QueryAnswerPayload secondPayload = answerGenerationService.rewriteFromReviewPayload(
+                "query-1",
+                "query",
+                "rewrite",
+                "timeout 配置是多少",
+                "旧答案",
+                "请补齐 timeout 的明确值",
+                buildMultiRouteEvidence()
+        );
+
+        assertThat(firstPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(secondPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(recordingLlmClient.getCallCount()).isEqualTo(1);
+        assertThat(gatewayFixture.getRedisKeyValueStore().values).hasSize(1);
+    }
+
+    /**
+     * 验证 query revise 会走统一文本生成入口，并复用 L1 prompt cache。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldWritePromptCacheForQueryReviseMarkdown() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                # Revised Answer
+
+                - settle_window=45m 以用户纠正为准
+                """);
+        GatewayFixture gatewayFixture = createGatewayFixture(recordingLlmClient);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(gatewayFixture.getLlmGateway());
+
+        String firstAnswer = answerGenerationService.revise(
+                "query-1",
+                "query",
+                "rewrite",
+                "settle_window=45m 是什么",
+                "旧答案",
+                "用户补充：settle_window=45m 代表结算窗口",
+                buildMultiRouteEvidence()
+        );
+        String secondAnswer = answerGenerationService.revise(
+                "query-1",
+                "query",
+                "rewrite",
+                "settle_window=45m 是什么",
+                "旧答案",
+                "用户补充：settle_window=45m 代表结算窗口",
+                buildMultiRouteEvidence()
+        );
+
+        assertThat(firstAnswer).startsWith("# Revised Answer");
+        assertThat(secondAnswer).startsWith("# Revised Answer");
+        assertThat(recordingLlmClient.getCallCount()).isEqualTo(1);
+        assertThat(gatewayFixture.getRedisKeyValueStore().values).hasSize(1);
+    }
+
+    /**
+     * 验证无证据时会返回 no knowledge 语义，而不是误标为模型失败。
+     */
+    @Test
+    void shouldReturnNoRelevantKnowledgePayloadWhenEvidenceMissing() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload("不存在的问题", List.of());
+
+        assertThat(answerPayload.getAnswerMarkdown()).isEqualTo("未找到相关知识");
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.NO_RELEVANT_KNOWLEDGE);
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.RULE_BASED);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SKIPPED);
+        assertThat(answerPayload.isAnswerCacheable()).isFalse();
+    }
+
+    /**
      * 通过反射构造可控的 LLM 网关。
      *
      * @param recordingLlmClient 记录 Prompt 的客户端
      * @return LLM 网关
      * @throws Exception 反射构造异常
      */
-    private LlmGateway createGateway(RecordingLlmClient recordingLlmClient) throws Exception {
+    private GatewayFixture createGatewayFixture(RecordingLlmClient recordingLlmClient) throws Exception {
         Constructor<LlmGateway> constructor = LlmGateway.class.getDeclaredConstructor(
                 LlmClient.class,
                 LlmClient.class,
@@ -98,11 +315,50 @@ class AnswerGenerationServiceTests {
                 LlmProperties.class
         );
         constructor.setAccessible(true);
-        return constructor.newInstance(
+        FakeRedisKeyValueStore redisKeyValueStore = new FakeRedisKeyValueStore();
+        LlmGateway llmGateway = constructor.newInstance(
                 recordingLlmClient,
                 recordingLlmClient,
-                new FakeRedisKeyValueStore(),
+                redisKeyValueStore,
                 createProperties()
+        );
+        return new GatewayFixture(llmGateway, redisKeyValueStore);
+    }
+
+    /**
+     * 构造多路证据样例。
+     *
+     * @return 多路证据样例
+     */
+    private List<QueryArticleHit> buildMultiRouteEvidence() {
+        return List.of(
+                new QueryArticleHit(
+                        QueryEvidenceType.ARTICLE,
+                        "payment-routing",
+                        "Payment Routing",
+                        "route=standard",
+                        "{\"description\":\"支付路由总览\"}",
+                        List.of("payment/analyze.json"),
+                        3.0
+                ),
+                new QueryArticleHit(
+                        QueryEvidenceType.SOURCE,
+                        "payment/context.md#0",
+                        "payment/context.md",
+                        "settle_window=45m",
+                        "{\"filePath\":\"payment/context.md\"}",
+                        List.of("payment/context.md"),
+                        2.0
+                ),
+                new QueryArticleHit(
+                        QueryEvidenceType.CONTRIBUTION,
+                        "contribution-1",
+                        "Contribution",
+                        "refund-manual-review 表示退款请求进入人工复核队列。",
+                        "{\"question\":\"refund-manual-review 是什么\"}",
+                        List.of("[用户反馈]"),
+                        1.0
+                )
         );
     }
 
@@ -134,8 +390,11 @@ class AnswerGenerationServiceTests {
 
         private String lastUserPrompt;
 
+        private int callCount;
+
         private RecordingLlmClient(String content) {
             this.content = content;
+            this.callCount = 0;
         }
 
         /**
@@ -149,6 +408,7 @@ class AnswerGenerationServiceTests {
         public LlmCallResult call(String systemPrompt, String userPrompt) {
             this.lastSystemPrompt = systemPrompt;
             this.lastUserPrompt = userPrompt;
+            callCount++;
             return new LlmCallResult(content, 128, 64);
         }
 
@@ -168,6 +428,15 @@ class AnswerGenerationServiceTests {
          */
         private String getLastUserPrompt() {
             return lastUserPrompt;
+        }
+
+        /**
+         * 获取模型调用次数。
+         *
+         * @return 模型调用次数
+         */
+        private int getCallCount() {
+            return callCount;
         }
     }
 
@@ -217,6 +486,43 @@ class AnswerGenerationServiceTests {
         @Override
         public void deleteByPrefix(String keyPrefix) {
             values.keySet().removeIf(key -> key.startsWith(keyPrefix));
+        }
+    }
+
+    /**
+     * 网关测试夹具。
+     *
+     * 职责：统一暴露网关与缓存替身，便于断言 L1 prompt cache 行为
+     *
+     * @author xiexu
+     */
+    private static class GatewayFixture {
+
+        private final LlmGateway llmGateway;
+
+        private final FakeRedisKeyValueStore redisKeyValueStore;
+
+        private GatewayFixture(LlmGateway llmGateway, FakeRedisKeyValueStore redisKeyValueStore) {
+            this.llmGateway = llmGateway;
+            this.redisKeyValueStore = redisKeyValueStore;
+        }
+
+        /**
+         * 返回 LLM 网关。
+         *
+         * @return LLM 网关
+         */
+        private LlmGateway getLlmGateway() {
+            return llmGateway;
+        }
+
+        /**
+         * 返回 Redis 替身。
+         *
+         * @return Redis 替身
+         */
+        private FakeRedisKeyValueStore getRedisKeyValueStore() {
+            return redisKeyValueStore;
         }
     }
 

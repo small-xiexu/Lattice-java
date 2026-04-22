@@ -12,6 +12,7 @@ import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import com.xbk.lattice.llm.service.LlmCallResult;
 import com.xbk.lattice.llm.service.LlmClient;
+import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -114,6 +115,101 @@ class ArticleCorrectionServiceTests {
         assertThat(compileClient.getUserPrompts().get(1)).contains("源文件明确写的是 retry=5");
     }
 
+    /**
+     * 验证交叉验证载荷不可解析时，会回退为“无证据支持”，但仍继续执行纠错重写。
+     */
+    @Test
+    void shouldFallbackToUnsupportedPayloadWhenCrossValidateJsonIsInvalid() throws Exception {
+        FakeArticleJdbcRepository articleJdbcRepository = new FakeArticleJdbcRepository(List.of(
+                article(
+                        "payment-config",
+                        "# Payment Config\n\n当前文档写的是 retry=3。",
+                        List.of("sources/payment-config.md"),
+                        List.of(),
+                        List.of()
+                )
+        ));
+        FakeSourceFileJdbcRepository sourceFileJdbcRepository = new FakeSourceFileJdbcRepository(List.of(
+                new SourceFileRecord(
+                        "sources/payment-config.md",
+                        "retry=5",
+                        "md",
+                        120,
+                        "配置原文明确写的是 retry=5，且支付配置已同步。",
+                        "{}",
+                        false,
+                        "sources/payment-config.md"
+                )
+        ));
+        FakeArticleSnapshotJdbcRepository articleSnapshotJdbcRepository = new FakeArticleSnapshotJdbcRepository();
+        CapturingLlmClient compileClient = new CapturingLlmClient(
+                "not-json-response",
+                "# Payment Config\n\n保留纠错结果，但当前没有交叉验证证据。"
+        );
+        ArticleCorrectionService articleCorrectionService = new ArticleCorrectionService(
+                articleJdbcRepository,
+                sourceFileJdbcRepository,
+                articleSnapshotJdbcRepository,
+                new DependencyGraphService(articleJdbcRepository),
+                newLlmGateway(compileClient)
+        );
+
+        ArticleCorrectionResult result = articleCorrectionService.correct("payment-config", "重试次数应为 5");
+
+        assertThat(result.isValidationSupported()).isFalse();
+        assertThat(compileClient.getUserPrompts().get(1))
+                .contains("源文件是否支持：false")
+                .doesNotContain("证据摘要：");
+        assertThat(articleSnapshotJdbcRepository.getSavedRecords()).hasSize(1);
+    }
+
+    /**
+     * 验证当运行时快照服务可用时，Admin 文章纠错会先冻结一个专用 writer 作用域，再执行两次纠错调用。
+     */
+    @Test
+    void shouldFreezeScopedWriterRouteBeforeArticleCorrection() throws Exception {
+        FakeArticleJdbcRepository articleJdbcRepository = new FakeArticleJdbcRepository(List.of(
+                article(
+                        "payment-config",
+                        "# Payment Config\n\n当前文档写的是 retry=3。",
+                        List.of("sources/payment-config.md"),
+                        List.of(),
+                        List.of()
+                )
+        ));
+        FakeSourceFileJdbcRepository sourceFileJdbcRepository = new FakeSourceFileJdbcRepository(List.of(
+                new SourceFileRecord(
+                        "sources/payment-config.md",
+                        "retry=5",
+                        "md",
+                        120,
+                        "配置原文明确写的是 retry=5，且支付配置已同步。",
+                        "{}",
+                        false,
+                        "sources/payment-config.md"
+                )
+        ));
+        RecordingExecutionLlmSnapshotService snapshotService = new RecordingExecutionLlmSnapshotService();
+        ArticleCorrectionService articleCorrectionService = new ArticleCorrectionService(
+                articleJdbcRepository,
+                sourceFileJdbcRepository,
+                new FakeArticleSnapshotJdbcRepository(),
+                new DependencyGraphService(articleJdbcRepository),
+                newLlmGateway(new CapturingLlmClient(
+                        "{\"supported\":true,\"evidence\":\"源文件明确写的是 retry=5\"}",
+                        "# Payment Config\n\n已按源文件修正为 retry=5。"
+                ))
+        );
+        articleCorrectionService.setExecutionLlmSnapshotService(snapshotService);
+
+        articleCorrectionService.correct("payment-config", "重试次数应为 5");
+
+        assertThat(snapshotService.freezeCount).isEqualTo(2);
+        assertThat(snapshotService.lastScopeType).isEqualTo(ExecutionLlmSnapshotService.COMPILE_SCOPE_TYPE);
+        assertThat(snapshotService.lastScene).isEqualTo(ExecutionLlmSnapshotService.COMPILE_SCENE);
+        assertThat(snapshotService.lastScopeId).isEqualTo("admin-correction:no-source:payment-config");
+    }
+
     private ArticleRecord article(
             String conceptId,
             String content,
@@ -198,6 +294,52 @@ class ArticleCorrectionServiceTests {
 
         private List<String> getUserPrompts() {
             return userPrompts;
+        }
+    }
+
+    /**
+     * 记录 Admin 纠错冻结作用域的运行时快照服务替身。
+     *
+     * @author xiexu
+     */
+    private static class RecordingExecutionLlmSnapshotService extends ExecutionLlmSnapshotService {
+
+        private int freezeCount;
+
+        private String lastScopeType;
+
+        private String lastScopeId;
+
+        private String lastScene;
+
+        private RecordingExecutionLlmSnapshotService() {
+            super(
+                    properties(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    new com.xbk.lattice.llm.service.LlmSecretCryptoService(properties())
+            );
+        }
+
+        @Override
+        public List<com.xbk.lattice.llm.domain.ExecutionLlmSnapshot> freezeSnapshots(
+                String scopeType,
+                String scopeId,
+                String scene
+        ) {
+            freezeCount++;
+            lastScopeType = scopeType;
+            lastScopeId = scopeId;
+            lastScene = scene;
+            return List.of();
+        }
+
+        private static LlmProperties properties() {
+            LlmProperties llmProperties = new LlmProperties();
+            llmProperties.setSecretEncryptionKey("test-phase8-key-0123456789abcdef");
+            return llmProperties;
         }
     }
 

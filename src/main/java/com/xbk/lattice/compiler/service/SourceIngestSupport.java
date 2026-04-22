@@ -151,6 +151,16 @@ public class SourceIngestSupport {
     }
 
     /**
+     * 过滤本次真正发生变化的原始源文件。
+     *
+     * @param rawSources 原始源文件集合
+     * @return 仅包含新增或内容变化文件的集合
+     */
+    public List<RawSource> filterChangedRawSources(List<RawSource> rawSources) {
+        return incrementalCompileService.filterChangedRawSources(rawSources);
+    }
+
+    /**
      * 对源文件集合进行分组。
      *
      * @param rawSources 原始源文件集合
@@ -238,7 +248,16 @@ public class SourceIngestSupport {
      * 刷新合成产物。
      */
     public void refreshGraphSynthesisArtifacts() {
-        incrementalCompileService.refreshGraphSynthesisArtifacts();
+        refreshGraphSynthesisArtifacts(null);
+    }
+
+    /**
+     * 在指定作业作用域下刷新合成产物。
+     *
+     * @param jobId 作业标识
+     */
+    public void refreshGraphSynthesisArtifacts(String jobId) {
+        incrementalCompileService.refreshGraphSynthesisArtifacts(jobId);
     }
 
     /**

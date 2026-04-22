@@ -1,8 +1,8 @@
 package com.xbk.lattice.compiler.node;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xbk.lattice.compiler.domain.AnalyzePayload;
 import com.xbk.lattice.compiler.domain.AnalyzedConcept;
 import com.xbk.lattice.compiler.domain.ConceptSection;
 import com.xbk.lattice.compiler.domain.RawSource;
@@ -29,6 +29,10 @@ import java.util.Set;
 public class AnalyzeNode {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    private static final String COMPILE_SCENE = "compile";
+
+    private static final String WRITER_ROLE = "writer";
 
     private final LlmGateway llmGateway;
 
@@ -126,7 +130,9 @@ public class AnalyzeNode {
             String systemPrompt = schemaAwarePrompts == null
                     ? LatticePrompts.SYSTEM_ANALYZE
                     : schemaAwarePrompts.getAnalyzePrompt(sourceDir);
-            String llmResponse = llmGateway.compile(
+            String llmResponse = llmGateway.generateText(
+                    COMPILE_SCENE,
+                    WRITER_ROLE,
                     "analyze",
                     systemPrompt,
                     buildAnalyzeUserPrompt(sortedSources)
@@ -273,11 +279,12 @@ public class AnalyzeNode {
      * @return 候选概念列表
      */
     private List<StructuredConceptCandidate> parseStructuredConceptCandidates(String content) {
+        String normalizedContent = unwrapJsonCodeFence(content);
         try {
-            return readConceptCandidatesFromJson(content);
+            return readConceptCandidatesFromJson(normalizedContent);
         }
         catch (JsonProcessingException ex) {
-            return salvageConceptCandidates(content);
+            return salvageConceptCandidates(normalizedContent);
         }
     }
 
@@ -289,25 +296,24 @@ public class AnalyzeNode {
      * @throws JsonProcessingException JSON 解析异常
      */
     private List<StructuredConceptCandidate> readConceptCandidatesFromJson(String content) throws JsonProcessingException {
-        JsonNode rootNode = OBJECT_MAPPER.readTree(content);
-        return readConceptCandidates(rootNode);
+        AnalyzePayload analyzePayload = OBJECT_MAPPER.readValue(content, AnalyzePayload.class);
+        return readConceptCandidates(analyzePayload);
     }
 
     /**
-     * 从 JSON 根节点中提取概念候选。
+     * 从 Analyze 结构化载荷中提取概念候选。
      *
-     * @param rootNode JSON 根节点
+     * @param analyzePayload Analyze 结构化载荷
      * @return 候选概念列表
      */
-    private List<StructuredConceptCandidate> readConceptCandidates(JsonNode rootNode) {
+    private List<StructuredConceptCandidate> readConceptCandidates(AnalyzePayload analyzePayload) {
         List<StructuredConceptCandidate> conceptCandidates = new ArrayList<StructuredConceptCandidate>();
-        JsonNode conceptsNode = rootNode.get("concepts");
-        if (conceptsNode == null || !conceptsNode.isArray()) {
+        if (analyzePayload == null || analyzePayload.getConcepts().isEmpty()) {
             return conceptCandidates;
         }
 
-        for (JsonNode conceptNode : conceptsNode) {
-            StructuredConceptCandidate conceptCandidate = toStructuredConceptCandidate(conceptNode);
+        for (AnalyzePayload.AnalyzeConceptPayload conceptPayload : analyzePayload.getConcepts()) {
+            StructuredConceptCandidate conceptCandidate = toStructuredConceptCandidate(conceptPayload);
             if (conceptCandidate != null) {
                 conceptCandidates.add(conceptCandidate);
             }
@@ -336,8 +342,11 @@ public class AnalyzeNode {
         List<String> objectJsons = extractCompletedJsonObjects(content, arrayStartIndex + 1);
         for (String objectJson : objectJsons) {
             try {
-                JsonNode conceptNode = OBJECT_MAPPER.readTree(objectJson);
-                StructuredConceptCandidate conceptCandidate = toStructuredConceptCandidate(conceptNode);
+                AnalyzePayload.AnalyzeConceptPayload conceptPayload = OBJECT_MAPPER.readValue(
+                        objectJson,
+                        AnalyzePayload.AnalyzeConceptPayload.class
+                );
+                StructuredConceptCandidate conceptCandidate = toStructuredConceptCandidate(conceptPayload);
                 if (conceptCandidate != null) {
                     conceptCandidates.add(conceptCandidate);
                 }
@@ -405,47 +414,41 @@ public class AnalyzeNode {
     /**
      * 把单个 JSON 概念节点转换为候选概念。
      *
-     * @param conceptNode 概念节点
+     * @param conceptPayload 概念载荷
      * @return 候选概念，若字段不足则返回空
      */
-    private StructuredConceptCandidate toStructuredConceptCandidate(JsonNode conceptNode) {
-        if (conceptNode == null || !conceptNode.isObject()) {
+    private StructuredConceptCandidate toStructuredConceptCandidate(AnalyzePayload.AnalyzeConceptPayload conceptPayload) {
+        if (conceptPayload == null) {
             return null;
         }
 
-        String conceptId = normalizeGroupKey(conceptNode.path("id").asText(""));
-        String title = normalizeTitle(conceptNode.path("title").asText(""));
+        String conceptId = normalizeGroupKey(conceptPayload.getId());
+        String title = normalizeTitle(conceptPayload.getTitle());
         if ("default".equals(conceptId) || title.isEmpty()) {
             return null;
         }
-        String description = normalizeSnippet(conceptNode.path("description").asText(""));
+        String description = normalizeSnippet(conceptPayload.getDescription());
         return new StructuredConceptCandidate(
                 conceptId,
                 title,
                 description,
-                collectStructuredSnippets(conceptNode),
-                collectStructuredSections(conceptNode)
+                collectStructuredSnippets(conceptPayload),
+                collectStructuredSections(conceptPayload)
         );
     }
 
     /**
      * 收集结构化概念的片段列表。
      *
-     * @param conceptNode 概念节点
+     * @param conceptPayload 概念载荷
      * @return 标准化片段列表
      */
-    private List<String> collectStructuredSnippets(JsonNode conceptNode) {
+    private List<String> collectStructuredSnippets(AnalyzePayload.AnalyzeConceptPayload conceptPayload) {
         Set<String> snippets = new LinkedHashSet<String>();
-        JsonNode snippetsNode = conceptNode.get("snippets");
-        if (snippetsNode != null && snippetsNode.isArray()) {
-            for (JsonNode snippetNode : snippetsNode) {
-                if (!snippetNode.isTextual()) {
-                    continue;
-                }
-                String snippet = normalizeSnippet(snippetNode.asText());
-                if (!snippet.isEmpty()) {
-                    snippets.add(snippet);
-                }
+        for (String rawSnippet : conceptPayload.getSnippets()) {
+            String snippet = normalizeSnippet(rawSnippet);
+            if (!snippet.isEmpty()) {
+                snippets.add(snippet);
             }
         }
 
@@ -453,7 +456,7 @@ public class AnalyzeNode {
             return new ArrayList<String>(snippets);
         }
 
-        String description = normalizeSnippet(conceptNode.path("description").asText(""));
+        String description = normalizeSnippet(conceptPayload.getDescription());
         if (description.isEmpty()) {
             return new ArrayList<String>();
         }
@@ -464,18 +467,13 @@ public class AnalyzeNode {
     /**
      * 收集结构化概念的章节列表。
      *
-     * @param conceptNode 概念节点
+     * @param conceptPayload 概念载荷
      * @return 标准化章节列表
      */
-    private List<ConceptSection> collectStructuredSections(JsonNode conceptNode) {
+    private List<ConceptSection> collectStructuredSections(AnalyzePayload.AnalyzeConceptPayload conceptPayload) {
         List<ConceptSection> sections = new ArrayList<ConceptSection>();
-        JsonNode sectionsNode = conceptNode.get("sections");
-        if (sectionsNode == null || !sectionsNode.isArray()) {
-            return sections;
-        }
-
-        for (JsonNode sectionNode : sectionsNode) {
-            ConceptSection section = toConceptSection(sectionNode);
+        for (AnalyzePayload.AnalyzeSectionPayload sectionPayload : conceptPayload.getSections()) {
+            ConceptSection section = toConceptSection(sectionPayload);
             if (section != null) {
                 sections.add(section);
             }
@@ -486,30 +484,24 @@ public class AnalyzeNode {
     /**
      * 把结构化 section 节点转换为概念章节。
      *
-     * @param sectionNode section 节点
+     * @param sectionPayload section 载荷
      * @return 概念章节，若内容不足则返回空
      */
-    private ConceptSection toConceptSection(JsonNode sectionNode) {
-        if (sectionNode == null || !sectionNode.isObject()) {
+    private ConceptSection toConceptSection(AnalyzePayload.AnalyzeSectionPayload sectionPayload) {
+        if (sectionPayload == null) {
             return null;
         }
 
-        String heading = normalizeTitle(sectionNode.path("heading").asText(""));
+        String heading = normalizeTitle(sectionPayload.getHeading());
         if (heading.isEmpty()) {
             return null;
         }
 
         Set<String> contentLines = new LinkedHashSet<String>();
-        JsonNode contentNode = sectionNode.get("content");
-        if (contentNode != null && contentNode.isArray()) {
-            for (JsonNode lineNode : contentNode) {
-                if (!lineNode.isTextual()) {
-                    continue;
-                }
-                String contentLine = normalizeSnippet(lineNode.asText());
-                if (!contentLine.isEmpty()) {
-                    contentLines.add(contentLine);
-                }
+        for (String rawContentLine : sectionPayload.getContent()) {
+            String contentLine = normalizeSnippet(rawContentLine);
+            if (!contentLine.isEmpty()) {
+                contentLines.add(contentLine);
             }
         }
 
@@ -519,33 +511,51 @@ public class AnalyzeNode {
         return new ConceptSection(
                 heading,
                 new ArrayList<String>(contentLines),
-                collectSectionSourceRefs(sectionNode)
+                collectSectionSourceRefs(sectionPayload)
         );
     }
 
     /**
      * 收集章节来源引用。
      *
-     * @param sectionNode section 节点
+     * @param sectionPayload section 载荷
      * @return 来源引用列表
      */
-    private List<String> collectSectionSourceRefs(JsonNode sectionNode) {
+    private List<String> collectSectionSourceRefs(AnalyzePayload.AnalyzeSectionPayload sectionPayload) {
         Set<String> sourceRefs = new LinkedHashSet<String>();
-        JsonNode sourcesNode = sectionNode.get("sources");
-        if (sourcesNode == null || !sourcesNode.isArray()) {
-            return new ArrayList<String>();
-        }
-
-        for (JsonNode sourceNode : sourcesNode) {
-            if (!sourceNode.isTextual()) {
-                continue;
-            }
-            String sourceRef = normalizeSourceRef(sourceNode.asText());
+        for (String rawSourceRef : sectionPayload.getSources()) {
+            String sourceRef = normalizeSourceRef(rawSourceRef);
             if (!sourceRef.isEmpty()) {
                 sourceRefs.add(sourceRef);
             }
         }
         return new ArrayList<String>(sourceRefs);
+    }
+
+    /**
+     * 从 Markdown code fence 中提取 JSON 主体。
+     *
+     * @param content 原始文本
+     * @return 归一化后的 JSON 文本
+     */
+    private String unwrapJsonCodeFence(String content) {
+        if (content == null) {
+            return "";
+        }
+        String normalized = content.trim();
+        int fenceStartIndex = normalized.indexOf("```");
+        if (fenceStartIndex < 0) {
+            return normalized;
+        }
+        int firstLineBreakIndex = normalized.indexOf('\n', fenceStartIndex);
+        if (firstLineBreakIndex < 0) {
+            return normalized;
+        }
+        int closingFenceIndex = normalized.indexOf("```", firstLineBreakIndex + 1);
+        if (closingFenceIndex < 0) {
+            return normalized;
+        }
+        return normalized.substring(firstLineBreakIndex + 1, closingFenceIndex).trim();
     }
 
     /**

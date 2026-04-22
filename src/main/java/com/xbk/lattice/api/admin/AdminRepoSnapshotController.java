@@ -1,5 +1,6 @@
 package com.xbk.lattice.api.admin;
 
+import com.xbk.lattice.governance.repo.RepoBaselineResult;
 import com.xbk.lattice.governance.repo.RepoRollbackResult;
 import com.xbk.lattice.governance.repo.RepoHistoryReport;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
@@ -57,6 +58,21 @@ public class AdminRepoSnapshotController {
     @GetMapping("/api/v1/admin/snapshot/repo")
     public RepoHistoryReport history(@RequestParam(defaultValue = "10") int limit) {
         return repoSnapshotService.history(limit);
+    }
+
+    /**
+     * 建立带 Git commit 的 repo baseline snapshot。
+     *
+     * @param request baseline 请求
+     * @return baseline 结果
+     * @throws IOException IO 异常
+     */
+    @PostMapping("/api/v1/admin/snapshot/repo/baseline")
+    public RepoBaselineResult createBaseline(@RequestBody AdminRepoBaselineRequest request) throws IOException {
+        if (request == null || request.getVaultDir() == null || request.getVaultDir().isBlank()) {
+            throw new IllegalArgumentException("vaultDir 不能为空");
+        }
+        return vaultSnapshotService.createBaselineSnapshot(Path.of(request.getVaultDir()), request.getDescription());
     }
 
     /**

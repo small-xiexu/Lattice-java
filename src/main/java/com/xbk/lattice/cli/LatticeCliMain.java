@@ -5,6 +5,7 @@ import com.xbk.lattice.cli.command.DiffCommand;
 import com.xbk.lattice.cli.command.LintCommand;
 import com.xbk.lattice.cli.command.McpStdioCommand;
 import com.xbk.lattice.cli.command.QueryCommand;
+import com.xbk.lattice.cli.command.RepoBaselineCommand;
 import com.xbk.lattice.cli.command.RollbackCommand;
 import com.xbk.lattice.cli.command.SearchCommand;
 import com.xbk.lattice.cli.command.ServeCommand;
@@ -50,6 +51,7 @@ public final class LatticeCliMain {
         commandLine.addSubcommand("source-sync", new SourceSyncCommand());
         commandLine.addSubcommand("lint", new LintCommand());
         commandLine.addSubcommand("history", new HistoryCommand());
+        commandLine.addSubcommand("repo-baseline", new RepoBaselineCommand());
         commandLine.addSubcommand("diff", new DiffCommand());
         commandLine.addSubcommand("rollback", new RollbackCommand());
         commandLine.addSubcommand("vault-export", new VaultExportCommand());

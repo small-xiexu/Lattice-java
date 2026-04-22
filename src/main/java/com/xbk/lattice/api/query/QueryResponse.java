@@ -2,6 +2,9 @@ package com.xbk.lattice.api.query;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.xbk.lattice.query.domain.AnswerOutcome;
+import com.xbk.lattice.query.domain.GenerationMode;
+import com.xbk.lattice.query.domain.ModelExecutionStatus;
 
 import java.util.List;
 
@@ -24,6 +27,12 @@ public class QueryResponse {
 
     private final String reviewStatus;
 
+    private final AnswerOutcome answerOutcome;
+
+    private final GenerationMode generationMode;
+
+    private final ModelExecutionStatus modelExecutionStatus;
+
     /**
      * 创建查询响应。
      *
@@ -32,7 +41,7 @@ public class QueryResponse {
      * @param articles 命中文章列表
      */
     public QueryResponse(String answer, List<QuerySourceResponse> sources, List<QueryArticleResponse> articles) {
-        this(answer, sources, articles, null, null);
+        this(answer, sources, articles, null, null, null, null, null);
     }
 
     /**
@@ -44,7 +53,6 @@ public class QueryResponse {
      * @param queryId 待确认查询标识
      * @param reviewStatus 审查状态
      */
-    @JsonCreator
     public QueryResponse(
             @JsonProperty("answer") String answer,
             @JsonProperty("sources") List<QuerySourceResponse> sources,
@@ -52,11 +60,40 @@ public class QueryResponse {
             @JsonProperty("queryId") String queryId,
             @JsonProperty("reviewStatus") String reviewStatus
     ) {
+        this(answer, sources, articles, queryId, reviewStatus, null, null, null);
+    }
+
+    /**
+     * 创建查询响应。
+     *
+     * @param answer 答案
+     * @param sources 来源列表
+     * @param articles 命中文章列表
+     * @param queryId 查询标识
+     * @param reviewStatus 审查状态
+     * @param answerOutcome 答案语义
+     * @param generationMode 生成模式
+     * @param modelExecutionStatus 模型执行状态
+     */
+    @JsonCreator
+    public QueryResponse(
+            @JsonProperty("answer") String answer,
+            @JsonProperty("sources") List<QuerySourceResponse> sources,
+            @JsonProperty("articles") List<QueryArticleResponse> articles,
+            @JsonProperty("queryId") String queryId,
+            @JsonProperty("reviewStatus") String reviewStatus,
+            @JsonProperty("answerOutcome") AnswerOutcome answerOutcome,
+            @JsonProperty("generationMode") GenerationMode generationMode,
+            @JsonProperty("modelExecutionStatus") ModelExecutionStatus modelExecutionStatus
+    ) {
         this.answer = answer;
         this.sources = sources;
         this.articles = articles;
         this.queryId = queryId;
         this.reviewStatus = reviewStatus;
+        this.answerOutcome = answerOutcome;
+        this.generationMode = generationMode;
+        this.modelExecutionStatus = modelExecutionStatus;
     }
 
     /**
@@ -102,5 +139,32 @@ public class QueryResponse {
      */
     public String getReviewStatus() {
         return reviewStatus;
+    }
+
+    /**
+     * 获取答案语义。
+     *
+     * @return 答案语义
+     */
+    public AnswerOutcome getAnswerOutcome() {
+        return answerOutcome;
+    }
+
+    /**
+     * 获取生成模式。
+     *
+     * @return 生成模式
+     */
+    public GenerationMode getGenerationMode() {
+        return generationMode;
+    }
+
+    /**
+     * 获取模型执行状态。
+     *
+     * @return 模型执行状态
+     */
+    public ModelExecutionStatus getModelExecutionStatus() {
+        return modelExecutionStatus;
     }
 }

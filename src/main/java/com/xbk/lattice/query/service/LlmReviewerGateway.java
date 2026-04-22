@@ -2,6 +2,7 @@ package com.xbk.lattice.query.service;
 
 import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
+import com.xbk.lattice.llm.service.LlmInvocationEnvelope;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -23,28 +24,35 @@ public class LlmReviewerGateway implements ReviewerGateway {
 
             输出要求：
             1. 只能输出 JSON
-            2. JSON 结构必须是 {"pass":true|false,"issues":[...]}
-            3. 如果答案缺少来源、与问题不匹配、包含无法证实的结论或明显遗漏，pass 必须为 false
+            2. JSON 结构必须是 {"approved":true|false,"rewriteRequired":true|false,"riskLevel":"LOW|MEDIUM|HIGH","issues":[...],"userFacingRewriteHints":[...],"cacheWritePolicy":"WRITE|SKIP_WRITE|EVICT_AFTER_READ"}
+            3. 如果答案缺少来源、与问题不匹配、包含无法证实的结论或明显遗漏，approved 必须为 false，rewriteRequired 必须为 true
             4. issues 中每项必须包含 severity、category、description
-            5. 不要输出 Markdown、解释性前后缀或代码块
+            5. 审查通过时，issues 与 userFacingRewriteHints 必须为空数组，cacheWritePolicy 返回 WRITE
+            6. 审查未通过时，cacheWritePolicy 默认返回 SKIP_WRITE
+            7. 不要输出 Markdown、解释性前后缀或代码块
             """;
 
     private final LlmGateway llmGateway;
 
     private final LocalReviewerGateway localReviewerGateway;
 
+    private final ReviewResultParser reviewResultParser;
+
     /**
      * 创建 LLM 审查网关。
      *
      * @param llmGateway LLM 网关
      * @param localReviewerGateway 本地规则审查网关
+     * @param reviewResultParser 审查结果解析器
      */
     public LlmReviewerGateway(
             LlmGateway llmGateway,
-            LocalReviewerGateway localReviewerGateway
+            LocalReviewerGateway localReviewerGateway,
+            ReviewResultParser reviewResultParser
     ) {
         this.llmGateway = llmGateway;
         this.localReviewerGateway = localReviewerGateway;
+        this.reviewResultParser = reviewResultParser;
     }
 
     /**
@@ -78,17 +86,31 @@ public class LlmReviewerGateway implements ReviewerGateway {
             return localReviewerGateway.review(reviewPrompt);
         }
         try {
+            LlmInvocationEnvelope envelope;
             if (scopeId == null || scopeId.isBlank()) {
-                return llmGateway.review("query-review", SYSTEM_QUERY_REVIEW, reviewPrompt);
+                envelope = llmGateway.invokeRaw(
+                        scene,
+                        agentRole,
+                        "query-review",
+                        SYSTEM_QUERY_REVIEW,
+                        reviewPrompt
+                );
             }
-            return llmGateway.reviewWithScope(
-                    scopeId,
-                    scene,
-                    agentRole,
-                    "query-review",
-                    SYSTEM_QUERY_REVIEW,
-                    reviewPrompt
+            else {
+                envelope = llmGateway.invokeRawWithScope(
+                        scopeId,
+                        scene,
+                        agentRole,
+                        "query-review",
+                        SYSTEM_QUERY_REVIEW,
+                        reviewPrompt
+                );
+            }
+            llmGateway.applyPromptCacheWritePolicy(
+                    envelope,
+                    reviewResultParser.resolvePromptCacheWritePolicy(envelope.getContent())
             );
+            return envelope.getContent();
         }
         catch (RuntimeException exception) {
             return localReviewerGateway.review(reviewPrompt);

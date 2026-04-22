@@ -55,6 +55,13 @@ lattice:
     cache-key-prefix: ${LATTICE_LLM_CACHE_KEY_PREFIX:llm:cache:}
     review-enabled: ${LATTICE_LLM_REVIEW_ENABLED:false}
     max-input-chars: ${LATTICE_LLM_MAX_INPUT_CHARS:64000}
+    chat-client:
+      enabled: ${LATTICE_LLM_CHAT_CLIENT_ENABLED:true}
+      query-answer-enabled: ${LATTICE_LLM_CHAT_CLIENT_QUERY_ANSWER_ENABLED:true}
+      query-rewrite-enabled: ${LATTICE_LLM_CHAT_CLIENT_QUERY_REWRITE_ENABLED:true}
+      query-review-enabled: ${LATTICE_LLM_CHAT_CLIENT_QUERY_REVIEW_ENABLED:true}
+      compile-review-enabled: ${LATTICE_LLM_CHAT_CLIENT_COMPILE_REVIEW_ENABLED:true}
+      governance-json-enabled: ${LATTICE_LLM_CHAT_CLIENT_GOVERNANCE_JSON_ENABLED:true}
     admin:
       encrypt-secrets: ${LATTICE_LLM_ADMIN_ENCRYPT_SECRETS:true}
       mask-secrets: ${LATTICE_LLM_ADMIN_MASK_SECRETS:true}

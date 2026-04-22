@@ -1,9 +1,8 @@
 package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.config.CompilerProperties;
-import com.xbk.lattice.compiler.config.LlmProperties;
 import com.xbk.lattice.compiler.domain.MergedConcept;
-import com.xbk.lattice.compiler.prompt.LatticePrompts;
+import com.xbk.lattice.compiler.domain.RawSource;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
@@ -11,9 +10,6 @@ import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.RepoSnapshotRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
-import com.xbk.lattice.llm.service.LlmCallResult;
-import com.xbk.lattice.llm.service.LlmClient;
-import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -21,7 +17,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -34,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * IncrementalCompileService 测试
  *
- * 职责：验证增量编译的增强、新建与 LLM 匹配行为
+ * 职责：验证增量编译的直命中、下游传播与最小刷新行为
  *
  * @author xiexu
  */
@@ -65,6 +60,8 @@ class IncrementalCompileServiceTests {
         ));
         FakeArticleChunkJdbcRepository articleChunkJdbcRepository = new FakeArticleChunkJdbcRepository();
         articleChunkJdbcRepository.replaceChunks("payment-timeout", List.of("retry=3"));
+        articleJdbcRepository.clearUpsertHistory();
+        articleChunkJdbcRepository.clearReplaceHistory();
         FakeSourceFileJdbcRepository sourceFileJdbcRepository = new FakeSourceFileJdbcRepository();
         RecordingSynthesisArtifactsService synthesisArtifactsService = new RecordingSynthesisArtifactsService();
         RecordingRepoSnapshotService repoSnapshotService = new RecordingRepoSnapshotService();
@@ -104,6 +101,8 @@ class IncrementalCompileServiceTests {
         assertThat(updatedArticle.getContent()).contains("manual-review");
         assertThat(String.join("\n", articleChunkJdbcRepository.findChunkTexts("payment-timeout"))).contains("## 增量更新");
         assertThat(String.join("\n", articleChunkJdbcRepository.findChunkTexts("payment-timeout"))).contains("manual-review");
+        assertThat(articleJdbcRepository.getUpsertedConceptIds()).containsExactly("payment-timeout");
+        assertThat(articleChunkJdbcRepository.getReplacedConceptIds()).containsExactly("payment-timeout");
         assertThat(synthesisArtifactsService.getLastConcepts()).hasSize(1);
         assertThat(repoSnapshotService.getSnapshotCount()).isEqualTo(1);
         assertThat(repoSnapshotService.getLastTriggerEvent()).isEqualTo("compile.incremental");
@@ -155,22 +154,24 @@ class IncrementalCompileServiceTests {
         assertThat(createdArticle.getContent()).contains("refund/new.json");
         assertThat(String.join("\n", articleChunkJdbcRepository.findChunkTexts("refund-status"))).contains("# Refund Status");
         assertThat(String.join("\n", articleChunkJdbcRepository.findChunkTexts("refund-status"))).contains("refund-created");
+        assertThat(articleJdbcRepository.getUpsertedConceptIds()).containsExactly("refund-status");
+        assertThat(articleChunkJdbcRepository.getReplacedConceptIds()).containsExactly("refund-status");
         assertThat(synthesisArtifactsService.getLastConcepts()).hasSize(1);
     }
 
     /**
-     * 验证 LLM 返回增强计划时，会优先按计划增强指定文章，而不是盲目新建。
+     * 验证源文件直命中的聚合文章会被增强，同时新增概念仍会创建独立文章。
      *
      * @param tempDir 临时目录
      * @throws IOException IO 异常
      */
     @Test
-    void shouldRespectLlmMatchPlanWhenEnhancingExistingArticle(@TempDir Path tempDir) throws IOException {
+    void shouldEnhanceDirectSourceHitArticleAndStillCreateNewConceptArticle(@TempDir Path tempDir) throws IOException {
         FakeArticleJdbcRepository articleJdbcRepository = new FakeArticleJdbcRepository();
         articleJdbcRepository.upsert(createExistingArticle(
                 "knowledge-overview",
                 "Knowledge Overview",
-                List.of("payment/overview.json"),
+                List.of("payment/update.json"),
                 "现有总览",
                 """
                         # Knowledge Overview
@@ -180,11 +181,13 @@ class IncrementalCompileServiceTests {
         ));
         FakeArticleChunkJdbcRepository articleChunkJdbcRepository = new FakeArticleChunkJdbcRepository();
         articleChunkJdbcRepository.replaceChunks("knowledge-overview", List.of("overview"));
+        articleJdbcRepository.clearUpsertHistory();
+        articleChunkJdbcRepository.clearReplaceHistory();
         FakeSourceFileJdbcRepository sourceFileJdbcRepository = new FakeSourceFileJdbcRepository();
         RecordingSynthesisArtifactsService synthesisArtifactsService = new RecordingSynthesisArtifactsService();
         IncrementalCompileService incrementalCompileService = new IncrementalCompileService(
                 createCompilerProperties(),
-                createRoutingLlmGateway(),
+                null,
                 null,
                 null,
                 synthesisArtifactsService,
@@ -209,14 +212,325 @@ class IncrementalCompileServiceTests {
         CompileResult compileResult = incrementalCompileService.incrementalCompile(tempDir);
 
         ArticleRecord updatedArticle = articleJdbcRepository.findByConceptId("knowledge-overview").orElseThrow();
-        assertThat(compileResult.getPersistedCount()).isEqualTo(1);
-        assertThat(updatedArticle.getSummary()).isEqualTo("更新后的知识总览");
-        assertThat(updatedArticle.getSourcePaths()).contains("payment/overview.json", "payment/update.json");
-        assertThat(updatedArticle.getConfidence()).isEqualTo("high");
-        assertThat(updatedArticle.getReviewStatus()).isEqualTo("passed");
-        assertThat(updatedArticle.getRelated()).contains("refund-status");
-        assertThat(updatedArticle.getContent()).contains("新增退款状态说明");
-        assertThat(articleJdbcRepository.findByConceptId("refund-status")).isEmpty();
+        ArticleRecord createdArticle = articleJdbcRepository.findByConceptId("refund-status").orElseThrow();
+        assertThat(compileResult.getPersistedCount()).isEqualTo(2);
+        assertThat(updatedArticle.getSourcePaths()).containsExactly("payment/update.json");
+        assertThat(updatedArticle.getContent()).contains("## 增量更新");
+        assertThat(updatedArticle.getContent()).contains("Refund Status");
+        assertThat(updatedArticle.getContent()).contains("refund-paid");
+        assertThat(createdArticle.getSourcePaths()).containsExactly("payment/update.json");
+        assertThat(createdArticle.getContent()).contains("# Refund Status");
+        assertThat(articleJdbcRepository.getUpsertedConceptIds()).containsExactly("knowledge-overview", "refund-status");
+        assertThat(articleChunkJdbcRepository.getReplacedConceptIds()).containsExactly("knowledge-overview", "refund-status");
+    }
+
+    /**
+     * 验证直命中后会沿依赖图传播到下游文章，且无关文章不会被刷新。
+     *
+     * @param tempDir 临时目录
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldPropagateDirectHitToDownstreamArticlesWithoutRefreshingUnrelatedArticles(@TempDir Path tempDir) throws IOException {
+        FakeArticleJdbcRepository articleJdbcRepository = new FakeArticleJdbcRepository();
+        articleJdbcRepository.upsert(createExistingArticle(
+                "payment-timeout",
+                "Payment Timeout",
+                List.of("payment/base.json"),
+                "现有支付超时规则",
+                """
+                        # Payment Timeout
+
+                        现有支付超时规则
+                        """
+        ));
+        articleJdbcRepository.upsert(createExistingArticle(
+                "payment-overview",
+                "Payment Overview",
+                List.of("overview/index.md"),
+                List.of("payment-timeout"),
+                "支付总览",
+                """
+                        # Payment Overview
+
+                        依赖 [[payment-timeout]]
+                        """
+        ));
+        articleJdbcRepository.upsert(createExistingArticle(
+                "refund-policy",
+                "Refund Policy",
+                List.of("refund/base.json"),
+                "退款规则",
+                """
+                        # Refund Policy
+
+                        原有退款规则
+                        """
+        ));
+        FakeArticleChunkJdbcRepository articleChunkJdbcRepository = new FakeArticleChunkJdbcRepository();
+        articleChunkJdbcRepository.replaceChunks("payment-timeout", List.of("timeout"));
+        articleChunkJdbcRepository.replaceChunks("payment-overview", List.of("overview"));
+        articleChunkJdbcRepository.replaceChunks("refund-policy", List.of("refund"));
+        articleJdbcRepository.clearUpsertHistory();
+        articleChunkJdbcRepository.clearReplaceHistory();
+        FakeSourceFileJdbcRepository sourceFileJdbcRepository = new FakeSourceFileJdbcRepository();
+        RecordingSynthesisArtifactsService synthesisArtifactsService = new RecordingSynthesisArtifactsService();
+        IncrementalCompileService incrementalCompileService = new IncrementalCompileService(
+                createCompilerProperties(),
+                null,
+                null,
+                null,
+                synthesisArtifactsService,
+                articleJdbcRepository,
+                articleChunkJdbcRepository,
+                sourceFileJdbcRepository
+        );
+
+        String unrelatedContent = articleJdbcRepository.findByConceptId("refund-policy").orElseThrow().getContent();
+
+        Path paymentDir = Files.createDirectories(tempDir.resolve("payment"));
+        Files.writeString(
+                paymentDir.resolve("update.json"),
+                "{"
+                        + "\"concepts\":["
+                        + "{\"id\":\"payment-timeout\",\"title\":\"Payment Timeout\",\"description\":\"补充支付超时补偿策略\","
+                        + "\"snippets\":[\"manual-review\"],"
+                        + "\"sections\":[{\"heading\":\"Compensation\",\"content\":[\"manual-review\",\"retry=5\"],\"sources\":[\"payment/update.json#compensation\"]}]}"
+                        + "]"
+                        + "}",
+                StandardCharsets.UTF_8
+        );
+
+        CompileResult compileResult = incrementalCompileService.incrementalCompile(tempDir);
+
+        ArticleRecord directHitArticle = articleJdbcRepository.findByConceptId("payment-timeout").orElseThrow();
+        ArticleRecord downstreamArticle = articleJdbcRepository.findByConceptId("payment-overview").orElseThrow();
+        ArticleRecord unrelatedArticle = articleJdbcRepository.findByConceptId("refund-policy").orElseThrow();
+        assertThat(compileResult.getPersistedCount()).isEqualTo(2);
+        assertThat(directHitArticle.getContent()).contains("manual-review");
+        assertThat(downstreamArticle.getContent()).contains("manual-review");
+        assertThat(downstreamArticle.getSourcePaths()).contains("overview/index.md", "payment/update.json");
+        assertThat(unrelatedArticle.getContent()).isEqualTo(unrelatedContent);
+        assertThat(articleJdbcRepository.getUpsertedConceptIds()).containsExactly("payment-timeout", "payment-overview");
+        assertThat(articleChunkJdbcRepository.getReplacedConceptIds()).containsExactly("payment-timeout", "payment-overview");
+    }
+
+    /**
+     * 验证整目录增量时会先滤掉未变化文件，只刷新真实受影响文章。
+     *
+     * @param tempDir 临时目录
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldIgnoreUnchangedFilesWhenIncrementalDirectoryContainsMixedChanges(@TempDir Path tempDir) throws IOException {
+        FakeArticleJdbcRepository articleJdbcRepository = new FakeArticleJdbcRepository();
+        articleJdbcRepository.upsert(createExistingArticle(
+                "payment-timeout",
+                "Payment Timeout",
+                List.of("payment/base.json"),
+                "现有支付超时规则",
+                """
+                        # Payment Timeout
+
+                        现有支付超时规则
+                        """
+        ));
+        articleJdbcRepository.upsert(createExistingArticle(
+                "payment-overview",
+                "Payment Overview",
+                List.of("overview/index.md"),
+                List.of("payment-timeout"),
+                "支付总览",
+                """
+                        # Payment Overview
+
+                        依赖 [[payment-timeout]]
+                        """
+        ));
+        articleJdbcRepository.upsert(createExistingArticle(
+                "refund-policy",
+                "Refund Policy",
+                List.of("refund/base.json"),
+                "退款规则",
+                """
+                        # Refund Policy
+
+                        原有退款规则
+                        """
+        ));
+        FakeArticleChunkJdbcRepository articleChunkJdbcRepository = new FakeArticleChunkJdbcRepository();
+        articleChunkJdbcRepository.replaceChunks("payment-timeout", List.of("timeout"));
+        articleChunkJdbcRepository.replaceChunks("payment-overview", List.of("overview"));
+        articleChunkJdbcRepository.replaceChunks("refund-policy", List.of("refund"));
+        articleJdbcRepository.clearUpsertHistory();
+        articleChunkJdbcRepository.clearReplaceHistory();
+
+        String unchangedRefundContent = """
+                {
+                  "concepts": [
+                    {
+                      "id": "refund-policy",
+                      "title": "Refund Policy",
+                      "description": "退款规则",
+                      "snippets": ["refund-window=7"],
+                      "sections": [
+                        {
+                          "heading": "Refund Rules",
+                          "content": ["refund-window=7"],
+                          "sources": ["refund/base.json#refund-rules"]
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """.trim();
+        String changedPaymentBaseline = """
+                {
+                  "concepts": [
+                    {
+                      "id": "payment-timeout",
+                      "title": "Payment Timeout",
+                      "description": "现有支付超时规则",
+                      "snippets": ["retry=3"],
+                      "sections": [
+                        {
+                          "heading": "Timeout Rules",
+                          "content": ["retry=3"],
+                          "sources": ["payment/base.json#timeout-rules"]
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """.trim();
+        FakeSourceFileJdbcRepository sourceFileJdbcRepository = new FakeSourceFileJdbcRepository();
+        sourceFileJdbcRepository.upsert(new SourceFileRecord(
+                "payment/base.json",
+                changedPaymentBaseline,
+                "json",
+                changedPaymentBaseline.getBytes(StandardCharsets.UTF_8).length,
+                changedPaymentBaseline,
+                "{}",
+                false,
+                "payment/base.json"
+        ));
+        sourceFileJdbcRepository.upsert(new SourceFileRecord(
+                "refund/base.json",
+                unchangedRefundContent,
+                "json",
+                unchangedRefundContent.getBytes(StandardCharsets.UTF_8).length,
+                unchangedRefundContent,
+                "{}",
+                false,
+                "refund/base.json"
+        ));
+        RecordingSynthesisArtifactsService synthesisArtifactsService = new RecordingSynthesisArtifactsService();
+        IncrementalCompileService incrementalCompileService = new IncrementalCompileService(
+                createCompilerProperties(),
+                null,
+                null,
+                null,
+                synthesisArtifactsService,
+                articleJdbcRepository,
+                articleChunkJdbcRepository,
+                sourceFileJdbcRepository
+        );
+
+        Path paymentDir = Files.createDirectories(tempDir.resolve("payment"));
+        Path refundDir = Files.createDirectories(tempDir.resolve("refund"));
+        Files.writeString(
+                paymentDir.resolve("base.json"),
+                """
+                        {
+                          "concepts": [
+                            {
+                              "id": "payment-timeout",
+                              "title": "Payment Timeout",
+                              "description": "补充支付超时补偿策略",
+                              "snippets": ["manual-review"],
+                              "sections": [
+                                {
+                                  "heading": "Compensation",
+                                  "content": ["manual-review", "retry=5"],
+                                  "sources": ["payment/base.json#compensation"]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                        """.trim(),
+                StandardCharsets.UTF_8
+        );
+        Files.writeString(
+                refundDir.resolve("base.json"),
+                unchangedRefundContent,
+                StandardCharsets.UTF_8
+        );
+
+        String unrelatedContent = articleJdbcRepository.findByConceptId("refund-policy").orElseThrow().getContent();
+
+        CompileResult compileResult = incrementalCompileService.incrementalCompile(tempDir);
+
+        ArticleRecord directHitArticle = articleJdbcRepository.findByConceptId("payment-timeout").orElseThrow();
+        ArticleRecord downstreamArticle = articleJdbcRepository.findByConceptId("payment-overview").orElseThrow();
+        ArticleRecord unrelatedArticle = articleJdbcRepository.findByConceptId("refund-policy").orElseThrow();
+        assertThat(compileResult.getPersistedCount()).isEqualTo(2);
+        assertThat(directHitArticle.getContent()).contains("manual-review");
+        assertThat(downstreamArticle.getContent()).contains("manual-review");
+        assertThat(unrelatedArticle.getContent()).isEqualTo(unrelatedContent);
+        assertThat(articleJdbcRepository.getUpsertedConceptIds()).containsExactly("payment-timeout", "payment-overview");
+        assertThat(articleChunkJdbcRepository.getReplacedConceptIds()).containsExactly("payment-timeout", "payment-overview");
+    }
+
+    /**
+     * 验证 metadata JSON 仅存在格式差异时，不应误判为源文件变化。
+     */
+    @Test
+    void shouldIgnoreMetadataJsonFormattingDifferencesWhenFilteringChangedSources() {
+        FakeArticleJdbcRepository articleJdbcRepository = new FakeArticleJdbcRepository();
+        FakeArticleChunkJdbcRepository articleChunkJdbcRepository = new FakeArticleChunkJdbcRepository();
+        FakeSourceFileJdbcRepository sourceFileJdbcRepository = new FakeSourceFileJdbcRepository();
+        sourceFileJdbcRepository.upsert(new SourceFileRecord(
+                null,
+                1L,
+                "integrations/guide.pdf",
+                "integrations/guide.pdf",
+                null,
+                "preview",
+                "pdf",
+                1024L,
+                "=== Page: 1 ===\ncontent",
+                "{\"pageCount\": 3}",
+                true,
+                "integrations/guide.pdf"
+        ));
+        IncrementalCompileService incrementalCompileService = new IncrementalCompileService(
+                createCompilerProperties(),
+                null,
+                null,
+                null,
+                new RecordingSynthesisArtifactsService(),
+                articleJdbcRepository,
+                articleChunkJdbcRepository,
+                sourceFileJdbcRepository
+        );
+
+        List<RawSource> changedRawSources = incrementalCompileService.filterChangedRawSources(List.of(
+                RawSource.parsed(
+                        1L,
+                        "integrations/guide.pdf",
+                        "=== Page: 1 ===\ncontent",
+                        "pdf",
+                        1024L,
+                        "{\"pageCount\":3}",
+                        true,
+                        "integrations/guide.pdf",
+                        "document-extract",
+                        "apache-pdfbox"
+                )
+        ));
+
+        assertThat(changedRawSources).isEmpty();
     }
 
     /**
@@ -248,17 +562,39 @@ class IncrementalCompileServiceTests {
             String summary,
             String body
     ) {
+        return createExistingArticle(conceptId, title, sourcePaths, List.of(), summary, body);
+    }
+
+    /**
+     * 创建已有文章。
+     *
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param sourcePaths 来源路径
+     * @param dependsOn 依赖概念
+     * @param summary 摘要
+     * @param body 主体
+     * @return 文章记录
+     */
+    private ArticleRecord createExistingArticle(
+            String conceptId,
+            String title,
+            List<String> sourcePaths,
+            List<String> dependsOn,
+            String summary,
+            String body
+    ) {
         return new ArticleRecord(
                 conceptId,
                 title,
-                buildArticleContent(title, summary, sourcePaths, body),
+                buildArticleContent(title, summary, sourcePaths, dependsOn, List.of(), body),
                 "ACTIVE",
                 OffsetDateTime.now(),
                 sourcePaths,
                 "{\"incremental\":false}",
                 summary,
                 List.of(),
-                List.of(),
+                dependsOn,
                 List.of(),
                 "medium",
                 "pending"
@@ -271,25 +607,42 @@ class IncrementalCompileServiceTests {
      * @param title 标题
      * @param summary 摘要
      * @param sourcePaths 来源路径
+     * @param dependsOn 依赖概念
+     * @param related 相关概念
      * @param body 主体
      * @return Markdown 内容
      */
-    private String buildArticleContent(String title, String summary, List<String> sourcePaths, String body) {
+    private String buildArticleContent(
+            String title,
+            String summary,
+            List<String> sourcePaths,
+            List<String> dependsOn,
+            List<String> related,
+            String body
+    ) {
         return """
                 ---
                 title: "%s"
                 summary: "%s"
                 referential_keywords: []
                 sources: %s
-                depends_on: []
-                related: []
+                depends_on: %s
+                related: %s
                 confidence: medium
                 compiled_at: "%s"
                 review_status: pending
                 ---
 
                 %s
-                """.formatted(title, summary, formatYamlList(sourcePaths), OffsetDateTime.now(), body).trim();
+                """.formatted(
+                title,
+                summary,
+                formatYamlList(sourcePaths),
+                formatYamlList(dependsOn),
+                formatYamlList(related),
+                OffsetDateTime.now(),
+                body
+        ).trim();
     }
 
     /**
@@ -307,119 +660,6 @@ class IncrementalCompileServiceTests {
     }
 
     /**
-     * 创建可按 Prompt 路由结果的 LLM 网关。
-     *
-     * @return LLM 网关
-     */
-    private LlmGateway createRoutingLlmGateway() {
-        LlmProperties llmProperties = new LlmProperties();
-        llmProperties.setCompileModel("openai");
-        llmProperties.setReviewerModel("anthropic");
-        llmProperties.setBudgetUsd(10.0D);
-        llmProperties.setCacheTtlSeconds(3600L);
-        llmProperties.setCacheKeyPrefix("llm:test:");
-        return new LlmGateway(
-                new RoutingLlmClient(),
-                new StaticLlmClient("{}"),
-                new NoopRedisKeyValueStore(),
-                llmProperties
-        );
-    }
-
-    /**
-     * 路由式 LLM 客户端。
-     *
-     * 职责：按不同系统 Prompt 返回不同结果
-     *
-     * @author xiexu
-     */
-    private static class RoutingLlmClient implements LlmClient {
-
-        @Override
-        public LlmCallResult call(String systemPrompt, String userPrompt) {
-            if (LatticePrompts.SYSTEM_INCREMENTAL_MATCH.equals(systemPrompt)) {
-                return new LlmCallResult("""
-                        {
-                          "enhancements": [
-                            {
-                              "target_article_id": "knowledge-overview",
-                              "new_info_summary": "补充退款状态说明",
-                              "source_refs": ["payment/update.json"]
-                            }
-                          ],
-                          "new_articles": []
-                        }
-                        """, 100, 50);
-            }
-            if (LatticePrompts.SYSTEM_INCREMENTAL_ENHANCE.equals(systemPrompt)) {
-                return new LlmCallResult("""
-                        ---
-                        title: "Knowledge Overview"
-                        summary: "更新后的知识总览"
-                        referential_keywords: ["retry=5"]
-                        sources: ["payment/overview.json", "payment/update.json"]
-                        depends_on: ["compile-pipeline"]
-                        related: ["refund-status"]
-                        confidence: high
-                        compiled_at: "2026-04-15T12:00:00Z"
-                        review_status: passed
-                        ---
-
-                        # Knowledge Overview
-
-                        新增退款状态说明
-                        """, 200, 120);
-            }
-            return new LlmCallResult("", 10, 5);
-        }
-    }
-
-    /**
-     * 固定返回内容的 LLM 客户端。
-     *
-     * @author xiexu
-     */
-    private static class StaticLlmClient implements LlmClient {
-
-        private final String content;
-
-        private StaticLlmClient(String content) {
-            this.content = content;
-        }
-
-        @Override
-        public LlmCallResult call(String systemPrompt, String userPrompt) {
-            return new LlmCallResult(content, 10, 5);
-        }
-    }
-
-    /**
-     * 空操作 Redis 存储。
-     *
-     * @author xiexu
-     */
-    private static class NoopRedisKeyValueStore implements RedisKeyValueStore {
-
-        @Override
-        public String get(String key) {
-            return null;
-        }
-
-        @Override
-        public void set(String key, String value, Duration ttl) {
-        }
-
-        @Override
-        public Long getExpire(String key) {
-            return null;
-        }
-
-        @Override
-        public void deleteByPrefix(String keyPrefix) {
-        }
-    }
-
-    /**
      * 文章仓储测试替身。
      *
      * @author xiexu
@@ -428,6 +668,8 @@ class IncrementalCompileServiceTests {
 
         private final Map<String, ArticleRecord> records = new LinkedHashMap<String, ArticleRecord>();
 
+        private final List<String> upsertedConceptIds = new ArrayList<String>();
+
         private FakeArticleJdbcRepository() {
             super(null);
         }
@@ -435,6 +677,7 @@ class IncrementalCompileServiceTests {
         @Override
         public void upsert(ArticleRecord articleRecord) {
             records.put(articleRecord.getConceptId(), articleRecord);
+            upsertedConceptIds.add(articleRecord.getConceptId());
         }
 
         @Override
@@ -442,8 +685,27 @@ class IncrementalCompileServiceTests {
             return Optional.ofNullable(records.get(conceptId));
         }
 
+        @Override
+        public Optional<ArticleRecord> findByArticleKey(String articleKey) {
+            return Optional.ofNullable(records.get(articleKey));
+        }
+
+        @Override
+        public Optional<ArticleRecord> findBySourceIdAndConceptId(Long sourceId, String conceptId) {
+            return findByConceptId(conceptId);
+        }
+
+        @Override
         public List<ArticleRecord> findAll() {
             return new ArrayList<ArticleRecord>(records.values());
+        }
+
+        private void clearUpsertHistory() {
+            upsertedConceptIds.clear();
+        }
+
+        private List<String> getUpsertedConceptIds() {
+            return upsertedConceptIds;
         }
     }
 
@@ -456,6 +718,8 @@ class IncrementalCompileServiceTests {
 
         private final Map<String, List<String>> chunks = new LinkedHashMap<String, List<String>>();
 
+        private final List<String> replacedConceptIds = new ArrayList<String>();
+
         private FakeArticleChunkJdbcRepository() {
             super(null);
         }
@@ -463,26 +727,38 @@ class IncrementalCompileServiceTests {
         @Override
         public void replaceChunks(String conceptId, List<String> chunkTexts) {
             chunks.put(conceptId, new ArrayList<String>(chunkTexts));
+            replacedConceptIds.add(conceptId);
         }
 
         @Override
         public void replaceChunks(String articleKey, String conceptId, List<String> chunkTexts) {
             chunks.put(conceptId, new ArrayList<String>(chunkTexts));
+            replacedConceptIds.add(conceptId);
         }
 
         @Override
         public void replaceChunksFromContent(String conceptId, String content) {
             chunks.put(conceptId, List.of(content));
+            replacedConceptIds.add(conceptId);
         }
 
         @Override
         public void replaceChunksFromContent(String articleKey, String conceptId, String content) {
             chunks.put(conceptId, List.of(content));
+            replacedConceptIds.add(conceptId);
         }
 
         @Override
         public List<String> findChunkTexts(String conceptId) {
             return chunks.getOrDefault(conceptId, List.of());
+        }
+
+        private void clearReplaceHistory() {
+            replacedConceptIds.clear();
+        }
+
+        private List<String> getReplacedConceptIds() {
+            return replacedConceptIds;
         }
     }
 
@@ -493,7 +769,9 @@ class IncrementalCompileServiceTests {
      */
     private static class FakeSourceFileJdbcRepository extends SourceFileJdbcRepository {
 
-        private final Map<String, SourceFileRecord> records = new LinkedHashMap<String, SourceFileRecord>();
+        private final Map<String, SourceFileRecord> recordsByPath = new LinkedHashMap<String, SourceFileRecord>();
+
+        private final Map<String, SourceFileRecord> recordsBySourcePath = new LinkedHashMap<String, SourceFileRecord>();
 
         private FakeSourceFileJdbcRepository() {
             super(null);
@@ -501,13 +779,28 @@ class IncrementalCompileServiceTests {
 
         @Override
         public SourceFileRecord upsert(SourceFileRecord sourceFileRecord) {
-            records.put(sourceFileRecord.getFilePath(), sourceFileRecord);
+            recordsByPath.put(sourceFileRecord.getFilePath(), sourceFileRecord);
+            if (sourceFileRecord.getRelativePath() != null) {
+                recordsByPath.put(sourceFileRecord.getRelativePath(), sourceFileRecord);
+            }
+            if (sourceFileRecord.getSourceId() != null && sourceFileRecord.getRelativePath() != null) {
+                recordsBySourcePath.put(buildSourcePathKey(sourceFileRecord.getSourceId(), sourceFileRecord.getRelativePath()), sourceFileRecord);
+            }
             return sourceFileRecord;
         }
 
         @Override
         public Optional<SourceFileRecord> findByPath(String filePath) {
-            return Optional.ofNullable(records.get(filePath));
+            return Optional.ofNullable(recordsByPath.get(filePath));
+        }
+
+        @Override
+        public Optional<SourceFileRecord> findBySourceIdAndRelativePath(Long sourceId, String relativePath) {
+            return Optional.ofNullable(recordsBySourcePath.get(buildSourcePathKey(sourceId, relativePath)));
+        }
+
+        private String buildSourcePathKey(Long sourceId, String relativePath) {
+            return sourceId + "::" + relativePath;
         }
     }
 
@@ -526,6 +819,17 @@ class IncrementalCompileServiceTests {
 
         @Override
         public void generateAll(List<MergedConcept> mergedConcepts) {
+            lastConcepts = new ArrayList<MergedConcept>(mergedConcepts);
+        }
+
+        /**
+         * 记录带作用域的合成产物刷新输入。
+         *
+         * @param scopeId 作用域标识
+         * @param mergedConcepts 合并概念列表
+         */
+        @Override
+        public void generateAll(String scopeId, List<MergedConcept> mergedConcepts) {
             lastConcepts = new ArrayList<MergedConcept>(mergedConcepts);
         }
 

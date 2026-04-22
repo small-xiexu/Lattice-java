@@ -140,7 +140,7 @@ public class QueryFacadeService {
             return finalResponse;
         }
         catch (RuntimeException exception) {
-            logQueryCompleted(new QueryResponse(null, List.of(), List.of(), queryId, null), "FAILED", exception);
+            logQueryCompleted(new QueryResponse(null, List.of(), List.of(), queryId, null, null, null, null), "FAILED", exception);
             throw exception;
         }
     }
@@ -159,7 +159,10 @@ public class QueryFacadeService {
                 baseResponse.getSources(),
                 baseResponse.getArticles(),
                 queryId,
-                baseResponse.getReviewStatus()
+                baseResponse.getReviewStatus(),
+                baseResponse.getAnswerOutcome(),
+                baseResponse.getGenerationMode(),
+                baseResponse.getModelExecutionStatus()
         );
     }
 
@@ -198,6 +201,9 @@ public class QueryFacadeService {
         fields.put("scopeType", ExecutionLlmSnapshotService.QUERY_SCOPE_TYPE);
         fields.put("scopeId", queryResponse.getQueryId());
         fields.put("reviewStatus", queryResponse.getReviewStatus());
+        fields.put("answerOutcome", queryResponse.getAnswerOutcome());
+        fields.put("generationMode", queryResponse.getGenerationMode());
+        fields.put("modelExecutionStatus", queryResponse.getModelExecutionStatus());
         fields.put("sourceCount", queryResponse.getSources() == null ? 0 : queryResponse.getSources().size());
         fields.put("articleCount", queryResponse.getArticles() == null ? 0 : queryResponse.getArticles().size());
         if (throwable != null) {

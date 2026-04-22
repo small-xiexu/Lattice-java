@@ -1,7 +1,6 @@
 package com.xbk.lattice.compiler.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.config.CompilerProperties;
 import com.xbk.lattice.compiler.domain.AnalyzedConcept;
@@ -23,6 +22,10 @@ import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
+import com.xbk.lattice.governance.DependencyGraphService;
+import com.xbk.lattice.governance.PropagationItem;
+import com.xbk.lattice.governance.PropagationReport;
+import com.xbk.lattice.governance.PropagationService;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.query.service.ArticleChunkVectorIndexService;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
@@ -54,6 +57,10 @@ import java.util.regex.Pattern;
 public class IncrementalCompileService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    private static final String COMPILE_SCENE = "compile";
+
+    private static final String WRITER_ROLE = "writer";
 
     private static final Pattern FRONTMATTER_PATTERN = Pattern.compile("\\A---\\R(.*?)\\R---\\R?(.*)\\z", Pattern.DOTALL);
 
@@ -278,19 +285,24 @@ public class IncrementalCompileService {
     CompileResult incrementalCompile(Path sourceDir) throws IOException {
         String jobId = UUID.randomUUID().toString();
         log.info("Incremental compile started sourceDir: {}", sourceDir);
-        List<RawSource> rawSources = ingestNode.ingest(sourceDir);
+        List<RawSource> ingestedRawSources = ingestNode.ingest(sourceDir);
+        List<RawSource> rawSources = filterChangedRawSources(ingestedRawSources);
+        log.info(
+                "Incremental compile filtered rawSources sourceDir: {}, changedCount: {}, ingestedCount: {}",
+                sourceDir,
+                rawSources.size(),
+                ingestedRawSources.size()
+        );
         persistSourceFiles(rawSources);
         persistSourceFileChunks(rawSources);
         List<MergedConcept> mergedConcepts = analyzeMergedConcepts(rawSources, sourceDir);
         List<ArticleRecord> existingArticles = articleJdbcRepository.findAll();
         IncrementalPlan incrementalPlan = planIncrementalChanges(mergedConcepts, existingArticles);
-
         Map<String, List<MergedConcept>> enhancementConcepts = resolveEnhancementConcepts(
                 incrementalPlan.getEnhancements(),
                 mergedConcepts,
                 existingArticles
         );
-        Set<String> handledConceptIds = new LinkedHashSet<String>();
         int persistedCount = 0;
 
         for (Map.Entry<String, List<MergedConcept>> entry : enhancementConcepts.entrySet()) {
@@ -309,17 +321,10 @@ public class IncrementalCompileService {
             if (articleChunkVectorIndexService != null) {
                 articleChunkVectorIndexService.indexArticle(updatedArticle);
             }
-            for (MergedConcept mergedConcept : entry.getValue()) {
-                handledConceptIds.add(mergedConcept.getConceptId());
-            }
             persistedCount++;
         }
 
-        List<MergedConcept> conceptsToCreate = resolveConceptsToCreate(
-                incrementalPlan.getNewArticles(),
-                mergedConcepts,
-                handledConceptIds
-        );
+        List<MergedConcept> conceptsToCreate = resolveConceptsToCreate(incrementalPlan.getNewArticles(), mergedConcepts);
         for (MergedConcept mergedConcept : conceptsToCreate) {
             ArticleRecord createdArticle = compileArticleNode.compile(mergedConcept, sourceDir);
             articleJdbcRepository.upsert(createdArticle);
@@ -332,11 +337,10 @@ public class IncrementalCompileService {
             if (articleChunkVectorIndexService != null) {
                 articleChunkVectorIndexService.indexArticle(createdArticle);
             }
-            handledConceptIds.add(mergedConcept.getConceptId());
             persistedCount++;
         }
 
-        refreshSynthesisArtifacts();
+        refreshSynthesisArtifacts(jobId);
         captureRepoSnapshot(sourceDir, persistedCount);
         log.info("Incremental compile completed sourceDir: {}, jobId: {}, persistedCount: {}", sourceDir, jobId, persistedCount);
         return new CompileResult(persistedCount, jobId);
@@ -356,18 +360,7 @@ public class IncrementalCompileService {
                 mergedConcepts,
                 existingArticles
         );
-
-        java.util.LinkedHashSet<String> handledConceptIds = new java.util.LinkedHashSet<String>();
-        for (List<MergedConcept> concepts : enhancementConcepts.values()) {
-            for (MergedConcept concept : concepts) {
-                handledConceptIds.add(concept.getConceptId());
-            }
-        }
-        List<MergedConcept> conceptsToCreate = resolveConceptsToCreate(
-                incrementalPlan.getNewArticles(),
-                mergedConcepts,
-                handledConceptIds
-        );
+        List<MergedConcept> conceptsToCreate = resolveConceptsToCreate(incrementalPlan.getNewArticles(), mergedConcepts);
 
         IncrementalCompilePlanResult result = new IncrementalCompilePlanResult();
         result.setEnhancementConcepts(enhancementConcepts);
@@ -398,7 +391,33 @@ public class IncrementalCompileService {
      * 刷新合成产物。
      */
     public void refreshGraphSynthesisArtifacts() {
-        refreshSynthesisArtifacts();
+        refreshGraphSynthesisArtifacts(null);
+    }
+
+    /**
+     * 在指定作业作用域下刷新合成产物。
+     *
+     * @param jobId 作业标识
+     */
+    public void refreshGraphSynthesisArtifacts(String jobId) {
+        refreshSynthesisArtifacts(jobId);
+    }
+
+    /**
+     * 过滤本次真正发生变化的原始源文件。
+     *
+     * @param rawSources 原始源文件集合
+     * @return 仅包含新增或内容变化文件的集合
+     */
+    public List<RawSource> filterChangedRawSources(List<RawSource> rawSources) {
+        List<RawSource> changedRawSources = new ArrayList<RawSource>();
+        for (RawSource rawSource : rawSources) {
+            Optional<SourceFileRecord> existingRecord = findExistingSourceFileRecord(rawSource);
+            if (existingRecord.isEmpty() || hasSourceFileChanged(rawSource, existingRecord.orElseThrow())) {
+                changedRawSources.add(rawSource);
+            }
+        }
+        return changedRawSources;
     }
 
     private void captureRepoSnapshot(Path sourceDir, int persistedCount) {
@@ -422,6 +441,48 @@ public class IncrementalCompileService {
             analyzedConcepts.addAll(analyzeNode.analyze(entry.getKey(), sourceBatches, sourceDir));
         }
         return crossGroupMergeNode.merge(analyzedConcepts);
+    }
+
+    private Optional<SourceFileRecord> findExistingSourceFileRecord(RawSource rawSource) {
+        if (rawSource.getSourceId() != null) {
+            Optional<SourceFileRecord> sourceAwareRecord = sourceFileJdbcRepository.findBySourceIdAndRelativePath(
+                    rawSource.getSourceId(),
+                    rawSource.getRelativePath()
+            );
+            if (sourceAwareRecord.isPresent()) {
+                return sourceAwareRecord;
+            }
+        }
+        return sourceFileJdbcRepository.findByPath(rawSource.getRelativePath());
+    }
+
+    private boolean hasSourceFileChanged(RawSource rawSource, SourceFileRecord existingRecord) {
+        return !sameText(rawSource.getRelativePath(), existingRecord.getRelativePath())
+                || !sameText(rawSource.getContent(), existingRecord.getContentText())
+                || rawSource.getFileSize() != existingRecord.getFileSize()
+                || !sameText(rawSource.getFormat(), existingRecord.getFormat())
+                || !sameMetadataJson(rawSource.getMetadataJson(), existingRecord.getMetadataJson())
+                || rawSource.isVerbatim() != existingRecord.isVerbatim();
+    }
+
+    private boolean sameText(String left, String right) {
+        String normalizedLeft = left == null ? "" : left;
+        String normalizedRight = right == null ? "" : right;
+        return normalizedLeft.equals(normalizedRight);
+    }
+
+    private boolean sameMetadataJson(String left, String right) {
+        String normalizedLeft = left == null ? "" : left.trim();
+        String normalizedRight = right == null ? "" : right.trim();
+        if (normalizedLeft.equals(normalizedRight)) {
+            return true;
+        }
+        try {
+            return OBJECT_MAPPER.readTree(normalizedLeft).equals(OBJECT_MAPPER.readTree(normalizedRight));
+        }
+        catch (JsonProcessingException ex) {
+            return normalizedLeft.equals(normalizedRight);
+        }
     }
 
     /**
@@ -485,127 +546,160 @@ public class IncrementalCompileService {
      * @return 增量计划
      */
     private IncrementalPlan planIncrementalChanges(List<MergedConcept> mergedConcepts, List<ArticleRecord> existingArticles) {
-        IncrementalPlan llmPlan = tryPlanWithLlm(mergedConcepts, existingArticles);
-        if (llmPlan != null && (!llmPlan.getEnhancements().isEmpty() || !llmPlan.getNewArticles().isEmpty())) {
-            return llmPlan;
-        }
-        return buildFallbackPlan(mergedConcepts, existingArticles);
+        return buildRuleBasedPlan(mergedConcepts, existingArticles);
     }
 
     /**
-     * 尝试借助 LLM 生成增量匹配计划。
+     * 构建规则主导的增量计划。
      *
      * @param mergedConcepts 增量概念
      * @param existingArticles 已有文章
-     * @return 增量计划；失败时返回 null
+     * @return 增量计划
      */
-    private IncrementalPlan tryPlanWithLlm(List<MergedConcept> mergedConcepts, List<ArticleRecord> existingArticles) {
-        if (llmGateway == null || mergedConcepts.isEmpty()) {
-            return null;
+    private IncrementalPlan buildRuleBasedPlan(List<MergedConcept> mergedConcepts, List<ArticleRecord> existingArticles) {
+        Map<String, List<MergedConcept>> directHitConcepts = resolveDirectHitConcepts(mergedConcepts, existingArticles);
+        List<EnhancementPlan> enhancements = new ArrayList<EnhancementPlan>();
+        for (Map.Entry<String, List<MergedConcept>> entry : directHitConcepts.entrySet()) {
+            enhancements.add(buildEnhancementPlan(entry.getKey(), entry.getValue()));
         }
-        try {
-            String llmResponse = llmGateway.compile(
-                    "incremental-match",
-                    LatticePrompts.SYSTEM_INCREMENTAL_MATCH,
-                    buildIncrementalMatchPrompt(mergedConcepts, existingArticles)
-            );
-            return parseIncrementalPlan(llmResponse);
-        }
-        catch (RuntimeException ex) {
-            return null;
-        }
+        enhancements.addAll(buildPropagationPlans(directHitConcepts, existingArticles));
+        return new IncrementalPlan(enhancements, buildNewArticlePlans(mergedConcepts, existingArticles));
     }
 
     /**
-     * 构建增量匹配 Prompt。
+     * 解析直命中文章集合。
      *
      * @param mergedConcepts 增量概念
      * @param existingArticles 已有文章
-     * @return 用户提示词
+     * @return 直命中文章到增量概念的映射
      */
-    private String buildIncrementalMatchPrompt(List<MergedConcept> mergedConcepts, List<ArticleRecord> existingArticles) {
-        StringBuilder builder = new StringBuilder();
-        builder.append("NEW CONCEPTS").append("\n");
-        for (MergedConcept mergedConcept : mergedConcepts) {
-            builder.append("- id: ").append(mergedConcept.getConceptId()).append("\n");
-            builder.append("  title: ").append(mergedConcept.getTitle()).append("\n");
-            builder.append("  description: ").append(mergedConcept.getDescription()).append("\n");
-            builder.append("  sources: ").append(String.join(", ", mergedConcept.getSourcePaths())).append("\n");
-        }
-        builder.append("\nEXISTING ARTICLES").append("\n");
+    private Map<String, List<MergedConcept>> resolveDirectHitConcepts(
+            List<MergedConcept> mergedConcepts,
+            List<ArticleRecord> existingArticles
+    ) {
+        Map<String, List<MergedConcept>> result = new LinkedHashMap<String, List<MergedConcept>>();
         for (ArticleRecord existingArticle : existingArticles) {
-            builder.append("- id: ").append(existingArticle.getConceptId()).append("\n");
-            builder.append("  title: ").append(existingArticle.getTitle()).append("\n");
-            builder.append("  summary: ").append(existingArticle.getSummary()).append("\n");
+            for (MergedConcept mergedConcept : mergedConcepts) {
+                if (!isDirectHit(existingArticle, mergedConcept)) {
+                    continue;
+                }
+                addMatchedConcept(result, existingArticle.getConceptId(), mergedConcept);
+            }
         }
-        return builder.toString().trim();
+        return result;
     }
 
     /**
-     * 解析 LLM 返回的增量计划。
+     * 判断文章是否被本次变更直接命中。
      *
-     * @param llmResponse 模型返回
-     * @return 增量计划
+     * @param existingArticle 已有文章
+     * @param mergedConcept 增量概念
+     * @return 是否直命中
      */
-    private IncrementalPlan parseIncrementalPlan(String llmResponse) {
-        if (llmResponse == null || llmResponse.isBlank()) {
-            return null;
+    private boolean isDirectHit(ArticleRecord existingArticle, MergedConcept mergedConcept) {
+        if (normalizeConceptId(existingArticle.getConceptId()).equals(normalizeConceptId(mergedConcept.getConceptId()))) {
+            return true;
         }
-        try {
-            JsonNode root = OBJECT_MAPPER.readTree(llmResponse);
-            List<EnhancementPlan> enhancements = new ArrayList<EnhancementPlan>();
-            for (JsonNode enhancementNode : root.path("enhancements")) {
-                String targetArticleId = readText(enhancementNode, "target_article_id");
-                if (targetArticleId.isBlank()) {
-                    continue;
-                }
-                enhancements.add(new EnhancementPlan(
-                        targetArticleId,
-                        readText(enhancementNode, "new_info_summary"),
-                        readTextArray(enhancementNode.path("source_refs"))
-                ));
-            }
-            List<NewArticlePlan> newArticles = new ArrayList<NewArticlePlan>();
-            for (JsonNode newArticleNode : root.path("new_articles")) {
-                String articleId = readText(newArticleNode, "id");
-                if (articleId.isBlank()) {
-                    continue;
-                }
-                newArticles.add(new NewArticlePlan(
-                        articleId,
-                        readText(newArticleNode, "title"),
-                        readText(newArticleNode, "description"),
-                        readTextArray(newArticleNode.path("source_refs"))
-                ));
-            }
-            return new IncrementalPlan(enhancements, newArticles);
-        }
-        catch (JsonProcessingException ex) {
-            return null;
-        }
+        return hasSourceIntersection(existingArticle.getSourcePaths(), mergedConcept.getSourcePaths());
     }
 
     /**
-     * 构建无 LLM 时的保守回退计划。
+     * 判断两组来源路径是否存在交集。
+     *
+     * @param leftSourcePaths 左侧来源路径
+     * @param rightSourcePaths 右侧来源路径
+     * @return 是否存在交集
+     */
+    private boolean hasSourceIntersection(List<String> leftSourcePaths, List<String> rightSourcePaths) {
+        Set<String> normalizedPaths = new LinkedHashSet<String>();
+        if (leftSourcePaths == null || rightSourcePaths == null) {
+            return false;
+        }
+        for (String sourcePath : leftSourcePaths) {
+            if (sourcePath == null || sourcePath.isBlank()) {
+                continue;
+            }
+            normalizedPaths.add(sourcePath.trim());
+        }
+        for (String sourcePath : rightSourcePaths) {
+            if (sourcePath == null || sourcePath.isBlank()) {
+                continue;
+            }
+            if (normalizedPaths.contains(sourcePath.trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 构建传播增强计划。
+     *
+     * @param directHitConcepts 直命中文章集合
+     * @param existingArticles 已有文章
+     * @return 下游增强计划列表
+     */
+    private List<EnhancementPlan> buildPropagationPlans(
+            Map<String, List<MergedConcept>> directHitConcepts,
+            List<ArticleRecord> existingArticles
+    ) {
+        List<EnhancementPlan> propagationPlans = new ArrayList<EnhancementPlan>();
+        if (directHitConcepts.isEmpty()) {
+            return propagationPlans;
+        }
+        PropagationService propagationService = new PropagationService(
+                new DependencyGraphService(articleJdbcRepository),
+                articleJdbcRepository
+        );
+        Map<String, ArticleRecord> existingArticleMap = indexExistingArticles(existingArticles);
+        Set<String> emittedPlanKeys = new LinkedHashSet<String>();
+        for (Map.Entry<String, List<MergedConcept>> entry : directHitConcepts.entrySet()) {
+            ArticleRecord rootArticle = existingArticleMap.get(normalizeConceptId(entry.getKey()));
+            if (rootArticle == null) {
+                continue;
+            }
+            String rootArticleId = resolveArticleId(rootArticle);
+            PropagationReport propagationReport = propagationService.analyzeImpact(rootArticleId, "incremental compile");
+            List<String> sourceRefs = collectSourceRefs(entry.getValue());
+            if (sourceRefs.isEmpty()) {
+                continue;
+            }
+            for (PropagationItem propagationItem : propagationReport.getItems()) {
+                String targetArticleId = propagationItem.getConceptId();
+                if (targetArticleId == null || targetArticleId.isBlank()) {
+                    continue;
+                }
+                String emittedPlanKey = normalizeConceptId(entry.getKey()) + "->" + normalizeConceptId(targetArticleId);
+                if (!emittedPlanKeys.add(emittedPlanKey)) {
+                    continue;
+                }
+                propagationPlans.add(new EnhancementPlan(
+                        targetArticleId,
+                        buildEnhancementSummary(entry.getValue()),
+                        sourceRefs
+                ));
+            }
+        }
+        return propagationPlans;
+    }
+
+    /**
+     * 构建新建文章计划。
      *
      * @param mergedConcepts 增量概念
      * @param existingArticles 已有文章
-     * @return 增量计划
+     * @return 新建文章计划列表
      */
-    private IncrementalPlan buildFallbackPlan(List<MergedConcept> mergedConcepts, List<ArticleRecord> existingArticles) {
+    private List<NewArticlePlan> buildNewArticlePlans(List<MergedConcept> mergedConcepts, List<ArticleRecord> existingArticles) {
         Set<String> existingArticleIds = new LinkedHashSet<String>();
         for (ArticleRecord existingArticle : existingArticles) {
-            existingArticleIds.add(existingArticle.getConceptId());
+            existingArticleIds.add(normalizeConceptId(existingArticle.getConceptId()));
         }
-        List<EnhancementPlan> enhancements = new ArrayList<EnhancementPlan>();
+        Set<String> plannedConceptIds = new LinkedHashSet<String>();
         List<NewArticlePlan> newArticles = new ArrayList<NewArticlePlan>();
         for (MergedConcept mergedConcept : mergedConcepts) {
-            if (existingArticleIds.contains(mergedConcept.getConceptId())) {
-                enhancements.add(new EnhancementPlan(
-                        mergedConcept.getConceptId(),
-                        mergedConcept.getDescription(),
-                        mergedConcept.getSourcePaths()
-                ));
+            String normalizedConceptId = normalizeConceptId(mergedConcept.getConceptId());
+            if (existingArticleIds.contains(normalizedConceptId) || !plannedConceptIds.add(normalizedConceptId)) {
                 continue;
             }
             newArticles.add(new NewArticlePlan(
@@ -615,7 +709,53 @@ public class IncrementalCompileService {
                     mergedConcept.getSourcePaths()
             ));
         }
-        return new IncrementalPlan(enhancements, newArticles);
+        return newArticles;
+    }
+
+    /**
+     * 构建单条增强计划。
+     *
+     * @param targetArticleId 目标文章标识
+     * @param matchedConcepts 命中的增量概念
+     * @return 增强计划
+     */
+    private EnhancementPlan buildEnhancementPlan(String targetArticleId, List<MergedConcept> matchedConcepts) {
+        return new EnhancementPlan(
+                targetArticleId,
+                buildEnhancementSummary(matchedConcepts),
+                collectSourceRefs(matchedConcepts)
+        );
+    }
+
+    /**
+     * 构建增强摘要。
+     *
+     * @param matchedConcepts 命中的增量概念
+     * @return 摘要文本
+     */
+    private String buildEnhancementSummary(List<MergedConcept> matchedConcepts) {
+        List<String> summaries = new ArrayList<String>();
+        for (MergedConcept matchedConcept : matchedConcepts) {
+            if (matchedConcept.getDescription() == null || matchedConcept.getDescription().isBlank()) {
+                continue;
+            }
+            summaries.add(matchedConcept.getDescription().trim());
+        }
+        return String.join("；", summaries);
+    }
+
+    /**
+     * 收集增量概念对应的来源路径。
+     *
+     * @param matchedConcepts 命中的增量概念
+     * @return 去重后的来源路径
+     */
+    private List<String> collectSourceRefs(List<MergedConcept> matchedConcepts) {
+        LinkedHashSet<String> sourceRefs = new LinkedHashSet<String>();
+        for (MergedConcept matchedConcept : matchedConcepts) {
+            sourceRefs.addAll(normalizeTextList(matchedConcept.getSourcePaths()));
+        }
+        return new ArrayList<String>(sourceRefs);
     }
 
     /**
@@ -633,30 +773,20 @@ public class IncrementalCompileService {
     ) {
         Set<String> existingArticleIds = new LinkedHashSet<String>();
         for (ArticleRecord existingArticle : existingArticles) {
-            existingArticleIds.add(existingArticle.getConceptId());
+            existingArticleIds.add(normalizeConceptId(existingArticle.getConceptId()));
         }
 
         Map<String, List<MergedConcept>> result = new LinkedHashMap<String, List<MergedConcept>>();
         for (EnhancementPlan enhancementPlan : enhancements) {
-            if (!existingArticleIds.contains(enhancementPlan.getTargetArticleId())) {
+            if (!existingArticleIds.contains(normalizeConceptId(enhancementPlan.getTargetArticleId()))) {
                 continue;
             }
             List<MergedConcept> matchedConcepts = matchConceptsForEnhancement(enhancementPlan, mergedConcepts);
             if (matchedConcepts.isEmpty()) {
                 continue;
             }
-            List<MergedConcept> concepts = result.computeIfAbsent(
-                    enhancementPlan.getTargetArticleId(),
-                    key -> new ArrayList<MergedConcept>()
-            );
-            Set<String> seenConceptIds = new LinkedHashSet<String>();
-            for (MergedConcept concept : concepts) {
-                seenConceptIds.add(concept.getConceptId());
-            }
             for (MergedConcept matchedConcept : matchedConcepts) {
-                if (seenConceptIds.add(matchedConcept.getConceptId())) {
-                    concepts.add(matchedConcept);
-                }
+                addMatchedConcept(result, enhancementPlan.getTargetArticleId(), matchedConcept);
             }
         }
         return result;
@@ -674,7 +804,7 @@ public class IncrementalCompileService {
             List<MergedConcept> mergedConcepts
     ) {
         List<MergedConcept> matchedConcepts = new ArrayList<MergedConcept>();
-        Set<String> sourceRefs = new LinkedHashSet<String>(enhancementPlan.getSourceRefs());
+        Set<String> sourceRefs = new LinkedHashSet<String>(normalizeTextList(enhancementPlan.getSourceRefs()));
         for (MergedConcept mergedConcept : mergedConcepts) {
             boolean matchedBySource = false;
             for (String sourcePath : mergedConcept.getSourcePaths()) {
@@ -691,7 +821,7 @@ public class IncrementalCompileService {
             return matchedConcepts;
         }
         for (MergedConcept mergedConcept : mergedConcepts) {
-            if (mergedConcept.getConceptId().equals(enhancementPlan.getTargetArticleId())) {
+            if (normalizeConceptId(mergedConcept.getConceptId()).equals(normalizeConceptId(enhancementPlan.getTargetArticleId()))) {
                 matchedConcepts.add(mergedConcept);
             }
         }
@@ -703,14 +833,9 @@ public class IncrementalCompileService {
      *
      * @param newArticles 新建计划
      * @param mergedConcepts 增量概念
-     * @param handledConceptIds 已处理概念标识
      * @return 待新建概念
      */
-    private List<MergedConcept> resolveConceptsToCreate(
-            List<NewArticlePlan> newArticles,
-            List<MergedConcept> mergedConcepts,
-            Set<String> handledConceptIds
-    ) {
+    private List<MergedConcept> resolveConceptsToCreate(List<NewArticlePlan> newArticles, List<MergedConcept> mergedConcepts) {
         List<MergedConcept> conceptsToCreate = new ArrayList<MergedConcept>();
         Set<String> conceptIdsToCreate = new LinkedHashSet<String>();
         for (NewArticlePlan newArticle : newArticles) {
@@ -718,20 +843,62 @@ public class IncrementalCompileService {
             if (matchedConcept == null) {
                 continue;
             }
-            if (handledConceptIds.add(matchedConcept.getConceptId())) {
+            if (conceptIdsToCreate.add(normalizeConceptId(matchedConcept.getConceptId()))) {
                 conceptsToCreate.add(matchedConcept);
-                conceptIdsToCreate.add(matchedConcept.getConceptId());
-            }
-        }
-        for (MergedConcept mergedConcept : mergedConcepts) {
-            if (conceptIdsToCreate.contains(mergedConcept.getConceptId())) {
-                continue;
-            }
-            if (handledConceptIds.add(mergedConcept.getConceptId())) {
-                conceptsToCreate.add(mergedConcept);
             }
         }
         return conceptsToCreate;
+    }
+
+    /**
+     * 向命中映射中追加概念，并按概念标识去重。
+     *
+     * @param matchedConcepts 目标映射
+     * @param targetArticleId 目标文章标识
+     * @param mergedConcept 增量概念
+     */
+    private void addMatchedConcept(
+            Map<String, List<MergedConcept>> matchedConcepts,
+            String targetArticleId,
+            MergedConcept mergedConcept
+    ) {
+        List<MergedConcept> concepts = matchedConcepts.computeIfAbsent(
+                targetArticleId,
+                key -> new ArrayList<MergedConcept>()
+        );
+        for (MergedConcept existingConcept : concepts) {
+            if (normalizeConceptId(existingConcept.getConceptId()).equals(normalizeConceptId(mergedConcept.getConceptId()))) {
+                return;
+            }
+        }
+        concepts.add(mergedConcept);
+    }
+
+    /**
+     * 建立已有文章索引。
+     *
+     * @param existingArticles 已有文章
+     * @return 按概念标识归一化后的文章映射
+     */
+    private Map<String, ArticleRecord> indexExistingArticles(List<ArticleRecord> existingArticles) {
+        Map<String, ArticleRecord> existingArticleMap = new LinkedHashMap<String, ArticleRecord>();
+        for (ArticleRecord existingArticle : existingArticles) {
+            existingArticleMap.put(normalizeConceptId(existingArticle.getConceptId()), existingArticle);
+        }
+        return existingArticleMap;
+    }
+
+    /**
+     * 解析传播分析使用的根文章标识。
+     *
+     * @param articleRecord 根文章
+     * @return articleKey 或 conceptId
+     */
+    private String resolveArticleId(ArticleRecord articleRecord) {
+        if (articleRecord.getArticleKey() != null && !articleRecord.getArticleKey().isBlank()) {
+            return articleRecord.getArticleKey();
+        }
+        return articleRecord.getConceptId();
     }
 
     /**
@@ -812,7 +979,9 @@ public class IncrementalCompileService {
             return null;
         }
         try {
-            return llmGateway.compile(
+            return llmGateway.generateText(
+                    COMPILE_SCENE,
+                    WRITER_ROLE,
                     "incremental-enhance",
                     LatticePrompts.SYSTEM_INCREMENTAL_ENHANCE,
                     buildIncrementalEnhancePrompt(existingArticle, mergedConcepts)
@@ -1015,7 +1184,7 @@ public class IncrementalCompileService {
     /**
      * 刷新合成产物。
      */
-    private void refreshSynthesisArtifacts() {
+    private void refreshSynthesisArtifacts(String jobId) {
         if (synthesisArtifactsService == null) {
             return;
         }
@@ -1030,36 +1199,53 @@ public class IncrementalCompileService {
                     List.of()
             ));
         }
-        synthesisArtifactsService.generateAll(knowledgeBaseConcepts);
+        synthesisArtifactsService.generateAll(jobId, knowledgeBaseConcepts);
     }
 
     /**
-     * 读取 JSON 字符串字段。
+     * 归一化字符串列表。
      *
-     * @param jsonNode JSON 节点
-     * @param fieldName 字段名
-     * @return 字段值
+     * @param rawValues 原始字符串列表
+     * @return 归一化后的字符串列表
      */
-    private String readText(JsonNode jsonNode, String fieldName) {
-        JsonNode childNode = jsonNode.path(fieldName);
-        return childNode.isMissingNode() || childNode.isNull() ? "" : childNode.asText("");
-    }
-
-    /**
-     * 读取 JSON 字符串数组。
-     *
-     * @param arrayNode 数组节点
-     * @return 字符串数组
-     */
-    private List<String> readTextArray(JsonNode arrayNode) {
+    private List<String> normalizeTextList(List<String> rawValues) {
         List<String> values = new ArrayList<String>();
-        for (JsonNode itemNode : arrayNode) {
-            String value = itemNode.asText("");
-            if (!value.isBlank()) {
-                values.add(value);
+        if (rawValues == null) {
+            return values;
+        }
+        for (String rawValue : rawValues) {
+            if (rawValue == null || rawValue.isBlank()) {
+                continue;
             }
+            values.add(rawValue.trim());
         }
         return values;
+    }
+
+    /**
+     * 从 Markdown code fence 中提取 JSON 主体。
+     *
+     * @param content 原始文本
+     * @return 归一化后的 JSON 文本
+     */
+    private String unwrapJsonCodeFence(String content) {
+        if (content == null) {
+            return "";
+        }
+        String normalized = content.trim();
+        int fenceStartIndex = normalized.indexOf("```");
+        if (fenceStartIndex < 0) {
+            return normalized;
+        }
+        int firstLineBreakIndex = normalized.indexOf('\n', fenceStartIndex);
+        if (firstLineBreakIndex < 0) {
+            return normalized;
+        }
+        int closingFenceIndex = normalized.indexOf("```", firstLineBreakIndex + 1);
+        if (closingFenceIndex < 0) {
+            return normalized;
+        }
+        return normalized.substring(firstLineBreakIndex + 1, closingFenceIndex).trim();
     }
 
     /**

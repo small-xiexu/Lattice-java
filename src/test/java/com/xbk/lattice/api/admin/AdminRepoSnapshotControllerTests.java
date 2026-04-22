@@ -7,6 +7,7 @@ import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.ContributionJdbcRepository;
 import com.xbk.lattice.infra.persistence.ContributionRecord;
+import com.xbk.lattice.infra.persistence.RepoSnapshotRecord;
 import com.xbk.lattice.vault.VaultExportService;
 import com.xbk.lattice.vault.snapshot.VaultGitService;
 import org.junit.jupiter.api.Test;
@@ -72,6 +73,35 @@ class AdminRepoSnapshotControllerTests {
 
     @Autowired
     private RepoSnapshotService repoSnapshotService;
+
+    /**
+     * 验证 repo baseline 管理接口会建立带 gitCommit 的 repo snapshot。
+     *
+     * @param tempDir 临时目录
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldCreateRepoBaselineSnapshot(@TempDir Path tempDir) throws Exception {
+        resetTables();
+        Path vaultDir = tempDir.resolve("vault");
+
+        seedBaseline();
+
+        mockMvc.perform(post("/api/v1/admin/snapshot/repo/baseline")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"vaultDir\":\"" + escapeJson(vaultDir.toString()) + "\",\"description\":\"baseline\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.snapshotId").isNumber())
+                .andExpect(jsonPath("$.gitCommit").isString())
+                .andExpect(jsonPath("$.createdNewCommit").value(true))
+                .andExpect(jsonPath("$.articleCount").value(1))
+                .andExpect(jsonPath("$.vaultDir").value(vaultDir.toString()));
+
+        List<RepoSnapshotRecord> snapshots = repoSnapshotService.history(10).getItems();
+        assertThat(snapshots).hasSize(1);
+        assertThat(snapshots.get(0).getGitCommit()).isNotBlank();
+        assertThat(vaultGitService.headCommitId(vaultDir)).isEqualTo(snapshots.get(0).getGitCommit());
+    }
 
     /**
      * 验证 repo diff 与 repo rollback 管理接口。

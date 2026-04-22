@@ -69,6 +69,14 @@ public final class QueryGraphStateKeys {
 
     public static final String REVIEW_STATUS = "reviewStatus";
 
+    public static final String ANSWER_OUTCOME = "answerOutcome";
+
+    public static final String GENERATION_MODE = "generationMode";
+
+    public static final String MODEL_EXECUTION_STATUS = "modelExecutionStatus";
+
+    public static final String ANSWER_CACHEABLE = "answerCacheable";
+
     public static final String REWRITE_ATTEMPT_COUNT = "rewriteAttemptCount";
 
     public static final String MAX_REWRITE_ROUNDS = "maxRewriteRounds";

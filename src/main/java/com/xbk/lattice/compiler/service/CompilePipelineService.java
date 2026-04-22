@@ -62,6 +62,8 @@ public class CompilePipelineService {
 
     private final IncrementalCompileService incrementalCompileService;
 
+    private final LlmGateway llmGateway;
+
     private QueryCacheStore queryCacheStore;
 
     /**
@@ -348,6 +350,7 @@ public class CompilePipelineService {
             CompilationWalStore compilationWalStore,
             SupportBundle supportBundle
     ) {
+        this.llmGateway = llmGateway;
         this.sourceIngestSupport = supportBundle.sourceIngestSupport;
         this.articleCompileSupport = supportBundle.articleCompileSupport;
         this.articlePersistSupport = supportBundle.articlePersistSupport;
@@ -421,7 +424,7 @@ public class CompilePipelineService {
         sourceIngestSupport.stageWal(jobId, mergedConcepts);
         int persistedCount = commitPendingConcepts(jobId, sourceDir);
         if (synthesisArtifactsService != null && !mergedConcepts.isEmpty()) {
-            synthesisArtifactsService.generateAll(mergedConcepts);
+            synthesisArtifactsService.generateAll(jobId, mergedConcepts);
         }
         articlePersistSupport.captureRepoSnapshot("compile.full", sourceDir, persistedCount);
         evictQueryCacheIfNeeded(persistedCount);
@@ -686,10 +689,15 @@ public class CompilePipelineService {
      * @param persistedCount 已落库文章数
      */
     private void evictQueryCacheIfNeeded(int persistedCount) {
-        if (persistedCount <= 0 || queryCacheStore == null) {
+        if (persistedCount <= 0) {
             return;
         }
-        queryCacheStore.evictAll();
+        if (queryCacheStore != null) {
+            queryCacheStore.evictAll();
+        }
+        if (llmGateway != null) {
+            llmGateway.evictPromptCache();
+        }
     }
 
     /**

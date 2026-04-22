@@ -58,6 +58,10 @@ public class QueryGraphStateMapper {
         state.setReviewRoute(readString(stateMap, QueryGraphStateKeys.REVIEW_ROUTE));
         state.setRewriteRoute(readString(stateMap, QueryGraphStateKeys.REWRITE_ROUTE));
         state.setReviewStatus(readString(stateMap, QueryGraphStateKeys.REVIEW_STATUS));
+        state.setAnswerOutcome(readString(stateMap, QueryGraphStateKeys.ANSWER_OUTCOME));
+        state.setGenerationMode(readString(stateMap, QueryGraphStateKeys.GENERATION_MODE));
+        state.setModelExecutionStatus(readString(stateMap, QueryGraphStateKeys.MODEL_EXECUTION_STATUS));
+        state.setAnswerCacheable(readBoolean(stateMap, QueryGraphStateKeys.ANSWER_CACHEABLE));
         state.setRewriteAttemptCount(readInt(stateMap, QueryGraphStateKeys.REWRITE_ATTEMPT_COUNT));
         state.setMaxRewriteRounds(readInt(stateMap, QueryGraphStateKeys.MAX_REWRITE_ROUNDS));
         return state;
@@ -100,6 +104,10 @@ public class QueryGraphStateMapper {
         values.put(QueryGraphStateKeys.REVIEW_ROUTE, state.getReviewRoute());
         values.put(QueryGraphStateKeys.REWRITE_ROUTE, state.getRewriteRoute());
         values.put(QueryGraphStateKeys.REVIEW_STATUS, state.getReviewStatus());
+        values.put(QueryGraphStateKeys.ANSWER_OUTCOME, state.getAnswerOutcome());
+        values.put(QueryGraphStateKeys.GENERATION_MODE, state.getGenerationMode());
+        values.put(QueryGraphStateKeys.MODEL_EXECUTION_STATUS, state.getModelExecutionStatus());
+        values.put(QueryGraphStateKeys.ANSWER_CACHEABLE, state.isAnswerCacheable());
         values.put(QueryGraphStateKeys.REWRITE_ATTEMPT_COUNT, state.getRewriteAttemptCount());
         values.put(QueryGraphStateKeys.MAX_REWRITE_ROUNDS, state.getMaxRewriteRounds());
         return values;

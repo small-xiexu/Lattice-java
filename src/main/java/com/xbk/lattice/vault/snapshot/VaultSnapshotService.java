@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.service.SynthesisArtifactJdbcStore;
 import com.xbk.lattice.compiler.service.SynthesisArtifactRecord;
+import com.xbk.lattice.governance.repo.RepoBaselineResult;
 import com.xbk.lattice.governance.repo.RepoRollbackResult;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
@@ -13,6 +14,7 @@ import com.xbk.lattice.infra.persistence.ContributionRecord;
 import com.xbk.lattice.infra.persistence.RepoSnapshotItemRecord;
 import com.xbk.lattice.infra.persistence.RepoSnapshotJdbcRepository;
 import com.xbk.lattice.infra.persistence.RepoSnapshotRecord;
+import com.xbk.lattice.vault.VaultExportResult;
 import com.xbk.lattice.vault.VaultExportService;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -39,6 +41,8 @@ import java.util.UUID;
 public class VaultSnapshotService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
+
+    private static final String BASELINE_TRIGGER_EVENT = "manual.baseline";
 
     private final RepoSnapshotJdbcRepository repoSnapshotJdbcRepository;
 
@@ -96,6 +100,48 @@ public class VaultSnapshotService {
     }
 
     /**
+     * 建立带 Git commit 的 repo baseline snapshot。
+     *
+     * @param vaultDir Vault 目录
+     * @param description baseline 描述
+     * @return baseline 结果
+     * @throws IOException IO 异常
+     */
+    public RepoBaselineResult createBaselineSnapshot(Path vaultDir, String description) throws IOException {
+        VaultExportResult exportResult = vaultExportService.export(vaultDir);
+        String effectiveDescription = normalizeBaselineDescription(vaultDir, description);
+        String commitId = vaultGitService.commitAll(
+                vaultDir,
+                "[lattice:baseline] " + effectiveDescription
+        );
+        boolean createdNewCommit = commitId != null && !commitId.isBlank();
+        if (!createdNewCommit) {
+            commitId = vaultGitService.headCommitId(vaultDir);
+        }
+        if (commitId == null || commitId.isBlank()) {
+            throw new IllegalStateException("无法建立 Git-backed repo baseline: " + vaultDir);
+        }
+        RepoSnapshotRecord snapshotRecord = repoSnapshotService.snapshot(
+                BASELINE_TRIGGER_EVENT,
+                effectiveDescription,
+                commitId
+        );
+        return new RepoBaselineResult(
+                snapshotRecord.getId(),
+                snapshotRecord.getCreatedAt(),
+                snapshotRecord.getTriggerEvent(),
+                snapshotRecord.getDescription(),
+                snapshotRecord.getGitCommit(),
+                createdNewCommit,
+                snapshotRecord.getArticleCount(),
+                exportResult.getVaultDir(),
+                exportResult.getWrittenFiles(),
+                exportResult.getSkippedFiles(),
+                exportResult.getDeletedFiles()
+        );
+    }
+
+    /**
      * 回滚整库到目标 repo snapshot。
      *
      * @param vaultDir Vault 目录
@@ -116,6 +162,13 @@ public class VaultSnapshotService {
                 commitId
         );
         return new RepoRollbackResult(snapshotId, OffsetDateTime.now());
+    }
+
+    private String normalizeBaselineDescription(Path vaultDir, String description) {
+        if (description == null || description.isBlank()) {
+            return "vaultDir=" + vaultDir;
+        }
+        return description.trim();
     }
 
     /**

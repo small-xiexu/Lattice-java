@@ -315,8 +315,8 @@ public class CompileArticleNode {
                     : schemaAwarePrompts.getCompileArticlePrompt(sourceDir);
             String userPrompt = buildCompilePrompt(mergedConcept, summary, sourceId);
             return scopeId == null || scopeId.isBlank()
-                    ? llmGateway.compile("compile-article", systemPrompt, userPrompt)
-                    : llmGateway.compileWithScope(
+                    ? llmGateway.generateText(COMPILE_SCENE, WRITER_ROLE, "compile-article", systemPrompt, userPrompt)
+                    : llmGateway.generateTextWithScope(
                             scopeId,
                             scene,
                             WRITER_ROLE,

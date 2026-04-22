@@ -8,7 +8,11 @@ import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import com.xbk.lattice.llm.service.LlmCallResult;
 import com.xbk.lattice.llm.service.LlmClient;
 import com.xbk.lattice.llm.service.LlmClientFactory;
+import com.xbk.lattice.llm.service.LlmInvocationContext;
+import com.xbk.lattice.llm.service.LlmInvocationEnvelope;
+import com.xbk.lattice.llm.service.LlmInvocationExecutor;
 import com.xbk.lattice.llm.service.LlmRouteResolution;
+import com.xbk.lattice.llm.service.PromptCacheWritePolicy;
 import com.xbk.lattice.observability.StructuredEventLogger;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +34,7 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * LLM 网关
@@ -48,6 +53,12 @@ public class LlmGateway {
     private static final String ROLE_REVIEWER = ExecutionLlmSnapshotService.ROLE_REVIEWER;
 
     private static final String ROLE_FIXER = ExecutionLlmSnapshotService.ROLE_FIXER;
+
+    private static final Set<String> GOVERNANCE_JSON_PURPOSES = Set.of(
+            "cross-validate",
+            "check-propagation",
+            "analyze"
+    );
 
     private final LlmClient compileClient;
 
@@ -68,6 +79,8 @@ public class LlmGateway {
     private final String reviewBootstrapBaseUrl;
 
     private final String reviewBootstrapApiKey;
+
+    private final LlmInvocationExecutor llmInvocationExecutor;
 
     private final StructuredEventLogger structuredEventLogger;
 
@@ -102,6 +115,7 @@ public class LlmGateway {
             LlmProperties llmProperties,
             LlmClientFactory llmClientFactory,
             ExecutionLlmSnapshotService executionLlmSnapshotService,
+            LlmInvocationExecutor llmInvocationExecutor,
             StructuredEventLogger structuredEventLogger
     ) {
         this(
@@ -116,6 +130,7 @@ public class LlmGateway {
                 llmProperties,
                 llmClientFactory,
                 executionLlmSnapshotService,
+                llmInvocationExecutor,
                 openAiBaseUrl,
                 openAiApiKey,
                 anthropicConnectionProperties.getBaseUrl(),
@@ -143,6 +158,7 @@ public class LlmGateway {
                 reviewClient,
                 redisKeyValueStore,
                 llmProperties,
+                null,
                 null,
                 null,
                 "",
@@ -176,6 +192,7 @@ public class LlmGateway {
                 llmProperties,
                 null,
                 null,
+                null,
                 "",
                 "",
                 "",
@@ -206,6 +223,7 @@ public class LlmGateway {
             LlmProperties llmProperties,
             LlmClientFactory llmClientFactory,
             ExecutionLlmSnapshotService executionLlmSnapshotService,
+            LlmInvocationExecutor llmInvocationExecutor,
             String compileBootstrapBaseUrl,
             String compileBootstrapApiKey,
             String reviewBootstrapBaseUrl,
@@ -218,6 +236,7 @@ public class LlmGateway {
         this.llmProperties = llmProperties;
         this.llmClientFactory = llmClientFactory;
         this.executionLlmSnapshotService = executionLlmSnapshotService;
+        this.llmInvocationExecutor = llmInvocationExecutor;
         this.compileBootstrapBaseUrl = compileBootstrapBaseUrl;
         this.compileBootstrapApiKey = compileBootstrapApiKey;
         this.reviewBootstrapBaseUrl = reviewBootstrapBaseUrl;
@@ -227,31 +246,28 @@ public class LlmGateway {
     }
 
     /**
-     * 调用编译模型。
+     * 执行文本生成调用，并保留 legacy compile 路径的 L1 prompt cache 写入语义。
      *
-     * @param systemPrompt 系统提示词
-     * @param userPrompt 用户提示词
-     * @return 模型输出
-     */
-    public String compile(String systemPrompt, String userPrompt) {
-        return compile("compile", systemPrompt, userPrompt);
-    }
-
-    /**
-     * 按用途调用编译模型。
-     *
+     * @param scene 场景
+     * @param agentRole Agent 角色
      * @param purpose 调用用途
      * @param systemPrompt 系统提示词
      * @param userPrompt 用户提示词
-     * @return 模型输出
+     * @return 模型输出文本
      */
-    public String compile(String purpose, String systemPrompt, String userPrompt) {
-        LlmRouteResolution routeResolution = resolveBootstrapRoute(ExecutionLlmSnapshotService.COMPILE_SCENE, ROLE_WRITER);
-        return invoke(resolveClient(routeResolution), routeResolution, purpose, systemPrompt, userPrompt);
+    public String generateText(
+            String scene,
+            String agentRole,
+            String purpose,
+            String systemPrompt,
+            String userPrompt
+    ) {
+        LlmRouteResolution routeResolution = resolveBootstrapRoute(scene, agentRole);
+        return invokeText(routeResolution, purpose, systemPrompt, userPrompt);
     }
 
     /**
-     * 按作用域调用编译模型。
+     * 在指定作用域下执行文本生成调用，并保留 legacy compile 路径的 L1 prompt cache 写入语义。
      *
      * @param scopeId 作用域标识
      * @param scene 场景
@@ -259,9 +275,9 @@ public class LlmGateway {
      * @param purpose 调用用途
      * @param systemPrompt 系统提示词
      * @param userPrompt 用户提示词
-     * @return 模型输出
+     * @return 模型输出文本
      */
-    public String compileWithScope(
+    public String generateTextWithScope(
             String scopeId,
             String scene,
             String agentRole,
@@ -270,35 +286,32 @@ public class LlmGateway {
             String userPrompt
     ) {
         LlmRouteResolution routeResolution = resolveScopedRoute(scopeId, scene, agentRole);
-        return invoke(resolveClient(routeResolution), routeResolution, purpose, systemPrompt, userPrompt);
+        return invokeText(routeResolution, purpose, systemPrompt, userPrompt);
     }
 
     /**
-     * 调用审查模型。
+     * 执行最小 raw 调用，并返回保留路由与 token 元数据的调用信封。
      *
-     * @param systemPrompt 系统提示词
-     * @param userPrompt 用户提示词
-     * @return 模型输出
-     */
-    public String review(String systemPrompt, String userPrompt) {
-        return review("review", systemPrompt, userPrompt);
-    }
-
-    /**
-     * 按用途调用审查模型。
-     *
+     * @param scene 场景
+     * @param agentRole Agent 角色
      * @param purpose 调用用途
      * @param systemPrompt 系统提示词
      * @param userPrompt 用户提示词
-     * @return 模型输出
+     * @return 调用信封
      */
-    public String review(String purpose, String systemPrompt, String userPrompt) {
-        LlmRouteResolution routeResolution = resolveBootstrapRoute(ExecutionLlmSnapshotService.COMPILE_SCENE, ROLE_REVIEWER);
-        return invoke(resolveClient(routeResolution), routeResolution, purpose, systemPrompt, userPrompt);
+    public LlmInvocationEnvelope invokeRaw(
+            String scene,
+            String agentRole,
+            String purpose,
+            String systemPrompt,
+            String userPrompt
+    ) {
+        LlmRouteResolution routeResolution = resolveBootstrapRoute(scene, agentRole);
+        return invokeRaw(routeResolution, purpose, systemPrompt, userPrompt, null);
     }
 
     /**
-     * 按作用域调用审查模型。
+     * 在指定作用域下执行最小 raw 调用，并返回保留路由与 token 元数据的调用信封。
      *
      * @param scopeId 作用域标识
      * @param scene 场景
@@ -306,9 +319,9 @@ public class LlmGateway {
      * @param purpose 调用用途
      * @param systemPrompt 系统提示词
      * @param userPrompt 用户提示词
-     * @return 模型输出
+     * @return 调用信封
      */
-    public String reviewWithScope(
+    public LlmInvocationEnvelope invokeRawWithScope(
             String scopeId,
             String scene,
             String agentRole,
@@ -317,7 +330,49 @@ public class LlmGateway {
             String userPrompt
     ) {
         LlmRouteResolution routeResolution = resolveScopedRoute(scopeId, scene, agentRole);
-        return invoke(resolveClient(routeResolution), routeResolution, purpose, systemPrompt, userPrompt);
+        return invokeRaw(routeResolution, purpose, systemPrompt, userPrompt, null);
+    }
+
+    /**
+     * 按策略处理 L1 prompt cache。
+     *
+     * @param envelope 调用信封
+     * @param promptCacheWritePolicy prompt cache 写策略
+     */
+    public void applyPromptCacheWritePolicy(
+            LlmInvocationEnvelope envelope,
+            PromptCacheWritePolicy promptCacheWritePolicy
+    ) {
+        if (envelope == null || promptCacheWritePolicy == null) {
+            return;
+        }
+        String cacheKey = envelope.getCacheKey();
+        if (cacheKey == null || cacheKey.isBlank()) {
+            return;
+        }
+        if (promptCacheWritePolicy == PromptCacheWritePolicy.EVICT_AFTER_READ) {
+            evictPromptCacheKey(cacheKey);
+            return;
+        }
+        if (promptCacheWritePolicy == PromptCacheWritePolicy.SKIP_WRITE || envelope.isPromptCacheHit()) {
+            return;
+        }
+        String content = envelope.getContent();
+        if (content == null || content.isBlank()) {
+            return;
+        }
+        writePromptCache(cacheKey, content);
+    }
+
+    /**
+     * 清理全部 L1 prompt cache。
+     */
+    public void evictPromptCache() {
+        String cacheKeyPrefix = llmProperties.getCacheKeyPrefix();
+        if (cacheKeyPrefix == null || cacheKeyPrefix.isBlank()) {
+            return;
+        }
+        redisKeyValueStore.deleteByPrefix(cacheKeyPrefix);
     }
 
     /**
@@ -459,6 +514,172 @@ public class LlmGateway {
             logLlmEvent("llm_call_failed", routeResolution, purpose, "FAILED", startedAtNs, null, null, exception);
             throw exception;
         }
+    }
+
+    /**
+     * 执行文本生成调用，并按 legacy compile 语义写入 L1 prompt cache。
+     *
+     * @param routeResolution 路由解析结果
+     * @param purpose 调用用途
+     * @param systemPrompt 系统提示词
+     * @param userPrompt 用户提示词
+     * @return 模型输出文本
+     */
+    private String invokeText(
+            LlmRouteResolution routeResolution,
+            String purpose,
+            String systemPrompt,
+            String userPrompt
+    ) {
+        String cacheKey = buildCacheKey(routeResolution, systemPrompt, userPrompt);
+        LlmInvocationEnvelope envelope = invokeRaw(
+                routeResolution,
+                purpose,
+                systemPrompt,
+                userPrompt,
+                cacheKey
+        );
+        applyPromptCacheWritePolicy(envelope, PromptCacheWritePolicy.WRITE);
+        return envelope.getContent();
+    }
+
+    private LlmInvocationEnvelope invokeRaw(
+            LlmRouteResolution routeResolution,
+            String purpose,
+            String systemPrompt,
+            String userPrompt,
+            String cacheKeyOverride
+    ) {
+        String truncatedUserPrompt = truncateUserPromptIfNecessary(systemPrompt, userPrompt, purpose);
+        String cacheKey = cacheKeyOverride == null || cacheKeyOverride.isBlank()
+                ? buildCacheKey(routeResolution, systemPrompt, truncatedUserPrompt)
+                : cacheKeyOverride;
+        String cachedValue = redisKeyValueStore.get(cacheKey);
+        if (cachedValue != null && !cachedValue.isBlank()) {
+            return LlmInvocationEnvelope.cached(cachedValue, purpose, cacheKey, routeResolution);
+        }
+        ensureBudgetAvailable();
+        long startedAtNs = System.nanoTime();
+        logLlmEvent("llm_raw_call_started", routeResolution, purpose, "STARTED", startedAtNs, null, null, null);
+        try {
+            LlmInvocationEnvelope envelope = executeRawInvocation(
+                    routeResolution,
+                    purpose,
+                    systemPrompt,
+                    truncatedUserPrompt,
+                    cacheKey,
+                    startedAtNs
+            );
+            double estimatedCost = estimateCostUsd(routeResolution, new LlmCallResult(
+                    envelope.getContent(),
+                    envelope.getInputTokens(),
+                    envelope.getOutputTokens()
+            ));
+            synchronized (budgetLock) {
+                if (spentUsd + estimatedCost > llmProperties.getBudgetUsd()) {
+                    throw new BudgetExceededException("LLM budget exceeded");
+                }
+                spentUsd += estimatedCost;
+            }
+            logLlmEvent(
+                    "llm_raw_call_succeeded",
+                    routeResolution,
+                    purpose,
+                    "SUCCEEDED",
+                    startedAtNs,
+                    new LlmCallResult(envelope.getContent(), envelope.getInputTokens(), envelope.getOutputTokens()),
+                    Double.valueOf(estimatedCost),
+                    null
+            );
+            return envelope;
+        }
+        catch (RuntimeException exception) {
+            logLlmEvent("llm_raw_call_failed", routeResolution, purpose, "FAILED", startedAtNs, null, null, exception);
+            throw exception;
+        }
+    }
+
+    private LlmInvocationEnvelope executeRawInvocation(
+            LlmRouteResolution routeResolution,
+            String purpose,
+            String systemPrompt,
+            String userPrompt,
+            String cacheKey,
+            long startedAtNs
+    ) {
+        if (shouldUseChatClientPath(routeResolution, purpose)) {
+            return llmInvocationExecutor.execute(
+                    routeResolution,
+                    LlmInvocationContext.from(routeResolution, purpose),
+                    systemPrompt,
+                    userPrompt,
+                    cacheKey
+            );
+        }
+        LlmCallResult llmCallResult = resolveClient(routeResolution).call(systemPrompt, userPrompt);
+        long latencyMs = (System.nanoTime() - startedAtNs) / 1_000_000L;
+        return LlmInvocationEnvelope.from(
+                llmCallResult.getContent(),
+                purpose,
+                cacheKey,
+                routeResolution,
+                llmCallResult,
+                latencyMs
+        );
+    }
+
+    private boolean shouldUseChatClientPath(LlmRouteResolution routeResolution, String purpose) {
+        if (llmInvocationExecutor == null || !supportsChatClientInvocation(routeResolution)) {
+            return false;
+        }
+        LlmProperties.ChatClient chatClientProperties = llmProperties == null ? null : llmProperties.getChatClient();
+        if (chatClientProperties == null || !chatClientProperties.isEnabled()) {
+            return false;
+        }
+        return isPurposeEnabledForChatClient(chatClientProperties, purpose);
+    }
+
+    private boolean isPurposeEnabledForChatClient(LlmProperties.ChatClient chatClientProperties, String purpose) {
+        String normalizedPurpose = purpose == null ? "" : purpose.trim().toLowerCase(Locale.ROOT);
+        if (normalizedPurpose.startsWith("query-answer")) {
+            return chatClientProperties.isQueryAnswerEnabled();
+        }
+        if (normalizedPurpose.startsWith("query-rewrite") || "query-revise".equals(normalizedPurpose)) {
+            return chatClientProperties.isQueryRewriteEnabled();
+        }
+        if ("query-review".equals(normalizedPurpose)) {
+            return chatClientProperties.isQueryReviewEnabled();
+        }
+        if ("compile-review".equals(normalizedPurpose)) {
+            return chatClientProperties.isCompileReviewEnabled();
+        }
+        if (GOVERNANCE_JSON_PURPOSES.contains(normalizedPurpose)) {
+            return chatClientProperties.isGovernanceJsonEnabled();
+        }
+        return true;
+    }
+
+    /**
+     * 写入指定 prompt cache 键。
+     *
+     * @param cacheKey cache 键
+     * @param content 缓存内容
+     */
+    private void writePromptCache(String cacheKey, String content) {
+        redisKeyValueStore.set(
+                cacheKey,
+                content,
+                Duration.ofSeconds(llmProperties.getCacheTtlSeconds())
+        );
+    }
+
+    /**
+     * 驱逐指定 prompt cache 键。
+     *
+     * @param cacheKey cache 键
+     */
+    private void evictPromptCacheKey(String cacheKey) {
+        redisKeyValueStore.deleteByPrefix(cacheKey);
     }
 
     /**
@@ -769,6 +990,14 @@ public class LlmGateway {
             return reviewClient;
         }
         return compileClient;
+    }
+
+    private boolean supportsChatClientInvocation(LlmRouteResolution routeResolution) {
+        if (routeResolution == null) {
+            return false;
+        }
+        String providerType = normalizeProviderType(routeResolution.getProviderType());
+        return "openai".equals(providerType) || "openai_compatible".equals(providerType);
     }
 
     private String resolveScopeType(String scene) {

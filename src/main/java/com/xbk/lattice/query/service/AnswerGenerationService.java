@@ -1,7 +1,13 @@
 package com.xbk.lattice.query.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
+import com.xbk.lattice.llm.service.LlmInvocationEnvelope;
+import com.xbk.lattice.llm.service.PromptCacheWritePolicy;
+import com.xbk.lattice.query.domain.AnswerOutcome;
+import com.xbk.lattice.query.domain.QueryAnswerPayload;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -23,14 +29,20 @@ import java.util.Map;
 @Profile("jdbc")
 public class AnswerGenerationService {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
     private static final String SYSTEM_QUERY_ANSWER = """
             你是 Lattice 查询助手。请基于给定证据回答用户问题。
 
             输出要求：
-            1. 必须输出 Markdown
-            2. 优先引用 ARTICLE / SOURCE / CONTRIBUTION 中直接可证实的信息
-            3. 如果信息不足，要明确指出缺口，不要编造
-            4. 回答语言使用简体中文，保留必要英文术语或原始配置项
+            1. 只能输出 JSON，不要输出 Markdown 正文、代码块或解释性前后缀
+            2. JSON 结构必须是 {"answerMarkdown":"...","answerOutcome":"SUCCESS|INSUFFICIENT_EVIDENCE|NO_RELEVANT_KNOWLEDGE|PARTIAL_ANSWER","answerCacheable":true|false}
+            3. answerMarkdown 字段内部必须是面向最终用户的 Markdown
+            4. 优先引用 ARTICLE / SOURCE / CONTRIBUTION 中直接可证实的信息
+            5. 如果信息不足，要明确指出缺口，不要编造；此时 answerOutcome 必须为 INSUFFICIENT_EVIDENCE 或 PARTIAL_ANSWER
+            6. 没有相关知识时 answerOutcome 必须为 NO_RELEVANT_KNOWLEDGE，answerCacheable 必须为 false
+            7. 只有在 answerOutcome=SUCCESS 且答案可稳定复用时，answerCacheable 才能为 true
+            8. 回答语言使用简体中文，保留必要英文术语或原始配置项
             """;
 
     private static final String SYSTEM_QUERY_REVISE = """
@@ -45,15 +57,17 @@ public class AnswerGenerationService {
             """;
 
     private static final String SYSTEM_QUERY_REWRITE_FROM_REVIEW = """
-            你是 Lattice 查询重写助手。你会收到用户问题、当前答案、审查发现的问题以及证据，请输出一份面向最终用户的 Markdown 答案。
+            你是 Lattice 查询重写助手。你会收到用户问题、当前答案、审查发现的问题以及证据，请输出一份面向最终用户的结构化结果。
 
             输出要求：
-            1. 直接输出最终答案，不要复述“审查结论”“修订说明”“问题单”或缺陷列表
-            2. 对有证据支撑的内容，给出明确结论，并保留关键阈值、地址、字段名等原始值
-            3. 对证据不足或无法确认的子问题，明确写“当前证据不足”或“暂无法确认”
-            4. 不要编造，不要输出 TODO，不要把 REVIEW FINDINGS 原样粘贴到答案中
-            5. 优先综合 ARTICLE / SOURCE / CONTRIBUTION 证据，必要时可用小标题、表格或列表组织答案
-            6. 回答语言使用简体中文
+            1. 只能输出 JSON，不要输出 Markdown 正文、代码块或解释性前后缀
+            2. JSON 结构必须是 {"answerMarkdown":"...","answerOutcome":"SUCCESS|INSUFFICIENT_EVIDENCE|NO_RELEVANT_KNOWLEDGE|PARTIAL_ANSWER","answerCacheable":true|false}
+            3. answerMarkdown 字段内部必须直接输出最终答案，不要复述“审查结论”“修订说明”“问题单”或缺陷列表
+            4. 对有证据支撑的内容，给出明确结论，并保留关键阈值、地址、字段名等原始值
+            5. 对证据不足或无法确认的子问题，明确写“当前证据不足”或“暂无法确认”
+            6. 不要编造，不要输出 TODO，不要把 REVIEW FINDINGS 原样粘贴到 answerMarkdown 中
+            7. 只有在 answerOutcome=SUCCESS 且答案可稳定复用时，answerCacheable 才能为 true
+            8. 回答语言使用简体中文
             """;
 
     private final LlmGateway llmGateway;
@@ -115,13 +129,13 @@ public class AnswerGenerationService {
      * @return Markdown 答案
      */
     public String generate(String question, List<QueryArticleHit> queryArticleHits) {
-        return generate(
+        return generatePayload(
                 null,
                 ExecutionLlmSnapshotService.QUERY_SCENE,
                 ExecutionLlmSnapshotService.ROLE_ANSWER,
                 question,
                 queryArticleHits
-        );
+        ).getAnswerMarkdown();
     }
 
     /**
@@ -141,32 +155,79 @@ public class AnswerGenerationService {
             String question,
             List<QueryArticleHit> queryArticleHits
     ) {
+        return generatePayload(scopeId, scene, agentRole, question, queryArticleHits).getAnswerMarkdown();
+    }
+
+    /**
+     * 基于多路证据生成结构化答案载荷。
+     *
+     * @param question 查询问题
+     * @param queryArticleHits 融合命中
+     * @return 结构化答案载荷
+     */
+    public QueryAnswerPayload generatePayload(String question, List<QueryArticleHit> queryArticleHits) {
+        return generatePayload(
+                null,
+                ExecutionLlmSnapshotService.QUERY_SCENE,
+                ExecutionLlmSnapshotService.ROLE_ANSWER,
+                question,
+                queryArticleHits
+        );
+    }
+
+    /**
+     * 基于多路证据生成结构化答案载荷。
+     *
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @param question 查询问题
+     * @param queryArticleHits 融合命中
+     * @return 结构化答案载荷
+     */
+    public QueryAnswerPayload generatePayload(
+            String scopeId,
+            String scene,
+            String agentRole,
+            String question,
+            List<QueryArticleHit> queryArticleHits
+    ) {
         if (queryArticleHits == null || queryArticleHits.isEmpty()) {
-            return "未找到相关知识";
+            return QueryAnswerPayload.ruleBased("未找到相关知识", AnswerOutcome.NO_RELEVANT_KNOWLEDGE);
         }
         if (containsOnlyArticleEvidence(queryArticleHits)) {
-            return generate(question, queryArticleHits.get(0));
+            return QueryAnswerPayload.ruleBased(generate(question, queryArticleHits.get(0)), AnswerOutcome.PARTIAL_ANSWER);
         }
 
         if (llmGateway != null) {
             try {
-                String llmAnswer = llmGateway.compileWithScope(
+                LlmInvocationEnvelope envelope = llmGateway.invokeRawWithScope(
                         scopeId,
                         scene,
                         agentRole,
-                        "query-answer",
+                        "query-answer-structured",
                         SYSTEM_QUERY_ANSWER,
                         buildAnswerPrompt(question, queryArticleHits)
                 );
-                if (llmAnswer != null && !llmAnswer.isBlank()) {
-                    return llmAnswer.trim();
+                String llmAnswer = envelope.getContent();
+                QueryAnswerPayload parsedPayload = parseStructuredAnswerPayload(llmAnswer);
+                if (parsedPayload != null) {
+                    llmGateway.applyPromptCacheWritePolicy(envelope, resolvePromptCacheWritePolicy(parsedPayload));
+                    return parsedPayload;
+                }
+                llmGateway.applyPromptCacheWritePolicy(envelope, PromptCacheWritePolicy.EVICT_AFTER_READ);
+                if (llmAnswer != null && !llmAnswer.isBlank() && !looksLikeStructuredJson(llmAnswer)) {
+                    return QueryAnswerPayload.fallback(llmAnswer.trim());
                 }
             }
             catch (RuntimeException ex) {
                 // 查询主链允许在模型失败时降级到可预测 Markdown，避免直接中断用户查询。
             }
         }
-        return buildFallbackMarkdown(question, queryArticleHits);
+        if (llmGateway == null) {
+            return QueryAnswerPayload.ruleBased(buildFallbackMarkdown(question, queryArticleHits), AnswerOutcome.PARTIAL_ANSWER);
+        }
+        return QueryAnswerPayload.fallback(buildFallbackMarkdown(question, queryArticleHits));
     }
 
     /**
@@ -218,13 +279,14 @@ public class AnswerGenerationService {
     ) {
         if (llmGateway != null) {
             try {
-                String llmAnswer = llmGateway.compileWithScope(
+                String revisePrompt = buildRevisePrompt(question, currentAnswer, correction, queryArticleHits);
+                String llmAnswer = llmGateway.generateTextWithScope(
                         scopeId,
                         scene,
                         agentRole,
                         "query-revise",
                         SYSTEM_QUERY_REVISE,
-                        buildRevisePrompt(question, currentAnswer, correction, queryArticleHits)
+                        revisePrompt
                 );
                 if (llmAnswer != null && !llmAnswer.isBlank()) {
                     return llmAnswer.trim();
@@ -258,25 +320,252 @@ public class AnswerGenerationService {
             String reviewFindings,
             List<QueryArticleHit> queryArticleHits
     ) {
+        return rewriteFromReviewPayload(
+                scopeId,
+                scene,
+                agentRole,
+                question,
+                currentAnswer,
+                reviewFindings,
+                queryArticleHits
+        ).getAnswerMarkdown();
+    }
+
+    /**
+     * 基于审查问题重写最终答案，并返回结构化载荷。
+     *
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @param question 查询问题
+     * @param currentAnswer 当前答案
+     * @param reviewFindings 审查问题
+     * @param queryArticleHits 修订证据
+     * @return 结构化答案载荷
+     */
+    public QueryAnswerPayload rewriteFromReviewPayload(
+            String scopeId,
+            String scene,
+            String agentRole,
+            String question,
+            String currentAnswer,
+            String reviewFindings,
+            List<QueryArticleHit> queryArticleHits
+    ) {
         if (llmGateway != null) {
             try {
-                String llmAnswer = llmGateway.compileWithScope(
+                LlmInvocationEnvelope envelope = llmGateway.invokeRawWithScope(
                         scopeId,
                         scene,
                         agentRole,
-                        "query-rewrite-from-review",
+                        "query-rewrite-from-review-structured",
                         SYSTEM_QUERY_REWRITE_FROM_REVIEW,
                         buildReviewRewritePrompt(question, currentAnswer, reviewFindings, queryArticleHits)
                 );
-                if (llmAnswer != null && !llmAnswer.isBlank()) {
-                    return llmAnswer.trim();
+                String llmAnswer = envelope.getContent();
+                QueryAnswerPayload parsedPayload = parseStructuredAnswerPayload(llmAnswer);
+                if (parsedPayload != null) {
+                    llmGateway.applyPromptCacheWritePolicy(envelope, resolvePromptCacheWritePolicy(parsedPayload));
+                    return parsedPayload;
+                }
+                llmGateway.applyPromptCacheWritePolicy(envelope, PromptCacheWritePolicy.EVICT_AFTER_READ);
+                if (llmAnswer != null && !llmAnswer.isBlank() && !looksLikeStructuredJson(llmAnswer)) {
+                    return QueryAnswerPayload.fallback(llmAnswer.trim());
                 }
             }
             catch (RuntimeException ex) {
                 // 审查驱动的重写失败时，降级回基于证据的结构化答案，避免把问题单直接返回给用户。
             }
         }
-        return buildFallbackMarkdown(question, queryArticleHits);
+        if (llmGateway == null) {
+            return QueryAnswerPayload.ruleBased(buildFallbackMarkdown(question, queryArticleHits), AnswerOutcome.PARTIAL_ANSWER);
+        }
+        return QueryAnswerPayload.fallback(buildFallbackMarkdown(question, queryArticleHits));
+    }
+
+    /**
+     * 解析结构化问答输出，并收敛为最小答案载荷。
+     *
+     * @param rawPayload 原始输出
+     * @return 结构化答案载荷；若无法解析则返回 null
+     */
+    private QueryAnswerPayload parseStructuredAnswerPayload(String rawPayload) {
+        JsonNode payloadNode = tryReadStructuredPayload(rawPayload);
+        if (payloadNode == null) {
+            return null;
+        }
+        String answerMarkdown = readText(payloadNode, "answerMarkdown");
+        AnswerOutcome answerOutcome = readAnswerOutcome(payloadNode, "answerOutcome");
+        if (answerMarkdown == null || answerMarkdown.isBlank() || answerOutcome == null) {
+            return null;
+        }
+        boolean answerCacheable = readBoolean(payloadNode, "answerCacheable");
+        if (answerOutcome != AnswerOutcome.SUCCESS) {
+            answerCacheable = false;
+        }
+        return QueryAnswerPayload.llm(answerMarkdown.trim(), answerOutcome, answerCacheable);
+    }
+
+    /**
+     * 尝试把原始输出解析成 JSON 节点。
+     *
+     * @param rawPayload 原始输出
+     * @return JSON 节点
+     */
+    private JsonNode tryReadStructuredPayload(String rawPayload) {
+        if (rawPayload == null || rawPayload.isBlank()) {
+            return null;
+        }
+        JsonNode payloadNode = readJsonNode(rawPayload.trim());
+        if (payloadNode != null) {
+            return payloadNode;
+        }
+        String normalizedPayload = stripMarkdownCodeFence(rawPayload.trim());
+        if (!normalizedPayload.equals(rawPayload.trim())) {
+            payloadNode = readJsonNode(normalizedPayload);
+            if (payloadNode != null) {
+                return payloadNode;
+            }
+        }
+        String jsonSlice = extractJsonObject(rawPayload);
+        if (jsonSlice == null || jsonSlice.isBlank()) {
+            return null;
+        }
+        return readJsonNode(jsonSlice);
+    }
+
+    /**
+     * 把文本解析为 JSON 节点。
+     *
+     * @param content 文本内容
+     * @return JSON 节点
+     */
+    private JsonNode readJsonNode(String content) {
+        try {
+            return OBJECT_MAPPER.readTree(content);
+        }
+        catch (Exception ex) {
+            return null;
+        }
+    }
+
+    /**
+     * 去掉 Markdown 代码块包裹。
+     *
+     * @param content 文本内容
+     * @return 归一化后的文本
+     */
+    private String stripMarkdownCodeFence(String content) {
+        String normalizedContent = content;
+        if (normalizedContent.startsWith("```json")) {
+            normalizedContent = normalizedContent.substring("```json".length()).trim();
+        }
+        else if (normalizedContent.startsWith("```")) {
+            normalizedContent = normalizedContent.substring("```".length()).trim();
+        }
+        if (normalizedContent.endsWith("```")) {
+            normalizedContent = normalizedContent.substring(0, normalizedContent.length() - 3).trim();
+        }
+        return normalizedContent;
+    }
+
+    /**
+     * 从混合文本中提取最外层 JSON 对象。
+     *
+     * @param content 原始内容
+     * @return JSON 文本
+     */
+    private String extractJsonObject(String content) {
+        int start = content.indexOf('{');
+        int end = content.lastIndexOf('}');
+        if (start < 0 || end <= start) {
+            return null;
+        }
+        return content.substring(start, end + 1);
+    }
+
+    /**
+     * 判断当前输出是否看起来像结构化 JSON。
+     *
+     * @param rawPayload 原始输出
+     * @return 是否像结构化 JSON
+     */
+    private boolean looksLikeStructuredJson(String rawPayload) {
+        String normalizedPayload = rawPayload == null ? "" : rawPayload.trim();
+        return normalizedPayload.startsWith("{")
+                || normalizedPayload.startsWith("```json")
+                || normalizedPayload.contains("\"answerMarkdown\"")
+                || normalizedPayload.contains("\"answerOutcome\"");
+    }
+
+    /**
+     * 基于答案载荷推导 prompt cache 写策略。
+     *
+     * @param answerPayload 结构化答案载荷
+     * @return prompt cache 写策略
+     */
+    private PromptCacheWritePolicy resolvePromptCacheWritePolicy(QueryAnswerPayload answerPayload) {
+        if (answerPayload == null) {
+            return PromptCacheWritePolicy.EVICT_AFTER_READ;
+        }
+        if (answerPayload.getAnswerOutcome() == AnswerOutcome.SUCCESS && answerPayload.isAnswerCacheable()) {
+            return PromptCacheWritePolicy.WRITE;
+        }
+        return PromptCacheWritePolicy.SKIP_WRITE;
+    }
+
+    /**
+     * 读取文本字段。
+     *
+     * @param payloadNode JSON 节点
+     * @param fieldName 字段名
+     * @return 字段值
+     */
+    private String readText(JsonNode payloadNode, String fieldName) {
+        JsonNode fieldNode = payloadNode.get(fieldName);
+        if (fieldNode == null || fieldNode.isNull()) {
+            return null;
+        }
+        String fieldValue = fieldNode.asText();
+        if (fieldValue == null || fieldValue.isBlank()) {
+            return null;
+        }
+        return fieldValue;
+    }
+
+    /**
+     * 读取布尔字段。
+     *
+     * @param payloadNode JSON 节点
+     * @param fieldName 字段名
+     * @return 布尔值
+     */
+    private boolean readBoolean(JsonNode payloadNode, String fieldName) {
+        JsonNode fieldNode = payloadNode.get(fieldName);
+        if (fieldNode == null || fieldNode.isNull()) {
+            return false;
+        }
+        return fieldNode.asBoolean(false);
+    }
+
+    /**
+     * 读取答案语义字段。
+     *
+     * @param payloadNode JSON 节点
+     * @param fieldName 字段名
+     * @return 答案语义
+     */
+    private AnswerOutcome readAnswerOutcome(JsonNode payloadNode, String fieldName) {
+        String fieldValue = readText(payloadNode, fieldName);
+        if (fieldValue == null) {
+            return null;
+        }
+        try {
+            return AnswerOutcome.valueOf(fieldValue.trim());
+        }
+        catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     /**
@@ -347,6 +636,9 @@ public class AnswerGenerationService {
      * @return 描述
      */
     private String extractDescription(String metadataJson) {
+        if (metadataJson == null || metadataJson.isBlank()) {
+            return "";
+        }
         String marker = "\"description\":";
         int markerIndex = metadataJson.indexOf(marker);
         if (markerIndex < 0) {

@@ -45,26 +45,26 @@
 
 ## 4. 实施清单
 
-- [ ] P1-1 完成 Query structured-output Spike 与降级映射
-  - 进行中：已回读运行/验收文档与技术方案，确认 `rootTraceId` 落库不纳入本轮；下一步用 OpenAI/Codex 路径验证 `answerMarkdown` JSON 转义、structured output fail-open、`non-LLM` 路径的 `AnswerOutcome` 映射。
+- [x] P1-1 完成 Query structured-output Spike 与降级映射
+  - 验收：已补齐 `AnswerGenerationServiceTests`，覆盖结构化成功、JSON fail-open、`queryArticleHits == null/only article evidence/llmGateway == null` 等降级映射；OpenAI/Codex 主回归见 `docs/plans/OpenAI配置回归改造清单.md` 中 D9 与 D11。
 
-- [ ] P1-2 定义 typed payload / outcome / execution envelope
-  - 待开始：计划新增 `QueryAnswerPayload`、`QueryReviewPayload`、`QueryRewritePayload`、`AnswerOutcome`、`generationMode`、`modelExecutionStatus`、`LlmInvocationEnvelope` 等结构，统一 Query 主链输出语义。
+- [x] P1-2 定义 typed payload / outcome / execution envelope
+  - 验收：已落地 `QueryAnswerPayload`、`QueryRewritePayload`、`ReviewerPayload`、`AnswerOutcome`、`GenerationMode`、`ModelExecutionStatus`、`LlmInvocationEnvelope`、`PromptCacheWritePolicy`，并由 `QueryGraphState/QueryResponse` 承载统一语义。
 
-- [ ] P1-3 新增统一执行抽象
-  - 待开始：计划补齐 `ChatClientRegistry`、`AdvisorChainFactory`、`LlmInvocationExecutor` 的最小实现，并保留 `LlmGateway` 作为上层兼容入口，不直接扩散底层依赖到业务层。
+- [x] P1-3 新增统一执行抽象
+  - 验收：已补齐 `ChatClientRegistry`、`AdvisorChainFactory`、`LlmInvocationExecutor`，并在 `LlmGateway` 内保留 facade；`LlmGatewayTests` 与 `LlmInvocationExecutorTests` 已覆盖 OpenAI/Codex 动态 ChatClient 执行路径。
 
-- [ ] P1-4 迁移 `query-answer / query-rewrite / query-review`
-  - 待开始：计划把 `AnswerGenerationService`、`LlmReviewerGateway`、Query Graph answer/rewrite/review 节点切到 typed payload 路径，并保留 legacy 文本路径作为受控降级。
+- [x] P1-4 迁移 `query-answer / query-rewrite / query-review`
+  - 验收：`AnswerGenerationService` 已输出 typed answer payload，`LlmReviewerGateway` 已走 raw facade + `ReviewResultParser`，`QueryGraphDefinitionFactory` 已把 answer/review/rewrite 的 outcome/status 回写到 Graph 状态与最终响应。
 
-- [ ] P1-5 落地 `PromptCacheWritePolicy` 与双层缓存治理
-  - 待开始：计划移除 `NON_CACHEABLE_ANSWER_MARKERS` 文案判断，改为基于 `AnswerOutcome + answerCacheable + PromptCacheWritePolicy` 决定 L1/L2 写入、抑制与清理策略。
+- [x] P1-5 落地 `PromptCacheWritePolicy` 与双层缓存治理
+  - 验收：Query answer/rewrite/review 与 compile review 已按 payload/outcome 决定 L1 prompt cache 写入；L2 query cache 已改为基于 `AnswerOutcome + answerCacheable` 决策，并在 compile/vector 侧清理双层缓存。
 
-- [ ] P1-6 扩展 Query API / `/admin/ask` 状态语义
-  - 待开始：计划在 `QueryResponse` 或其等价返回结构中补齐 `answerOutcome / generationMode / modelExecutionStatus`，让前端和 API 能明确区分“成功 / 部分答案 / 证据不足 / 无相关知识 / 模型失败已降级”。
+- [x] P1-6 扩展 Query API / `/admin/ask` 状态语义
+  - 验收：`QueryResponse` 已补齐 `queryId / reviewStatus / answerOutcome / generationMode / modelExecutionStatus`；`ask.js` 与对应 Controller/Service 测试已覆盖结果态展示。
 
-- [ ] P1-7 完成回归验收与断点回写
-  - 待开始：计划完成 OpenAI/Codex 路径回归、缓存语义回归、`/admin/ask` 状态展示验收，并按清单逐项回写完成/阻塞依据。
+- [x] P1-7 完成回归验收与断点回写
+  - 验收：`mvn -q -s .codex/maven-settings.xml -Dtest=AnswerGenerationServiceTests,LlmReviewerGatewayTests,LlmGatewayTests,QueryControllerTests,QueryGraphOrchestratorTests test` 已覆盖核心回归；真实 OpenAI/Codex 主回归与 `/admin/ask` 验收已记录在 `docs/plans/OpenAI配置回归改造清单.md`。
 
 ## 5. Phase 1 验收口径
 
@@ -77,9 +77,9 @@
 
 ## 6. 当前断点
 
-- 当前阶段：P1-1 进行中
+- 当前阶段：Phase 1 已完成
 - 已知约束：
   - `Phase 0.5` 已完成，可直接进入 Query 主链迁移
   - 本轮不动 SQL，不把 `rootTraceId` 持久化增强混入主迁移
   - 工作区存在用户未提交改动 `src/main/resources/db/migration/V1__baseline_schema.sql`，本轮不触碰该文件
-- 下一步：先做 Query structured-output Spike 与降级映射，再决定 typed payload 最终落点和 API 返回形态
+- 下一步：后续 reviewer / governance / compile 文本调用收口改由 `docs/plans/ChatClient-Advisor-后续阶段实施清单.md` 继续跟进

@@ -36,6 +36,8 @@ public class LlmProperties {
 
     private final Admin admin = new Admin();
 
+    private final ChatClient chatClient = new ChatClient();
+
     private final Pricing pricing = new Pricing();
 
     /**
@@ -228,6 +230,15 @@ public class LlmProperties {
     }
 
     /**
+     * 获取 ChatClient 渐进式迁移配置。
+     *
+     * @return ChatClient 配置
+     */
+    public ChatClient getChatClient() {
+        return chatClient;
+    }
+
+    /**
      * 获取价格配置。
      *
      * @return 价格配置
@@ -283,6 +294,136 @@ public class LlmProperties {
          */
         public void setMaskSecrets(boolean maskSecrets) {
             this.maskSecrets = maskSecrets;
+        }
+    }
+
+    /**
+     * ChatClient 渐进式迁移配置。
+     *
+     * 职责：按 purpose 控制新旧执行栈灰度，避免所有 OpenAI 路由一次性切换
+     *
+     * @author xiexu
+     */
+    public static class ChatClient {
+
+        private boolean enabled = true;
+
+        private boolean queryAnswerEnabled = true;
+
+        private boolean queryRewriteEnabled = true;
+
+        private boolean queryReviewEnabled = true;
+
+        private boolean compileReviewEnabled = true;
+
+        private boolean governanceJsonEnabled = true;
+
+        /**
+         * 返回是否启用 ChatClient 路径。
+         *
+         * @return 是否启用 ChatClient 路径
+         */
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        /**
+         * 设置是否启用 ChatClient 路径。
+         *
+         * @param enabled 是否启用 ChatClient 路径
+         */
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        /**
+         * 返回是否启用 Query answer 路径。
+         *
+         * @return 是否启用 Query answer 路径
+         */
+        public boolean isQueryAnswerEnabled() {
+            return queryAnswerEnabled;
+        }
+
+        /**
+         * 设置是否启用 Query answer 路径。
+         *
+         * @param queryAnswerEnabled 是否启用 Query answer 路径
+         */
+        public void setQueryAnswerEnabled(boolean queryAnswerEnabled) {
+            this.queryAnswerEnabled = queryAnswerEnabled;
+        }
+
+        /**
+         * 返回是否启用 Query rewrite 路径。
+         *
+         * @return 是否启用 Query rewrite 路径
+         */
+        public boolean isQueryRewriteEnabled() {
+            return queryRewriteEnabled;
+        }
+
+        /**
+         * 设置是否启用 Query rewrite 路径。
+         *
+         * @param queryRewriteEnabled 是否启用 Query rewrite 路径
+         */
+        public void setQueryRewriteEnabled(boolean queryRewriteEnabled) {
+            this.queryRewriteEnabled = queryRewriteEnabled;
+        }
+
+        /**
+         * 返回是否启用 Query review 路径。
+         *
+         * @return 是否启用 Query review 路径
+         */
+        public boolean isQueryReviewEnabled() {
+            return queryReviewEnabled;
+        }
+
+        /**
+         * 设置是否启用 Query review 路径。
+         *
+         * @param queryReviewEnabled 是否启用 Query review 路径
+         */
+        public void setQueryReviewEnabled(boolean queryReviewEnabled) {
+            this.queryReviewEnabled = queryReviewEnabled;
+        }
+
+        /**
+         * 返回是否启用 compile review 路径。
+         *
+         * @return 是否启用 compile review 路径
+         */
+        public boolean isCompileReviewEnabled() {
+            return compileReviewEnabled;
+        }
+
+        /**
+         * 设置是否启用 compile review 路径。
+         *
+         * @param compileReviewEnabled 是否启用 compile review 路径
+         */
+        public void setCompileReviewEnabled(boolean compileReviewEnabled) {
+            this.compileReviewEnabled = compileReviewEnabled;
+        }
+
+        /**
+         * 返回是否启用治理侧 JSON 路径。
+         *
+         * @return 是否启用治理侧 JSON 路径
+         */
+        public boolean isGovernanceJsonEnabled() {
+            return governanceJsonEnabled;
+        }
+
+        /**
+         * 设置是否启用治理侧 JSON 路径。
+         *
+         * @param governanceJsonEnabled 是否启用治理侧 JSON 路径
+         */
+        public void setGovernanceJsonEnabled(boolean governanceJsonEnabled) {
+            this.governanceJsonEnabled = governanceJsonEnabled;
         }
     }
 

@@ -47,6 +47,8 @@ public class ArticlePersistSupport {
 
     private QueryCacheStore queryCacheStore;
 
+    private LlmGateway llmGateway;
+
     private RepoSnapshotService repoSnapshotService;
 
     /**
@@ -131,6 +133,16 @@ public class ArticlePersistSupport {
     @Autowired(required = false)
     void setQueryCacheStore(QueryCacheStore queryCacheStore) {
         this.queryCacheStore = queryCacheStore;
+    }
+
+    /**
+     * 注入 LLM 网关。
+     *
+     * @param llmGateway LLM 网关
+     */
+    @Autowired(required = false)
+    void setLlmGateway(LlmGateway llmGateway) {
+        this.llmGateway = llmGateway;
     }
 
     /**
@@ -227,10 +239,15 @@ public class ArticlePersistSupport {
      * @param persistedCount 已落库文章数
      */
     private void evictQueryCacheIfNeeded(int persistedCount) {
-        if (persistedCount <= 0 || queryCacheStore == null) {
+        if (persistedCount <= 0) {
             return;
         }
-        queryCacheStore.evictAll();
+        if (queryCacheStore != null) {
+            queryCacheStore.evictAll();
+        }
+        if (llmGateway != null) {
+            llmGateway.evictPromptCache();
+        }
     }
 
     private ArticleRecord ensureSourceAwareIdentifiers(ArticleRecord articleRecord, Long sourceId, String sourceCode) {
@@ -310,7 +327,17 @@ public class ArticlePersistSupport {
      */
     @Transactional(rollbackFor = Exception.class)
     public void generateGraphSynthesisArtifacts() {
-        sourceIngestSupport.refreshGraphSynthesisArtifacts();
+        generateGraphSynthesisArtifacts(null);
+    }
+
+    /**
+     * 在指定作业作用域下刷新合成产物。
+     *
+     * @param jobId 作业标识
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void generateGraphSynthesisArtifacts(String jobId) {
+        sourceIngestSupport.refreshGraphSynthesisArtifacts(jobId);
     }
 
     /**

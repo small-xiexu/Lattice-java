@@ -55,6 +55,9 @@ public class IngestSourcesNode extends AbstractCompileGraphNode {
                 Path.of(state.getSourceDir()),
                 state.getSourceId()
         );
+        if ("incremental".equalsIgnoreCase(state.getCompileMode())) {
+            rawSources = sourceIngestSupport.filterChangedRawSources(rawSources);
+        }
         state.setRawSourcesRef(workingSetStore().saveRawSources(state.getJobId(), rawSources));
         state.setConceptCount(rawSources.size());
         return delta(state);

@@ -2,6 +2,8 @@ package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.config.LlmProperties;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
+import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
+import com.xbk.lattice.llm.service.LlmInvocationEnvelope;
 import com.xbk.lattice.query.domain.ReviewResult;
 import com.xbk.lattice.query.service.ReviewResultParser;
 import org.springframework.context.annotation.Profile;
@@ -97,16 +99,37 @@ public class ArticleReviewerGateway {
                 %s
                 === END SOURCES ===
                 """.formatted(articleContent, truncatedSources);
-        String rawResult = scopeId == null || scopeId.isBlank()
-                ? llmGateway.review("review", LatticePrompts.SYSTEM_REVIEW, prompt)
-                : llmGateway.reviewWithScope(
-                        scopeId,
-                        scene,
-                        agentRole,
-                        "review",
-                        LatticePrompts.SYSTEM_REVIEW,
-                        prompt
-                );
-        return reviewResultParser.parse(rawResult);
+        String effectiveScene = scene == null || scene.isBlank()
+                ? ExecutionLlmSnapshotService.COMPILE_SCENE
+                : scene;
+        String effectiveAgentRole = agentRole == null || agentRole.isBlank()
+                ? ExecutionLlmSnapshotService.ROLE_REVIEWER
+                : agentRole;
+        try {
+            LlmInvocationEnvelope envelope = scopeId == null || scopeId.isBlank()
+                    ? llmGateway.invokeRaw(
+                            effectiveScene,
+                            effectiveAgentRole,
+                            "compile-review",
+                            LatticePrompts.SYSTEM_REVIEW,
+                            prompt
+                    )
+                    : llmGateway.invokeRawWithScope(
+                            scopeId,
+                            effectiveScene,
+                            effectiveAgentRole,
+                            "compile-review",
+                            LatticePrompts.SYSTEM_REVIEW,
+                            prompt
+                    );
+            llmGateway.applyPromptCacheWritePolicy(
+                    envelope,
+                    reviewResultParser.resolvePromptCacheWritePolicy(envelope.getContent())
+            );
+            return reviewResultParser.parse(envelope.getContent());
+        }
+        catch (RuntimeException exception) {
+            return ruleBasedArticleReviewer.review(articleContent, sourceContents);
+        }
     }
 }

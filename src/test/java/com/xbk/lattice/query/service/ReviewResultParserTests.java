@@ -1,8 +1,13 @@
 package com.xbk.lattice.query.service;
 
+import com.xbk.lattice.llm.service.PromptCacheWritePolicy;
+import com.xbk.lattice.query.domain.ReviewIssue;
 import com.xbk.lattice.query.domain.ReviewResult;
 import com.xbk.lattice.query.domain.ReviewStatus;
+import com.xbk.lattice.query.domain.ReviewerPayload;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -23,12 +28,105 @@ class ReviewResultParserTests {
         ReviewResultParser reviewResultParser = new ReviewResultParser();
 
         ReviewResult reviewResult = reviewResultParser.parse("""
-                {"pass":true,"issues":[]}
+                {"approved":true,"rewriteRequired":false,"riskLevel":"LOW","issues":[],"userFacingRewriteHints":[],"cacheWritePolicy":"WRITE"}
                 """);
 
         assertThat(reviewResult.isPass()).isTrue();
         assertThat(reviewResult.getStatus()).isEqualTo(ReviewStatus.PASSED);
         assertThat(reviewResult.getIssues()).isEmpty();
+    }
+
+    /**
+     * 验证 typed review payload 可兼容解析为 ReviewResult。
+     */
+    @Test
+    void shouldParseTypedReviewPayload() {
+        ReviewResultParser reviewResultParser = new ReviewResultParser();
+
+        ReviewResult reviewResult = reviewResultParser.parse("""
+                {
+                  "approved": false,
+                  "rewriteRequired": true,
+                  "riskLevel": "HIGH",
+                  "issues": [
+                    {
+                      "severity": "HIGH",
+                      "category": "GROUNDING",
+                      "description": "答案缺少来源定位"
+                    }
+                  ],
+                  "userFacingRewriteHints": [
+                    "补充 payment/analyze.json 的来源标注"
+                  ],
+                  "cacheWritePolicy": "SKIP_WRITE"
+                }
+                """);
+
+        assertThat(reviewResult.isPass()).isFalse();
+        assertThat(reviewResult.getStatus()).isEqualTo(ReviewStatus.ISSUES_FOUND);
+        assertThat(reviewResult.getIssues()).extracting(ReviewIssue::getCategory).containsExactly("GROUNDING");
+        assertThat(reviewResult.getIssues()).extracting(ReviewIssue::getDescription).containsExactly("答案缺少来源定位");
+    }
+
+    /**
+     * 验证 typed review payload 即使没有 issues，也会从 rewrite hint 收敛出最小问题。
+     */
+    @Test
+    void shouldCreateIssueFromRewriteHintsWhenTypedPayloadHasNoIssues() {
+        ReviewResultParser reviewResultParser = new ReviewResultParser();
+
+        ReviewResult reviewResult = reviewResultParser.parse("""
+                {
+                  "approved": false,
+                  "rewriteRequired": true,
+                  "riskLevel": "MEDIUM",
+                  "issues": [],
+                  "userFacingRewriteHints": [
+                    "补充订单服务为什么需要异步解耦的证据"
+                  ],
+                  "cacheWritePolicy": "SKIP_WRITE"
+                }
+                """);
+
+        assertThat(reviewResult.isPass()).isFalse();
+        assertThat(reviewResult.getStatus()).isEqualTo(ReviewStatus.ISSUES_FOUND);
+        assertThat(reviewResult.getIssues()).hasSize(1);
+        assertThat(reviewResult.getIssues()).extracting(ReviewIssue::getCategory).containsExactly("REWRITE_REQUIRED");
+        assertThat(reviewResult.getIssues()).extracting(ReviewIssue::getDescription)
+                .containsExactly("补充订单服务为什么需要异步解耦的证据");
+    }
+
+    /**
+     * 验证 parser 可直接提取统一 reviewer payload 与 cache policy。
+     */
+    @Test
+    void shouldParseReviewerPayloadAndResolveCachePolicy() {
+        ReviewResultParser reviewResultParser = new ReviewResultParser();
+
+        ReviewerPayload reviewerPayload = reviewResultParser.parsePayload("""
+                {
+                  "approved": true,
+                  "rewriteRequired": false,
+                  "riskLevel": "LOW",
+                  "issues": [],
+                  "userFacingRewriteHints": [],
+                  "cacheWritePolicy": "WRITE"
+                }
+                """);
+
+        assertThat(reviewerPayload).isNotNull();
+        assertThat(reviewerPayload.isApproved()).isTrue();
+        assertThat(reviewerPayload.getCacheWritePolicy()).isEqualTo(PromptCacheWritePolicy.WRITE);
+        assertThat(reviewResultParser.resolvePromptCacheWritePolicy("""
+                {
+                  "approved": false,
+                  "rewriteRequired": true,
+                  "riskLevel": "HIGH",
+                  "issues": [],
+                  "userFacingRewriteHints": ["请补齐来源"],
+                  "cacheWritePolicy": "SKIP_WRITE"
+                }
+                """)).isEqualTo(PromptCacheWritePolicy.SKIP_WRITE);
     }
 
     /**

@@ -2,6 +2,10 @@ package com.xbk.lattice.query.service;
 
 import com.xbk.lattice.api.query.QueryResponse;
 import com.xbk.lattice.infra.persistence.PendingQueryRecord;
+import com.xbk.lattice.query.domain.AnswerOutcome;
+import com.xbk.lattice.query.domain.GenerationMode;
+import com.xbk.lattice.query.domain.ModelExecutionStatus;
+import com.xbk.lattice.query.domain.QueryAnswerPayload;
 import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
@@ -298,14 +302,29 @@ class QueryFacadeServiceCacheTests {
         /**
          * 生成递增答案，并统计调用次数。
          *
+         * @param scopeId 作用域标识
+         * @param scene 场景
+         * @param agentRole Agent 角色
          * @param question 查询问题
-         * @param articleHit 文章命中
-         * @return 递增答案
+         * @param queryArticleHits 融合命中
+         * @return 递增答案载荷
          */
         @Override
-        public String generate(String question, QueryArticleHit articleHit) {
+        public QueryAnswerPayload generatePayload(
+                String scopeId,
+                String scene,
+                String agentRole,
+                String question,
+                List<QueryArticleHit> queryArticleHits
+        ) {
             invocationCount++;
-            return "answer-" + invocationCount;
+            return new QueryAnswerPayload(
+                    "answer-" + invocationCount,
+                    AnswerOutcome.SUCCESS,
+                    GenerationMode.LLM,
+                    ModelExecutionStatus.SUCCESS,
+                    true
+            );
         }
 
         /**

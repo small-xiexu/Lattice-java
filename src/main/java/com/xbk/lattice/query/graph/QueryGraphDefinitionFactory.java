@@ -9,6 +9,10 @@ import com.xbk.lattice.api.query.QueryArticleResponse;
 import com.xbk.lattice.api.query.QueryResponse;
 import com.xbk.lattice.api.query.QuerySourceResponse;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
+import com.xbk.lattice.query.domain.AnswerOutcome;
+import com.xbk.lattice.query.domain.GenerationMode;
+import com.xbk.lattice.query.domain.ModelExecutionStatus;
+import com.xbk.lattice.query.domain.QueryAnswerPayload;
 import com.xbk.lattice.query.domain.ReviewIssue;
 import com.xbk.lattice.query.domain.ReviewResult;
 import com.xbk.lattice.query.service.AnswerGenerationService;
@@ -49,15 +53,6 @@ import java.util.Set;
 public class QueryGraphDefinitionFactory {
 
     private static final int TOP_K = 8;
-
-    private static final List<String> NON_CACHEABLE_ANSWER_MARKERS = List.of(
-            "当前证据不足",
-            "证据不足",
-            "暂无法确认",
-            "无法确认",
-            "暂无足够证据",
-            "没有足够证据"
-    );
 
     private static final String CHANNEL_FTS = "fts";
 
@@ -242,6 +237,10 @@ public class QueryGraphDefinitionFactory {
             state.setCacheHit(true);
             state.setCachedResponseRef(queryWorkingSetStore.saveResponse(state.getQueryId(), responseForCurrentQuery));
             state.setReviewStatus(responseForCurrentQuery.getReviewStatus());
+            state.setAnswerOutcome(enumName(responseForCurrentQuery.getAnswerOutcome()));
+            state.setGenerationMode(enumName(responseForCurrentQuery.getGenerationMode()));
+            state.setModelExecutionStatus(enumName(responseForCurrentQuery.getModelExecutionStatus()));
+            state.setAnswerCacheable(isCacheableOutcome(responseForCurrentQuery.getAnswerOutcome()));
         }
         else {
             state.setCacheHit(false);
@@ -366,14 +365,18 @@ public class QueryGraphDefinitionFactory {
                 ExecutionLlmSnapshotService.QUERY_SCENE,
                 ExecutionLlmSnapshotService.ROLE_ANSWER
         ));
-        String answer = answerGenerationService.generate(
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
                 state.getLlmScopeId(),
                 ExecutionLlmSnapshotService.QUERY_SCENE,
                 ExecutionLlmSnapshotService.ROLE_ANSWER,
                 state.getQuestion(),
                 fusedHits
         );
-        state.setDraftAnswerRef(queryWorkingSetStore.saveAnswer(state.getQueryId(), answer));
+        state.setDraftAnswerRef(queryWorkingSetStore.saveAnswer(state.getQueryId(), answerPayload.getAnswerMarkdown()));
+        state.setAnswerOutcome(answerPayload.getAnswerOutcome().name());
+        state.setGenerationMode(answerPayload.getGenerationMode().name());
+        state.setModelExecutionStatus(answerPayload.getModelExecutionStatus().name());
+        state.setAnswerCacheable(answerPayload.isAnswerCacheable());
         return queryGraphStateMapper.toDeltaMap(state);
     }
 
@@ -409,7 +412,7 @@ public class QueryGraphDefinitionFactory {
                 ExecutionLlmSnapshotService.QUERY_SCENE,
                 ExecutionLlmSnapshotService.ROLE_REWRITE
         ));
-        String rewrittenAnswer = answerGenerationService.rewriteFromReviewFeedback(
+        QueryAnswerPayload rewrittenPayload = answerGenerationService.rewriteFromReviewPayload(
                 state.getLlmScopeId(),
                 ExecutionLlmSnapshotService.QUERY_SCENE,
                 ExecutionLlmSnapshotService.ROLE_REWRITE,
@@ -418,7 +421,11 @@ public class QueryGraphDefinitionFactory {
                 buildRewriteGuidance(reviewResult),
                 fusedHits
         );
-        state.setDraftAnswerRef(queryWorkingSetStore.saveAnswer(state.getQueryId(), rewrittenAnswer));
+        state.setDraftAnswerRef(queryWorkingSetStore.saveAnswer(state.getQueryId(), rewrittenPayload.getAnswerMarkdown()));
+        state.setAnswerOutcome(rewrittenPayload.getAnswerOutcome().name());
+        state.setGenerationMode(rewrittenPayload.getGenerationMode().name());
+        state.setModelExecutionStatus(rewrittenPayload.getModelExecutionStatus().name());
+        state.setAnswerCacheable(rewrittenPayload.isAnswerCacheable());
         state.setRewriteAttemptCount(state.getRewriteAttemptCount() + 1);
         return queryGraphStateMapper.toDeltaMap(state);
     }
@@ -427,7 +434,7 @@ public class QueryGraphDefinitionFactory {
         QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
         QueryResponse queryResponse = buildSuccessResponse(state);
         String responseRef = queryWorkingSetStore.saveResponse(state.getQueryId(), queryResponse);
-        if (shouldCacheResponse(queryResponse)) {
+        if (shouldCacheResponse(queryResponse, state.isAnswerCacheable())) {
             queryCacheStore.put(state.getNormalizedQuestion(), withoutQueryId(queryResponse));
             state.setCachedResponseRef(responseRef);
         }
@@ -446,7 +453,16 @@ public class QueryGraphDefinitionFactory {
         }
         QueryResponse queryResponse;
         if (!state.isHasFusedHits()) {
-            queryResponse = new QueryResponse("未找到相关知识", List.of(), List.of(), state.getQueryId(), null);
+            queryResponse = new QueryResponse(
+                    "未找到相关知识",
+                    List.of(),
+                    List.of(),
+                    state.getQueryId(),
+                    null,
+                    AnswerOutcome.NO_RELEVANT_KNOWLEDGE,
+                    GenerationMode.RULE_BASED,
+                    ModelExecutionStatus.SKIPPED
+            );
         }
         else {
             queryResponse = buildSuccessResponse(state);
@@ -468,7 +484,10 @@ public class QueryGraphDefinitionFactory {
                 toSourceResponses(fusedHits),
                 toArticleResponses(fusedHits),
                 state.getQueryId(),
-                state.getReviewStatus()
+                state.getReviewStatus(),
+                readAnswerOutcome(state.getAnswerOutcome()),
+                readGenerationMode(state.getGenerationMode()),
+                readModelExecutionStatus(state.getModelExecutionStatus())
         );
     }
 
@@ -478,7 +497,10 @@ public class QueryGraphDefinitionFactory {
                 queryResponse.getSources(),
                 queryResponse.getArticles(),
                 queryId,
-                queryResponse.getReviewStatus()
+                queryResponse.getReviewStatus(),
+                queryResponse.getAnswerOutcome(),
+                queryResponse.getGenerationMode(),
+                queryResponse.getModelExecutionStatus()
         );
     }
 
@@ -488,7 +510,10 @@ public class QueryGraphDefinitionFactory {
                 queryResponse.getSources(),
                 queryResponse.getArticles(),
                 null,
-                queryResponse.getReviewStatus()
+                queryResponse.getReviewStatus(),
+                queryResponse.getAnswerOutcome(),
+                queryResponse.getGenerationMode(),
+                queryResponse.getModelExecutionStatus()
         );
     }
 
@@ -498,8 +523,11 @@ public class QueryGraphDefinitionFactory {
      * @param queryResponse 查询响应
      * @return 是否允许写缓存
      */
-    private boolean shouldCacheResponse(QueryResponse queryResponse) {
+    private boolean shouldCacheResponse(QueryResponse queryResponse, boolean answerCacheable) {
         if (queryResponse == null) {
+            return false;
+        }
+        if (!answerCacheable) {
             return false;
         }
         String answer = queryResponse.getAnswer();
@@ -509,12 +537,39 @@ public class QueryGraphDefinitionFactory {
         if (queryResponse.getSources().isEmpty() && queryResponse.getArticles().isEmpty()) {
             return false;
         }
-        for (String marker : NON_CACHEABLE_ANSWER_MARKERS) {
-            if (answer.contains(marker)) {
-                return false;
-            }
+        return isCacheableOutcome(queryResponse.getAnswerOutcome());
+    }
+
+    private boolean isCacheableOutcome(AnswerOutcome answerOutcome) {
+        return answerOutcome == AnswerOutcome.SUCCESS;
+    }
+
+    private String enumName(Enum<?> enumValue) {
+        if (enumValue == null) {
+            return null;
         }
-        return true;
+        return enumValue.name();
+    }
+
+    private AnswerOutcome readAnswerOutcome(String answerOutcome) {
+        if (answerOutcome == null || answerOutcome.isBlank()) {
+            return null;
+        }
+        return AnswerOutcome.valueOf(answerOutcome);
+    }
+
+    private GenerationMode readGenerationMode(String generationMode) {
+        if (generationMode == null || generationMode.isBlank()) {
+            return null;
+        }
+        return GenerationMode.valueOf(generationMode);
+    }
+
+    private ModelExecutionStatus readModelExecutionStatus(String modelExecutionStatus) {
+        if (modelExecutionStatus == null || modelExecutionStatus.isBlank()) {
+            return null;
+        }
+        return ModelExecutionStatus.valueOf(modelExecutionStatus);
     }
 
     private String buildRewriteGuidance(ReviewResult reviewResult) {

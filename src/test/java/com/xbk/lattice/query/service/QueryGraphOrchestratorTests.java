@@ -1,6 +1,10 @@
 package com.xbk.lattice.query.service;
 
 import com.xbk.lattice.api.query.QueryResponse;
+import com.xbk.lattice.query.domain.AnswerOutcome;
+import com.xbk.lattice.query.domain.GenerationMode;
+import com.xbk.lattice.query.domain.ModelExecutionStatus;
+import com.xbk.lattice.query.domain.QueryAnswerPayload;
 import com.xbk.lattice.query.domain.ReviewResult;
 import org.junit.jupiter.api.Test;
 
@@ -52,8 +56,8 @@ class QueryGraphOrchestratorTests {
                 queryCacheStore,
                 new ReviewerAgent(
                         new SequencedReviewerGateway(
-                                "{\"pass\":false,\"issues\":[{\"severity\":\"HIGH\",\"category\":\"WEAK_ANSWER\",\"description\":\"答案包含 TODO\"}]}",
-                                "{\"pass\":true,\"issues\":[]}"
+                                "{\"approved\":false,\"rewriteRequired\":true,\"riskLevel\":\"HIGH\",\"issues\":[{\"severity\":\"HIGH\",\"category\":\"WEAK_ANSWER\",\"description\":\"答案包含 TODO\"}],\"userFacingRewriteHints\":[\"请去掉 TODO 并补齐明确结论\"],\"cacheWritePolicy\":\"SKIP_WRITE\"}",
+                                "{\"approved\":true,\"rewriteRequired\":false,\"riskLevel\":\"LOW\",\"issues\":[],\"userFacingRewriteHints\":[],\"cacheWritePolicy\":\"WRITE\"}"
                         ),
                         new ReviewResultParser()
                 ),
@@ -64,6 +68,9 @@ class QueryGraphOrchestratorTests {
 
         assertThat(queryResponse.getAnswer()).isEqualTo("修复后的答案：retry=3");
         assertThat(queryResponse.getReviewStatus()).isEqualTo("PASSED");
+        assertThat(queryResponse.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(queryResponse.getGenerationMode()).isEqualTo(GenerationMode.LLM);
+        assertThat(queryResponse.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SUCCESS);
         assertThat(answerGenerationService.getGenerateCount()).isEqualTo(1);
         assertThat(answerGenerationService.getReviseCount()).isEqualTo(1);
         assertThat(answerGenerationService.getGeneratedScopeId()).isNotBlank();
@@ -108,8 +115,8 @@ class QueryGraphOrchestratorTests {
                 queryCacheStore,
                 new ReviewerAgent(
                         new SequencedReviewerGateway(
-                                "{\"pass\":false,\"issues\":[{\"severity\":\"HIGH\",\"category\":\"WEAK_ANSWER\",\"description\":\"答案包含 TODO\"}]}",
-                                "{\"pass\":false,\"issues\":[{\"severity\":\"HIGH\",\"category\":\"WEAK_ANSWER\",\"description\":\"答案仍缺乏可验证结论\"}]}"
+                                "{\"approved\":false,\"rewriteRequired\":true,\"riskLevel\":\"HIGH\",\"issues\":[{\"severity\":\"HIGH\",\"category\":\"WEAK_ANSWER\",\"description\":\"答案包含 TODO\"}],\"userFacingRewriteHints\":[\"请返回可验证的结论\"],\"cacheWritePolicy\":\"SKIP_WRITE\"}",
+                                "{\"approved\":false,\"rewriteRequired\":true,\"riskLevel\":\"HIGH\",\"issues\":[{\"severity\":\"HIGH\",\"category\":\"WEAK_ANSWER\",\"description\":\"答案仍缺乏可验证结论\"}],\"userFacingRewriteHints\":[\"请补齐可验证证据\"],\"cacheWritePolicy\":\"SKIP_WRITE\"}"
                         ),
                         new ReviewResultParser()
                 ),
@@ -172,7 +179,7 @@ class QueryGraphOrchestratorTests {
     }
 
     /**
-     * 验证“当前证据不足”这类负向答案不会写入缓存。
+     * 验证负向 outcome 不会写入缓存，而不是再依赖文案 marker。
      */
     @Test
     void shouldNotCacheEvidenceInsufficientAnswerEvenWhenReviewPasses() {
@@ -185,8 +192,20 @@ class QueryGraphOrchestratorTests {
                 9.5D
         );
         TrackingAnswerGenerationService answerGenerationService = new TrackingAnswerGenerationService(
-                "当前证据不足，暂无法确认为什么必须走消息队列。",
-                "当前证据不足，暂无法确认为什么必须走消息队列。"
+                new QueryAnswerPayload(
+                        "现有证据只能说明订单服务通过消息队列异步通知库存服务，但无法证明这是唯一必选方案。",
+                        AnswerOutcome.INSUFFICIENT_EVIDENCE,
+                        GenerationMode.LLM,
+                        ModelExecutionStatus.SUCCESS,
+                        false
+                ),
+                new QueryAnswerPayload(
+                        "现有证据只能说明订单服务通过消息队列异步通知库存服务，但无法证明这是唯一必选方案。",
+                        AnswerOutcome.INSUFFICIENT_EVIDENCE,
+                        GenerationMode.LLM,
+                        ModelExecutionStatus.SUCCESS,
+                        false
+                )
         );
         InMemoryQueryCacheStore queryCacheStore = new InMemoryQueryCacheStore();
         QueryReviewProperties queryReviewProperties = new QueryReviewProperties();
@@ -201,7 +220,7 @@ class QueryGraphOrchestratorTests {
                 answerGenerationService,
                 queryCacheStore,
                 new ReviewerAgent(
-                        new SequencedReviewerGateway("{\"pass\":true,\"issues\":[]}"),
+                        new SequencedReviewerGateway("{\"approved\":true,\"rewriteRequired\":false,\"riskLevel\":\"LOW\",\"issues\":[],\"userFacingRewriteHints\":[],\"cacheWritePolicy\":\"WRITE\"}"),
                         new ReviewResultParser()
                 ),
                 queryReviewProperties
@@ -209,8 +228,9 @@ class QueryGraphOrchestratorTests {
 
         QueryResponse queryResponse = queryGraphOrchestrator.execute("为什么订单服务要走消息队列");
 
-        assertThat(queryResponse.getAnswer()).contains("当前证据不足");
+        assertThat(queryResponse.getAnswer()).contains("无法证明这是唯一必选方案");
         assertThat(queryResponse.getReviewStatus()).isEqualTo("PASSED");
+        assertThat(queryResponse.getAnswerOutcome()).isEqualTo(AnswerOutcome.INSUFFICIENT_EVIDENCE);
         assertThat(queryCacheStore.getCachedResponse()).isEmpty();
     }
 
@@ -244,7 +264,7 @@ class QueryGraphOrchestratorTests {
                 answerGenerationService,
                 queryCacheStore,
                 new ReviewerAgent(
-                        new SequencedReviewerGateway("{\"pass\":true,\"issues\":[]}"),
+                        new SequencedReviewerGateway("{\"approved\":true,\"rewriteRequired\":false,\"riskLevel\":\"LOW\",\"issues\":[],\"userFacingRewriteHints\":[],\"cacheWritePolicy\":\"WRITE\"}"),
                         new ReviewResultParser()
                 ),
                 queryReviewProperties
@@ -258,6 +278,8 @@ class QueryGraphOrchestratorTests {
         assertThat(secondResponse.getQueryId()).isEqualTo("query-002");
         assertThat(secondResponse.getQueryId()).isNotEqualTo(firstResponse.getQueryId());
         assertThat(cachedResponse.getQueryId()).isNull();
+        assertThat(secondResponse.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(secondResponse.getGenerationMode()).isEqualTo(GenerationMode.LLM);
     }
 
     /**
@@ -267,9 +289,9 @@ class QueryGraphOrchestratorTests {
      */
     private static class TrackingAnswerGenerationService extends AnswerGenerationService {
 
-        private final String generatedAnswer;
+        private final QueryAnswerPayload generatedPayload;
 
-        private final String revisedAnswer;
+        private final QueryAnswerPayload revisedPayload;
 
         private int generateCount;
 
@@ -294,9 +316,37 @@ class QueryGraphOrchestratorTests {
          * @param revisedAnswer 重写答案
          */
         private TrackingAnswerGenerationService(String generatedAnswer, String revisedAnswer) {
+            this(
+                    new QueryAnswerPayload(
+                            generatedAnswer,
+                            AnswerOutcome.SUCCESS,
+                            GenerationMode.LLM,
+                            ModelExecutionStatus.SUCCESS,
+                            true
+                    ),
+                    new QueryAnswerPayload(
+                            revisedAnswer,
+                            AnswerOutcome.SUCCESS,
+                            GenerationMode.LLM,
+                            ModelExecutionStatus.SUCCESS,
+                            true
+                    )
+            );
+        }
+
+        /**
+         * 创建答案服务替身。
+         *
+         * @param generatedPayload 首轮答案载荷
+         * @param revisedPayload 重写答案载荷
+         */
+        private TrackingAnswerGenerationService(
+                QueryAnswerPayload generatedPayload,
+                QueryAnswerPayload revisedPayload
+        ) {
             super();
-            this.generatedAnswer = generatedAnswer;
-            this.revisedAnswer = revisedAnswer;
+            this.generatedPayload = generatedPayload;
+            this.revisedPayload = revisedPayload;
         }
 
         /**
@@ -307,7 +357,7 @@ class QueryGraphOrchestratorTests {
          * @return 首轮答案
          */
         @Override
-        public String generate(
+        public QueryAnswerPayload generatePayload(
                 String scopeId,
                 String scene,
                 String agentRole,
@@ -318,7 +368,7 @@ class QueryGraphOrchestratorTests {
             generatedScopeId = scopeId;
             generatedScene = scene;
             generatedRole = agentRole;
-            return generatedAnswer;
+            return generatedPayload;
         }
 
         /**
@@ -331,7 +381,7 @@ class QueryGraphOrchestratorTests {
          * @return 重写答案
          */
         @Override
-        public String rewriteFromReviewFeedback(
+        public QueryAnswerPayload rewriteFromReviewPayload(
                 String scopeId,
                 String scene,
                 String agentRole,
@@ -344,7 +394,7 @@ class QueryGraphOrchestratorTests {
             revisedScopeId = scopeId;
             revisedScene = scene;
             revisedRole = agentRole;
-            return revisedAnswer;
+            return revisedPayload;
         }
 
         /**
@@ -443,7 +493,12 @@ class QueryGraphOrchestratorTests {
          * 创建审查代理替身。
          */
         private TrackingReviewerAgent() {
-            super(new SequencedReviewerGateway("{\"pass\":true,\"issues\":[]}"), new ReviewResultParser());
+            super(
+                    new SequencedReviewerGateway(
+                            "{\"approved\":true,\"rewriteRequired\":false,\"riskLevel\":\"LOW\",\"issues\":[],\"userFacingRewriteHints\":[],\"cacheWritePolicy\":\"WRITE\"}"
+                    ),
+                    new ReviewResultParser()
+            );
         }
 
         /**

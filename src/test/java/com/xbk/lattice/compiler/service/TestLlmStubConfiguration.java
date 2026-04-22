@@ -61,15 +61,13 @@ public class TestLlmStubConfiguration {
         }
 
         /**
-         * 执行测试专用编译调用。
+         * 按用途返回固定文本结果。
          *
          * @param purpose 调用用途
-         * @param systemPrompt 系统提示词
          * @param userPrompt 用户提示词
          * @return 固定测试结果
          */
-        @Override
-        public String compile(String purpose, String systemPrompt, String userPrompt) {
+        private String resolveTextResult(String purpose, String userPrompt) {
             if ("cross-validate".equals(purpose)) {
                 return "{\"supported\":false,\"evidence\":\"test stub\"}";
             }
@@ -89,16 +87,47 @@ public class TestLlmStubConfiguration {
         }
 
         /**
-         * 执行测试专用审查调用。
+         * 执行测试专用文本生成调用。
          *
+         * @param scene 场景
+         * @param agentRole Agent 角色
          * @param purpose 调用用途
          * @param systemPrompt 系统提示词
          * @param userPrompt 用户提示词
-         * @return 固定通过结果
+         * @return 固定测试结果
          */
         @Override
-        public String review(String purpose, String systemPrompt, String userPrompt) {
-            return "{\"passed\":true,\"issues\":[]}";
+        public String generateText(
+                String scene,
+                String agentRole,
+                String purpose,
+                String systemPrompt,
+                String userPrompt
+        ) {
+            return resolveTextResult(purpose, userPrompt);
+        }
+
+        /**
+         * 执行测试专用 scoped 文本生成调用。
+         *
+         * @param scopeId 作用域标识
+         * @param scene 场景
+         * @param agentRole Agent 角色
+         * @param purpose 调用用途
+         * @param systemPrompt 系统提示词
+         * @param userPrompt 用户提示词
+         * @return 固定测试结果
+         */
+        @Override
+        public String generateTextWithScope(
+                String scopeId,
+                String scene,
+                String agentRole,
+                String purpose,
+                String systemPrompt,
+                String userPrompt
+        ) {
+            return resolveTextResult(purpose, userPrompt);
         }
 
         /**

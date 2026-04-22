@@ -94,17 +94,11 @@ class QueryFacadeServiceVectorTests {
          * 返回固定答案。
          *
          * @param question 查询问题
-         * @param hits 查询命中
+         * @param articleHit 查询命中
          * @return 固定答案
          */
         @Override
-        public String generate(
-                String scopeId,
-                String scene,
-                String agentRole,
-                String question,
-                List<QueryArticleHit> hits
-        ) {
+        public String generate(String question, QueryArticleHit articleHit) {
             return answer;
         }
     }

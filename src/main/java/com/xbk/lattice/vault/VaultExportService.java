@@ -99,7 +99,6 @@ public class VaultExportService {
 
         Map<String, Object> previousManifest = vaultManifestStore.read(manifestPath);
         Map<String, Object> nextManifest = new LinkedHashMap<String, Object>();
-        nextManifest.put("exportedAt", OffsetDateTime.now().toString());
 
         int writtenFiles = 0;
         int skippedFiles = 0;
@@ -159,12 +158,27 @@ public class VaultExportService {
             managedPaths.add(relativePath);
             contributionEntries.put(contributionRecord.getId().toString(), manifestEntry(relativePath, contentHash));
         }
-        nextManifest.put("contributions", contributionEntries);
-
         int deletedFiles = deleteOrphanedManagedFiles(vaultDir, previousManifest, managedPaths);
+        nextManifest.put("contributions", contributionEntries);
+        nextManifest.put("exportedAt", resolveExportedAt(previousManifest, writtenFiles, deletedFiles));
         vaultManifestStore.write(manifestPath, nextManifest);
 
         return new VaultExportResult(vaultDir.toString(), writtenFiles, skippedFiles, deletedFiles);
+    }
+
+    private String resolveExportedAt(
+            Map<String, Object> previousManifest,
+            int writtenFiles,
+            int deletedFiles
+    ) {
+        if (writtenFiles > 0 || deletedFiles > 0) {
+            return OffsetDateTime.now().toString();
+        }
+        Object previousExportedAt = previousManifest.get("exportedAt");
+        if (previousExportedAt != null && !String.valueOf(previousExportedAt).isBlank()) {
+            return String.valueOf(previousExportedAt);
+        }
+        return OffsetDateTime.now().toString();
     }
 
     private boolean writeIfChanged(
