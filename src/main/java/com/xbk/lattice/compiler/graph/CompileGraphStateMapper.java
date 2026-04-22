@@ -32,6 +32,9 @@ public class CompileGraphStateMapper {
         state.setSourceId(readLong(stateMap, CompileGraphStateKeys.SOURCE_ID));
         state.setSourceCode(readString(stateMap, CompileGraphStateKeys.SOURCE_CODE));
         state.setSourceSyncRunId(readLong(stateMap, CompileGraphStateKeys.SOURCE_SYNC_RUN_ID));
+        state.setTraceId(readString(stateMap, CompileGraphStateKeys.TRACE_ID));
+        state.setSpanId(readString(stateMap, CompileGraphStateKeys.SPAN_ID));
+        state.setRootTraceId(readString(stateMap, CompileGraphStateKeys.ROOT_TRACE_ID));
         state.setCompileMode(readString(stateMap, CompileGraphStateKeys.COMPILE_MODE));
         state.setOrchestrationMode(readString(stateMap, CompileGraphStateKeys.ORCHESTRATION_MODE));
         state.setRawSourcesRef(readString(stateMap, CompileGraphStateKeys.RAW_SOURCES_REF));
@@ -85,6 +88,9 @@ public class CompileGraphStateMapper {
         values.put(CompileGraphStateKeys.SOURCE_ID, state.getSourceId());
         values.put(CompileGraphStateKeys.SOURCE_CODE, state.getSourceCode());
         values.put(CompileGraphStateKeys.SOURCE_SYNC_RUN_ID, state.getSourceSyncRunId());
+        values.put(CompileGraphStateKeys.TRACE_ID, state.getTraceId());
+        values.put(CompileGraphStateKeys.SPAN_ID, state.getSpanId());
+        values.put(CompileGraphStateKeys.ROOT_TRACE_ID, state.getRootTraceId());
         values.put(CompileGraphStateKeys.COMPILE_MODE, state.getCompileMode());
         values.put(CompileGraphStateKeys.ORCHESTRATION_MODE, state.getOrchestrationMode());
         values.put(CompileGraphStateKeys.RAW_SOURCES_REF, state.getRawSourcesRef());

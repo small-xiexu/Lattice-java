@@ -13,6 +13,10 @@ import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import com.xbk.lattice.llm.service.LlmCallResult;
 import com.xbk.lattice.llm.service.LlmClient;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
+import com.xbk.lattice.llm.service.LlmClientFactory;
+import com.xbk.lattice.llm.service.LlmInvocationExecutor;
+import com.xbk.lattice.llm.service.LlmRouteResolution;
+import com.xbk.lattice.observability.StructuredEventLogger;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -29,6 +33,7 @@ import java.util.Optional;
 import java.util.Queue;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * ArticleCorrectionService 测试
@@ -113,6 +118,101 @@ class ArticleCorrectionServiceTests {
                 .contains("重试次数应为 5")
                 .contains("配置原文明确写的是 retry=5");
         assertThat(compileClient.getUserPrompts().get(1)).contains("源文件明确写的是 retry=5");
+    }
+
+    /**
+     * 验证当纠错结果返回带 frontmatter 的 Markdown 时，会同步刷新结构化字段，并把 review_status 统一收口为 needs_review。
+     */
+    @Test
+    void shouldSyncStructuredFieldsFromCorrectedMarkdown() throws Exception {
+        FakeArticleJdbcRepository articleJdbcRepository = new FakeArticleJdbcRepository(List.of(
+                article(
+                        "payment-config",
+                        """
+                                ---
+                                title: "Payment Config"
+                                summary: "旧摘要"
+                                referential_keywords: ["retry=3"]
+                                sources: ["sources/payment-config.md"]
+                                depends_on: []
+                                related: []
+                                confidence: medium
+                                compiled_at: "2026-04-16T10:10:00+08:00"
+                                review_status: passed
+                                ---
+
+                                # Payment Config
+
+                                当前文档写的是 retry=3。
+                                """,
+                        List.of("sources/payment-config.md"),
+                        List.of(),
+                        List.of()
+                )
+        ));
+        FakeSourceFileJdbcRepository sourceFileJdbcRepository = new FakeSourceFileJdbcRepository(List.of(
+                new SourceFileRecord(
+                        "sources/payment-config.md",
+                        "retry=5",
+                        "md",
+                        120,
+                        "配置原文明确写的是 retry=5，且支付配置已同步。",
+                        "{}",
+                        false,
+                        "sources/payment-config.md"
+                )
+        ));
+        FakeArticleSnapshotJdbcRepository articleSnapshotJdbcRepository = new FakeArticleSnapshotJdbcRepository();
+        CapturingLlmClient compileClient = new CapturingLlmClient(
+                "{\"supported\":true,\"evidence\":\"源文件明确写的是 retry=5\"}",
+                """
+                        ---
+                        title: "Payment Config Updated"
+                        summary: "已按源文件修正到 retry=5。"
+                        referential_keywords: ["retry=5", "payment"]
+                        sources: ["sources/payment-config.md", "sources/retry-policy.md"]
+                        depends_on: ["retry-policy"]
+                        related: ["payment-timeout"]
+                        confidence: "high"
+                        compiled_at: "2026-04-22T18:10:00+08:00"
+                        review_status: passed
+                        ---
+
+                        # Payment Config Updated
+
+                        已按源文件修正为 retry=5。
+                        """
+        );
+        ArticleCorrectionService articleCorrectionService = new ArticleCorrectionService(
+                articleJdbcRepository,
+                sourceFileJdbcRepository,
+                articleSnapshotJdbcRepository,
+                new DependencyGraphService(articleJdbcRepository),
+                newLlmGateway(compileClient)
+        );
+
+        ArticleCorrectionResult result = articleCorrectionService.correct("payment-config", "重试次数应为 5");
+        ArticleRecord updatedRecord = articleJdbcRepository.getLastUpserted();
+
+        assertThat(result.getRevisedContent()).contains("review_status: needs_review");
+        assertThat(updatedRecord.getTitle()).isEqualTo("Payment Config Updated");
+        assertThat(updatedRecord.getSummary()).isEqualTo("已按源文件修正到 retry=5。");
+        assertThat(updatedRecord.getReferentialKeywords()).containsExactly("retry=5", "payment");
+        assertThat(updatedRecord.getSourcePaths()).containsExactly("sources/payment-config.md", "sources/retry-policy.md");
+        assertThat(updatedRecord.getDependsOn()).containsExactly("retry-policy");
+        assertThat(updatedRecord.getRelated()).containsExactly("payment-timeout");
+        assertThat(updatedRecord.getConfidence()).isEqualTo("high");
+        assertThat(updatedRecord.getCompiledAt()).isEqualTo(OffsetDateTime.parse("2026-04-22T18:10:00+08:00"));
+        assertThat(updatedRecord.getReviewStatus()).isEqualTo("needs_review");
+        assertThat(updatedRecord.getContent())
+                .contains("review_status: needs_review")
+                .contains("referential_keywords: [\"retry=5\", \"payment\"]");
+        assertThat(updatedRecord.getMetadataJson())
+                .contains("\"summary\":\"已按源文件修正到 retry=5。\"")
+                .contains("\"description\":\"已按源文件修正到 retry=5。\"")
+                .contains("\"sourceCount\":2");
+        assertThat(articleSnapshotJdbcRepository.getSavedRecords()).hasSize(1);
+        assertThat(articleSnapshotJdbcRepository.getSavedRecords().get(0).getContent()).contains("review_status: needs_review");
     }
 
     /**
@@ -210,6 +310,77 @@ class ArticleCorrectionServiceTests {
         assertThat(snapshotService.lastScopeId).isEqualTo("admin-correction:no-source:payment-config");
     }
 
+    /**
+     * 验证当 Admin 纠错命中 README 演示连接时，会在真正调用模型前给出明确错误提示。
+     */
+    @Test
+    void shouldRejectReadmeDemoRouteBeforeCallingCorrectionLlm() throws Exception {
+        FakeArticleJdbcRepository articleJdbcRepository = new FakeArticleJdbcRepository(List.of(
+                article(
+                        "payment-config",
+                        "# Payment Config\n\n当前文档写的是 retry=3。",
+                        List.of("sources/payment-config.md"),
+                        List.of(),
+                        List.of()
+                )
+        ));
+        FakeSourceFileJdbcRepository sourceFileJdbcRepository = new FakeSourceFileJdbcRepository(List.of(
+                new SourceFileRecord(
+                        "sources/payment-config.md",
+                        "retry=5",
+                        "md",
+                        120,
+                        "配置原文明确写的是 retry=5，且支付配置已同步。",
+                        "{}",
+                        false,
+                        "sources/payment-config.md"
+                )
+        ));
+        RecordingExecutionLlmSnapshotService snapshotService = new RecordingExecutionLlmSnapshotService();
+        snapshotService.setResolvedRoute(new LlmRouteResolution(
+                ExecutionLlmSnapshotService.COMPILE_SCOPE_TYPE,
+                "admin-correction:no-source:payment-config",
+                ExecutionLlmSnapshotService.COMPILE_SCENE,
+                ExecutionLlmSnapshotService.ROLE_WRITER,
+                Long.valueOf(1L),
+                Long.valueOf(2L),
+                Integer.valueOf(1),
+                "readme-demo-openai",
+                "openai",
+                "http://127.0.0.1:19999",
+                "demo-key",
+                "gpt-5.4-demo",
+                null,
+                null,
+                null,
+                "{}",
+                null,
+                null,
+                true
+        ));
+        CapturingLlmClient compileClient = new CapturingLlmClient(
+                "{\"supported\":true,\"evidence\":\"源文件明确写的是 retry=5\"}",
+                "# Payment Config\n\n已按源文件修正为 retry=5。"
+        );
+        ArticleCorrectionService articleCorrectionService = new ArticleCorrectionService(
+                articleJdbcRepository,
+                sourceFileJdbcRepository,
+                new FakeArticleSnapshotJdbcRepository(),
+                new DependencyGraphService(articleJdbcRepository),
+                newScopedLlmGateway(compileClient, snapshotService)
+        );
+        articleCorrectionService.setExecutionLlmSnapshotService(snapshotService);
+
+        assertThatThrownBy(() -> articleCorrectionService.correct("payment-config", "重试次数应为 5"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("README 演示 LLM 连接")
+                .hasMessageContaining("/admin/settings")
+                .hasMessageContaining("compile.writer");
+        assertThat(snapshotService.freezeCount).isEqualTo(1);
+        assertThat(compileClient.getSystemPrompts()).isEmpty();
+        assertThat(compileClient.getUserPrompts()).isEmpty();
+    }
+
     private ArticleRecord article(
             String conceptId,
             String content,
@@ -247,6 +418,41 @@ class ArticleCorrectionServiceTests {
                 new CapturingLlmClient("{\"passed\":true}"),
                 new FakeRedisKeyValueStore(),
                 createProperties()
+        );
+    }
+
+    private LlmGateway newScopedLlmGateway(
+            CapturingLlmClient compileClient,
+            ExecutionLlmSnapshotService executionLlmSnapshotService
+    ) throws Exception {
+        Constructor<LlmGateway> constructor = LlmGateway.class.getDeclaredConstructor(
+                LlmClient.class,
+                LlmClient.class,
+                RedisKeyValueStore.class,
+                LlmProperties.class,
+                LlmClientFactory.class,
+                ExecutionLlmSnapshotService.class,
+                LlmInvocationExecutor.class,
+                String.class,
+                String.class,
+                String.class,
+                String.class,
+                StructuredEventLogger.class
+        );
+        constructor.setAccessible(true);
+        return constructor.newInstance(
+                compileClient,
+                new CapturingLlmClient("{\"passed\":true}"),
+                new FakeRedisKeyValueStore(),
+                createProperties(),
+                null,
+                executionLlmSnapshotService,
+                null,
+                "http://127.0.0.1:18080",
+                "test-compile-key",
+                "http://127.0.0.1:18081",
+                "test-review-key",
+                null
         );
     }
 
@@ -312,6 +518,8 @@ class ArticleCorrectionServiceTests {
 
         private String lastScene;
 
+        private Optional<LlmRouteResolution> resolvedRoute = Optional.empty();
+
         private RecordingExecutionLlmSnapshotService() {
             super(
                     properties(),
@@ -334,6 +542,20 @@ class ArticleCorrectionServiceTests {
             lastScopeId = scopeId;
             lastScene = scene;
             return List.of();
+        }
+
+        @Override
+        public Optional<LlmRouteResolution> resolveRoute(
+                String scopeType,
+                String scopeId,
+                String scene,
+                String agentRole
+        ) {
+            return resolvedRoute;
+        }
+
+        private void setResolvedRoute(LlmRouteResolution routeResolution) {
+            this.resolvedRoute = Optional.ofNullable(routeResolution);
         }
 
         private static LlmProperties properties() {

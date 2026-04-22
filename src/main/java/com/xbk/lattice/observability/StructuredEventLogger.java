@@ -119,9 +119,12 @@ public class StructuredEventLogger {
         contextValues.put("eventName", eventName);
 
         String traceId = resolveTraceId();
+        String rootTraceId = resolveRootTraceId(traceId);
         if (traceId != null && !traceId.isBlank()) {
             contextValues.put("traceId", traceId);
-            contextValues.put("rootTraceId", traceId);
+        }
+        if (rootTraceId != null && !rootTraceId.isBlank()) {
+            contextValues.put("rootTraceId", rootTraceId);
         }
         String spanId = resolveSpanId();
         if (spanId != null && !spanId.isBlank()) {
@@ -153,6 +156,14 @@ public class StructuredEventLogger {
             }
         }
         return MDC.get("traceId");
+    }
+
+    private String resolveRootTraceId(String traceId) {
+        String rootTraceId = MDC.get("rootTraceId");
+        if (rootTraceId != null && !rootTraceId.isBlank()) {
+            return rootTraceId;
+        }
+        return traceId;
     }
 
     private String resolveSpanId() {

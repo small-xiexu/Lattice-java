@@ -19,6 +19,12 @@ public final class CompileGraphStateKeys {
 
     public static final String SOURCE_SYNC_RUN_ID = "sourceSyncRunId";
 
+    public static final String TRACE_ID = "traceId";
+
+    public static final String SPAN_ID = "spanId";
+
+    public static final String ROOT_TRACE_ID = "rootTraceId";
+
     public static final String COMPILE_MODE = "compileMode";
 
     public static final String ORCHESTRATION_MODE = "orchestrationMode";

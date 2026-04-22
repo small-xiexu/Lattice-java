@@ -299,6 +299,7 @@ CREATE TABLE IF NOT EXISTS compile_jobs (
     source_dir VARCHAR(1024) NOT NULL,
     source_id BIGINT,
     source_sync_run_id BIGINT,
+    root_trace_id VARCHAR(64),
     incremental BOOLEAN NOT NULL DEFAULT FALSE,
     orchestration_mode VARCHAR(32) NOT NULL DEFAULT 'state_graph',
     status VARCHAR(32) NOT NULL,
@@ -315,6 +316,7 @@ COMMENT ON COLUMN compile_jobs.job_id IS '编译任务唯一标识';
 COMMENT ON COLUMN compile_jobs.source_dir IS '编译输入目录';
 COMMENT ON COLUMN compile_jobs.source_id IS '所属资料源主键 ID';
 COMMENT ON COLUMN compile_jobs.source_sync_run_id IS '触发该编译的资料源同步运行主键';
+COMMENT ON COLUMN compile_jobs.root_trace_id IS '异步编译链路根追踪标识';
 COMMENT ON COLUMN compile_jobs.incremental IS '是否为增量编译';
 COMMENT ON COLUMN compile_jobs.orchestration_mode IS '编排模式';
 COMMENT ON COLUMN compile_jobs.status IS '任务状态';

@@ -121,7 +121,49 @@ class VaultExportServiceTests {
         assertThat(Files.list(tempDir.resolve("_contributions")).count()).isEqualTo(1L);
         assertThat(Files.exists(tempDir.resolve("_meta/README.md"))).isTrue();
         assertThat(Files.exists(tempDir.resolve("_meta/export-manifest.json"))).isTrue();
+        assertThat(Files.readString(tempDir.resolve("_meta/export-manifest.json"), StandardCharsets.UTF_8))
+                .doesNotContain("exportedAt");
         assertThat(Files.exists(tempDir.resolve(".git"))).isTrue();
+    }
+
+    /**
+     * 验证当磁盘文件已漂移但 manifest 仍指向旧内容时，导出会强制重写受管文件。
+     *
+     * @param tempDir 临时目录
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldRewriteDriftedManagedFileWhenManifestHashMatches(@TempDir Path tempDir) throws Exception {
+        resetTables();
+        Long sourceId = createManagedSourceId();
+        articleJdbcRepository.upsert(new ArticleRecord(
+                sourceId,
+                "payments-docs--payment-timeout",
+                "payment-timeout",
+                "Payment Timeout",
+                "# Payment Timeout\n\nretry=3\n",
+                "ACTIVE",
+                OffsetDateTime.parse("2026-04-16T17:30:00+08:00"),
+                List.of("payment/a.md"),
+                "{\"description\":\"payment summary\"}",
+                "payment summary",
+                List.of("retry=3"),
+                List.of(),
+                List.of(),
+                "medium",
+                "pending"
+        ));
+
+        Path vaultDir = tempDir.resolve("vault");
+        Path articlePath = vaultDir.resolve("concepts/payments-docs--payment-timeout.md");
+
+        vaultExportService.export(vaultDir);
+        Files.writeString(articlePath, "# Payment Timeout\n\nretry=9\n", StandardCharsets.UTF_8);
+
+        VaultExportResult result = vaultExportService.export(vaultDir);
+
+        assertThat(result.getWrittenFiles()).isGreaterThanOrEqualTo(1);
+        assertThat(Files.readString(articlePath, StandardCharsets.UTF_8)).contains("retry=3");
     }
 
     private void resetTables() {

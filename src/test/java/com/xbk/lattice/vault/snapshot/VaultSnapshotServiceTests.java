@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -115,6 +116,7 @@ class VaultSnapshotServiceTests {
                 .contains("# Index baseline");
         assertThat(vaultGitService.headCommitId(vaultDir)).isNotBlank();
         assertThat(latestSnapshots.get(0).getTriggerEvent()).isEqualTo("rollback");
+        assertThat(latestSnapshots.get(0).getGitCommit()).isEqualTo(vaultGitService.headCommitId(vaultDir));
     }
 
     /**
@@ -146,6 +148,64 @@ class VaultSnapshotServiceTests {
         assertThat(vaultGitService.headCommitId(vaultDir)).isEqualTo(firstBaseline.getGitCommit());
         assertThat(snapshots).hasSize(2);
         assertThat(snapshots).allMatch(snapshot -> snapshot.getGitCommit() != null && !snapshot.getGitCommit().isBlank());
+    }
+
+    /**
+     * 验证 rollback 在当前 Vault 已经位于目标内容时，会复用 HEAD commit 而不是落出 gitCommit=null。
+     *
+     * @param tempDir 临时目录
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldReuseHeadCommitWhenRollbackProducesNoNewGitChanges(@TempDir Path tempDir) throws Exception {
+        resetTables();
+        Path vaultDir = tempDir.resolve("vault");
+
+        Long sourceId = createManagedSourceId();
+        seedBaselineState(sourceId);
+
+        RepoBaselineResult baseline = vaultSnapshotService.createBaselineSnapshot(vaultDir, "baseline");
+
+        RepoRollbackResult rollbackResult = vaultSnapshotService.rollback(vaultDir, baseline.getSnapshotId());
+        List<RepoSnapshotRecord> latestSnapshots = repoSnapshotJdbcRepository.findRecent(5);
+
+        assertThat(rollbackResult.getRestoredSnapshotId()).isEqualTo(baseline.getSnapshotId());
+        assertThat(vaultGitService.headCommitId(vaultDir)).isEqualTo(baseline.getGitCommit());
+        assertThat(latestSnapshots.get(0).getTriggerEvent()).isEqualTo("rollback");
+        assertThat(latestSnapshots.get(0).getGitCommit()).isEqualTo(baseline.getGitCommit());
+    }
+
+    /**
+     * 验证当 Vault 文件被仓库外修改并提交后，rollback 仍会把文件恢复到目标快照并产出新的 Git commit。
+     *
+     * @param tempDir 临时目录
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldRestoreCommittedVaultDriftDuringRollback(@TempDir Path tempDir) throws Exception {
+        resetTables();
+        Path vaultDir = tempDir.resolve("vault");
+
+        Long sourceId = createManagedSourceId();
+        seedBaselineState(sourceId);
+
+        RepoBaselineResult baseline = vaultSnapshotService.createBaselineSnapshot(vaultDir, "baseline");
+        Path articlePath = vaultDir.resolve("concepts/payments-docs--payment-timeout.md");
+
+        Files.writeString(articlePath, "# Payment Timeout\n\nretry=9\n");
+        String driftCommitId = vaultGitService.commitAll(vaultDir, "[lattice:manual] drift");
+
+        RepoRollbackResult rollbackResult = vaultSnapshotService.rollback(vaultDir, baseline.getSnapshotId());
+        List<RepoSnapshotRecord> latestSnapshots = repoSnapshotJdbcRepository.findRecent(5);
+        String headCommitId = vaultGitService.headCommitId(vaultDir);
+
+        assertThat(driftCommitId).isNotBlank();
+        assertThat(rollbackResult.getRestoredSnapshotId()).isEqualTo(baseline.getSnapshotId());
+        assertThat(Files.readString(articlePath)).contains("retry=3");
+        assertThat(headCommitId).isNotBlank().isNotEqualTo(driftCommitId);
+        assertThat(latestSnapshots.get(0).getTriggerEvent()).isEqualTo("rollback");
+        assertThat(latestSnapshots.get(0).getGitCommit()).isEqualTo(headCommitId);
+        assertThat(vaultSnapshotService.diff(vaultDir, baseline.getSnapshotId())).isEmpty();
     }
 
     private void seedBaselineState(Long sourceId) {

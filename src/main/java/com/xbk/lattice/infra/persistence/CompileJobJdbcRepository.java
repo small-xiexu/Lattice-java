@@ -41,15 +41,16 @@ public class CompileJobJdbcRepository {
         jdbcTemplate.update(
                 """
                         insert into compile_jobs (
-                            job_id, source_dir, source_id, source_sync_run_id, incremental,
+                            job_id, source_dir, source_id, source_sync_run_id, root_trace_id, incremental,
                             orchestration_mode, status, persisted_count, error_message,
                             attempt_count, requested_at, started_at, finished_at
                         )
-                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         on conflict (job_id) do update
                         set source_dir = excluded.source_dir,
                             source_id = excluded.source_id,
                             source_sync_run_id = excluded.source_sync_run_id,
+                            root_trace_id = excluded.root_trace_id,
                             incremental = excluded.incremental,
                             orchestration_mode = excluded.orchestration_mode,
                             status = excluded.status,
@@ -64,6 +65,7 @@ public class CompileJobJdbcRepository {
                 compileJobRecord.getSourceDir(),
                 compileJobRecord.getSourceId(),
                 compileJobRecord.getSourceSyncRunId(),
+                compileJobRecord.getRootTraceId(),
                 compileJobRecord.isIncremental(),
                 compileJobRecord.getOrchestrationMode(),
                 compileJobRecord.getStatus(),
@@ -85,7 +87,7 @@ public class CompileJobJdbcRepository {
         return jdbcTemplate.query(
                 """
                         select job_id, source_dir, source_id, source_sync_run_id, incremental,
-                               orchestration_mode, status, persisted_count, error_message,
+                               root_trace_id, orchestration_mode, status, persisted_count, error_message,
                                attempt_count, requested_at, started_at, finished_at
                         from compile_jobs
                         order by requested_at desc, job_id desc
@@ -104,7 +106,7 @@ public class CompileJobJdbcRepository {
         List<CompileJobRecord> records = jdbcTemplate.query(
                 """
                         select job_id, source_dir, source_id, source_sync_run_id, incremental,
-                               orchestration_mode, status, persisted_count, error_message,
+                               root_trace_id, orchestration_mode, status, persisted_count, error_message,
                                attempt_count, requested_at, started_at, finished_at
                         from compile_jobs
                         where job_id = ?
@@ -127,7 +129,7 @@ public class CompileJobJdbcRepository {
         List<CompileJobRecord> records = jdbcTemplate.query(
                 """
                         select job_id, source_dir, source_id, source_sync_run_id, incremental,
-                               orchestration_mode, status, persisted_count, error_message,
+                               root_trace_id, orchestration_mode, status, persisted_count, error_message,
                                attempt_count, requested_at, started_at, finished_at
                         from compile_jobs
                         where status = 'QUEUED'
@@ -246,6 +248,7 @@ public class CompileJobJdbcRepository {
                 resultSet.getString("source_dir"),
                 readLong(resultSet, "source_id"),
                 readLong(resultSet, "source_sync_run_id"),
+                resultSet.getString("root_trace_id"),
                 resultSet.getBoolean("incremental"),
                 resultSet.getString("orchestration_mode"),
                 resultSet.getString("status"),

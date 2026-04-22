@@ -1,6 +1,8 @@
 package com.xbk.lattice.governance;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.xbk.lattice.article.service.ArticleMarkdownSupport;
 import com.xbk.lattice.article.service.ArticleIdentityResolver;
 import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
@@ -13,6 +15,7 @@ import com.xbk.lattice.infra.persistence.ArticleSnapshotRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
+import com.xbk.lattice.llm.service.LlmRouteResolution;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -47,6 +50,12 @@ public class ArticleCorrectionService {
     private static final String WRITER_ROLE = "writer";
 
     private static final String ADMIN_CORRECTION_SCOPE_PREFIX = "admin-correction";
+
+    private static final String README_DEMO_ROUTE_LABEL = "readme-demo-openai";
+
+    private static final String README_DEMO_BASE_URL = "http://127.0.0.1:19999";
+
+    private static final String CORRECTION_REVIEW_STATUS = "needs_review";
 
     private final ArticleJdbcRepository articleJdbcRepository;
 
@@ -196,20 +205,46 @@ public class ArticleCorrectionService {
                 LatticePrompts.SYSTEM_APPLY_CORRECTION,
                 buildApplyCorrectionPrompt(articleRecord, correctionSummary, validationPayload)
         );
+        String normalizedContent = ArticleMarkdownSupport.normalizeReviewStatus(revisedContent, CORRECTION_REVIEW_STATUS);
+        ArticleMarkdownSupport.ParsedFrontmatter parsedFrontmatter = ArticleMarkdownSupport.parse(normalizedContent);
+        String normalizedTitle = parsedFrontmatter.getTitle().isBlank()
+                ? articleRecord.getTitle()
+                : parsedFrontmatter.getTitle();
+        List<String> normalizedSourcePaths = parsedFrontmatter.getSourcePaths().isEmpty()
+                ? articleRecord.getSourcePaths()
+                : parsedFrontmatter.getSourcePaths();
+        String normalizedSummary = parsedFrontmatter.getSummary().isBlank()
+                ? articleRecord.getSummary()
+                : parsedFrontmatter.getSummary();
+        List<String> normalizedReferentialKeywords = parsedFrontmatter.getReferentialKeywords().isEmpty()
+                ? articleRecord.getReferentialKeywords()
+                : parsedFrontmatter.getReferentialKeywords();
+        List<String> normalizedDependsOn = parsedFrontmatter.getDependsOn().isEmpty()
+                ? articleRecord.getDependsOn()
+                : parsedFrontmatter.getDependsOn();
+        List<String> normalizedRelated = parsedFrontmatter.getRelated().isEmpty()
+                ? articleRecord.getRelated()
+                : parsedFrontmatter.getRelated();
+        String normalizedConfidence = parsedFrontmatter.getConfidence().isBlank()
+                ? articleRecord.getConfidence()
+                : parsedFrontmatter.getConfidence();
+        OffsetDateTime normalizedCompiledAt = parsedFrontmatter.getCompiledAt() == null
+                ? articleRecord.getCompiledAt()
+                : parsedFrontmatter.getCompiledAt();
 
         ArticleRecord updatedRecord = articleRecord.copy(
-                articleRecord.getTitle(),
-                revisedContent,
+                normalizedTitle,
+                normalizedContent,
                 articleRecord.getLifecycle(),
-                articleRecord.getCompiledAt(),
-                articleRecord.getSourcePaths(),
-                articleRecord.getMetadataJson(),
-                articleRecord.getSummary(),
-                articleRecord.getReferentialKeywords(),
-                articleRecord.getDependsOn(),
-                articleRecord.getRelated(),
-                articleRecord.getConfidence(),
-                "needs_review"
+                normalizedCompiledAt,
+                normalizedSourcePaths,
+                mergeCorrectionMetadataJson(articleRecord.getMetadataJson(), normalizedSummary, normalizedSourcePaths),
+                normalizedSummary,
+                normalizedReferentialKeywords,
+                normalizedDependsOn,
+                normalizedRelated,
+                normalizedConfidence,
+                CORRECTION_REVIEW_STATUS
         );
         articleJdbcRepository.upsert(updatedRecord);
 
@@ -224,10 +259,48 @@ public class ArticleCorrectionService {
                 updatedRecord.getSourceId(),
                 updatedRecord.getArticleKey(),
                 updatedRecord.getConceptId(),
-                revisedContent,
+                normalizedContent,
                 collectDownstreamIds(updatedRecord.getConceptId()),
                 validationPayload.isSupported()
         );
+    }
+
+    private String mergeCorrectionMetadataJson(
+            String metadataJson,
+            String summary,
+            List<String> sourcePaths
+    ) {
+        try {
+            ObjectNode metadataNode = readMetadataNode(metadataJson);
+            if (summary != null && !summary.isBlank()) {
+                metadataNode.put("summary", summary);
+                metadataNode.put("description", summary);
+            }
+            if (sourcePaths != null) {
+                metadataNode.put("sourceCount", sourcePaths.size());
+            }
+            return OBJECT_MAPPER.writeValueAsString(metadataNode);
+        }
+        catch (Exception exception) {
+            if (metadataJson == null || metadataJson.isBlank()) {
+                return "{}";
+            }
+            return metadataJson;
+        }
+    }
+
+    private ObjectNode readMetadataNode(String metadataJson) {
+        if (metadataJson == null || metadataJson.isBlank()) {
+            return OBJECT_MAPPER.createObjectNode();
+        }
+        try {
+            return OBJECT_MAPPER.readTree(metadataJson) instanceof ObjectNode objectNode
+                    ? objectNode.deepCopy()
+                    : OBJECT_MAPPER.createObjectNode();
+        }
+        catch (Exception exception) {
+            return OBJECT_MAPPER.createObjectNode();
+        }
     }
 
     private String generateWriterText(
@@ -239,6 +312,7 @@ public class ArticleCorrectionService {
         String correctionScopeId = resolveCorrectionScopeId(articleRecord);
         ExecutionLlmSnapshotService snapshotService = this.executionLlmSnapshotService;
         if (snapshotService == null || correctionScopeId == null || correctionScopeId.isBlank()) {
+            ensureCorrectionRouteIsUsable(llmGateway.routeResolution(COMPILE_SCENE, WRITER_ROLE));
             return llmGateway.generateText(COMPILE_SCENE, WRITER_ROLE, purpose, systemPrompt, userPrompt);
         }
         snapshotService.freezeSnapshots(
@@ -246,6 +320,7 @@ public class ArticleCorrectionService {
                 correctionScopeId,
                 COMPILE_SCENE
         );
+        ensureCorrectionRouteIsUsable(llmGateway.routeResolutionFor(correctionScopeId, COMPILE_SCENE, WRITER_ROLE));
         return llmGateway.generateTextWithScope(
                 correctionScopeId,
                 COMPILE_SCENE,
@@ -267,6 +342,56 @@ public class ArticleCorrectionService {
                 ? "unknown-concept"
                 : articleRecord.getConceptId().trim();
         return ADMIN_CORRECTION_SCOPE_PREFIX + ":" + sourcePart + ":" + conceptPart;
+    }
+
+    /**
+     * 校验 Admin 纠错当前命中的 writer 路由是否仍为 README 演示连接。
+     *
+     * @param routeResolution 路由解析结果
+     */
+    private void ensureCorrectionRouteIsUsable(LlmRouteResolution routeResolution) {
+        if (!isReadmeDemoRoute(routeResolution)) {
+            return;
+        }
+        String routeLabel = routeResolution.getRouteLabel();
+        String baseUrl = routeResolution.getBaseUrl();
+        throw new IllegalStateException(
+                "Admin 纠错当前命中 README 演示 LLM 连接"
+                        + "（routeLabel=" + safeRouteValue(routeLabel)
+                        + ", baseUrl=" + safeRouteValue(baseUrl)
+                        + "），请先在 /admin/settings 为 compile.writer 切换到真实可用连接后重试"
+        );
+    }
+
+    /**
+     * 判断当前路由是否仍为 README 演示连接。
+     *
+     * @param routeResolution 路由解析结果
+     * @return 是否命中 README 演示连接
+     */
+    private boolean isReadmeDemoRoute(LlmRouteResolution routeResolution) {
+        if (routeResolution == null) {
+            return false;
+        }
+        String routeLabel = routeResolution.getRouteLabel();
+        if (README_DEMO_ROUTE_LABEL.equalsIgnoreCase(safeRouteValue(routeLabel))) {
+            return true;
+        }
+        String baseUrl = routeResolution.getBaseUrl();
+        return README_DEMO_BASE_URL.equalsIgnoreCase(safeRouteValue(baseUrl));
+    }
+
+    /**
+     * 返回适合展示的路由字段值。
+     *
+     * @param value 原始值
+     * @return 展示值
+     */
+    private String safeRouteValue(String value) {
+        if (value == null || value.isBlank()) {
+            return "unknown";
+        }
+        return value.trim();
     }
 
     private void captureRepoSnapshot(ArticleRecord articleRecord) {

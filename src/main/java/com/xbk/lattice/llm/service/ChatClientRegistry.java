@@ -4,11 +4,17 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.observation.ObservationRegistry;
+import org.springframework.ai.anthropic.AnthropicChatModel;
+import org.springframework.ai.anthropic.AnthropicChatOptions;
+import org.springframework.ai.anthropic.api.AnthropicApi;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatProperties;
+import org.springframework.ai.model.anthropic.autoconfigure.AnthropicConnectionProperties;
 import org.springframework.ai.model.tool.DefaultToolCallingManager;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -34,7 +40,7 @@ import java.util.concurrent.ConcurrentMap;
 /**
  * 动态 ChatClient 注册表
  *
- * 职责：按运行时路由参数构造并缓存 OpenAI ChatClient 句柄
+ * 职责：按运行时路由参数构造并缓存 OpenAI / Anthropic ChatClient 句柄
  *
  * @author xiexu
  */
@@ -50,7 +56,36 @@ public class ChatClientRegistry {
 
     private final AdvisorChainFactory advisorChainFactory;
 
+    private final AnthropicConnectionProperties anthropicConnectionProperties;
+
+    private final AnthropicChatProperties anthropicChatProperties;
+
     private final ConcurrentMap<String, ChatClientHandle> clientCache = new ConcurrentHashMap<String, ChatClientHandle>();
+
+    /**
+     * 创建动态 ChatClient 注册表。
+     *
+     * @param restClientBuilder RestClient 构建器
+     * @param webClientBuilder WebClient 构建器
+     * @param objectMapper Jackson 对象映射器
+     * @param advisorChainFactory Advisor 链工厂
+     */
+    @Autowired
+    public ChatClientRegistry(
+            RestClient.Builder restClientBuilder,
+            WebClient.Builder webClientBuilder,
+            ObjectMapper objectMapper,
+            AdvisorChainFactory advisorChainFactory,
+            AnthropicConnectionProperties anthropicConnectionProperties,
+            AnthropicChatProperties anthropicChatProperties
+    ) {
+        this.restClientBuilder = restClientBuilder;
+        this.webClientBuilder = webClientBuilder;
+        this.objectMapper = objectMapper;
+        this.advisorChainFactory = advisorChainFactory;
+        this.anthropicConnectionProperties = anthropicConnectionProperties;
+        this.anthropicChatProperties = anthropicChatProperties;
+    }
 
     /**
      * 创建动态 ChatClient 注册表。
@@ -66,10 +101,14 @@ public class ChatClientRegistry {
             ObjectMapper objectMapper,
             AdvisorChainFactory advisorChainFactory
     ) {
-        this.restClientBuilder = restClientBuilder;
-        this.webClientBuilder = webClientBuilder;
-        this.objectMapper = objectMapper;
-        this.advisorChainFactory = advisorChainFactory;
+        this(
+                restClientBuilder,
+                webClientBuilder,
+                objectMapper,
+                advisorChainFactory,
+                null,
+                null
+        );
     }
 
     /**
@@ -94,6 +133,14 @@ public class ChatClientRegistry {
     }
 
     private ChatClientHandle createHandle(LlmRouteResolution routeResolution) {
+        String providerType = normalizeProviderType(routeResolution == null ? null : routeResolution.getProviderType());
+        if ("anthropic".equals(providerType)) {
+            return createAnthropicHandle(routeResolution);
+        }
+        return createOpenAiHandle(routeResolution);
+    }
+
+    private ChatClientHandle createOpenAiHandle(LlmRouteResolution routeResolution) {
         OpenAiApi openAiApi = OpenAiApi.builder()
                 .baseUrl(routeResolution.getBaseUrl())
                 .apiKey(routeResolution.getApiKey())
@@ -111,6 +158,32 @@ public class ChatClientRegistry {
                 .retryTemplate(RetryTemplate.defaultInstance())
                 .observationRegistry(ObservationRegistry.NOOP)
                 .build();
+        ChatClient chatClient = ChatClient.builder(chatModel)
+                .defaultAdvisors(advisorChainFactory.createDefaultAdvisors())
+                .build();
+        return new ChatClientHandle(chatClient);
+    }
+
+    private ChatClientHandle createAnthropicHandle(LlmRouteResolution routeResolution) {
+        AnthropicApi anthropicApi = AnthropicApi.builder()
+                .baseUrl(routeResolution.getBaseUrl())
+                .apiKey(routeResolution.getApiKey())
+                .completionsPath(resolveAnthropicCompletionPath(routeResolution.getBaseUrl()))
+                .anthropicVersion(resolveAnthropicVersion())
+                .anthropicBetaFeatures(resolveAnthropicBetaFeatures())
+                .restClientBuilder(createRestClientBuilder(routeResolution.getTimeoutSeconds()))
+                .webClientBuilder(webClientBuilder.clone())
+                .build();
+        AnthropicChatOptions defaultOptions = buildAnthropicOptions(routeResolution);
+        AnthropicChatModel chatModel = new AnthropicChatModel(
+                anthropicApi,
+                defaultOptions,
+                DefaultToolCallingManager.builder()
+                        .observationRegistry(ObservationRegistry.NOOP)
+                        .build(),
+                RetryTemplate.defaultInstance(),
+                ObservationRegistry.NOOP
+        );
         ChatClient chatClient = ChatClient.builder(chatModel)
                 .defaultAdvisors(advisorChainFactory.createDefaultAdvisors())
                 .build();
@@ -141,6 +214,27 @@ public class ChatClientRegistry {
         Map<String, Object> extraBody = parseExtraBody(routeResolution.getExtraOptionsJson());
         if (!extraBody.isEmpty()) {
             builder.extraBody(extraBody);
+        }
+        return builder.build();
+    }
+
+    private AnthropicChatOptions buildAnthropicOptions(LlmRouteResolution routeResolution) {
+        AnthropicChatOptions.Builder builder = AnthropicChatOptions.builder()
+                .model(routeResolution.getModelName());
+        BigDecimal temperature = routeResolution.getTemperature();
+        if (temperature != null) {
+            builder.temperature(temperature.doubleValue());
+        }
+        if (routeResolution.getMaxTokens() != null) {
+            builder.maxTokens(routeResolution.getMaxTokens());
+        }
+        Double topP = readDouble(routeResolution.getExtraOptionsJson(), "top_p", "topP");
+        if (topP != null) {
+            builder.topP(topP);
+        }
+        Integer topK = readInteger(routeResolution.getExtraOptionsJson(), "top_k", "topK");
+        if (topK != null) {
+            builder.topK(topK);
         }
         return builder.build();
     }
@@ -216,7 +310,7 @@ public class ChatClientRegistry {
 
     private void validateSupportedProvider(LlmRouteResolution routeResolution) {
         String providerType = normalizeProviderType(routeResolution == null ? null : routeResolution.getProviderType());
-        if (!"openai".equals(providerType) && !"openai_compatible".equals(providerType)) {
+        if (!"openai".equals(providerType) && !"openai_compatible".equals(providerType) && !"anthropic".equals(providerType)) {
             throw new IllegalArgumentException("Unsupported chat client provider type: " + providerType);
         }
     }
@@ -228,6 +322,13 @@ public class ChatClientRegistry {
         return providerType.trim().toLowerCase(Locale.ROOT);
     }
 
+    private String resolveAnthropicCompletionPath(String baseUrl) {
+        if (baseUrl != null && baseUrl.endsWith("/v1")) {
+            return "/messages";
+        }
+        return "/v1/messages";
+    }
+
     private String resolveCompletionPath(String baseUrl) {
         if (baseUrl != null && baseUrl.endsWith("/v1")) {
             return "/chat/completions";
@@ -235,11 +336,68 @@ public class ChatClientRegistry {
         return "/v1/chat/completions";
     }
 
+    private Double readDouble(String extraOptionsJson, String... candidateKeys) {
+        JsonNode valueNode = readValue(extraOptionsJson, candidateKeys);
+        if (valueNode == null || !valueNode.isNumber()) {
+            if (anthropicChatProperties == null || anthropicChatProperties.getOptions() == null) {
+                return null;
+            }
+            return anthropicChatProperties.getOptions().getTopP();
+        }
+        return valueNode.doubleValue();
+    }
+
+    private Integer readInteger(String extraOptionsJson, String... candidateKeys) {
+        JsonNode valueNode = readValue(extraOptionsJson, candidateKeys);
+        if (valueNode == null || !valueNode.isNumber()) {
+            if (anthropicChatProperties == null || anthropicChatProperties.getOptions() == null) {
+                return null;
+            }
+            return anthropicChatProperties.getOptions().getTopK();
+        }
+        return Integer.valueOf(valueNode.intValue());
+    }
+
+    private JsonNode readValue(String extraOptionsJson, String... candidateKeys) {
+        if (!StringUtils.hasText(extraOptionsJson)) {
+            return null;
+        }
+        try {
+            JsonNode rootNode = objectMapper.readTree(extraOptionsJson);
+            if (!rootNode.isObject()) {
+                return null;
+            }
+            for (String candidateKey : candidateKeys) {
+                if (rootNode.has(candidateKey)) {
+                    return rootNode.get(candidateKey);
+                }
+            }
+            return null;
+        }
+        catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to parse chat client extra options", exception);
+        }
+    }
+
     private int resolveTimeout(Integer timeoutSeconds) {
         if (timeoutSeconds == null || timeoutSeconds.intValue() <= 0) {
             return 300;
         }
         return timeoutSeconds.intValue();
+    }
+
+    private String resolveAnthropicVersion() {
+        if (anthropicConnectionProperties != null && StringUtils.hasText(anthropicConnectionProperties.getVersion())) {
+            return anthropicConnectionProperties.getVersion();
+        }
+        return AnthropicApi.DEFAULT_ANTHROPIC_VERSION;
+    }
+
+    private String resolveAnthropicBetaFeatures() {
+        if (anthropicConnectionProperties != null && StringUtils.hasText(anthropicConnectionProperties.getBetaVersion())) {
+            return anthropicConnectionProperties.getBetaVersion();
+        }
+        return AnthropicApi.DEFAULT_ANTHROPIC_BETA_VERSION;
     }
 
     private String safeValue(String value) {

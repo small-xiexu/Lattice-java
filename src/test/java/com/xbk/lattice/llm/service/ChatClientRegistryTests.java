@@ -23,20 +23,26 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ChatClientRegistryTests {
 
-    private final List<StubOpenAiChatServer> stubServers = new ArrayList<StubOpenAiChatServer>();
+    private final List<StubOpenAiChatServer> openAiStubServers = new ArrayList<StubOpenAiChatServer>();
+
+    private final List<StubAnthropicChatServer> anthropicStubServers = new ArrayList<StubAnthropicChatServer>();
 
     @AfterEach
     void tearDown() {
-        for (StubOpenAiChatServer stubServer : stubServers) {
+        for (StubOpenAiChatServer stubServer : openAiStubServers) {
             stubServer.stop();
         }
-        stubServers.clear();
+        openAiStubServers.clear();
+        for (StubAnthropicChatServer stubServer : anthropicStubServers) {
+            stubServer.stop();
+        }
+        anthropicStubServers.clear();
     }
 
     @Test
     void shouldCacheAndIsolateDynamicChatClientsAcrossRoutes() throws IOException {
-        StubOpenAiChatServer routeA = startStubServer("route-a-ok");
-        StubOpenAiChatServer routeB = startStubServer("route-b-ok");
+        StubOpenAiChatServer routeA = startOpenAiStubServer("route-a-ok");
+        StubOpenAiChatServer routeB = startOpenAiStubServer("route-b-ok");
         ChatClientRegistry registry = new ChatClientRegistry(
                 RestClient.builder(),
                 WebClient.builder(),
@@ -111,10 +117,102 @@ class ChatClientRegistryTests {
         assertThat(registry.getClientCount()).isEqualTo(2);
     }
 
-    private StubOpenAiChatServer startStubServer(String answerText) throws IOException {
+    @Test
+    void shouldCacheAndInvokeAnthropicDynamicChatClientsAcrossRoutes() throws IOException {
+        StubAnthropicChatServer routeA = startAnthropicStubServer("anthropic-a-ok");
+        StubAnthropicChatServer routeB = startAnthropicStubServer("anthropic-b-ok");
+        ChatClientRegistry registry = new ChatClientRegistry(
+                RestClient.builder(),
+                WebClient.builder(),
+                new ObjectMapper(),
+                new AdvisorChainFactory()
+        );
+
+        ChatClientRegistry.ChatClientHandle firstRouteA = registry.getOrCreate(createAnthropicRouteResolution(
+                routeA.getBaseUrl(),
+                "claude-key-a",
+                "claude-sonnet-4-6",
+                new BigDecimal("0.2"),
+                Integer.valueOf(128),
+                "query.review.anthropic",
+                "{\"top_p\":0.8,\"top_k\":12}"
+        ));
+        ChatClientRegistry.ChatClientHandle secondRouteA = registry.getOrCreate(createAnthropicRouteResolution(
+                routeA.getBaseUrl(),
+                "claude-key-a",
+                "claude-sonnet-4-6",
+                new BigDecimal("0.2"),
+                Integer.valueOf(128),
+                "query.review.anthropic",
+                "{\"top_p\":0.8,\"top_k\":12}"
+        ));
+        ChatClientRegistry.ChatClientHandle routeBHandle = registry.getOrCreate(createAnthropicRouteResolution(
+                routeB.getBaseUrl(),
+                "claude-key-b",
+                "claude-haiku-3-5",
+                new BigDecimal("0.4"),
+                Integer.valueOf(64),
+                "query.review.anthropic.route-b",
+                "{\"top_p\":0.6,\"top_k\":8}"
+        ));
+
+        ChatClientResponse firstResponse = firstRouteA.getChatClient()
+                .prompt()
+                .advisors(spec -> spec.params(new LlmInvocationContext(
+                        "query",
+                        "query-review",
+                        "query-review-a",
+                        "reviewer",
+                        "query.review.anthropic"
+                ).toAdvisorParams()))
+                .system("review-system-a")
+                .user("review-user-a")
+                .call()
+                .chatClientResponse();
+        ChatClientResponse secondResponse = routeBHandle.getChatClient()
+                .prompt()
+                .advisors(spec -> spec.params(new LlmInvocationContext(
+                        "query",
+                        "query-review",
+                        "query-review-b",
+                        "reviewer",
+                        "query.review.anthropic.route-b"
+                ).toAdvisorParams()))
+                .system("review-system-b")
+                .user("review-user-b")
+                .call()
+                .chatClientResponse();
+
+        assertThat(secondRouteA).isSameAs(firstRouteA);
+        assertThat(routeBHandle).isNotSameAs(firstRouteA);
+        assertThat(firstResponse.chatResponse().getResult().getOutput().getText()).isEqualTo("anthropic-a-ok");
+        assertThat(secondResponse.chatResponse().getResult().getOutput().getText()).isEqualTo("anthropic-b-ok");
+        assertThat(firstResponse.context().get("capturedScene")).isEqualTo("query");
+        assertThat(firstResponse.context().get("capturedPurpose")).isEqualTo("query-review");
+        assertThat(firstResponse.context().get("capturedScopeId")).isEqualTo("query-review-a");
+        assertThat(secondResponse.context().get("capturedRouteLabel")).isEqualTo("query.review.anthropic.route-b");
+        assertThat(routeA.getRequestCount()).isEqualTo(1);
+        assertThat(routeB.getRequestCount()).isEqualTo(1);
+        assertThat(routeA.getCapturedModels()).containsExactly("claude-sonnet-4-6");
+        assertThat(routeB.getCapturedModels()).containsExactly("claude-haiku-3-5");
+        assertThat(routeA.getCapturedTopPs()).containsExactly(0.8D);
+        assertThat(routeA.getCapturedTopKs()).containsExactly(12);
+        assertThat(routeB.getCapturedTopPs()).containsExactly(0.6D);
+        assertThat(routeB.getCapturedTopKs()).containsExactly(8);
+        assertThat(registry.getClientCount()).isEqualTo(2);
+    }
+
+    private StubOpenAiChatServer startOpenAiStubServer(String answerText) throws IOException {
         StubOpenAiChatServer stubServer = new StubOpenAiChatServer(answerText);
         stubServer.start();
-        stubServers.add(stubServer);
+        openAiStubServers.add(stubServer);
+        return stubServer;
+    }
+
+    private StubAnthropicChatServer startAnthropicStubServer(String answerText) throws IOException {
+        StubAnthropicChatServer stubServer = new StubAnthropicChatServer(answerText);
+        stubServer.start();
+        anthropicStubServers.add(stubServer);
         return stubServer;
     }
 
@@ -145,6 +243,38 @@ class ChatClientRegistryTests {
                 "{\"reasoning_effort\":\"medium\"}",
                 new BigDecimal("0.001"),
                 new BigDecimal("0.002"),
+                true
+        );
+    }
+
+    private LlmRouteResolution createAnthropicRouteResolution(
+            String baseUrl,
+            String apiKey,
+            String modelName,
+            BigDecimal temperature,
+            Integer maxTokens,
+            String routeLabel,
+            String extraOptionsJson
+    ) {
+        return new LlmRouteResolution(
+                "query_request",
+                "query-1",
+                "query",
+                "reviewer",
+                Long.valueOf(31L),
+                Long.valueOf(42L),
+                Integer.valueOf(5),
+                routeLabel,
+                "anthropic",
+                baseUrl,
+                apiKey,
+                modelName,
+                temperature,
+                maxTokens,
+                Integer.valueOf(30),
+                extraOptionsJson,
+                new BigDecimal("0.003"),
+                new BigDecimal("0.015"),
                 true
         );
     }

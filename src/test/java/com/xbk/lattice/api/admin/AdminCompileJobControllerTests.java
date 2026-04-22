@@ -150,6 +150,70 @@ class AdminCompileJobControllerTests {
     }
 
     /**
+     * 验证 compile job 会持久化 rootTraceId，并在后台执行阶段复用同一根追踪链。
+     *
+     * @param tempDir 临时目录
+     * @param output 控制台输出
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldPersistRootTraceIdAndReuseItDuringCompileExecution(@TempDir Path tempDir, CapturedOutput output)
+            throws Exception {
+        resetTables();
+        Path sourceDir = prepareSourceDirectory(tempDir);
+
+        String responseBody = mockMvc.perform(post("/api/v1/admin/compile/jobs")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{"
+                                + "\"sourceDir\":\"" + escapeJson(sourceDir.toString()) + "\","
+                                + "\"async\":true,"
+                                + "\"orchestrationMode\":\"state_graph\""
+                                + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("QUEUED"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        String jobId = extractJsonValue(responseBody, "jobId");
+
+        String persistedRootTraceId = jdbcTemplate.queryForObject(
+                "select root_trace_id from lattice_b8_compile_job_test.compile_jobs where job_id = ?",
+                String.class,
+                jobId
+        );
+        assertThat(persistedRootTraceId).isNotBlank();
+
+        compileJobService.processNextQueuedJob();
+
+        List<JsonNode> structuredEvents = parseStructuredEvents(output.getOut());
+        JsonNode compileSubmittedEvent = findStructuredEvent(structuredEvents, "compile_submitted", "compileJobId", jobId);
+        JsonNode compileStartedEvent = findStructuredEvent(structuredEvents, "compile_started", "compileJobId", jobId);
+        JsonNode compileCompletedEvent = findStructuredEvent(structuredEvents, "compile_completed", "compileJobId", jobId);
+        JsonNode compileGraphStartedEvent = findStructuredEvent(structuredEvents, "compile_graph_step_started", "compileJobId", jobId);
+        JsonNode compileGraphCompletedEvent = findStructuredEvent(structuredEvents, "compile_graph_step_completed", "compileJobId", jobId);
+
+        assertThat(compileSubmittedEvent).isNotNull();
+        assertThat(compileStartedEvent).isNotNull();
+        assertThat(compileCompletedEvent).isNotNull();
+        assertThat(compileGraphStartedEvent).isNotNull();
+        assertThat(compileGraphCompletedEvent).isNotNull();
+        assertThat(compileSubmittedEvent.path("rootTraceId").asText()).isEqualTo(persistedRootTraceId);
+        assertThat(compileStartedEvent.path("traceId").asText()).isEqualTo(persistedRootTraceId);
+        assertThat(compileStartedEvent.path("rootTraceId").asText()).isEqualTo(persistedRootTraceId);
+        assertThat(compileCompletedEvent.path("traceId").asText()).isEqualTo(persistedRootTraceId);
+        assertThat(compileCompletedEvent.path("rootTraceId").asText()).isEqualTo(persistedRootTraceId);
+        assertThat(compileCompletedEvent.path("status").asText()).isEqualTo("SUCCEEDED");
+        assertThat(compileGraphStartedEvent.path("traceId").asText()).isEqualTo(persistedRootTraceId);
+        assertThat(compileGraphStartedEvent.path("rootTraceId").asText()).isEqualTo(persistedRootTraceId);
+        assertThat(compileGraphStartedEvent.path("nodeId").asText()).isNotBlank();
+        assertThat(compileGraphStartedEvent.path("status").asText()).isEqualTo("STARTED");
+        assertThat(compileGraphCompletedEvent.path("traceId").asText()).isEqualTo(persistedRootTraceId);
+        assertThat(compileGraphCompletedEvent.path("rootTraceId").asText()).isEqualTo(persistedRootTraceId);
+        assertThat(compileGraphCompletedEvent.path("nodeId").asText()).isNotBlank();
+        assertThat(compileGraphCompletedEvent.path("status").asText()).isEqualTo("SUCCEEDED");
+    }
+
+    /**
      * 验证管理侧可上传源文件并同步触发编译。
      *
      * @throws Exception 测试异常

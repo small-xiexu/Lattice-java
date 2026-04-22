@@ -80,6 +80,10 @@ public class LlmGateway {
 
     private final String reviewBootstrapApiKey;
 
+    private String compileBootstrapModelName;
+
+    private String reviewBootstrapModelName;
+
     private final LlmInvocationExecutor llmInvocationExecutor;
 
     private final StructuredEventLogger structuredEventLogger;
@@ -109,6 +113,7 @@ public class LlmGateway {
             ObjectMapper objectMapper,
             @Value("${spring.ai.openai.base-url:}") String openAiBaseUrl,
             @Value("${spring.ai.openai.api-key:}") String openAiApiKey,
+            @Value("${spring.ai.openai.chat.options.model:}") String openAiChatOptionsModel,
             AnthropicConnectionProperties anthropicConnectionProperties,
             AnthropicChatProperties anthropicChatProperties,
             RedisKeyValueStore redisKeyValueStore,
@@ -137,6 +142,11 @@ public class LlmGateway {
                 anthropicConnectionProperties.getApiKey(),
                 structuredEventLogger
         );
+        this.compileBootstrapModelName = resolveBootstrapModelName(openAiChatOptionsModel, this.compileBootstrapModelName);
+        String anthropicModelName = anthropicChatProperties.getOptions() == null
+                ? ""
+                : anthropicChatProperties.getOptions().getModel();
+        this.reviewBootstrapModelName = resolveBootstrapModelName(anthropicModelName, this.reviewBootstrapModelName);
     }
 
     /**
@@ -241,6 +251,8 @@ public class LlmGateway {
         this.compileBootstrapApiKey = compileBootstrapApiKey;
         this.reviewBootstrapBaseUrl = reviewBootstrapBaseUrl;
         this.reviewBootstrapApiKey = reviewBootstrapApiKey;
+        this.compileBootstrapModelName = llmProperties == null ? "" : resolveBootstrapModelName("", llmProperties.getCompileModel());
+        this.reviewBootstrapModelName = llmProperties == null ? "" : resolveBootstrapModelName("", llmProperties.getReviewerModel());
         this.structuredEventLogger = structuredEventLogger;
         this.spentUsd = 0.0D;
     }
@@ -445,6 +457,29 @@ public class LlmGateway {
      */
     public String routeFor(String scopeId, String scene, String agentRole) {
         return resolveScopedRoute(scopeId, scene, agentRole).getRouteLabel();
+    }
+
+    /**
+     * 返回指定场景与角色当前实际命中的路由。
+     *
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @return 路由解析结果
+     */
+    public LlmRouteResolution routeResolution(String scene, String agentRole) {
+        return resolveBootstrapRoute(scene, agentRole);
+    }
+
+    /**
+     * 返回指定作用域、场景与角色当前实际命中的路由。
+     *
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @return 路由解析结果
+     */
+    public LlmRouteResolution routeResolutionFor(String scopeId, String scene, String agentRole) {
+        return resolveScopedRoute(scopeId, scene, agentRole);
     }
 
     /**
@@ -874,10 +909,11 @@ public class LlmGateway {
 
     private LlmRouteResolution resolveBootstrapRoute(String scene, String agentRole, String scopeId) {
         LlmRouteResolution bootstrapRoute;
+        String normalizedRole = normalizeAgentRole(agentRole);
         if (executionLlmSnapshotService != null) {
             bootstrapRoute = executionLlmSnapshotService.bootstrapRoute(
                     normalizeScene(scene),
-                    normalizeAgentRole(agentRole),
+                    normalizedRole,
                     compileBootstrapBaseUrl,
                     compileBootstrapApiKey,
                     reviewBootstrapBaseUrl,
@@ -885,7 +921,6 @@ public class LlmGateway {
             );
         }
         else {
-            String normalizedRole = normalizeAgentRole(agentRole);
             if (ROLE_REVIEWER.equals(normalizedRole)) {
                 bootstrapRoute = createBootstrapReviewerRoute(scene, normalizedRole);
             }
@@ -893,7 +928,71 @@ public class LlmGateway {
                 bootstrapRoute = createBootstrapCompileRoute(scene, normalizedRole);
             }
         }
+        bootstrapRoute = replaceBootstrapModelNameIfNecessary(bootstrapRoute, normalizedRole);
         return attachScopeIfNecessary(bootstrapRoute, scene, scopeId);
+    }
+
+    /**
+     * 在 bootstrap fallback 路由上补入真实模型名，避免把 provider 占位值误当成 ChatClient model。
+     *
+     * @param routeResolution 路由解析结果
+     * @param agentRole Agent 角色
+     * @return 路由解析结果
+     */
+    private LlmRouteResolution replaceBootstrapModelNameIfNecessary(
+            LlmRouteResolution routeResolution,
+            String agentRole
+    ) {
+        if (routeResolution == null || routeResolution.isSnapshotBacked()) {
+            return routeResolution;
+        }
+        String effectiveModelName = ROLE_REVIEWER.equals(agentRole)
+                ? reviewBootstrapModelName
+                : compileBootstrapModelName;
+        if (effectiveModelName == null || effectiveModelName.isBlank()) {
+            return routeResolution;
+        }
+        if (effectiveModelName.equals(routeResolution.getModelName())) {
+            return routeResolution;
+        }
+        return new LlmRouteResolution(
+                routeResolution.getScopeType(),
+                routeResolution.getScopeId(),
+                routeResolution.getScene(),
+                routeResolution.getAgentRole(),
+                routeResolution.getBindingId(),
+                routeResolution.getSnapshotId(),
+                routeResolution.getSnapshotVersion(),
+                routeResolution.getRouteLabel(),
+                routeResolution.getProviderType(),
+                routeResolution.getBaseUrl(),
+                routeResolution.getApiKey(),
+                effectiveModelName,
+                routeResolution.getTemperature(),
+                routeResolution.getMaxTokens(),
+                routeResolution.getTimeoutSeconds(),
+                routeResolution.getExtraOptionsJson(),
+                routeResolution.getInputPricePer1kTokens(),
+                routeResolution.getOutputPricePer1kTokens(),
+                routeResolution.isSnapshotBacked()
+        );
+    }
+
+    /**
+     * 返回 bootstrap fallback 的有效模型名。
+     *
+     * @param configuredModelName Spring AI 或运行时配置中的模型名
+     * @param fallbackModelName 回退模型名
+     * @return 有效模型名
+     */
+    private String resolveBootstrapModelName(String configuredModelName, String fallbackModelName) {
+        if (configuredModelName != null && !configuredModelName.isBlank()) {
+            return configuredModelName.trim();
+        }
+        if (fallbackModelName != null && !fallbackModelName.isBlank()) {
+            return fallbackModelName.trim();
+        }
+        return "";
     }
 
     private LlmRouteResolution attachScopeIfNecessary(
@@ -997,7 +1096,9 @@ public class LlmGateway {
             return false;
         }
         String providerType = normalizeProviderType(routeResolution.getProviderType());
-        return "openai".equals(providerType) || "openai_compatible".equals(providerType);
+        return "openai".equals(providerType)
+                || "openai_compatible".equals(providerType)
+                || "anthropic".equals(providerType);
     }
 
     private String resolveScopeType(String scene) {

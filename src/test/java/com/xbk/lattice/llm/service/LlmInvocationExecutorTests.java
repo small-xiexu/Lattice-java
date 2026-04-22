@@ -21,19 +21,24 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class LlmInvocationExecutorTests {
 
-    private StubOpenAiChatServer stubServer;
+    private StubOpenAiChatServer openAiStubServer;
+
+    private StubAnthropicChatServer anthropicStubServer;
 
     @AfterEach
     void tearDown() {
-        if (stubServer != null) {
-            stubServer.stop();
+        if (openAiStubServer != null) {
+            openAiStubServer.stop();
+        }
+        if (anthropicStubServer != null) {
+            anthropicStubServer.stop();
         }
     }
 
     @Test
     void shouldReturnInvocationEnvelopeForOpenAiRoute() throws IOException {
-        stubServer = new StubOpenAiChatServer("executor-ok");
-        stubServer.start();
+        openAiStubServer = new StubOpenAiChatServer("executor-ok");
+        openAiStubServer.start();
         ChatClientRegistry chatClientRegistry = new ChatClientRegistry(
                 RestClient.builder(),
                 WebClient.builder(),
@@ -53,7 +58,7 @@ class LlmInvocationExecutorTests {
                 Integer.valueOf(3),
                 "query.answer.openai",
                 "openai",
-                stubServer.getBaseUrl(),
+                openAiStubServer.getBaseUrl(),
                 "test-key",
                 "gpt-5.4",
                 new BigDecimal("0.2"),
@@ -86,7 +91,69 @@ class LlmInvocationExecutorTests {
         assertThat(envelope.getInputTokens()).isEqualTo(9);
         assertThat(envelope.getOutputTokens()).isEqualTo(4);
         assertThat(envelope.getLatencyMs()).isGreaterThanOrEqualTo(0L);
-        assertThat(stubServer.getRequestCount()).isEqualTo(1);
-        assertThat(stubServer.getCapturedModels()).containsExactly("gpt-5.4");
+        assertThat(openAiStubServer.getRequestCount()).isEqualTo(1);
+        assertThat(openAiStubServer.getCapturedModels()).containsExactly("gpt-5.4");
+    }
+
+    @Test
+    void shouldReturnInvocationEnvelopeForAnthropicRoute() throws IOException {
+        anthropicStubServer = new StubAnthropicChatServer("anthropic-executor-ok");
+        anthropicStubServer.start();
+        ChatClientRegistry chatClientRegistry = new ChatClientRegistry(
+                RestClient.builder(),
+                WebClient.builder(),
+                new ObjectMapper(),
+                new AdvisorChainFactory()
+        );
+        LlmProperties llmProperties = new LlmProperties();
+        llmProperties.setCacheKeyPrefix("llm:cache:");
+        LlmInvocationExecutor llmInvocationExecutor = new LlmInvocationExecutor(chatClientRegistry, llmProperties);
+        LlmRouteResolution routeResolution = new LlmRouteResolution(
+                "query_request",
+                "query-review-1",
+                "query",
+                "reviewer",
+                Long.valueOf(51L),
+                Long.valueOf(62L),
+                Integer.valueOf(7),
+                "query.review.anthropic",
+                "anthropic",
+                anthropicStubServer.getBaseUrl(),
+                "anthropic-key",
+                "claude-sonnet-4-6",
+                new BigDecimal("0.1"),
+                Integer.valueOf(256),
+                Integer.valueOf(30),
+                "{\"top_p\":0.8,\"top_k\":12}",
+                new BigDecimal("0.003"),
+                new BigDecimal("0.015"),
+                true
+        );
+
+        LlmInvocationEnvelope envelope = llmInvocationExecutor.execute(
+                routeResolution,
+                new LlmInvocationContext(
+                        "query",
+                        "query-review",
+                        "query-review-1",
+                        "reviewer",
+                        "query.review.anthropic"
+                ),
+                "你是查询审查助手",
+                "请审查当前答案是否存在幻觉",
+                "llm:cache:anthropic:test"
+        );
+
+        assertThat(envelope.getContent()).isEqualTo("anthropic-executor-ok");
+        assertThat(envelope.getPurpose()).isEqualTo("query-review");
+        assertThat(envelope.getCacheKey()).isEqualTo("llm:cache:anthropic:test");
+        assertThat(envelope.getRouteResolution()).isSameAs(routeResolution);
+        assertThat(envelope.getInputTokens()).isEqualTo(11);
+        assertThat(envelope.getOutputTokens()).isEqualTo(7);
+        assertThat(envelope.getLatencyMs()).isGreaterThanOrEqualTo(0L);
+        assertThat(anthropicStubServer.getRequestCount()).isEqualTo(1);
+        assertThat(anthropicStubServer.getCapturedModels()).containsExactly("claude-sonnet-4-6");
+        assertThat(anthropicStubServer.getCapturedTopPs()).containsExactly(0.8D);
+        assertThat(anthropicStubServer.getCapturedTopKs()).containsExactly(12);
     }
 }

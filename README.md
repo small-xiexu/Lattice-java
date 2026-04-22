@@ -315,10 +315,10 @@ flowchart LR
 当前已知限制包括：
 
 - 某些真实 embedding 网关下，向量检索仍可能因 embeddings 接口异常而降级；该限制依赖具体网关组合，不代表所有真实验收配置
-- `2026-04-22` 在 `http://127.0.0.1:18082` 真实探测 `POST /api/v1/admin/articles/ops/correct` 仍稳定返回 `500 / COMPILE_IO_ERROR`；根因已定位为当前 `compile.writer` 绑定命中 README 演示连接 `http://127.0.0.1:19999`，连接测试返回 `Connection refused`
-- `2026-04-22` 已补验整库 repo snapshot history 与 Vault 导出；但 live `repo diff` 对最新快照仍返回 `400`，原因是当前 compile / governance 生成的 repo snapshot 仍是 `gitCommit=null`，而 live `repo rollback` 由于会直接改写共享 `lattice` 数据，本轮未在当前实例上执行
+- `2026-04-22` 在共享实例 `http://127.0.0.1:18082` 真实探测 `POST /api/v1/admin/articles/ops/correct` 仍返回 `500`，但现在会明确提示当前 `compile.writer` 命中 README 演示连接 `http://127.0.0.1:19999`，需要先到 `/admin/settings` 切换真实可用连接后再重试；在隔离 schema `lattice_f4_iso_20260422` 的 `18086` 实例上，该接口已用真实 OpenAI 兼容连接跑通并返回 `validationSupported=true`，重跑后 `referentialKeywords` 也已与正文中的 `retry=5` 同步
+- `2026-04-22` 已在隔离 Vault 基线下补齐 live `repo baseline / diff / rollback`：历史基线 `snapshotId=3` 解决了 Git-backed rollback 主链路；随后又用 fresh Vault 基线 `snapshotId=7 / gitCommit=0c29c18...` 复验，rollback 生成 `snapshotId=8 / gitCommit=dc3722b...` 后，`repo diff` 已返回 `count=0`
 
-更细的样本、命令、日志和限制说明，请看 [`docs/项目全流程真实验收手册.md`](docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md)；如果要继续推进当前修复工作，请直接看 [`docs/plans/Admin纠错绑定修复与Repo基线补齐实施清单.md`](docs/plans/Admin%E7%BA%A0%E9%94%99%E7%BB%91%E5%AE%9A%E4%BF%AE%E5%A4%8D%E4%B8%8ERepo%E5%9F%BA%E7%BA%BF%E8%A1%A5%E9%BD%90%E5%AE%9E%E6%96%BD%E6%B8%85%E5%8D%95.md)。
+更细的样本、命令、日志和限制说明，请看 [`docs/项目全流程真实验收手册.md`](docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md)。
 
 ---
 
@@ -388,10 +388,6 @@ mvn -q -s .codex/maven-settings.xml spring-boot:run
 ### 想知道当前真实跑通了什么
 
 - [`docs/项目全流程真实验收手册.md`](docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md)
-
-### 想知道当前正在推进什么
-
-- [`docs/plans/Admin纠错绑定修复与Repo基线补齐实施清单.md`](docs/plans/Admin%E7%BA%A0%E9%94%99%E7%BB%91%E5%AE%9A%E4%BF%AE%E5%A4%8D%E4%B8%8ERepo%E5%9F%BA%E7%BA%BF%E8%A1%A5%E9%BD%90%E5%AE%9E%E6%96%BD%E6%B8%85%E5%8D%95.md)
 
 ### 想知道数据库对象和实体关系
 

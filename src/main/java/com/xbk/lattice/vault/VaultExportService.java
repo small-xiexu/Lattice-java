@@ -160,25 +160,9 @@ public class VaultExportService {
         }
         int deletedFiles = deleteOrphanedManagedFiles(vaultDir, previousManifest, managedPaths);
         nextManifest.put("contributions", contributionEntries);
-        nextManifest.put("exportedAt", resolveExportedAt(previousManifest, writtenFiles, deletedFiles));
         vaultManifestStore.write(manifestPath, nextManifest);
 
         return new VaultExportResult(vaultDir.toString(), writtenFiles, skippedFiles, deletedFiles);
-    }
-
-    private String resolveExportedAt(
-            Map<String, Object> previousManifest,
-            int writtenFiles,
-            int deletedFiles
-    ) {
-        if (writtenFiles > 0 || deletedFiles > 0) {
-            return OffsetDateTime.now().toString();
-        }
-        Object previousExportedAt = previousManifest.get("exportedAt");
-        if (previousExportedAt != null && !String.valueOf(previousExportedAt).isBlank()) {
-            return String.valueOf(previousExportedAt);
-        }
-        return OffsetDateTime.now().toString();
     }
 
     private boolean writeIfChanged(
@@ -190,7 +174,10 @@ public class VaultExportService {
     ) throws IOException {
         String previousHash = readPreviousHash(previousManifest, relativePath);
         if (contentHash.equals(previousHash) && Files.exists(outputPath)) {
-            return false;
+            String currentFileHash = hash(Files.readString(outputPath, StandardCharsets.UTF_8));
+            if (contentHash.equals(currentFileHash)) {
+                return false;
+            }
         }
         Files.createDirectories(outputPath.getParent());
         Files.writeString(outputPath, content, StandardCharsets.UTF_8);

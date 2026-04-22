@@ -25,6 +25,12 @@ public class CompileGraphState {
 
     private Long sourceSyncRunId;
 
+    private String traceId;
+
+    private String spanId;
+
+    private String rootTraceId;
+
     private String compileMode;
 
     private String orchestrationMode;

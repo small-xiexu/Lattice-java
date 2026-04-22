@@ -3,10 +3,14 @@ package com.xbk.lattice.compiler.graph;
 import com.alibaba.cloud.ai.graph.GraphLifecycleListener;
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.xbk.lattice.compiler.config.CompileGraphProperties;
+import com.xbk.lattice.observability.StructuredEventLogger;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -14,7 +18,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 /**
  * 编译图生命周期监听器
  *
- * 职责：把 Graph 生命周期事件桥接到步骤日志记录器
+ * 职责：把 Graph 生命周期事件桥接到步骤日志记录器与结构化事件日志
  *
  * @author xiexu
  */
@@ -23,14 +27,24 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 @Profile("jdbc")
 public class CompileGraphLifecycleListener implements GraphLifecycleListener {
 
+    private static final String MDC_TRACE_ID = "traceId";
+
+    private static final String MDC_SPAN_ID = "spanId";
+
+    private static final String MDC_ROOT_TRACE_ID = "rootTraceId";
+
     private final CompileGraphStateMapper compileGraphStateMapper;
 
     private final GraphStepLogger graphStepLogger;
 
     private final CompileGraphProperties compileGraphProperties;
 
+    private final StructuredEventLogger structuredEventLogger;
+
     private final Map<String, ConcurrentLinkedDeque<StepExecutionHandle>> inflightHandleMap =
             new ConcurrentHashMap<String, ConcurrentLinkedDeque<StepExecutionHandle>>();
+
+    private final ThreadLocal<Map<String, String>> previousTraceContext = new ThreadLocal<Map<String, String>>();
 
     /**
      * 创建编译图生命周期监听器。
@@ -38,15 +52,27 @@ public class CompileGraphLifecycleListener implements GraphLifecycleListener {
      * @param compileGraphStateMapper 编译图状态映射器
      * @param graphStepLogger Graph 步骤日志器
      * @param compileGraphProperties 编译图配置
+     * @param structuredEventLogger 结构化事件日志器
      */
+    @Autowired
     public CompileGraphLifecycleListener(
             CompileGraphStateMapper compileGraphStateMapper,
             GraphStepLogger graphStepLogger,
-            CompileGraphProperties compileGraphProperties
+            CompileGraphProperties compileGraphProperties,
+            StructuredEventLogger structuredEventLogger
     ) {
         this.compileGraphStateMapper = compileGraphStateMapper;
         this.graphStepLogger = graphStepLogger;
         this.compileGraphProperties = compileGraphProperties;
+        this.structuredEventLogger = structuredEventLogger;
+    }
+
+    CompileGraphLifecycleListener(
+            CompileGraphStateMapper compileGraphStateMapper,
+            GraphStepLogger graphStepLogger,
+            CompileGraphProperties compileGraphProperties
+    ) {
+        this(compileGraphStateMapper, graphStepLogger, compileGraphProperties, null);
     }
 
     /**
@@ -59,10 +85,12 @@ public class CompileGraphLifecycleListener implements GraphLifecycleListener {
      */
     @Override
     public void before(String nodeId, Map<String, Object> state, RunnableConfig config, Long curTime) {
+        CompileGraphState graphState = compileGraphStateMapper.fromMap(state);
+        bindTraceContext(graphState);
+        logStructuredStepEvent("compile_graph_step_started", nodeId, graphState, "STARTED", null);
         if (!compileGraphProperties.isPersistStepLog()) {
             return;
         }
-        CompileGraphState graphState = compileGraphStateMapper.fromMap(state);
         StepExecutionHandle handle = executeWithFailureMode(
                 () -> graphStepLogger.beforeStep(nodeId, graphState, curTime),
                 nodeId,
@@ -84,25 +112,32 @@ public class CompileGraphLifecycleListener implements GraphLifecycleListener {
     @Override
     public void after(String nodeId, Map<String, Object> state, RunnableConfig config, Long curTime) {
         CompileGraphState graphState = compileGraphStateMapper.fromMap(state);
-        if (!compileGraphProperties.isPersistStepLog()) {
+        bindTraceContextIfNecessary(graphState);
+        try {
+            logStructuredStepEvent("compile_graph_step_completed", nodeId, graphState, "SUCCEEDED", null);
+            if (!compileGraphProperties.isPersistStepLog()) {
+                if ("finalize_job".equals(nodeId)) {
+                    graphStepLogger.clearJob(graphState.getJobId());
+                }
+                return;
+            }
+            String executionKey = resolveNodeExecutionKey(state, config, graphState.getJobId(), nodeId);
+            StepExecutionHandle handle = pollHandle(executionKey);
+            executeWithFailureMode(
+                    () -> {
+                        graphStepLogger.afterStep(handle, nodeId, graphState, curTime);
+                        return null;
+                    },
+                    nodeId,
+                    graphState.getJobId()
+            );
             if ("finalize_job".equals(nodeId)) {
                 graphStepLogger.clearJob(graphState.getJobId());
+                clearExecution(resolveExecutionPrefix(state, config, graphState.getJobId()));
             }
-            return;
         }
-        String executionKey = resolveNodeExecutionKey(state, config, graphState.getJobId(), nodeId);
-        StepExecutionHandle handle = pollHandle(executionKey);
-        executeWithFailureMode(
-                () -> {
-                    graphStepLogger.afterStep(handle, nodeId, graphState, curTime);
-                    return null;
-                },
-                nodeId,
-                graphState.getJobId()
-        );
-        if ("finalize_job".equals(nodeId)) {
-            graphStepLogger.clearJob(graphState.getJobId());
-            clearExecution(resolveExecutionPrefix(state, config, graphState.getJobId()));
+        finally {
+            restoreTraceContext();
         }
     }
 
@@ -117,21 +152,28 @@ public class CompileGraphLifecycleListener implements GraphLifecycleListener {
     @Override
     public void onError(String nodeId, Map<String, Object> state, Throwable ex, RunnableConfig config) {
         CompileGraphState graphState = compileGraphStateMapper.fromMap(state);
-        if (compileGraphProperties.isPersistStepLog()) {
-            StepExecutionHandle handle = pollHandle(resolveNodeExecutionKey(state, config, graphState.getJobId(), nodeId));
-            executeWithFailureMode(
-                    () -> {
-                        graphStepLogger.failStep(handle, nodeId, graphState, ex);
-                        return null;
-                    },
-                    nodeId,
-                    graphState.getJobId()
-            );
+        bindTraceContextIfNecessary(graphState);
+        try {
+            logStructuredStepEvent("compile_graph_step_failed", nodeId, graphState, "FAILED", ex);
+            if (compileGraphProperties.isPersistStepLog()) {
+                StepExecutionHandle handle = pollHandle(resolveNodeExecutionKey(state, config, graphState.getJobId(), nodeId));
+                executeWithFailureMode(
+                        () -> {
+                            graphStepLogger.failStep(handle, nodeId, graphState, ex);
+                            return null;
+                        },
+                        nodeId,
+                        graphState.getJobId()
+                );
+            }
+            if (graphState.getJobId() != null) {
+                graphStepLogger.clearJob(graphState.getJobId());
+            }
+            clearExecution(resolveExecutionPrefix(state, config, graphState.getJobId()));
         }
-        if (graphState.getJobId() != null) {
-            graphStepLogger.clearJob(graphState.getJobId());
+        finally {
+            restoreTraceContext();
         }
-        clearExecution(resolveExecutionPrefix(state, config, graphState.getJobId()));
     }
 
     private void registerHandle(String executionKey, StepExecutionHandle handle) {
@@ -218,6 +260,90 @@ public class CompileGraphLifecycleListener implements GraphLifecycleListener {
     private boolean isFailMode() {
         String failureMode = compileGraphProperties.getStepLogFailureMode();
         return "fail".equalsIgnoreCase(failureMode);
+    }
+
+    private void logStructuredStepEvent(
+            String eventName,
+            String nodeId,
+            CompileGraphState graphState,
+            String status,
+            Throwable throwable
+    ) {
+        if (structuredEventLogger == null) {
+            return;
+        }
+        Map<String, Object> fields = new LinkedHashMap<String, Object>();
+        fields.put("scene", "compile");
+        fields.put("compileJobId", graphState.getJobId());
+        fields.put("nodeId", nodeId);
+        fields.put("compileMode", graphState.getCompileMode());
+        fields.put("sourceId", graphState.getSourceId());
+        fields.put("sourceSyncRunId", graphState.getSourceSyncRunId());
+        fields.put("status", status);
+        fields.put("pendingReviewCount", graphState.getPendingReviewCount());
+        fields.put("acceptedCount", graphState.getAcceptedCount());
+        fields.put("needsHumanReviewCount", graphState.getNeedsHumanReviewCount());
+        fields.put("persistedCount", graphState.getPersistedCount());
+        fields.put("fixAttemptCount", graphState.getFixAttemptCount());
+        fields.put("nothingToDo", graphState.isNothingToDo());
+        if (throwable != null) {
+            fields.put("error", throwable.getMessage());
+            structuredEventLogger.error(eventName, fields, throwable);
+            return;
+        }
+        structuredEventLogger.info(eventName, fields);
+    }
+
+    private void bindTraceContextIfNecessary(CompileGraphState graphState) {
+        if (previousTraceContext.get() != null) {
+            return;
+        }
+        bindTraceContext(graphState);
+    }
+
+    private void bindTraceContext(CompileGraphState graphState) {
+        Map<String, String> previousValues = new LinkedHashMap<String, String>();
+        capturePreviousValue(previousValues, MDC_TRACE_ID);
+        capturePreviousValue(previousValues, MDC_SPAN_ID);
+        capturePreviousValue(previousValues, MDC_ROOT_TRACE_ID);
+        previousTraceContext.set(previousValues);
+        putIfPresent(MDC_TRACE_ID, graphState.getTraceId());
+        putIfPresent(MDC_SPAN_ID, graphState.getSpanId());
+        putIfPresent(MDC_ROOT_TRACE_ID, graphState.getRootTraceId());
+    }
+
+    private void capturePreviousValue(Map<String, String> previousValues, String key) {
+        previousValues.put(key, MDC.get(key));
+    }
+
+    private void putIfPresent(String key, String value) {
+        if (value == null || value.isBlank()) {
+            MDC.remove(key);
+            return;
+        }
+        MDC.put(key, value);
+    }
+
+    private void restoreTraceContext() {
+        Map<String, String> previousValues = previousTraceContext.get();
+        previousTraceContext.remove();
+        if (previousValues == null || previousValues.isEmpty()) {
+            MDC.remove(MDC_TRACE_ID);
+            MDC.remove(MDC_SPAN_ID);
+            MDC.remove(MDC_ROOT_TRACE_ID);
+            return;
+        }
+        restoreValue(MDC_TRACE_ID, previousValues.get(MDC_TRACE_ID));
+        restoreValue(MDC_SPAN_ID, previousValues.get(MDC_SPAN_ID));
+        restoreValue(MDC_ROOT_TRACE_ID, previousValues.get(MDC_ROOT_TRACE_ID));
+    }
+
+    private void restoreValue(String key, String value) {
+        if (value == null || value.isBlank()) {
+            MDC.remove(key);
+            return;
+        }
+        MDC.put(key, value);
     }
 
     @FunctionalInterface

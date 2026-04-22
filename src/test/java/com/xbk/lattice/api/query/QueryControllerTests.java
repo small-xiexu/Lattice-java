@@ -238,18 +238,28 @@ class QueryControllerTests {
         JsonNode queryReceivedEvent = findStructuredEvent(structuredEvents, "query_received", "queryId", queryId);
         JsonNode llmStartedEvent = findStructuredEvent(structuredEvents, "llm_raw_call_started", "queryId", queryId);
         JsonNode llmSucceededEvent = findStructuredEvent(structuredEvents, "llm_raw_call_succeeded", "queryId", queryId);
+        JsonNode queryGraphStartedEvent = findStructuredEvent(structuredEvents, "query_graph_step_started", "queryId", queryId);
+        JsonNode queryGraphCompletedEvent = findStructuredEvent(structuredEvents, "query_graph_step_completed", "queryId", queryId);
         JsonNode queryCompletedEvent = findStructuredEvent(structuredEvents, "query_completed", "queryId", queryId);
 
         assertThat(queryReceivedEvent).isNotNull();
         assertThat(llmStartedEvent).isNotNull();
         assertThat(llmSucceededEvent).isNotNull();
+        assertThat(queryGraphStartedEvent).isNotNull();
+        assertThat(queryGraphCompletedEvent).isNotNull();
         assertThat(queryCompletedEvent).isNotNull();
         assertThat(queryReceivedEvent.path("traceId").asText()).isNotBlank();
         assertThat(llmStartedEvent.path("traceId").asText()).isEqualTo(queryReceivedEvent.path("traceId").asText());
         assertThat(llmSucceededEvent.path("traceId").asText()).isEqualTo(queryReceivedEvent.path("traceId").asText());
+        assertThat(queryGraphStartedEvent.path("traceId").asText()).isEqualTo(queryReceivedEvent.path("traceId").asText());
+        assertThat(queryGraphCompletedEvent.path("traceId").asText()).isEqualTo(queryReceivedEvent.path("traceId").asText());
         assertThat(queryCompletedEvent.path("traceId").asText()).isEqualTo(queryReceivedEvent.path("traceId").asText());
         assertThat(llmStartedEvent.path("spanId").asText()).isNotBlank();
         assertThat(llmSucceededEvent.path("status").asText()).isEqualTo("SUCCEEDED");
+        assertThat(queryGraphStartedEvent.path("nodeId").asText()).isNotBlank();
+        assertThat(queryGraphStartedEvent.path("status").asText()).isEqualTo("STARTED");
+        assertThat(queryGraphCompletedEvent.path("nodeId").asText()).isNotBlank();
+        assertThat(queryGraphCompletedEvent.path("status").asText()).isEqualTo("SUCCEEDED");
         assertThat(queryCompletedEvent.path("status").asText()).isEqualTo("SUCCEEDED");
         assertThat(queryCompletedEvent.path("answerOutcome").asText()).isNotBlank();
         assertThat(queryCompletedEvent.path("generationMode").asText()).isNotBlank();

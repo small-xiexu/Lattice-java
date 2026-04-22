@@ -19,6 +19,8 @@ public class CompileJobRecord {
 
     private final Long sourceSyncRunId;
 
+    private final String rootTraceId;
+
     private final boolean incremental;
 
     private final String orchestrationMode;
@@ -70,6 +72,7 @@ public class CompileJobRecord {
                 sourceDir,
                 null,
                 null,
+                null,
                 incremental,
                 orchestrationMode,
                 status,
@@ -89,6 +92,7 @@ public class CompileJobRecord {
      * @param sourceDir 源目录
      * @param sourceId 资料源主键
      * @param sourceSyncRunId 资料源同步运行主键
+     * @param rootTraceId 根追踪标识
      * @param incremental 是否增量编译
      * @param orchestrationMode 编排模式
      * @param status 状态
@@ -104,6 +108,7 @@ public class CompileJobRecord {
             String sourceDir,
             Long sourceId,
             Long sourceSyncRunId,
+            String rootTraceId,
             boolean incremental,
             String orchestrationMode,
             String status,
@@ -118,6 +123,7 @@ public class CompileJobRecord {
         this.sourceDir = sourceDir;
         this.sourceId = sourceId;
         this.sourceSyncRunId = sourceSyncRunId;
+        this.rootTraceId = rootTraceId;
         this.incremental = incremental;
         this.orchestrationMode = orchestrationMode;
         this.status = status;
@@ -163,6 +169,15 @@ public class CompileJobRecord {
      */
     public Long getSourceSyncRunId() {
         return sourceSyncRunId;
+    }
+
+    /**
+     * 获取根追踪标识。
+     *
+     * @return 根追踪标识
+     */
+    public String getRootTraceId() {
+        return rootTraceId;
     }
 
     /**

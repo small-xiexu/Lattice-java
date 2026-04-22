@@ -19,6 +19,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -409,6 +410,67 @@ class LlmGatewayTests {
     }
 
     /**
+     * 验证 bootstrap Anthropic reviewer 路径会像 OpenAI 一样进入动态 ChatClient。
+     */
+    @Test
+    void shouldInvokeBootstrapReviewerFacadeThroughAnthropicChatClientRoute() throws Exception {
+        StubAnthropicChatServer stubServer = new StubAnthropicChatServer("claude-review-answer");
+        stubServer.start();
+        try {
+            FakeLlmClient compileClient = new FakeLlmClient("legacy-compile", 120, 30);
+            FakeLlmClient reviewClient = new FakeLlmClient("legacy-review", 60, 10);
+            LlmProperties llmProperties = createProperties();
+            LlmInvocationExecutor llmInvocationExecutor = new LlmInvocationExecutor(
+                    new com.xbk.lattice.llm.service.ChatClientRegistry(
+                            RestClient.builder(),
+                            WebClient.builder(),
+                            new ObjectMapper(),
+                            new com.xbk.lattice.llm.service.AdvisorChainFactory()
+                    ),
+                    llmProperties
+            );
+            LlmGateway llmGateway = new LlmGateway(
+                    compileClient,
+                    reviewClient,
+                    new FakeRedisKeyValueStore(),
+                    llmProperties,
+                    null,
+                    null,
+                    llmInvocationExecutor,
+                    "",
+                    "",
+                    stubServer.getBaseUrl(),
+                    "anthropic-key",
+                    null
+            );
+            setField(llmGateway, "reviewBootstrapModelName", "claude-sonnet-4-6");
+
+            LlmInvocationEnvelope envelope = llmGateway.invokeRaw(
+                    ExecutionLlmSnapshotService.QUERY_SCENE,
+                    ExecutionLlmSnapshotService.ROLE_REVIEWER,
+                    "query-review",
+                    "你是查询审查助手",
+                    "请判断当前回答是否需要重写"
+            );
+
+            assertThat(envelope.getContent()).isEqualTo("claude-review-answer");
+            assertThat(envelope.getPurpose()).isEqualTo("query-review");
+            assertThat(envelope.getRouteResolution().getProviderType()).isEqualTo("anthropic");
+            assertThat(envelope.getRouteResolution().getModelName()).isEqualTo("claude-sonnet-4-6");
+            assertThat(envelope.getRouteResolution().isSnapshotBacked()).isFalse();
+            assertThat(envelope.getInputTokens()).isEqualTo(11);
+            assertThat(envelope.getOutputTokens()).isEqualTo(7);
+            assertThat(stubServer.getRequestCount()).isEqualTo(1);
+            assertThat(stubServer.getCapturedModels()).containsExactly("claude-sonnet-4-6");
+            assertThat(reviewClient.getCallCount()).isZero();
+            assertThat(compileClient.getCallCount()).isZero();
+        }
+        finally {
+            stubServer.stop();
+        }
+    }
+
+    /**
      * 验证当 Query answer 的 ChatClient 开关关闭时，即使是 OpenAI snapshot 路由也会回退到 legacy client。
      */
     @Test
@@ -575,6 +637,44 @@ class LlmGatewayTests {
     }
 
     /**
+     * 验证 bootstrap fallback 路由会优先使用真实 ChatModel 模型名，而不是 provider 占位值。
+     */
+    @Test
+    void shouldUseActualBootstrapChatModelNameForScopedFallbackRoute() throws Exception {
+        LlmProperties llmProperties = createProperties();
+        StubExecutionLlmSnapshotService snapshotService = new StubExecutionLlmSnapshotService();
+        LlmGateway llmGateway = new LlmGateway(
+                new FakeLlmClient("legacy-answer", 120, 30),
+                new FakeLlmClient("review-result", 60, 10),
+                new FakeRedisKeyValueStore(),
+                llmProperties,
+                null,
+                snapshotService,
+                null,
+                "http://127.0.0.1:18086",
+                "test-key",
+                "",
+                "",
+                null
+        );
+        setField(llmGateway, "compileBootstrapModelName", "gpt-5.4");
+
+        LlmRouteResolution routeResolution = llmGateway.routeResolutionFor(
+                "admin-correction:1:ops",
+                ExecutionLlmSnapshotService.COMPILE_SCENE,
+                ExecutionLlmSnapshotService.ROLE_WRITER
+        );
+
+        assertThat(routeResolution.isSnapshotBacked()).isFalse();
+        assertThat(routeResolution.getModelName()).isEqualTo("gpt-5.4");
+        assertThat(routeResolution.getBaseUrl()).isEqualTo("http://127.0.0.1:18086");
+        assertThat(snapshotService.lastScopeType).isEqualTo(ExecutionLlmSnapshotService.COMPILE_SCOPE_TYPE);
+        assertThat(snapshotService.lastScopeId).isEqualTo("admin-correction:1:ops");
+        assertThat(snapshotService.lastScene).isEqualTo(ExecutionLlmSnapshotService.COMPILE_SCENE);
+        assertThat(snapshotService.lastAgentRole).isEqualTo(ExecutionLlmSnapshotService.ROLE_WRITER);
+    }
+
+    /**
      * 创建默认 LLM 配置。
      *
      * @return LLM 配置
@@ -587,6 +687,12 @@ class LlmGatewayTests {
         llmProperties.setCacheTtlSeconds(3600L);
         llmProperties.setCacheKeyPrefix("llm:cache:");
         return llmProperties;
+    }
+
+    private void setField(Object target, String fieldName, String value) throws Exception {
+        Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        field.set(target, value);
     }
 
     /**
@@ -784,6 +890,88 @@ class LlmGatewayTests {
                           }
                         }
                         """.formatted(answerText);
+                byte[] responseBytes = responseBody.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().add("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, responseBytes.length);
+                exchange.getResponseBody().write(responseBytes);
+                exchange.close();
+            }
+        }
+    }
+
+    /**
+     * Anthropic Messages stub 服务。
+     *
+     * 职责：为 LlmGateway 的 Anthropic ChatClient 路径提供本地稳定响应
+     *
+     * @author xiexu
+     */
+    private static class StubAnthropicChatServer {
+
+        private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+        private final HttpServer httpServer;
+
+        private final String answerText;
+
+        private final AtomicInteger requestCount = new AtomicInteger();
+
+        private final List<String> capturedModels = new CopyOnWriteArrayList<String>();
+
+        private StubAnthropicChatServer(String answerText) throws IOException {
+            this.answerText = answerText;
+            this.httpServer = HttpServer.create(new InetSocketAddress(0), 0);
+            HttpHandler handler = new MessagesHandler();
+            httpServer.createContext("/v1/messages", handler);
+            httpServer.createContext("/messages", handler);
+        }
+
+        private void start() {
+            httpServer.start();
+        }
+
+        private void stop() {
+            httpServer.stop(0);
+        }
+
+        private String getBaseUrl() {
+            return "http://127.0.0.1:" + httpServer.getAddress().getPort();
+        }
+
+        private int getRequestCount() {
+            return requestCount.get();
+        }
+
+        private List<String> getCapturedModels() {
+            return capturedModels;
+        }
+
+        private final class MessagesHandler implements HttpHandler {
+
+            @Override
+            public void handle(HttpExchange exchange) throws IOException {
+                requestCount.incrementAndGet();
+                String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+                JsonNode rootNode = OBJECT_MAPPER.readTree(requestBody);
+                capturedModels.add(rootNode.path("model").asText());
+                String responseBody = """
+                        {
+                          "id": "msg_test",
+                          "type": "message",
+                          "model": "%s",
+                          "role": "assistant",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "%s"
+                            }
+                          ],
+                          "usage": {
+                            "input_tokens": 11,
+                            "output_tokens": 7
+                          }
+                        }
+                        """.formatted(rootNode.path("model").asText(), answerText);
                 byte[] responseBytes = responseBody.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().add("Content-Type", "application/json");
                 exchange.sendResponseHeaders(200, responseBytes.length);

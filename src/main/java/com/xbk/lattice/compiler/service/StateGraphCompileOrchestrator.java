@@ -7,6 +7,7 @@ import com.xbk.lattice.compiler.graph.CompileGraphDefinitionFactory;
 import com.xbk.lattice.compiler.graph.CompileGraphLifecycleListener;
 import com.xbk.lattice.compiler.graph.CompileGraphState;
 import com.xbk.lattice.compiler.graph.CompileGraphStateMapper;
+import org.slf4j.MDC;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -81,6 +82,9 @@ public class StateGraphCompileOrchestrator implements CompileOrchestrator {
             initialState.setSourceId(executionRequest.getSourceId());
             initialState.setSourceCode(executionRequest.getSourceCode());
             initialState.setSourceSyncRunId(executionRequest.getSourceSyncRunId());
+            initialState.setTraceId(resolveCurrentMdcValue("traceId"));
+            initialState.setSpanId(resolveCurrentMdcValue("spanId"));
+            initialState.setRootTraceId(resolveRootTraceId(initialState.getTraceId()));
 
             Optional<OverAllState> result = compiledGraph.invoke(compileGraphStateMapper.toMap(initialState));
             OverAllState overAllState = result.orElseThrow(() -> new IllegalStateException("state graph compile returned empty state"));
@@ -113,5 +117,21 @@ public class StateGraphCompileOrchestrator implements CompileOrchestrator {
                 null,
                 null
         ));
+    }
+
+    private String resolveRootTraceId(String traceId) {
+        String rootTraceId = resolveCurrentMdcValue("rootTraceId");
+        if (rootTraceId != null && !rootTraceId.isBlank()) {
+            return rootTraceId;
+        }
+        return traceId;
+    }
+
+    private String resolveCurrentMdcValue(String key) {
+        String value = MDC.get(key);
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value;
     }
 }
