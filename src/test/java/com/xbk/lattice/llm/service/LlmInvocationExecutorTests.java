@@ -93,6 +93,67 @@ class LlmInvocationExecutorTests {
         assertThat(envelope.getLatencyMs()).isGreaterThanOrEqualTo(0L);
         assertThat(openAiStubServer.getRequestCount()).isEqualTo(1);
         assertThat(openAiStubServer.getCapturedModels()).containsExactly("gpt-5.4");
+        assertThat(openAiStubServer.getCapturedTransferEncodings()).containsExactly((String) null);
+        assertThat(openAiStubServer.getCapturedContentLengths().get(0)).isNotBlank();
+    }
+
+    /**
+     * 验证 raw 调用遇到瞬时 5xx 后会自动重试并成功返回。
+     *
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldRetryTransientOpenAiFailuresForInvocationExecutor() throws IOException {
+        openAiStubServer = new StubOpenAiChatServer("executor-retry-ok", 1);
+        openAiStubServer.start();
+        ChatClientRegistry chatClientRegistry = new ChatClientRegistry(
+                RestClient.builder(),
+                WebClient.builder(),
+                new ObjectMapper(),
+                new AdvisorChainFactory()
+        );
+        LlmProperties llmProperties = new LlmProperties();
+        llmProperties.setCacheKeyPrefix("llm:cache:");
+        LlmInvocationExecutor llmInvocationExecutor = new LlmInvocationExecutor(chatClientRegistry, llmProperties);
+        LlmRouteResolution routeResolution = new LlmRouteResolution(
+                "query_request",
+                "query-retry-1",
+                "query",
+                "answer",
+                Long.valueOf(91L),
+                Long.valueOf(92L),
+                Integer.valueOf(5),
+                "query.answer.openai.retry",
+                "openai",
+                openAiStubServer.getBaseUrl(),
+                "test-key",
+                "gpt-5.4",
+                new BigDecimal("0.2"),
+                Integer.valueOf(96),
+                Integer.valueOf(30),
+                "{}",
+                new BigDecimal("0.001"),
+                new BigDecimal("0.002"),
+                true
+        );
+
+        LlmInvocationEnvelope envelope = llmInvocationExecutor.execute(
+                routeResolution,
+                new LlmInvocationContext(
+                        "query",
+                        "query-answer-retry",
+                        "query-retry-1",
+                        "answer",
+                        "query.answer.openai.retry"
+                ),
+                "你是查询助手",
+                "请解释为什么会触发自动重试",
+                "llm:cache:retry:test"
+        );
+
+        assertThat(envelope.getContent()).isEqualTo("executor-retry-ok");
+        assertThat(openAiStubServer.getRequestCount()).isEqualTo(2);
+        assertThat(openAiStubServer.getCapturedModels()).containsExactly("gpt-5.4");
     }
 
     @Test

@@ -712,35 +712,6 @@ a {
     padding: 16px 18px 22px;
 }
 
-.page-notice {
-    padding: 12px 16px;
-    border: 1px solid rgba(143, 190, 255, 0.18);
-    border-radius: 18px;
-    background: linear-gradient(180deg, rgba(12, 24, 45, 0.92), rgba(8, 16, 30, 0.88));
-    color: var(--text);
-    box-shadow: var(--shadow-soft);
-    line-height: 1.65;
-}
-
-.page-notice.info {
-    border-color: rgba(121, 210, 255, 0.2);
-}
-
-.page-notice.success {
-    border-color: rgba(118, 240, 200, 0.28);
-    background: linear-gradient(180deg, rgba(15, 49, 50, 0.94), rgba(9, 26, 30, 0.88));
-}
-
-.page-notice.warning {
-    border-color: rgba(255, 194, 108, 0.24);
-    background: linear-gradient(180deg, rgba(57, 39, 18, 0.94), rgba(29, 21, 11, 0.88));
-}
-
-.page-notice.danger {
-    border-color: rgba(255, 141, 141, 0.28);
-    background: linear-gradient(180deg, rgba(64, 23, 27, 0.94), rgba(30, 13, 15, 0.9));
-}
-
 .hero-panel,
 .panel,
 .sub-panel,
@@ -1098,13 +1069,6 @@ a {
     font-weight: 700;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-}
-
-.step-card-accent {
-    border-color: rgba(255, 197, 107, 0.22);
-    background:
-            linear-gradient(180deg, rgba(49, 35, 16, 0.9), rgba(22, 18, 13, 0.92)),
-            radial-gradient(circle at top right, rgba(255, 197, 107, 0.08), transparent 36%);
 }
 
 .import-entry-grid {
@@ -1897,15 +1861,20 @@ a {
     display: grid;
     gap: 6px;
     padding: 12px;
-    border: 1px solid rgba(143, 190, 255, 0.1);
+    border: 1px solid rgba(76, 89, 75, 0.12);
     border-radius: 14px;
-    background: rgba(15, 24, 42, 0.72);
+    background:
+            linear-gradient(180deg, rgba(255, 252, 247, 0.95), rgba(244, 237, 226, 0.96)),
+            radial-gradient(circle at top right, rgba(0, 117, 74, 0.04), transparent 40%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
 }
 
 .role-flow-item.active {
-    border-color: rgba(121, 210, 255, 0.3);
-    background: linear-gradient(180deg, rgba(25, 40, 67, 0.84), rgba(13, 22, 40, 0.9));
-    box-shadow: inset 0 0 0 1px rgba(121, 210, 255, 0.08);
+    border-color: rgba(0, 117, 74, 0.24);
+    background:
+            linear-gradient(180deg, rgba(239, 247, 242, 0.98), rgba(228, 240, 232, 0.98)),
+            radial-gradient(circle at top right, rgba(0, 117, 74, 0.1), transparent 42%);
+    box-shadow: 0 12px 24px rgba(28, 57, 49, 0.1);
 }
 
 .role-flow-order {
@@ -2020,14 +1989,24 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .checkbox-row {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
+    display: flex;
+    width: 100%;
+    min-height: 22px;
+    align-items: flex-start;
+    gap: 12px;
     color: var(--text);
-    line-height: 1.5;
+    line-height: 1.45;
+}
+
+.checkbox-row span {
+    display: inline;
+    flex: 1 1 auto;
+    margin-bottom: 0 !important;
 }
 
 .checkbox-row input {
+    margin: 2px 0 0;
+    flex: 0 0 auto;
     width: 18px;
     height: 18px;
     accent-color: var(--primary-strong);
@@ -3402,12 +3381,16 @@ body::after {
     padding: 22px 24px 28px;
 }
 
+/* Consolidated page notice theme */
 .page-notice {
+    padding: 12px 16px;
     border: 1px solid rgba(76, 89, 75, 0.12);
+    border-radius: 18px;
     border-left: 4px solid var(--primary);
     background: rgba(255, 250, 242, 0.92);
     color: var(--text);
     box-shadow: var(--shadow-soft);
+    line-height: 1.65;
 }
 
 .page-notice.info {
@@ -4209,20 +4192,26 @@ input[type="file"]::file-selector-button:hover {
     grid-column: span 2;
 }
 
-.settings-llm-vector-panel .vector-step-grid .step-card:nth-child(4) {
-    grid-column: 1 / -1;
-    border-color: rgba(171, 75, 61, 0.16);
+.settings-llm-vector-panel .vector-step-grid .step-card-optional {
+    grid-column: span 3;
+    border-color: rgba(182, 101, 45, 0.14);
     background:
-            linear-gradient(180deg, rgba(253, 241, 238, 0.98), rgba(250, 233, 230, 0.98)),
-            radial-gradient(circle at top right, rgba(171, 75, 61, 0.08), transparent 40%);
+            linear-gradient(180deg, rgba(252, 246, 239, 0.98), rgba(247, 239, 229, 0.98)),
+            radial-gradient(circle at top right, rgba(182, 101, 45, 0.06), transparent 40%);
 }
 
-.settings-llm-vector-panel .vector-step-grid .step-card:nth-child(5) {
-    grid-column: 1 / -1;
+.settings-llm-vector-panel .vector-step-grid .step-card-next {
+    grid-column: span 3;
     border-color: rgba(31, 106, 73, 0.16);
     background:
             linear-gradient(180deg, rgba(239, 247, 242, 0.98), rgba(232, 242, 236, 0.98)),
             radial-gradient(circle at top right, rgba(31, 106, 73, 0.08), transparent 40%);
+}
+
+.vector-advanced-audit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
 }
 
 .developer-fastlane-grid {
@@ -4291,6 +4280,15 @@ input[type="file"]::file-selector-button:hover {
 
     .settings-llm-vector-panel .vector-step-grid .step-card:nth-child(-n+3) {
         grid-column: span 1;
+    }
+
+    .settings-llm-vector-panel .vector-step-grid .step-card-optional,
+    .settings-llm-vector-panel .vector-step-grid .step-card-next {
+        grid-column: 1 / -1;
+    }
+
+    .vector-advanced-audit-grid {
+        grid-template-columns: 1fr;
     }
 }
 

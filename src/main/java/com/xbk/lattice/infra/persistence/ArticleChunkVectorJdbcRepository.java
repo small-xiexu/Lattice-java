@@ -169,6 +169,35 @@ public class ArticleChunkVectorJdbcRepository {
     }
 
     /**
+     * 返回 chunk 向量列的数据库类型描述。
+     *
+     * @return 向量列类型描述
+     */
+    public Optional<String> findEmbeddingColumnType() {
+        if (jdbcTemplate == null) {
+            return Optional.empty();
+        }
+        List<String> values = jdbcTemplate.queryForList(
+                """
+                        select format_type(a.atttypid, a.atttypmod)
+                        from pg_attribute a
+                        join pg_class c on c.oid = a.attrelid
+                        join pg_namespace n on n.oid = c.relnamespace
+                        where n.nspname = current_schema()
+                          and c.relname = 'article_chunk_vector_index'
+                          and a.attname = 'embedding'
+                          and a.attnum > 0
+                          and not a.attisdropped
+                        """,
+                String.class
+        );
+        if (values.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(values.get(0));
+    }
+
+    /**
      * 执行 chunk 级向量近邻检索。
      *
      * @param embedding 查询向量

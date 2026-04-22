@@ -302,33 +302,23 @@
                                     <p class="step-card-kicker">Step 3</p>
                                     <h3>保存配置</h3>
                                     <p class="muted">先保存启用状态和 profile 选择，再根据系统判断决定是否继续执行重建。</p>
-                                    <div class="form-grid top-gap">
-                                        <label>
-                                            <span>保存操作人</span>
-                                            <input id="vector-config-operator" type="text" placeholder="admin">
-                                        </label>
-                                    </div>
                                     <div class="button-row wrap top-gap">
                                         <button id="save-vector-config" class="primary-btn" type="button">保存向量配置</button>
                                     </div>
+                                    <p class="muted">默认会按当前后台操作人记录审计信息；只有需要补充特殊备注时，才去高级选项里改。</p>
                                 </article>
 
-                                <article class="sub-panel step-card step-card-accent">
+                                <article class="sub-panel step-card step-card-optional">
                                     <p class="step-card-kicker">Step 4</p>
-                                    <h3>必要时重建索引</h3>
-                                    <p class="muted">只有在维度不兼容、profile 切换或历史索引需要重做时，才需要执行这里的动作。</p>
-                                    <div class="form-grid top-gap">
-                                        <label>
-                                            <span>重建操作人</span>
-                                            <input id="vector-rebuild-operator" type="text" placeholder="admin">
-                                        </label>
-                                    </div>
+                                    <h3>仅在必要时重建索引</h3>
+                                    <p class="muted">只有在维度不兼容、profile 切换或历史索引需要重做时，才需要执行这里的动作；如果状态卡没有提示风险，可以直接跳到 Step 5。</p>
                                     <div class="button-row wrap top-gap">
                                         <button id="rebuild-vector-index" class="warn-btn" type="button">重建向量索引</button>
                                     </div>
+                                    <p class="muted">这一步属于运维动作，不是每次保存配置后的固定下一步。</p>
                                 </article>
 
-                                <article class="sub-panel step-card">
+                                <article class="sub-panel step-card step-card-next">
                                     <p class="step-card-kicker">Step 5</p>
                                     <h3>回知识问答复测</h3>
                                     <p class="muted">保存完成且状态满足要求后，直接去问答页验证复杂中文“为什么 / 原因”类问题是否稳定命中。</p>
@@ -342,6 +332,16 @@
                             <details class="advanced-panel top-gap">
                                 <summary>高级选项与原始结果</summary>
                                 <div class="advanced-panel-body">
+                                    <div class="vector-advanced-audit-grid">
+                                        <label>
+                                            <span>保存操作人（可选）</span>
+                                            <input id="vector-config-operator" type="text" placeholder="留空时默认 admin">
+                                        </label>
+                                        <label>
+                                            <span>重建操作人（可选）</span>
+                                            <input id="vector-rebuild-operator" type="text" placeholder="留空时默认 admin">
+                                        </label>
+                                    </div>
                                     <label class="checkbox-row">
                                         <input id="vector-truncate-first" type="checkbox">
                                         <span>重建前先清空旧向量（当维度不一致且已有历史向量时必须勾选）</span>

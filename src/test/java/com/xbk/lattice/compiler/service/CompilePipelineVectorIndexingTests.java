@@ -11,9 +11,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.Embedding;
+import org.springframework.ai.embedding.EmbeddingOptions;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
+import org.springframework.ai.openai.OpenAiEmbeddingOptions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -191,6 +193,49 @@ class CompilePipelineVectorIndexingTests {
     }
 
     /**
+     * 验证首次编译遇到 schema 维度与 embedding profile 不一致时，
+     * 会在空向量表场景下自动对齐维度并正常写入索引。
+     *
+     * @param tempDir 临时目录
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldAlignVectorSchemaDimensionsDuringCompileWhenTablesAreEmpty(@TempDir Path tempDir) throws IOException {
+        resetCompileTables();
+        seedEmbeddingProfile(1024);
+        assertVectorCapabilityReady();
+
+        Path paymentDir = Files.createDirectories(tempDir.resolve("payment"));
+        Files.writeString(
+                paymentDir.resolve("analyze.json"),
+                "{"
+                        + "\"concepts\":["
+                        + "{\"id\":\"payment-timeout\",\"title\":\"Payment Timeout\",\"description\":\"支付超时处理说明\","
+                        + "\"snippets\":[\"retry=5\"],"
+                        + "\"sections\":[{\"heading\":\"Timeout Rules\",\"content\":[\"retry=5\",\"interval=30s\"],\"sources\":[\"payment/analyze.json#timeout-rules\"]}]}"
+                        + "]"
+                        + "}",
+                StandardCharsets.UTF_8
+        );
+
+        compilePipelineService.compile(tempDir);
+
+        Integer vectorCount = jdbcTemplate.queryForObject(
+                "select count(*) from lattice_b8_vector_compile_test.article_vector_index",
+                Integer.class
+        );
+        Integer chunkVectorCount = jdbcTemplate.queryForObject(
+                "select count(*) from lattice_b8_vector_compile_test.article_chunk_vector_index",
+                Integer.class
+        );
+
+        assertThat(vectorCount).isEqualTo(1);
+        assertThat(chunkVectorCount).isGreaterThan(0);
+        assertThat(findEmbeddingColumnType("article_vector_index")).contains("vector(1024)");
+        assertThat(findEmbeddingColumnType("article_chunk_vector_index")).contains("vector(1024)");
+    }
+
+    /**
      * 重置编译相关测试表。
      */
     private void resetCompileTables() {
@@ -208,6 +253,15 @@ class CompilePipelineVectorIndexingTests {
      * 写入测试用 embedding profile。
      */
     private void seedEmbeddingProfile() {
+        seedEmbeddingProfile(1536);
+    }
+
+    /**
+     * 写入测试用 embedding profile。
+     *
+     * @param expectedDimensions 期望维度
+     */
+    private void seedEmbeddingProfile(int expectedDimensions) {
         String encryptedApiKey = llmSecretCryptoService.encrypt("sk-test-openai");
         String maskedApiKey = llmSecretCryptoService.mask("sk-test-openai");
         jdbcTemplate.update(
@@ -238,7 +292,7 @@ class CompilePipelineVectorIndexingTests {
                 Long.valueOf(1L),
                 "test-embedding-model",
                 "EMBEDDING",
-                Integer.valueOf(1536),
+                Integer.valueOf(expectedDimensions),
                 false,
                 true,
                 "tester",
@@ -253,6 +307,30 @@ class CompilePipelineVectorIndexingTests {
         assertThat(searchCapabilityService.supportsVectorType()).isTrue();
         assertThat(searchCapabilityService.hasArticleVectorIndex()).isTrue();
         assertThat(articleVectorIndexService.isIndexingAvailable()).isTrue();
+    }
+
+    /**
+     * 读取指定向量表的 embedding 列类型。
+     *
+     * @param tableName 表名
+     * @return 列类型
+     */
+    private String findEmbeddingColumnType(String tableName) {
+        return jdbcTemplate.queryForObject(
+                """
+                        select format_type(a.atttypid, a.atttypmod)
+                        from pg_attribute a
+                        join pg_class c on c.oid = a.attrelid
+                        join pg_namespace n on n.oid = c.relnamespace
+                        where n.nspname = 'lattice_b8_vector_compile_test'
+                          and c.relname = ?
+                          and a.attname = 'embedding'
+                          and a.attnum > 0
+                          and not a.attisdropped
+                        """,
+                String.class,
+                tableName
+        );
     }
 
     /**
@@ -341,7 +419,7 @@ class CompilePipelineVectorIndexingTests {
          */
         @Override
         public EmbeddingResponse call(EmbeddingRequest request) {
-            return new EmbeddingResponse(List.of(new Embedding(createEmbedding(), 0)));
+            return new EmbeddingResponse(List.of(new Embedding(createEmbedding(resolveDimensions(request)), 0)));
         }
 
         /**
@@ -352,16 +430,36 @@ class CompilePipelineVectorIndexingTests {
          */
         @Override
         public float[] embed(Document document) {
-            return createEmbedding();
+            return createEmbedding(1536);
         }
 
         /**
-         * 创建与 pgvector 基线一致的固定维度向量。
+         * 根据请求中的 options 解析目标维度。
          *
-         * @return 1536 维 embedding
+         * @param request embedding 请求
+         * @return 目标维度
          */
-        private float[] createEmbedding() {
-            float[] embedding = new float[1536];
+        private int resolveDimensions(EmbeddingRequest request) {
+            if (request == null) {
+                return 1536;
+            }
+            EmbeddingOptions embeddingOptions = request.getOptions();
+            if (embeddingOptions instanceof OpenAiEmbeddingOptions openAiEmbeddingOptions
+                    && openAiEmbeddingOptions.getDimensions() != null
+                    && openAiEmbeddingOptions.getDimensions().intValue() > 0) {
+                return openAiEmbeddingOptions.getDimensions().intValue();
+            }
+            return 1536;
+        }
+
+        /**
+         * 创建指定维度的固定向量。
+         *
+         * @param dimensions 目标维度
+         * @return 固定 embedding
+         */
+        private float[] createEmbedding(int dimensions) {
+            float[] embedding = new float[dimensions];
             for (int index = 0; index < embedding.length; index++) {
                 embedding[index] = 0.15F + (index % 11) * 0.01F;
             }

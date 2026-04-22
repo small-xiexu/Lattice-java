@@ -16,6 +16,7 @@ import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.client.BufferingClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
@@ -198,7 +199,7 @@ public class ChatClientRegistry {
                 .build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(Duration.ofSeconds(resolvedTimeoutSeconds));
-        return restClientBuilder.clone().requestFactory(requestFactory);
+        return restClientBuilder.clone().requestFactory(new BufferingClientHttpRequestFactory(requestFactory));
     }
 
     private OpenAiChatOptions buildDefaultOptions(LlmRouteResolution routeResolution) {

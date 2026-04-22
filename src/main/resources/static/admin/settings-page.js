@@ -127,7 +127,9 @@
         document.getElementById("refresh-vector-status").addEventListener("click", refreshVectorMaintenance);
         document.getElementById("save-vector-config").addEventListener("click", saveVectorConfig);
         document.getElementById("rebuild-vector-index").addEventListener("click", rebuildVectorIndex);
-        document.getElementById("vector-config-profile-id").addEventListener("change", syncVectorProfilePreview);
+        document.getElementById("vector-config-profile-id").addEventListener("change", function () {
+            syncVectorProfileSelectionState();
+        });
         document.getElementById("load-retrieval-config").addEventListener("click", loadRetrievalConfig);
         document.getElementById("save-retrieval-config").addEventListener("click", saveRetrievalConfig);
         document.addEventListener("click", handleSettingsHelpActionClick);
@@ -175,7 +177,7 @@
             fillRetrievalConfigForm(state.retrievalConfig || {});
             renderRetrievalConfigSummary(state.retrievalConfig || {});
             syncLlmModelKindForm();
-            syncVectorProfilePreview();
+            syncVectorProfileSelectionState();
             syncDocumentParseEndpointSuggestion();
             renderSettingsOverviewBoard();
             renderSettingsHelpCard();
@@ -1202,9 +1204,7 @@
         state.vectorConfig = effectiveConfig;
         document.getElementById("vector-config-enabled").checked = !!effectiveConfig.vectorEnabled;
         renderVectorProfileOptions(effectiveConfig.embeddingModelProfileId || "");
-        document.getElementById("vector-config-provider").value = effectiveConfig.providerType || "";
-        document.getElementById("vector-config-model-name").value = effectiveConfig.modelName || "";
-        document.getElementById("vector-config-profile-dimensions").value = effectiveConfig.profileDimensions || "";
+        syncVectorProfileFields(effectiveConfig);
         document.getElementById("vector-config-schema-dimensions").value = state.vectorStatus
                 && state.vectorStatus.schemaDimensions
                 ? String(state.vectorStatus.schemaDimensions)
@@ -1222,6 +1222,7 @@
         const embeddingModels = getEmbeddingModels();
         if (embeddingModels.length === 0) {
             select.innerHTML = "<option value=''>请先在“模型与向量”里创建启用中的向量模型</option>";
+            syncVectorProfileSelectionState();
             return;
         }
         select.innerHTML = embeddingModels.map(function (item) {
@@ -1233,7 +1234,7 @@
         if (currentValue) {
             select.value = currentValue;
         }
-        syncVectorProfilePreview();
+        syncVectorProfileSelectionState();
     }
 
     function renderVectorStatusSummary(status) {
@@ -1571,6 +1572,12 @@
         return item ? item.connectionCode : String(connectionId || "-");
     }
 
+    function findConnectionById(connectionId) {
+        return state.llmConnections.find(function (entry) {
+            return String(entry.id) === String(connectionId);
+        }) || null;
+    }
+
     function resolveDocumentParseConnectionLabel(connectionId) {
         const item = state.documentParseConnections.find(function (entry) {
             return String(entry.id) === String(connectionId);
@@ -1765,6 +1772,34 @@
         }) || null;
     }
 
+    function syncVectorProfileSelectionState(fallbackConfig) {
+        syncVectorProfileFields(fallbackConfig || state.vectorConfig || {});
+        syncVectorProfilePreview();
+    }
+
+    function syncVectorProfileFields(fallbackConfig) {
+        const selectedModel = findModelById(document.getElementById("vector-config-profile-id").value);
+        const effectiveConfig = fallbackConfig || {};
+        const providerInput = document.getElementById("vector-config-provider");
+        const modelInput = document.getElementById("vector-config-model-name");
+        const dimensionsInput = document.getElementById("vector-config-profile-dimensions");
+        if (!providerInput || !modelInput || !dimensionsInput) {
+            return;
+        }
+        if (selectedModel) {
+            const connection = findConnectionById(selectedModel.connectionId);
+            providerInput.value = connection ? getProviderDisplayLabel(connection.providerType) : "";
+            modelInput.value = selectedModel.modelName || "";
+            dimensionsInput.value = renderNumberField(selectedModel.expectedDimensions, "");
+            return;
+        }
+        providerInput.value = effectiveConfig.providerType
+                ? getProviderDisplayLabel(effectiveConfig.providerType)
+                : "";
+        modelInput.value = effectiveConfig.modelName || "";
+        dimensionsInput.value = renderNumberField(effectiveConfig.profileDimensions, "");
+    }
+
     function syncVectorProfilePreview() {
         const container = document.getElementById("vector-profile-preview");
         if (!container) {
@@ -1776,6 +1811,13 @@
                     + "<p>还没有选中可用的 embedding profile。先在“模型与向量”里准备启用中的向量模型，再回来继续。</p>";
             return;
         }
+        const selectedConnection = findConnectionById(selectedModel.connectionId);
+        const providerLabel = selectedConnection
+                ? getProviderDisplayLabel(selectedConnection.providerType)
+                : "未识别供应商";
+        const connectionLabel = selectedConnection
+                ? selectedConnection.connectionCode
+                : resolveConnectionLabel(selectedModel.connectionId);
         const selectedDimensions = selectedModel.expectedDimensions ? Number(selectedModel.expectedDimensions) : 0;
         const vectorStatus = state.vectorStatus || {};
         const schemaDimensions = vectorStatus.schemaDimensions ? Number(vectorStatus.schemaDimensions) : 0;
@@ -1793,7 +1835,9 @@
         container.innerHTML = "<strong>" + escapeHtml(selectedModel.modelName || "未命名模型")
                 + "</strong>"
                 + "<p>供应商："
-                + escapeHtml(resolveConnectionLabel(selectedModel.connectionId))
+                + escapeHtml(providerLabel)
+                + "｜连接："
+                + escapeHtml(connectionLabel)
                 + "｜期望维度："
                 + escapeHtml(renderNumberValue(selectedModel.expectedDimensions))
                 + " 维</p>"

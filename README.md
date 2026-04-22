@@ -87,11 +87,12 @@
 
 <img src="docs/images/readme/ask-answer-result.png" alt="邪修智库真实问答结果" />
 
-这张图不是 README 摆拍，而是基于一条真实最小链路生成的：
+这张图不是 README 摆拍，而是 **2026-04-22** 在隔离实例 `18089 / lattice_e2e_ui_20260422_r3` 上跑出来的真实页面：
 
-- 先通过项目自身的编译入口导入 `payment/analyze.json`
-- 再在页面提问 `payment timeout retry=3 是什么配置`
-- 页面返回最终回答、证据摘要和引用来源
+- 先导入 `SCHEMA.md`、`payments/*`、`ops/incident-runbook.md` 共 `5` 个文件
+- 编译后形成 `3` 篇知识文章，并完成 `1024` 维向量刷新
+- 再在 `/admin/ask` 提问 `payment timeout retry 是什么配置`
+- 页面返回最终答案、`8` 条直接来源，并给出“回答成功 / 模型执行成功 / 已复核通过”
 
 ### 第二张：Agent 仪轨
 
@@ -102,20 +103,32 @@
 - 编译侧：`writer / reviewer / fixer`
 - 问答侧：`answer / reviewer / rewrite`
 
-这也是这个项目和普通“带个模型配置页的知识库”差异很大的地方之一：Agent 编排不是文档概念，而是后台真实可维护、可冻结到运行时的系统骨架。
+当前截图来自同一轮真实回归，`6` 个启用绑定统一挂在 `gpt-5.4 / openai-main-r3` 上。这也是这个项目和普通“带个模型配置页的知识库”差异很大的地方之一：Agent 编排不是文档概念，而是后台真实可维护、可冻结到运行时的系统骨架。
 
-### 第三张：炉台与外门
+### 第三张：系统配置与向量维护
+
+<img src="docs/images/readme/admin-settings.png" alt="邪修智库系统配置与向量维护页面" />
+
+这张图对应同一实例的 `/admin/settings?tab=settings-llm`：
+
+- 对话模型：`gpt-5.4 @ openai-main-r3`
+- Embedding：`BAAI/bge-m3 @ siliconflow-embedding-r3`
+- 当前向量状态：`profile 1024 维 / schema 1024 维 / 已建索引 3/3`
+
+这也把这轮最新结论直接钉死了：`.claude/t1.md` 里的真实 OpenAI chat + SiliconFlow embedding 组合，不只是“能保存配置”，而是已经在独立 schema 上把 compile、vector refresh 和 ask 真链路一起跑通。
+
+### 第四张：炉台与外门
 
 <table>
   <tr>
     <td width="50%">
       <strong>知识库管理</strong><br/>
-      资料导入、Git 仓库接入、同步运行、已入库内容与状态工作台。<br/><br/>
+      资料导入、Git 仓库接入、同步运行和工作台总览。当前截图里能直接看到 `3` 篇文章、`5` 个源文件这组真实数据口径。<br/><br/>
       <img src="docs/images/readme/knowledge-console.png" alt="邪修智库知识库管理工作台" />
     </td>
     <td width="50%">
       <strong>开发者接入</strong><br/>
-      CLI、HTTP API、MCP 模板和首次验证路径集中展示。<br/><br/>
+      CLI、HTTP API、MCP 模板和首次验证路径集中展示。当前页面会按访问地址自动生成 `http://127.0.0.1:18089` 与 `/mcp` 接入模板。<br/><br/>
       <img src="docs/images/readme/developer-access.png" alt="邪修智库开发者接入页面" />
     </td>
   </tr>
@@ -125,6 +138,7 @@
 
 - 知识库工作台
 - 真实问答页
+- 系统配置与向量维护页
 - Agent 编排与模型绑定页
 - 开发者接入页
 
@@ -285,40 +299,39 @@ flowchart LR
 
 ## 当前状态
 
-截至 **2026-04-22** 的当前文档口径，项目主链路已经跑通：
+截至 **2026-04-22**，仓库当前口径已经明确包含一轮基于 [`.claude/t1.md`](.claude/t1.md) 的真实端到端回归，而不是停留在“模型配置页能保存”的半通状态：
 
-- `2026-04-18` 已完成主轮真实验收
-- `2026-04-22` 已补做 `ChatClient + Advisor` Query / Compile 真链路 smoke
-
-- 独立 schema 启动
-- 管理员设置页配置
-- 复杂知识源全量编译
-- 增量编译
-- Query 问答
-- pending query 的 `correct -> confirm` / `discard`
-- Admin 治理接口
-- CLI remote / standalone
-- MCP raw HTTP
-- Vault 导出
-- 文章级快照、历史与回滚
+- 隔离实例：`http://127.0.0.1:18089`
+- 隔离 schema：`lattice_e2e_ui_20260422_r3`
+- 聊天模型：`gpt-5.4 @ http://44.254.123.32:8080`
+- Embedding 模型：`BAAI/bge-m3 (1024) @ https://api.siliconflow.cn`
+- 最小真实样本：`5` 个文件编译成 `3` 篇文章
+- Query 真实结果：`answerOutcome=SUCCESS`、`generationMode=LLM`、`modelExecutionStatus=SUCCESS`
+- 向量真实状态：`embeddingColumnType=vector(1024)`、`dimensionsMatch=true`、`indexedArticleCount=3`
+- `/admin`、`/admin/ask`、`/admin/settings`、`/admin/developer-access` 四页已做浏览器验收，当前 README 截图就是这轮实例生成的实拍图
 
 当前已经明确成立的结论包括：
 
 - compile / query 已共享统一连接、模型、Agent 绑定与快照能力
-- `/admin`、`/admin/ask`、`/admin/settings`、`/admin/developer-access` 已是分离页面
+- `.claude/t1.md` 里的真实 OpenAI chat + SiliconFlow embedding 组合已经把 compile、ask、vector refresh 真链路一起跑通
 - Query 侧 `answer / reviewer / rewrite` 已真实冻结到 `execution_llm_snapshots`
-- `2026-04-22` 的补充 smoke 已确认 Query 真链路可返回 `queryId / answerOutcome / generationMode / modelExecutionStatus`
-- `2026-04-22` 的补充 smoke 已确认 Compile 真链路中的 `synthesis-*` 与向量刷新可复用编译作业冻结路由
+- `2026-04-22` 的最新补验已确认空 schema 下也能自动对齐 `1024` 维向量列，不需要手工先改表再编译
 - CLI remote 已补验 `compile / status / search / query / vault-export`
 - MCP HTTP 端点已真实跑通 `initialize / tools/list / lattice_status / lattice_query`
 
-当前已知限制包括：
+当前仍需注意的点：
 
-- 某些真实 embedding 网关下，向量检索仍可能因 embeddings 接口异常而降级；该限制依赖具体网关组合，不代表所有真实验收配置
-- `2026-04-22` 在共享实例 `http://127.0.0.1:18082` 真实探测 `POST /api/v1/admin/articles/ops/correct` 仍返回 `500`，但现在会明确提示当前 `compile.writer` 命中 README 演示连接 `http://127.0.0.1:19999`，需要先到 `/admin/settings` 切换真实可用连接后再重试；在隔离 schema `lattice_f4_iso_20260422` 的 `18086` 实例上，该接口已用真实 OpenAI 兼容连接跑通并返回 `validationSupported=true`，重跑后 `referentialKeywords` 也已与正文中的 `retry=5` 同步
-- `2026-04-22` 已在隔离 Vault 基线下补齐 live `repo baseline / diff / rollback`：历史基线 `snapshotId=3` 解决了 Git-backed rollback 主链路；随后又用 fresh Vault 基线 `snapshotId=7 / gitCommit=0c29c18...` 复验，rollback 生成 `snapshotId=8 / gitCommit=dc3722b...` 后，`repo diff` 已返回 `count=0`
+- 当前实例尚未检测到 ANN 索引类型，页面会显示“待补齐”；但 `1024` 维向量写入、索引刷新和真实问答检索都已通过
+- 每次真实 query 都会产生 pending feedback，若要让工作台统计保持干净，需要继续执行 `confirm / correct / discard`
 
 更细的样本、命令、日志和限制说明，请看 [`docs/项目全流程真实验收手册.md`](docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md)。
+
+---
+
+## 这轮补修掉的真实问题
+
+- `ChatClient / OpenAiApi` 在 `.claude/t1.md` 这条 OpenAI 兼容网关前，原先会发送 `Transfer-Encoding: chunked`，网关把它判成 `Request body is empty`。现在已改成发送带 `Content-Length` 的普通 JSON 请求，并补了瞬时失败重试，所以 compile / query 主链会直接返回真实 `LLM + SUCCESS` 结果。
+- 当空 schema 还保留默认 `vector(1536)`，而本轮 embedding 已切到 `BAAI/bge-m3 (1024)` 时，现在会在首次 compile 的向量刷新阶段自动把列维度对齐到 `vector(1024)`，不需要手工先改表。
 
 ---
 
@@ -361,6 +374,8 @@ mvn -q spring-boot:run
 ```bash
 mvn -q -s .codex/maven-settings.xml spring-boot:run
 ```
+
+如果你想复用本 README 这轮真实回归口径，可以在 `/admin/settings` 手动录入 [`.claude/t1.md`](.claude/t1.md) 里的 OpenAI chat 与 SiliconFlow embedding 配置；密钥只保留在本地，不要写进仓库。
 
 ### 为什么这里直接重建 schema
 

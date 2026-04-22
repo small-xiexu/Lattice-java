@@ -17,6 +17,8 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 文章向量索引服务
@@ -29,6 +31,8 @@ import java.util.Optional;
 @Service
 @Profile("jdbc")
 public class ArticleVectorIndexService {
+
+    private static final Pattern VECTOR_DIMENSIONS_PATTERN = Pattern.compile(".*vector\\((\\d+)\\)$");
 
     private final QuerySearchProperties querySearchProperties;
 
@@ -97,6 +101,7 @@ public class ArticleVectorIndexService {
         if (articleRecord == null || !isIndexingAvailable()) {
             return;
         }
+        alignSchemaDimensionsIfNecessary();
 
         String contentHash = buildContentHash(articleRecord);
         Long configuredProfileId = getConfiguredModelProfileId();
@@ -184,6 +189,33 @@ public class ArticleVectorIndexService {
     }
 
     /**
+     * 在首次写入前把空表 schema 自动对齐到当前 embedding profile 维度。
+     */
+    private void alignSchemaDimensionsIfNecessary() {
+        int expectedDimensions = configuredVectorEmbeddingService == null
+                ? 0
+                : configuredVectorEmbeddingService.getConfiguredExpectedDimensions();
+        if (expectedDimensions <= 0 || articleVectorJdbcRepository == null) {
+            return;
+        }
+        if (articleVectorJdbcRepository.countAll() > 0) {
+            return;
+        }
+        Integer schemaDimensions = extractSchemaDimensions(
+                articleVectorJdbcRepository.findEmbeddingColumnType().orElse("")
+        ).orElse(null);
+        if (schemaDimensions == null || schemaDimensions.intValue() == expectedDimensions) {
+            return;
+        }
+        articleVectorJdbcRepository.alignEmbeddingColumnDimensions(expectedDimensions);
+        log.info(
+                "Aligned article vector schema dimensions before compile indexing. schemaDimensions: {}, targetDimensions: {}",
+                schemaDimensions,
+                expectedDimensions
+        );
+    }
+
+    /**
      * 判断当前文章是否可直接跳过向量重建。
      *
      * @param existingRecord 已有向量记录
@@ -251,6 +283,17 @@ public class ArticleVectorIndexService {
         catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("sha-256 is not available", ex);
         }
+    }
+
+    private Optional<Integer> extractSchemaDimensions(String embeddingColumnType) {
+        if (embeddingColumnType == null || embeddingColumnType.isBlank()) {
+            return Optional.empty();
+        }
+        Matcher matcher = VECTOR_DIMENSIONS_PATTERN.matcher(embeddingColumnType.trim());
+        if (!matcher.matches()) {
+            return Optional.empty();
+        }
+        return Optional.of(Integer.valueOf(Integer.parseInt(matcher.group(1))));
     }
 
     /**

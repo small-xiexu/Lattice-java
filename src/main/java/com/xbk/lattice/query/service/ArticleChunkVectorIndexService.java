@@ -18,6 +18,8 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 文章分块向量索引服务
@@ -30,6 +32,8 @@ import java.util.Optional;
 @Service
 @Profile("jdbc")
 public class ArticleChunkVectorIndexService {
+
+    private static final Pattern VECTOR_DIMENSIONS_PATTERN = Pattern.compile(".*vector\\((\\d+)\\)$");
 
     private final QuerySearchProperties querySearchProperties;
 
@@ -81,6 +85,7 @@ public class ArticleChunkVectorIndexService {
         if (articleRecord == null || !isIndexingAvailable() || articleChunkJdbcRepository == null) {
             return;
         }
+        alignSchemaDimensionsIfNecessary();
         List<ArticleChunkRecord> chunkRecords = hasText(articleRecord.getArticleKey())
                 ? articleChunkJdbcRepository.findByArticleKey(articleRecord.getArticleKey())
                 : articleChunkJdbcRepository.findByConceptId(articleRecord.getConceptId());
@@ -168,6 +173,33 @@ public class ArticleChunkVectorIndexService {
         return configuredVectorEmbeddingService == null ? null : configuredVectorEmbeddingService.getConfiguredProfileId();
     }
 
+    /**
+     * 在首次写入前把空表 schema 自动对齐到当前 embedding profile 维度。
+     */
+    private void alignSchemaDimensionsIfNecessary() {
+        int expectedDimensions = configuredVectorEmbeddingService == null
+                ? 0
+                : configuredVectorEmbeddingService.getConfiguredExpectedDimensions();
+        if (expectedDimensions <= 0 || articleChunkVectorJdbcRepository == null) {
+            return;
+        }
+        if (articleChunkVectorJdbcRepository.countAll() > 0) {
+            return;
+        }
+        Integer schemaDimensions = extractSchemaDimensions(
+                articleChunkVectorJdbcRepository.findEmbeddingColumnType().orElse("")
+        ).orElse(null);
+        if (schemaDimensions == null || schemaDimensions.intValue() == expectedDimensions) {
+            return;
+        }
+        articleChunkVectorJdbcRepository.alignEmbeddingColumnDimensions(expectedDimensions);
+        log.info(
+                "Aligned article chunk vector schema dimensions before compile indexing. schemaDimensions: {}, targetDimensions: {}",
+                schemaDimensions,
+                expectedDimensions
+        );
+    }
+
     private boolean shouldSkipIndexing(
             Optional<ArticleChunkVectorRecord> existingRecord,
             String contentHash,
@@ -197,6 +229,17 @@ public class ArticleChunkVectorIndexService {
                 expectedDimensions
         );
         return false;
+    }
+
+    private Optional<Integer> extractSchemaDimensions(String embeddingColumnType) {
+        if (embeddingColumnType == null || embeddingColumnType.isBlank()) {
+            return Optional.empty();
+        }
+        Matcher matcher = VECTOR_DIMENSIONS_PATTERN.matcher(embeddingColumnType.trim());
+        if (!matcher.matches()) {
+            return Optional.empty();
+        }
+        return Optional.of(Integer.valueOf(Integer.parseInt(matcher.group(1))));
     }
 
     private String buildContentHash(String content) {
