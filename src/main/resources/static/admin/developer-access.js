@@ -312,23 +312,23 @@
 
     function resolveCopyMessage(templateName) {
         const messages = {
-            "service-url": "当前服务地址已复制",
-            "mcp-url": "当前 MCP 地址已复制",
-            "bridge-command": "Bridge 命令已复制",
-            "mcp-http-config": "MCP HTTP 配置已复制",
-            "mcp-bridge-config": "STDIO Bridge 配置已复制",
-            "mcp-verify-steps": "MCP 验证步骤已复制",
-            "cli-status-command": "状态检查命令已复制",
-            "cli-query-command": "首次问答命令已复制",
-            "cli-source-list-command": "资料源列表命令已复制",
-            "cli-source-sync-command": "资料源同步命令已复制",
-            "cli-env-example": "环境变量示例已复制",
-            "cli-advanced-command": "高级模式命令已复制",
-            "mcp-bridge-advanced-command": "Bridge 高级命令已复制",
-            "cli-verify-steps": "CLI 验证步骤已复制",
-            "http-api-example": "HTTP API 示例已复制"
+            "service-url": "已复制服务地址",
+            "mcp-url": "已复制 MCP 地址",
+            "bridge-command": "已复制 Bridge 命令",
+            "mcp-http-config": "已复制 MCP 配置",
+            "mcp-bridge-config": "已复制 Bridge 配置",
+            "mcp-verify-steps": "已复制 MCP 验证步骤",
+            "cli-status-command": "已复制状态检查命令",
+            "cli-query-command": "已复制首次问答命令",
+            "cli-source-list-command": "已复制资料源列表命令",
+            "cli-source-sync-command": "已复制资料源同步命令",
+            "cli-env-example": "已复制环境变量示例",
+            "cli-advanced-command": "已复制高级模式命令",
+            "mcp-bridge-advanced-command": "已复制 Bridge 高级命令",
+            "cli-verify-steps": "已复制 CLI 验证步骤",
+            "http-api-example": "已复制 HTTP 示例"
         };
-        return messages[templateName] || "内容已复制";
+        return messages[templateName] || "已复制";
     }
 
     function applyInitialRoute() {

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>邪修智库｜工作台</title>
-    <link rel="stylesheet" href="/admin/admin.css?v=20260421-starbucks-polish-4">
+    <link rel="stylesheet" href="/admin/admin.css?v=20260423-admin-align-2">
 </head>
 <body>
 <div class="app-shell">
@@ -58,6 +58,16 @@
                 <section id="page-notice" class="page-notice" hidden aria-live="polite"></section>
 
                 <div class="tab-shell" data-tab-group="knowledge-console" data-tab-query-key="tab">
+                    <section class="panel">
+                        <div class="panel-title-row">
+                            <div>
+                                <h2>状态摘要</h2>
+                                <p>先看这一屏状态摘要，判断现在能不能直接提问；如果还不能，再进入下面对应模块继续处理。</p>
+                            </div>
+                        </div>
+                        <div id="summary-cards" class="metric-grid top-gap"></div>
+                    </section>
+
                     <section class="panel workbench-status-panel">
                         <div class="workbench-hero-grid">
                             <div class="workbench-hero-copy">
@@ -72,6 +82,12 @@
                             </div>
 
                             <div class="workbench-hero-side">
+                                <div id="knowledge-help-card" class="help-state-card" data-help-tone="info">
+                                    <p class="help-card-eyebrow">现在该怎么做</p>
+                                    <h3 class="help-card-title">正在整理知识库状态</h3>
+                                    <p class="help-card-description">页面会根据资料、同步运行和已入库内容，告诉你下一步应该去资料导入、最近同步运行还是知识问答。</p>
+                                </div>
+
                                 <div class="hero-metric" aria-live="polite">
                                     <span class="hero-metric-label">服务健康</span>
                                     <div class="health-inline">
@@ -82,12 +98,6 @@
                                         <button id="refresh-summary" class="secondary-btn" type="button">刷新知识库状态</button>
                                         <button id="refresh-health" class="ghost-btn" type="button">刷新服务状态</button>
                                     </div>
-                                </div>
-
-                                <div id="knowledge-help-card" class="help-state-card" data-help-tone="info">
-                                    <p class="help-card-eyebrow">现在该怎么做</p>
-                                    <h3 class="help-card-title">正在整理知识库状态</h3>
-                                    <p class="help-card-description">页面会根据资料、同步运行和已入库内容，告诉你下一步应该去资料导入、最近同步运行还是知识问答。</p>
                                 </div>
                             </div>
                         </div>
@@ -118,36 +128,34 @@
                                             <h3 class="import-entry-title">上传电脑里的资料</h3>
                                         </div>
                                     </div>
-                                    <p class="import-entry-copy">把文件拖进来、直接选多个文件，或者整包选择一个文件夹即可。系统会自动识别并处理，文件夹内会保留原有目录结构。</p>
+                                    <p class="import-entry-copy">把文件或文件夹直接拖进来，或者点击上传资料选择文件即可。系统会自动识别并处理，拖拽文件夹时会尽量保留原有目录结构。</p>
                                     <div class="import-entry-form">
                                         <div class="import-entry-box">
-                                            <div class="import-entry-box-title">选择文件或文件夹</div>
+                                            <div class="import-entry-box-title">上传资料</div>
                                             <div id="compile-file-picker" class="file-picker import-file-picker">
                                                 <input id="compile-files" class="import-file-input" type="file" multiple accept=".doc,.docx,.pptx,.pdf,.xlsx,.xls,.csv,.md,.markdown,.txt,.json,.html,.xml,.yml,.yaml,.properties,.js,.css,.java,.sh,.py">
-                                                <input id="compile-folder-files" class="import-file-input" type="file" multiple webkitdirectory directory>
                                                 <div class="import-file-picker-hero" aria-hidden="true">
                                                     <span class="import-file-picker-badge">本地资料导入</span>
-                                                    <span class="import-file-picker-hint">文件夹保留结构</span>
+                                                    <span class="import-file-picker-hint">文件夹拖拽上传</span>
                                                 </div>
                                                 <div class="import-file-picker-copy">
-                                                    <strong>拖入文件到这里，或直接从电脑选择文件 / 文件夹</strong>
-                                                    <p>支持一次选择多个文件，也支持整包选择一个文件夹；文件夹里的相对路径会一并上传，重新选择会替换当前列表。</p>
+                                                    <strong>拖入文件或文件夹到这里，或点击上传资料选择文件</strong>
+                                                    <p>支持一次选择多个文件；如果要整包上传文件夹，直接拖进来即可。重新选择或继续拖拽时会在当前列表里追加。</p>
                                                 </div>
                                                 <div class="import-file-picker-toolbar">
                                                     <div class="button-row wrap import-file-picker-actions">
-                                                        <button id="compile-file-trigger" class="ghost-btn import-file-picker-trigger" type="button">选择文件</button>
-                                                        <button id="compile-folder-trigger" class="secondary-btn import-folder-picker-trigger" type="button">选择文件夹</button>
+                                                        <button id="compile-file-trigger" class="import-file-picker-trigger" type="button">上传资料</button>
                                                         <button id="compile-file-clear" class="ghost-btn import-file-picker-clear" type="button" hidden>清空列表</button>
                                                     </div>
                                                     <div class="import-file-picker-status" aria-live="polite">
                                                         <span id="compile-file-summary" class="import-file-picker-summary">未选择任何文件</span>
-                                                        <p id="compile-file-helper" class="import-file-picker-helper">支持拖拽多个文件，也支持一次选择多个文件或整个文件夹。</p>
+                                                        <p id="compile-file-helper" class="import-file-picker-helper">支持拖拽多个文件，也支持直接把整个文件夹拖进来上传。</p>
                                                     </div>
                                                 </div>
                                                 <div id="compile-file-list" class="import-file-picker-list" hidden></div>
                                                 <div id="compile-file-feedback" class="import-file-picker-feedback" hidden></div>
                                             </div>
-                                            <p class="import-entry-meta">支持 PDF、Word（.doc/.docx）、PPT、Excel、CSV、Markdown、TXT、JSON、HTML、XML 等常见资料格式；如果整包选择文件夹，系统会自动忽略当前暂不支持的文件类型。</p>
+                                            <p class="import-entry-meta">支持 PDF、Word（.doc/.docx）、PPT、Excel、CSV、Markdown、TXT、JSON、HTML、XML 等常见资料格式；如果拖入整个文件夹，系统会尽量保留原始目录结构，并自动忽略当前暂不支持的文件类型。</p>
                                         </div>
                                     </div>
                                     <div class="button-row wrap import-entry-actions">
@@ -251,16 +259,6 @@
                                 </article>
                             </div>
                         </section>
-                    </section>
-
-                    <section class="panel">
-                        <div class="panel-title-row">
-                            <div>
-                                <h2>简化状态摘要</h2>
-                                <p>当你需要判断“现在能不能直接问”时，再看这一屏摘要，不让它抢在导入动作前面。</p>
-                            </div>
-                        </div>
-                        <div id="summary-cards" class="metric-grid top-gap"></div>
                     </section>
 
                     <section class="tab-panel" data-tab-panel="knowledge-runs" hidden>
@@ -417,16 +415,6 @@
                         </section>
                     </section>
 
-                    <section class="panel compact-entry-panel">
-                        <div class="panel-title-row">
-                            <div>
-                                <h2>开发接入</h2>
-                                <p>只有在要接 CLI、HTTP API 或 MCP 时，才需要进入独立的开发接入页复制模板。</p>
-                            </div>
-                            <a class="secondary-btn" href="/admin/developer-access">去开发接入</a>
-                        </div>
-                    </section>
-
                     <section class="panel">
                         <div class="panel-title-row">
                             <div>
@@ -496,6 +484,6 @@
     </div>
  </div>
 <script src="/admin/admin-tabs.js?v=20260419-tabs-1"></script>
-<script src="/admin/management.js?v=20260420-source-console-13"></script>
+<script src="/admin/management.js?v=20260423-source-console-14"></script>
 </body>
 </html>

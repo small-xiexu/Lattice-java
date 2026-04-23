@@ -180,7 +180,6 @@
             syncVectorProfileSelectionState();
             syncDocumentParseEndpointSuggestion();
             renderSettingsOverviewBoard();
-            renderSettingsHelpCard();
             syncSettingsFaqOpenState();
             if (showSuccessFeedback) {
                 setStatus("系统配置已刷新", "success");
@@ -415,7 +414,6 @@
             renderVectorMaintenanceCard();
             syncVectorProfilePreview();
             renderSettingsOverviewBoard();
-            renderSettingsHelpCard();
             syncSettingsFaqOpenState();
             setStatus("向量状态已刷新", "success");
         }
@@ -513,7 +511,6 @@
             renderRetrievalConfigSummary(result || {});
             document.getElementById("retrieval-config-result").textContent = JSON.stringify(result, null, 2);
             renderSettingsOverviewBoard();
-            renderSettingsHelpCard();
             syncSettingsFaqOpenState();
             setStatus("检索配置已刷新", "success");
         }
@@ -583,7 +580,6 @@
             renderVectorMaintenanceCard();
             syncVectorProfilePreview();
             renderSettingsOverviewBoard();
-            renderSettingsHelpCard();
             syncSettingsFaqOpenState();
             setStatus(successMessage, "success");
         }
@@ -2027,7 +2023,6 @@
     function updateSettingsHelpState(patch) {
         state.helpState = Object.assign({}, state.helpState, patch || {});
         renderSettingsOverviewBoard();
-        renderSettingsHelpCard();
         syncSettingsFaqOpenState();
     }
 
@@ -2120,33 +2115,6 @@
             ],
             faqKey: "default-warning"
         };
-    }
-
-    function renderSettingsHelpCard() {
-        const container = document.getElementById("settings-help-card");
-        if (!container) {
-            return;
-        }
-        const helpState = deriveSettingsHelpState();
-        container.setAttribute("data-help-tone", helpState.tone || "info");
-        container.innerHTML = "<p class='help-card-eyebrow'>配置影响范围</p>"
-                + "<h2 class='help-card-title'>" + escapeHtml(helpState.title || "先看这里") + "</h2>"
-                + "<p class='help-card-description'>" + escapeHtml(helpState.description || "") + "</p>"
-                + renderSettingsHelpActions(helpState.actions || []);
-    }
-
-    function renderSettingsHelpActions(actions) {
-        if (!actions || actions.length === 0) {
-            return "";
-        }
-        return "<div class='help-action-row'>"
-                + actions.map(function (item) {
-                    return "<button class='" + escapeHtml(item.className || "ghost-btn")
-                            + "' type='button' data-settings-help-action='" + escapeHtml(item.action || "") + "'>"
-                            + escapeHtml(item.label || "继续查看")
-                            + "</button>";
-                }).join("")
-                + "</div>";
     }
 
     function syncSettingsFaqOpenState() {

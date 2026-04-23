@@ -64,9 +64,7 @@
     function bindUploadFilePicker() {
         const picker = document.getElementById("compile-file-picker");
         const filesInput = document.getElementById("compile-files");
-        const folderInput = document.getElementById("compile-folder-files");
-        const trigger = document.getElementById("compile-file-trigger");
-        const folderTrigger = document.getElementById("compile-folder-trigger");
+        const fileTrigger = document.getElementById("compile-file-trigger");
         const clearButton = document.getElementById("compile-file-clear");
         const list = document.getElementById("compile-file-list");
         if (!picker || !filesInput) {
@@ -77,17 +75,8 @@
             handleUploadInputChange(filesInput.files);
             filesInput.value = "";
         });
-        if (folderInput) {
-            folderInput.addEventListener("change", function () {
-                handleUploadInputChange(folderInput.files);
-                folderInput.value = "";
-            });
-        }
-        if (trigger) {
-            trigger.addEventListener("click", openUploadFileDialog);
-        }
-        if (folderTrigger) {
-            folderTrigger.addEventListener("click", openUploadFolderDialog);
+        if (fileTrigger) {
+            fileTrigger.addEventListener("click", openUploadFileDialog);
         }
         if (clearButton) {
             clearButton.addEventListener("click", clearUploadFileSelection);
@@ -114,7 +103,8 @@
         if (!event) {
             return;
         }
-        if (event.target.closest("button") || event.target.closest(".import-file-picker-list")) {
+        if (event.target.closest("button")
+                || event.target.closest(".import-file-picker-list")) {
             return;
         }
         openUploadFileDialog();
@@ -125,23 +115,12 @@
             event.preventDefault();
             event.stopPropagation();
         }
+        closeUploadPickerMenu();
         const filesInput = document.getElementById("compile-files");
         if (!filesInput) {
             return;
         }
         filesInput.click();
-    }
-
-    function openUploadFolderDialog(event) {
-        if (event) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
-        const folderInput = document.getElementById("compile-folder-files");
-        if (!folderInput) {
-            return;
-        }
-        folderInput.click();
     }
 
     function clearUploadFileSelection(event) {
@@ -150,12 +129,8 @@
             event.stopPropagation();
         }
         const filesInput = document.getElementById("compile-files");
-        const folderInput = document.getElementById("compile-folder-files");
         if (filesInput) {
             filesInput.value = "";
-        }
-        if (folderInput) {
-            folderInput.value = "";
         }
         setUploadFiles([]);
         renderUploadPickerFeedback([], 0);
@@ -313,7 +288,6 @@
     function renderUploadFileSelection(fileList) {
         const picker = document.getElementById("compile-file-picker");
         const trigger = document.getElementById("compile-file-trigger");
-        const folderTrigger = document.getElementById("compile-folder-trigger");
         const clearButton = document.getElementById("compile-file-clear");
         const summary = document.getElementById("compile-file-summary");
         const helper = document.getElementById("compile-file-helper");
@@ -325,17 +299,14 @@
         picker.classList.remove("dragover");
         picker.classList.toggle("has-files", files.length > 0);
         if (trigger) {
-            trigger.textContent = files.length > 0 ? "重新选择文件" : "选择文件";
-        }
-        if (folderTrigger) {
-            folderTrigger.textContent = files.length > 0 ? "重新选择文件夹" : "选择文件夹";
+            trigger.textContent = files.length > 0 ? "继续添加文件" : "上传资料";
         }
         if (clearButton) {
             clearButton.hidden = files.length === 0;
         }
         if (files.length === 0) {
             summary.textContent = "未选择任何文件";
-            helper.textContent = "支持拖拽多个文件，也支持一次选择多个文件或整个文件夹。";
+            helper.textContent = "支持拖拽多个文件，也支持直接把整个文件夹拖进来上传。";
             list.hidden = true;
             list.replaceChildren();
             return;
@@ -612,7 +583,11 @@
         if (state.overview) {
             renderSummary(state.overview, health);
         }
-        setStatus("服务健康状态：" + health.label, health.tone === "danger" ? "warning" : "success");
+        if (health.tone === "success") {
+            clearStatus();
+            return;
+        }
+        setStatus("服务健康状态：" + health.label, health.tone === "danger" ? "warning" : health.tone);
     }
 
     async function loadSources() {
@@ -1294,7 +1269,7 @@
             return;
         }
         if (!items || items.length === 0) {
-            container.innerHTML = "<div class='inline-credential-card'><h4>还没有可用凭据</h4><p>如果你要导入私有 Git 仓库，可以直接在上面新增一个。公开仓库则不需要这里。</p></div>";
+            container.innerHTML = "<div class='inline-credential-card inline-credential-card-empty'><h4>还没有可用凭据</h4><p>如果你要导入私有 Git 仓库，可以直接在上面新增一个。公开仓库则不需要这里。</p></div>";
             return;
         }
         container.innerHTML = items.map(function (item) {
@@ -2552,6 +2527,20 @@
                 ? persist
                 : (resolvedTone === "danger" || resolvedTone === "warning");
         renderPageNotice(message, resolvedTone, resolvedPersist);
+    }
+
+    function clearStatus() {
+        const notice = document.getElementById("page-notice");
+        if (!notice) {
+            return;
+        }
+        if (pageNoticeTimer) {
+            window.clearTimeout(pageNoticeTimer);
+            pageNoticeTimer = null;
+        }
+        notice.hidden = true;
+        notice.className = "page-notice";
+        notice.textContent = "";
     }
 
     function showError(prefix, error) {

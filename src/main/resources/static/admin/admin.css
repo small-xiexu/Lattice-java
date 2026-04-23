@@ -289,22 +289,18 @@ textarea:focus {
     order: 1;
 }
 
-.tab-shell[data-tab-group="admin-console"] > .tab-panel[data-tab-panel="settings-llm"],
-.tab-shell[data-tab-group="admin-console"] > .tab-panel[data-tab-panel="settings-parse"],
-.tab-shell[data-tab-group="admin-console"] > .tab-panel[data-tab-panel="settings-sources"] {
+.tab-shell[data-tab-group="admin-console"] > .config-overview-panel {
     order: 2;
 }
 
-.tab-shell[data-tab-group="admin-console"] > .config-overview-panel {
+.tab-shell[data-tab-group="admin-console"] > .tab-panel[data-tab-panel="settings-llm"],
+.tab-shell[data-tab-group="admin-console"] > .tab-panel[data-tab-panel="settings-parse"],
+.tab-shell[data-tab-group="admin-console"] > .tab-panel[data-tab-panel="settings-sources"] {
     order: 3;
 }
 
-.tab-shell[data-tab-group="admin-console"] > .settings-help-panel {
-    order: 4;
-}
-
 .tab-shell[data-tab-group="admin-console"] > .settings-faq-panel {
-    order: 5;
+    order: 4;
 }
 
 .settings-llm-panel > .settings-llm-setup-panel {
@@ -323,7 +319,6 @@ textarea:focus {
 .settings-llm-vector-panel,
 .settings-llm-lists-panel,
 .config-overview-panel,
-.settings-help-panel,
 .settings-faq-panel {
     box-shadow: 0 18px 32px rgba(72, 56, 33, 0.08);
 }
@@ -1353,10 +1348,12 @@ a {
 }
 
 .import-file-picker-trigger,
-.import-folder-picker-trigger,
 .import-file-picker-clear {
     position: relative;
     z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     min-height: 40px;
     padding: 0 16px;
     border-radius: 14px;
@@ -1371,15 +1368,6 @@ a {
     font-weight: 700;
     letter-spacing: 0.01em;
     box-shadow: 0 12px 22px rgba(27, 64, 118, 0.26);
-}
-
-.import-folder-picker-trigger {
-    border: 1px solid rgba(121, 210, 255, 0.18);
-    background:
-            linear-gradient(135deg, rgba(30, 53, 87, 0.94), rgba(24, 42, 71, 0.96)),
-            radial-gradient(circle at top center, rgba(205, 240, 255, 0.12), transparent 58%);
-    color: #ecf4ff;
-    box-shadow: 0 10px 18px rgba(14, 30, 56, 0.24);
 }
 
 .import-file-picker-clear {
@@ -2010,6 +1998,31 @@ input[type="file"]::file-selector-button:hover {
     width: 18px;
     height: 18px;
     accent-color: var(--primary-strong);
+}
+
+.form-grid > .checkbox-row {
+    min-height: 48px;
+    padding: 11px 13px;
+    align-items: center;
+    border: 1px solid rgba(67, 79, 68, 0.16);
+    border-radius: 14px;
+    background: rgba(255, 252, 247, 0.94);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+.form-grid > .checkbox-row span {
+    color: var(--muted-strong);
+    font-weight: 650;
+}
+
+.form-grid > .checkbox-row input {
+    margin: 0;
+}
+
+.settings-llm-setup-panel .sub-panel > .button-row,
+.settings-parse-primary > .button-row,
+.settings-parse-secondary > .button-row {
+    padding-left: 13px;
 }
 
 .list-header,
@@ -3041,29 +3054,37 @@ button:disabled {
 
 .developer-toast-stack {
     position: fixed;
-    right: 24px;
-    bottom: 24px;
+    right: 20px;
+    bottom: 20px;
     z-index: 24;
     display: grid;
     gap: 10px;
-    width: min(360px, calc(100vw - 32px));
+    justify-items: end;
+    width: auto;
+    max-width: calc(100vw - 32px);
+    pointer-events: none;
 }
 
 .developer-toast {
-    padding: 12px 14px;
+    width: fit-content;
+    max-width: min(260px, calc(100vw - 32px));
+    padding: 10px 13px;
     border: 1px solid rgba(143, 190, 255, 0.16);
-    border-radius: 16px;
+    border-radius: 14px;
     background: rgba(8, 15, 29, 0.92);
     box-shadow: var(--shadow-soft);
     color: var(--text);
-    line-height: 1.6;
-    backdrop-filter: blur(24px);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.5;
+    backdrop-filter: blur(16px);
     animation: panel-rise 180ms ease;
 }
 
 .developer-toast.success {
     border-color: rgba(118, 240, 200, 0.28);
-    background: rgba(10, 34, 31, 0.92);
+    background: linear-gradient(135deg, rgba(28, 92, 66, 0.96), rgba(23, 63, 51, 0.96));
+    color: #f4fbf7;
 }
 
 .developer-toast.warning {
@@ -3639,13 +3660,10 @@ body::after {
 }
 
 .import-entry-card-upload .import-entry-box {
-    border-style: dashed;
-    border-width: 1.5px;
-    border-color: rgba(0, 117, 74, 0.24);
-    background:
-            linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(245, 238, 226, 0.96)),
-            radial-gradient(circle at top right, rgba(0, 117, 74, 0.06), transparent 38%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.74);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
 }
 
 .import-file-picker {
@@ -3694,21 +3712,18 @@ body::after {
 }
 
 .import-file-picker-toolbar {
-    border-color: rgba(76, 89, 75, 0.12);
-    background: rgba(255, 252, 247, 0.84);
+    gap: 14px;
+    padding: 20px 0 0;
+    border: 0;
+    border-top: 1px solid rgba(76, 89, 75, 0.1);
+    border-radius: 0;
+    background: transparent;
 }
 
 .import-file-picker-trigger {
     background: linear-gradient(135deg, rgba(0, 117, 74, 0.96), rgba(30, 57, 50, 0.96));
     color: #faf4eb;
     box-shadow: 0 10px 20px rgba(30, 57, 50, 0.16);
-}
-
-.import-folder-picker-trigger {
-    border: 1px solid rgba(30, 57, 50, 0.16);
-    background: rgba(244, 238, 228, 0.96);
-    color: var(--primary-strong);
-    box-shadow: none;
 }
 
 .import-file-picker-clear {
@@ -3718,6 +3733,7 @@ body::after {
 }
 
 .import-file-picker-summary {
+    margin-top: 2px;
     color: var(--primary-strong);
 }
 
@@ -3825,6 +3841,29 @@ body::after {
 
 .inline-credential-help strong {
     color: var(--primary-strong);
+}
+
+.inline-credential-card {
+    border-color: rgba(76, 89, 75, 0.12);
+    background:
+            linear-gradient(180deg, rgba(255, 251, 245, 0.96), rgba(246, 239, 228, 0.94)),
+            radial-gradient(circle at top right, rgba(0, 117, 74, 0.05), transparent 42%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+.inline-credential-card h4 {
+    color: var(--text);
+}
+
+.inline-credential-card p {
+    color: var(--muted);
+}
+
+.inline-credential-card-empty {
+    border-style: dashed;
+    background:
+            linear-gradient(180deg, rgba(243, 247, 244, 0.96), rgba(233, 239, 235, 0.94)),
+            radial-gradient(circle at top right, rgba(0, 117, 74, 0.06), transparent 44%);
 }
 
 .content-workspace {
@@ -4163,12 +4202,8 @@ input[type="file"]::file-selector-button:hover {
             radial-gradient(circle at top right, rgba(171, 75, 61, 0.08), transparent 36%);
 }
 
-.settings-help-panel {
-    order: 4;
-}
-
 .config-overview-panel {
-    order: 3;
+    order: 2;
     background:
             linear-gradient(180deg, rgba(250, 246, 239, 0.98), rgba(245, 238, 227, 0.98)),
             radial-gradient(circle at top right, rgba(182, 101, 45, 0.06), transparent 36%);
@@ -4256,8 +4291,40 @@ input[type="file"]::file-selector-button:hover {
     backdrop-filter: none;
 }
 
+.developer-access-page .panel-title-row h2,
+.developer-access-page .panel-title-row h3,
+.developer-access-page .quick-copy-card h3,
+.developer-access-page .entry-card-title,
+.developer-access-page .access-template-title,
+.developer-access-page .help-card-title {
+    font-weight: 500;
+}
+
+.developer-access-page .metric-card .label,
+.developer-access-page .template-kicker,
+.developer-access-page .surface-chip,
+.developer-access-page .pill,
+.developer-access-page .label {
+    font-weight: 500;
+}
+
+.developer-access-page .metric-card .value,
+.developer-access-page .developer-value {
+    font-weight: 500;
+}
+
+.developer-access-page .primary-btn,
+.developer-access-page .secondary-btn,
+.developer-access-page .ghost-btn,
+.developer-access-page .ghost-link,
+.developer-access-page .tab-btn {
+    font-weight: 500;
+}
+
 .developer-toast.success {
-    background: rgba(239, 247, 242, 0.98);
+    border-color: rgba(118, 240, 200, 0.24);
+    background: linear-gradient(135deg, rgba(28, 92, 66, 0.96), rgba(23, 63, 51, 0.96));
+    color: #f4fbf7;
 }
 
 .developer-toast.warning {
@@ -4597,7 +4664,6 @@ input[type="file"]::file-selector-button:hover {
     }
 
     .import-file-picker-trigger,
-    .import-folder-picker-trigger,
     .import-file-picker-clear {
         width: 100%;
     }
