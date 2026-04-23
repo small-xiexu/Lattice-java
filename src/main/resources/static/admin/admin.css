@@ -2716,17 +2716,22 @@ button.list-item {
 .simple-table {
     width: 100%;
     min-width: 720px;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid rgba(74, 88, 76, 0.14);
+    border-radius: 18px;
+    background: rgba(255, 251, 245, 0.82);
+    overflow: hidden;
 }
 
 .simple-table thead {
-    background: rgba(20, 35, 60, 0.9);
+    background: linear-gradient(180deg, rgba(30, 57, 50, 0.96), rgba(31, 76, 59, 0.9));
 }
 
 .simple-table th,
 .simple-table td {
     padding: 14px 12px;
-    border-bottom: 1px solid rgba(143, 190, 255, 0.1);
+    border-bottom: 1px solid rgba(74, 88, 76, 0.12);
     text-align: left;
     vertical-align: top;
     font-size: 14px;
@@ -2734,12 +2739,33 @@ button.list-item {
 }
 
 .simple-table th {
-    color: var(--muted-strong);
+    color: #f6efe3;
     font-weight: 650;
+    letter-spacing: 0.02em;
+}
+
+.simple-table td {
+    color: var(--text);
+}
+
+.simple-table thead th:first-child {
+    border-top-left-radius: 18px;
+}
+
+.simple-table thead th:last-child {
+    border-top-right-radius: 18px;
+}
+
+.simple-table tbody tr:nth-child(even) {
+    background: rgba(31, 76, 59, 0.03);
+}
+
+.simple-table tbody tr:last-child td {
+    border-bottom: none;
 }
 
 .simple-table tbody tr:hover {
-    background: rgba(20, 35, 60, 0.42);
+    background: rgba(0, 117, 74, 0.08);
 }
 
 .table-shell,
@@ -3914,6 +3940,29 @@ body::after {
     color: var(--text);
 }
 
+.source-section {
+    border-color: rgba(0, 117, 74, 0.14);
+    background:
+            linear-gradient(180deg, rgba(244, 249, 246, 0.98), rgba(236, 243, 239, 0.96)),
+            radial-gradient(circle at top right, rgba(0, 117, 74, 0.06), transparent 38%);
+}
+
+.source-section .panel-title-row h3 {
+    color: var(--primary-strong);
+}
+
+.source-section .panel-title-row p {
+    color: #58685e;
+}
+
+.source-card-primary {
+    border-color: rgba(0, 117, 74, 0.18);
+    background:
+            linear-gradient(180deg, rgba(240, 248, 243, 0.98), rgba(232, 243, 236, 0.98)),
+            radial-gradient(circle at top right, rgba(0, 117, 74, 0.08), transparent 38%);
+    box-shadow: inset 0 0 0 1px rgba(0, 117, 74, 0.05);
+}
+
 .list-item:hover,
 .list-item:focus-visible,
 .job-card:hover,
@@ -3949,6 +3998,10 @@ body::after {
 .list-guide,
 .source-snippet {
     color: #5c695f;
+}
+
+.source-card-primary .source-snippet {
+    color: #53645a;
 }
 
 .run-board {
@@ -4065,20 +4118,19 @@ select {
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;
-    padding-right: 50px;
-    background-image:
-            linear-gradient(180deg, rgba(76, 89, 75, 0.14), rgba(76, 89, 75, 0.14)),
-            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.5 4.25 6 7.5l3.5-3.25' stroke='%23314b3e' stroke-width='1.55' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-size: 1px 22px, 12px 12px;
-    background-position: right 42px center, right 18px center;
+    padding-right: 52px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 44 44' fill='none'%3E%3Cpath d='M1 11.5V32.5' stroke='rgba(76,89,75,0.18)'/%3E%3Cpath d='M16.5 18.5 22 24l5.5-5.5' stroke='%23314b3e' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-size: 44px 44px;
+    background-position: right 8px center;
     background-repeat: no-repeat;
 }
 
 select:hover {
     border-color: rgba(0, 117, 74, 0.22);
-    background-image:
-            linear-gradient(180deg, rgba(0, 117, 74, 0.18), rgba(0, 117, 74, 0.18)),
-            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.5 4.25 6 7.5l3.5-3.25' stroke='%2300754a' stroke-width='1.55' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 44 44' fill='none'%3E%3Cpath d='M1 11.5V32.5' stroke='rgba(0,117,74,0.24)'/%3E%3Cpath d='M16.5 18.5 22 24l5.5-5.5' stroke='%2300754a' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-size: 44px 44px;
+    background-position: right 8px center;
+    background-repeat: no-repeat;
 }
 
 input[type="text"]::placeholder,
@@ -4097,22 +4149,18 @@ select:focus {
     border-color: rgba(0, 117, 74, 0.34);
     box-shadow: 0 0 0 4px rgba(0, 117, 74, 0.12);
     background-color: rgba(255, 255, 252, 0.98);
-    background-image:
-            linear-gradient(180deg, rgba(0, 117, 74, 0.22), rgba(0, 117, 74, 0.22)),
-            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.5 4.25 6 7.5l3.5-3.25' stroke='%2300754a' stroke-width='1.55' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-size: 1px 22px, 12px 12px;
-    background-position: right 42px center, right 18px center;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 44 44' fill='none'%3E%3Cpath d='M1 11.5V32.5' stroke='rgba(0,117,74,0.28)'/%3E%3Cpath d='M16.5 18.5 22 24l5.5-5.5' stroke='%2300754a' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-size: 44px 44px;
+    background-position: right 8px center;
     background-repeat: no-repeat;
 }
 
 select:disabled {
     color: rgba(99, 112, 99, 0.74);
     background-color: rgba(255, 251, 245, 0.9);
-    background-image:
-            linear-gradient(180deg, rgba(131, 150, 138, 0.18), rgba(131, 150, 138, 0.18)),
-            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.5 4.25 6 7.5l3.5-3.25' stroke='%2383968a' stroke-width='1.55' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-size: 1px 22px, 12px 12px;
-    background-position: right 42px center, right 18px center;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 44 44' fill='none'%3E%3Cpath d='M1 11.5V32.5' stroke='rgba(131,150,138,0.18)'/%3E%3Cpath d='M16.5 18.5 22 24l5.5-5.5' stroke='%2383968a' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-size: 44px 44px;
+    background-position: right 8px center;
     background-repeat: no-repeat;
 }
 

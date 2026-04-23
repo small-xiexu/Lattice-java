@@ -20,12 +20,13 @@
         lastEvidenceWeak: false
     };
 
-    document.addEventListener("DOMContentLoaded", function () {
+    document.addEventListener("DOMContentLoaded", async function () {
         bindEvents();
         resetAnswerExperience();
-        refreshReadiness();
+        await refreshReadiness();
         renderReadinessCard();
         renderResultGuide();
+        bootstrapQuestionFromUrl();
     });
 
     function bindEvents() {
@@ -33,6 +34,23 @@
         document.getElementById("submit-question").addEventListener("click", submitQuestion);
         document.getElementById("clear-question").addEventListener("click", clearQuestion);
         document.addEventListener("click", handleAskHelpActionClick);
+    }
+
+    function bootstrapQuestionFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        const question = String(params.get("question") || "").trim();
+        const autorun = ["1", "true", "yes"].includes(String(params.get("autorun") || "").toLowerCase());
+        if (!question) {
+            return;
+        }
+        document.getElementById("ask-question").value = question;
+        if (autorun && canAsk) {
+            submitQuestion();
+            return;
+        }
+        if (autorun && !canAsk) {
+            setStatus("已从链接填入问题，但当前知识库还没有准备好自动发问。", "warning");
+        }
     }
 
     async function refreshReadiness() {
