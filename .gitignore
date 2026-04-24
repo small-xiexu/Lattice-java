@@ -49,3 +49,7 @@ build/
 ### Local JS Tool Caches ###
 .npm-cache/
 .playwright-browsers/
+
+### Local Temp Outputs ###
+tmp/
+test-results/
