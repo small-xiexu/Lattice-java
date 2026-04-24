@@ -91,6 +91,8 @@ public class CompileGraphState {
 
     private String llmBindingSnapshotRef;
 
+    private String astExtractReportRef;
+
     private int fixAttemptCount;
 
     private int maxFixRounds;
@@ -100,6 +102,12 @@ public class CompileGraphState {
     private boolean snapshotRequired;
 
     private String stepLogFailureMode;
+
+    private int graphEntityUpsertCount;
+
+    private int graphFactUpsertCount;
+
+    private int graphRelationUpsertCount;
 
     private List<String> stepSummaries = new ArrayList<String>();
 

@@ -1,6 +1,9 @@
 package com.xbk.lattice.query.graph;
 
 import com.xbk.lattice.api.query.QueryResponse;
+import com.xbk.lattice.query.citation.CitationCheckReport;
+import com.xbk.lattice.query.citation.ClaimSegment;
+import com.xbk.lattice.query.citation.QueryAnswerAuditSnapshot;
 import com.xbk.lattice.query.domain.ReviewResult;
 import com.xbk.lattice.query.service.QueryArticleHit;
 
@@ -100,6 +103,57 @@ public interface QueryWorkingSetStore {
      * @return 审查结果
      */
     ReviewResult loadReviewResult(String ref);
+
+    /**
+     * 保存 claim 分段结果。
+     *
+     * @param queryId 查询标识
+     * @param claimSegments claim 分段
+     * @return 工作集引用
+     */
+    String saveClaimSegments(String queryId, List<ClaimSegment> claimSegments);
+
+    /**
+     * 读取 claim 分段结果。
+     *
+     * @param ref 工作集引用
+     * @return claim 分段
+     */
+    List<ClaimSegment> loadClaimSegments(String ref);
+
+    /**
+     * 保存 Citation 检查报告。
+     *
+     * @param queryId 查询标识
+     * @param report Citation 检查报告
+     * @return 工作集引用
+     */
+    String saveCitationCheckReport(String queryId, CitationCheckReport report);
+
+    /**
+     * 读取 Citation 检查报告。
+     *
+     * @param ref 工作集引用
+     * @return Citation 检查报告
+     */
+    CitationCheckReport loadCitationCheckReport(String ref);
+
+    /**
+     * 保存答案审计快照。
+     *
+     * @param queryId 查询标识
+     * @param answerAuditSnapshot 答案审计快照
+     * @return 工作集引用
+     */
+    String saveAnswerAudit(String queryId, QueryAnswerAuditSnapshot answerAuditSnapshot);
+
+    /**
+     * 读取答案审计快照。
+     *
+     * @param ref 工作集引用
+     * @return 答案审计快照
+     */
+    QueryAnswerAuditSnapshot loadAnswerAudit(String ref);
 
     /**
      * 保存查询响应。

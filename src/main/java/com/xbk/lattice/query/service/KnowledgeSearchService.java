@@ -26,6 +26,8 @@ public class KnowledgeSearchService {
 
     private final ContributionSearchService contributionSearchService;
 
+    private final GraphSearchService graphSearchService;
+
     private final VectorSearchService vectorSearchService;
 
     private final ChunkVectorSearchService chunkVectorSearchService;
@@ -41,6 +43,7 @@ public class KnowledgeSearchService {
      * @param refKeySearchService referential keywords 检索
      * @param sourceSearchService 源文件检索
      * @param contributionSearchService contribution 检索
+     * @param graphSearchService 图谱检索
      * @param vectorSearchService 向量检索
      * @param rrfFusionService RRF 融合服务
      */
@@ -50,6 +53,7 @@ public class KnowledgeSearchService {
             RefKeySearchService refKeySearchService,
             SourceSearchService sourceSearchService,
             ContributionSearchService contributionSearchService,
+            GraphSearchService graphSearchService,
             VectorSearchService vectorSearchService,
             ChunkVectorSearchService chunkVectorSearchService,
             RrfFusionService rrfFusionService,
@@ -59,6 +63,7 @@ public class KnowledgeSearchService {
         this.refKeySearchService = refKeySearchService;
         this.sourceSearchService = sourceSearchService;
         this.contributionSearchService = contributionSearchService;
+        this.graphSearchService = graphSearchService;
         this.vectorSearchService = vectorSearchService;
         this.chunkVectorSearchService = chunkVectorSearchService;
         this.rrfFusionService = rrfFusionService;
@@ -86,6 +91,7 @@ public class KnowledgeSearchService {
                 refKeySearchService,
                 sourceSearchService,
                 contributionSearchService,
+                new GraphSearchService(),
                 new VectorSearchService(),
                 new ChunkVectorSearchService(),
                 rrfFusionService,
@@ -106,6 +112,7 @@ public class KnowledgeSearchService {
         List<QueryArticleHit> refKeyHits = refKeySearchService.search(question, safeLimit);
         List<QueryArticleHit> sourceHits = sourceSearchService.search(question, safeLimit);
         List<QueryArticleHit> contributionHits = contributionSearchService.search(question, safeLimit);
+        List<QueryArticleHit> graphHits = graphSearchService.search(question, safeLimit);
         List<QueryArticleHit> articleVectorHits = vectorSearchService.search(question, safeLimit);
         List<QueryArticleHit> chunkVectorHits = chunkVectorSearchService.search(question, safeLimit);
         QueryRetrievalSettingsState settings = queryRetrievalSettingsService == null
@@ -117,6 +124,7 @@ public class KnowledgeSearchService {
                         "refkey", refKeyHits,
                         "source", sourceHits,
                         "contribution", contributionHits,
+                        "graph", graphHits,
                         "article_vector", articleVectorHits,
                         "chunk_vector", chunkVectorHits
                 ),
@@ -125,6 +133,7 @@ public class KnowledgeSearchService {
                         "refkey", settings.getFtsWeight(),
                         "source", settings.getSourceWeight(),
                         "contribution", settings.getContributionWeight(),
+                        "graph", settings.getGraphWeight(),
                         "article_vector", settings.getArticleVectorWeight(),
                         "chunk_vector", settings.getChunkVectorWeight()
                 ),

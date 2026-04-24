@@ -32,16 +32,20 @@ class QueryFacadeServiceVectorTests {
                 0.95D
         );
 
-        QueryFacadeService queryFacadeService = new QueryFacadeService(
+        QueryGraphOrchestrator queryGraphOrchestrator = QueryGraphTestSupport.createQueryGraphOrchestrator(
                 new FixedFtsSearchService(List.of()),
                 new FixedRefKeySearchService(List.of()),
                 new FixedSourceSearchService(List.of()),
                 new FixedContributionSearchService(List.of()),
                 new FixedVectorSearchService(List.of(vectorHit)),
-                new RrfFusionService(),
                 new FixedAnswerGenerationService("来自向量召回的答案"),
                 new InMemoryQueryCacheStore(),
                 new ReviewerAgent(new FixedReviewerGateway(), new ReviewResultParser()),
+                new QueryReviewProperties(),
+                List.of(vectorHit)
+        );
+        QueryFacadeService queryFacadeService = QueryGraphTestSupport.createQueryFacadeService(
+                queryGraphOrchestrator,
                 new FixedPendingQueryManager()
         );
 
@@ -67,7 +71,7 @@ class QueryFacadeServiceVectorTests {
          */
         @Override
         public String review(String reviewPrompt) {
-            return "{\"pass\":true,\"issues\":[]}";
+            return "{\"approved\":true,\"rewriteRequired\":false,\"riskLevel\":\"LOW\",\"issues\":[],\"userFacingRewriteHints\":[],\"cacheWritePolicy\":\"WRITE\"}";
         }
     }
 

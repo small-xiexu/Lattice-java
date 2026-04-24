@@ -6,7 +6,9 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -142,6 +144,43 @@ public class SourceFileJdbcRepository {
                 order by relative_path asc, id asc
                 """;
         return jdbcTemplate.query(sql, this::mapSourceFileRecord, sourceId);
+    }
+
+    /**
+     * 按主键批量查询源文件记录。
+     *
+     * @param sourceFileIds 源文件主键列表
+     * @return 主键到源文件记录的映射
+     */
+    public Map<Long, SourceFileRecord> findByIds(List<Long> sourceFileIds) {
+        Map<Long, SourceFileRecord> sourceFileMap = new LinkedHashMap<Long, SourceFileRecord>();
+        if (jdbcTemplate == null || sourceFileIds == null || sourceFileIds.isEmpty()) {
+            return sourceFileMap;
+        }
+        StringBuilder sqlBuilder = new StringBuilder();
+        sqlBuilder.append("""
+                select id, source_id, file_path, relative_path, source_sync_run_id, content_preview,
+                       format, file_size, content_text, metadata_json::text as metadata_json,
+                       is_verbatim, raw_path
+                from source_files
+                where id in (
+                """);
+        for (int index = 0; index < sourceFileIds.size(); index++) {
+            if (index > 0) {
+                sqlBuilder.append(", ");
+            }
+            sqlBuilder.append("?");
+        }
+        sqlBuilder.append(")");
+        List<SourceFileRecord> sourceFileRecords = jdbcTemplate.query(
+                sqlBuilder.toString(),
+                this::mapSourceFileRecord,
+                sourceFileIds.toArray()
+        );
+        for (SourceFileRecord sourceFileRecord : sourceFileRecords) {
+            sourceFileMap.put(sourceFileRecord.getId(), sourceFileRecord);
+        }
+        return sourceFileMap;
     }
 
     private SourceFileRecord upsertSourceAwareRecord(SourceFileRecord sourceFileRecord) {

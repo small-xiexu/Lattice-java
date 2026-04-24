@@ -67,6 +67,15 @@ class AnswerGenerationServiceTests {
                                 2.0
                         ),
                         new QueryArticleHit(
+                                QueryEvidenceType.GRAPH,
+                                "payment-routing#RoutePlanner",
+                                "图谱实体：payment.routing.RoutePlanner",
+                                "实体=payment.routing.RoutePlanner；annotation=@RequestMapping；calls->PaymentService.plan",
+                                "{\"entityId\":\"payment-routing#RoutePlanner\"}",
+                                List.of("src/main/java/payment/RoutePlanner.java, lines 12-24"),
+                                1.5
+                        ),
+                        new QueryArticleHit(
                                 QueryEvidenceType.CONTRIBUTION,
                                 "contribution-1",
                                 "Contribution",
@@ -89,6 +98,8 @@ class AnswerGenerationServiceTests {
         assertThat(recordingLlmClient.getLastUserPrompt()).contains("Payment Routing");
         assertThat(recordingLlmClient.getLastUserPrompt()).contains("SOURCE EVIDENCE");
         assertThat(recordingLlmClient.getLastUserPrompt()).contains("payment/context.md");
+        assertThat(recordingLlmClient.getLastUserPrompt()).contains("GRAPH EVIDENCE");
+        assertThat(recordingLlmClient.getLastUserPrompt()).contains("RoutePlanner");
         assertThat(recordingLlmClient.getLastUserPrompt()).contains("CONTRIBUTION EVIDENCE");
         assertThat(recordingLlmClient.getLastUserPrompt()).contains("refund-manual-review 表示退款请求进入人工复核队列");
     }
@@ -349,6 +360,15 @@ class AnswerGenerationServiceTests {
                         "{\"filePath\":\"payment/context.md\"}",
                         List.of("payment/context.md"),
                         2.0
+                ),
+                new QueryArticleHit(
+                        QueryEvidenceType.GRAPH,
+                        "payment-routing#RoutePlanner",
+                        "图谱实体：payment.routing.RoutePlanner",
+                        "实体=payment.routing.RoutePlanner；annotation=@RequestMapping；calls->PaymentService.plan",
+                        "{\"entityId\":\"payment-routing#RoutePlanner\"}",
+                        List.of("src/main/java/payment/RoutePlanner.java, lines 12-24"),
+                        1.5
                 ),
                 new QueryArticleHit(
                         QueryEvidenceType.CONTRIBUTION,

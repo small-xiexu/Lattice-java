@@ -9,6 +9,7 @@ package com.xbk.lattice.query.service;
  */
 public enum QueryEvidenceType {
     ARTICLE,
+    GRAPH,
     SOURCE,
     CONTRIBUTION
 }

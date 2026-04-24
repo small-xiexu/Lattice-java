@@ -1,6 +1,7 @@
 package com.xbk.lattice.api.query;
 
 import com.xbk.lattice.query.service.QueryFacadeService;
+import jakarta.validation.Valid;
 import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -37,10 +38,7 @@ public class QueryController {
      * @return 查询响应
      */
     @PostMapping
-    public QueryResponse query(@RequestBody QueryRequest queryRequest) {
-        if (queryRequest.getQuestion() == null || queryRequest.getQuestion().trim().isEmpty()) {
-            throw new IllegalArgumentException("question 不能为空");
-        }
-        return queryFacadeService.query(queryRequest.getQuestion());
+    public QueryResponse query(@Valid @RequestBody QueryRequest queryRequest) {
+        return queryFacadeService.query(queryRequest);
     }
 }

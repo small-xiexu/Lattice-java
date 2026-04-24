@@ -75,57 +75,6 @@ public class QueryGraphOrchestrator {
     }
 
     /**
-     * 创建兼容单测的问答图编排器。
-     *
-     * @param ftsSearchService FTS 检索服务
-     * @param refKeySearchService 引用词检索服务
-     * @param sourceSearchService 源文件检索服务
-     * @param contributionSearchService Contribution 检索服务
-     * @param vectorSearchService 向量检索服务
-     * @param rrfFusionService RRF 融合服务
-     * @param answerGenerationService 答案生成服务
-     * @param queryCacheStore 查询缓存存储
-     * @param reviewerAgent 审查代理
-     * @param queryReviewProperties 查询审查配置
-     */
-    public QueryGraphOrchestrator(
-            FtsSearchService ftsSearchService,
-            RefKeySearchService refKeySearchService,
-            SourceSearchService sourceSearchService,
-            ContributionSearchService contributionSearchService,
-            VectorSearchService vectorSearchService,
-            RrfFusionService rrfFusionService,
-            AnswerGenerationService answerGenerationService,
-            QueryCacheStore queryCacheStore,
-            ReviewerAgent reviewerAgent,
-            QueryReviewProperties queryReviewProperties
-    ) {
-        QueryWorkingSetStore inMemoryQueryWorkingSetStore = new InMemoryQueryWorkingSetStore();
-        QueryGraphStateMapper inMemoryStateMapper = new QueryGraphStateMapper();
-        this.queryGraphDefinitionFactory = new QueryGraphDefinitionFactory(
-                ftsSearchService,
-                refKeySearchService,
-                sourceSearchService,
-                contributionSearchService,
-                vectorSearchService,
-                new ChunkVectorSearchService(),
-                rrfFusionService,
-                new QueryRetrievalSettingsService(),
-                answerGenerationService,
-                queryCacheStore,
-                reviewerAgent,
-                inMemoryQueryWorkingSetStore,
-                inMemoryStateMapper,
-                new QueryGraphConditions(queryReviewProperties)
-        );
-        this.queryGraphStateMapper = inMemoryStateMapper;
-        this.queryGraphLifecycleListener = new QueryGraphLifecycleListener(inMemoryStateMapper);
-        this.queryWorkingSetStore = inMemoryQueryWorkingSetStore;
-        this.queryReviewProperties = queryReviewProperties;
-        this.executionLlmSnapshotService = null;
-    }
-
-    /**
      * 执行查询图。
      *
      * @param question 查询问题

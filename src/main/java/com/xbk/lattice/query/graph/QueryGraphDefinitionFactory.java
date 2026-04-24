@@ -8,6 +8,12 @@ import com.alibaba.cloud.ai.graph.action.MultiCommand;
 import com.xbk.lattice.api.query.QueryArticleResponse;
 import com.xbk.lattice.api.query.QueryResponse;
 import com.xbk.lattice.api.query.QuerySourceResponse;
+import com.xbk.lattice.query.citation.CitationCheckOptions;
+import com.xbk.lattice.query.citation.CitationCheckReport;
+import com.xbk.lattice.query.citation.CitationCheckService;
+import com.xbk.lattice.query.citation.ClaimSegment;
+import com.xbk.lattice.query.citation.QueryAnswerAuditPersistenceService;
+import com.xbk.lattice.query.citation.QueryAnswerAuditSnapshot;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import com.xbk.lattice.query.domain.AnswerOutcome;
 import com.xbk.lattice.query.domain.GenerationMode;
@@ -19,6 +25,7 @@ import com.xbk.lattice.query.service.AnswerGenerationService;
 import com.xbk.lattice.query.service.ChunkVectorSearchService;
 import com.xbk.lattice.query.service.ContributionSearchService;
 import com.xbk.lattice.query.service.FtsSearchService;
+import com.xbk.lattice.query.service.GraphSearchService;
 import com.xbk.lattice.query.service.QueryArticleHit;
 import com.xbk.lattice.query.service.QueryCacheStore;
 import com.xbk.lattice.query.service.QueryEvidenceType;
@@ -62,9 +69,13 @@ public class QueryGraphDefinitionFactory {
 
     private static final String CHANNEL_CONTRIBUTION = "contribution";
 
+    private static final String CHANNEL_GRAPH = "graph";
+
     private static final String CHANNEL_ARTICLE_VECTOR = "article_vector";
 
     private static final String CHANNEL_CHUNK_VECTOR = "chunk_vector";
+
+    private static final CitationCheckOptions CITATION_CHECK_OPTIONS = CitationCheckOptions.defaults();
 
     private final FtsSearchService ftsSearchService;
 
@@ -73,6 +84,8 @@ public class QueryGraphDefinitionFactory {
     private final SourceSearchService sourceSearchService;
 
     private final ContributionSearchService contributionSearchService;
+
+    private final GraphSearchService graphSearchService;
 
     private final VectorSearchService vectorSearchService;
 
@@ -90,6 +103,10 @@ public class QueryGraphDefinitionFactory {
 
     private final QueryWorkingSetStore queryWorkingSetStore;
 
+    private final CitationCheckService citationCheckService;
+
+    private final QueryAnswerAuditPersistenceService queryAnswerAuditPersistenceService;
+
     private final QueryGraphStateMapper queryGraphStateMapper;
 
     private final QueryGraphConditions queryGraphConditions;
@@ -102,6 +119,7 @@ public class QueryGraphDefinitionFactory {
             RefKeySearchService refKeySearchService,
             SourceSearchService sourceSearchService,
             ContributionSearchService contributionSearchService,
+            GraphSearchService graphSearchService,
             VectorSearchService vectorSearchService,
             ChunkVectorSearchService chunkVectorSearchService,
             RrfFusionService rrfFusionService,
@@ -110,6 +128,8 @@ public class QueryGraphDefinitionFactory {
             QueryCacheStore queryCacheStore,
             ReviewerAgent reviewerAgent,
             QueryWorkingSetStore queryWorkingSetStore,
+            CitationCheckService citationCheckService,
+            QueryAnswerAuditPersistenceService queryAnswerAuditPersistenceService,
             QueryGraphStateMapper queryGraphStateMapper,
             QueryGraphConditions queryGraphConditions
     ) {
@@ -117,6 +137,7 @@ public class QueryGraphDefinitionFactory {
         this.refKeySearchService = refKeySearchService;
         this.sourceSearchService = sourceSearchService;
         this.contributionSearchService = contributionSearchService;
+        this.graphSearchService = graphSearchService;
         this.vectorSearchService = vectorSearchService;
         this.chunkVectorSearchService = chunkVectorSearchService;
         this.rrfFusionService = rrfFusionService;
@@ -125,6 +146,8 @@ public class QueryGraphDefinitionFactory {
         this.queryCacheStore = queryCacheStore;
         this.reviewerAgent = reviewerAgent;
         this.queryWorkingSetStore = queryWorkingSetStore;
+        this.citationCheckService = citationCheckService;
+        this.queryAnswerAuditPersistenceService = queryAnswerAuditPersistenceService;
         this.queryGraphStateMapper = queryGraphStateMapper;
         this.queryGraphConditions = queryGraphConditions;
     }
@@ -148,6 +171,7 @@ public class QueryGraphDefinitionFactory {
                         "retrieve_refkey", "retrieve_refkey",
                         "retrieve_source", "retrieve_source",
                         "retrieve_contribution", "retrieve_contribution",
+                        "retrieve_graph", "retrieve_graph",
                         "retrieve_article_vector", "retrieve_article_vector",
                         "retrieve_chunk_vector", "retrieve_chunk_vector"
                 )
@@ -157,13 +181,17 @@ public class QueryGraphDefinitionFactory {
         stateGraph.addNode("retrieve_refkey", AsyncNodeAction.node_async(this::retrieveRefkey));
         stateGraph.addNode("retrieve_source", AsyncNodeAction.node_async(this::retrieveSource));
         stateGraph.addNode("retrieve_contribution", AsyncNodeAction.node_async(this::retrieveContribution));
+        stateGraph.addNode("retrieve_graph", AsyncNodeAction.node_async(this::retrieveGraph));
         stateGraph.addNode("retrieve_article_vector", AsyncNodeAction.node_async(this::retrieveArticleVector));
         stateGraph.addNode("retrieve_chunk_vector", AsyncNodeAction.node_async(this::retrieveChunkVector));
         stateGraph.addNode("fuse_candidates", AsyncNodeAction.node_async(this::fuseCandidates));
         stateGraph.addNode("answer_question", AsyncNodeAction.node_async(this::answerQuestion));
         stateGraph.addNode("review_answer", AsyncNodeAction.node_async(this::reviewAnswer));
         stateGraph.addNode("rewrite_answer", AsyncNodeAction.node_async(this::rewriteAnswer));
-        stateGraph.addNode("cache_response", AsyncNodeAction.node_async(this::cacheResponse));
+        stateGraph.addNode("claim_segment", AsyncNodeAction.node_async(this::claimSegment));
+        stateGraph.addNode("citation_check", AsyncNodeAction.node_async(this::citationCheck));
+        stateGraph.addNode("citation_repair", AsyncNodeAction.node_async(this::citationRepair));
+        stateGraph.addNode("persist_response", AsyncNodeAction.node_async(this::persistResponse));
         stateGraph.addNode("finalize_response", AsyncNodeAction.node_async(this::finalizeResponse));
 
         stateGraph.addEdge(StateGraph.START, "normalize_question");
@@ -185,6 +213,7 @@ public class QueryGraphDefinitionFactory {
                         "retrieve_refkey",
                         "retrieve_source",
                         "retrieve_contribution",
+                        "retrieve_graph",
                         "retrieve_article_vector",
                         "retrieve_chunk_vector"
                 ),
@@ -205,13 +234,22 @@ public class QueryGraphDefinitionFactory {
                 "review_answer",
                 AsyncEdgeAction.edge_async(state -> routeAfterReview(queryGraphStateMapper.fromMap(state.data()))),
                 Map.of(
-                        "cache_response", "cache_response",
                         "rewrite_answer", "rewrite_answer",
-                        "finalize_response", "finalize_response"
+                        "claim_segment", "claim_segment"
                 )
         );
         stateGraph.addEdge("rewrite_answer", "review_answer");
-        stateGraph.addEdge("cache_response", "finalize_response");
+        stateGraph.addEdge("claim_segment", "citation_check");
+        stateGraph.addConditionalEdges(
+                "citation_check",
+                AsyncEdgeAction.edge_async(state -> routeAfterCitationCheck(queryGraphStateMapper.fromMap(state.data()))),
+                Map.of(
+                        "citation_repair", "citation_repair",
+                        "persist_response", "persist_response"
+                )
+        );
+        stateGraph.addEdge("citation_repair", "citation_check");
+        stateGraph.addEdge("persist_response", "finalize_response");
         stateGraph.addEdge("finalize_response", StateGraph.END);
         return stateGraph;
     }
@@ -268,6 +306,7 @@ public class QueryGraphDefinitionFactory {
                             "retrieve_refkey",
                             "retrieve_source",
                             "retrieve_contribution",
+                            "retrieve_graph",
                             "retrieve_article_vector",
                             "retrieve_chunk_vector"
                     ),
@@ -314,6 +353,14 @@ public class QueryGraphDefinitionFactory {
         );
     }
 
+    private Map<String, Object> retrieveGraph(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+        return saveSingleChannelHits(
+                queryGraphStateMapper.fromMap(overAllState.data()),
+                CHANNEL_GRAPH,
+                graphSearchService.search(readQuestion(overAllState), TOP_K)
+        );
+    }
+
     private Map<String, Object> retrieveArticleVector(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
         return saveSingleChannelHits(
                 queryGraphStateMapper.fromMap(overAllState.data()),
@@ -339,6 +386,7 @@ public class QueryGraphDefinitionFactory {
         weights.put(CHANNEL_REFKEY, retrievalSettings.getFtsWeight());
         weights.put(CHANNEL_SOURCE, retrievalSettings.getSourceWeight());
         weights.put(CHANNEL_CONTRIBUTION, retrievalSettings.getContributionWeight());
+        weights.put(CHANNEL_GRAPH, retrievalSettings.getGraphWeight());
         weights.put(CHANNEL_ARTICLE_VECTOR, retrievalSettings.getArticleVectorWeight());
         weights.put(CHANNEL_CHUNK_VECTOR, retrievalSettings.getChunkVectorWeight());
         List<QueryArticleHit> fusedHits = rrfFusionService.fuse(channelHits, weights, TOP_K, retrievalSettings.getRrfK());
@@ -430,11 +478,54 @@ public class QueryGraphDefinitionFactory {
         return queryGraphStateMapper.toDeltaMap(state);
     }
 
-    private Map<String, Object> cacheResponse(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+    private Map<String, Object> claimSegment(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
         QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
+        String answer = queryWorkingSetStore.loadAnswer(state.getDraftAnswerRef());
+        List<ClaimSegment> claimSegments = citationCheckService == null ? List.of() : citationCheckService.check(answer).getClaimSegments();
+        state.setClaimSegmentsRef(queryWorkingSetStore.saveClaimSegments(state.getQueryId(), claimSegments));
+        return queryGraphStateMapper.toDeltaMap(state);
+    }
+
+    private Map<String, Object> citationCheck(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
+        if (citationCheckService == null) {
+            state.setClaimSegmentsRef(queryWorkingSetStore.saveClaimSegments(state.getQueryId(), List.of()));
+            state.setCitationCheckReportRef(null);
+            return queryGraphStateMapper.toDeltaMap(state);
+        }
+        String answer = queryWorkingSetStore.loadAnswer(state.getDraftAnswerRef());
+        CitationCheckReport report = citationCheckService.check(answer);
+        state.setClaimSegmentsRef(queryWorkingSetStore.saveClaimSegments(state.getQueryId(), report.getClaimSegments()));
+        state.setCitationCheckReportRef(queryWorkingSetStore.saveCitationCheckReport(state.getQueryId(), report));
+        return queryGraphStateMapper.toDeltaMap(state);
+    }
+
+    private Map<String, Object> citationRepair(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
+        String answer = queryWorkingSetStore.loadAnswer(state.getDraftAnswerRef());
+        CitationCheckReport report = queryWorkingSetStore.loadCitationCheckReport(state.getCitationCheckReportRef());
+        if (citationCheckService != null && citationCheckService.shouldRepair(
+                report,
+                CITATION_CHECK_OPTIONS,
+                state.getCitationRepairAttemptCount()
+        )) {
+            String repairedAnswer = citationCheckService.repair(answer, report);
+            state.setDraftAnswerRef(queryWorkingSetStore.saveAnswer(state.getQueryId(), repairedAnswer));
+            state.setCitationRepairAttemptCount(state.getCitationRepairAttemptCount() + 1);
+        }
+        return queryGraphStateMapper.toDeltaMap(state);
+    }
+
+    private Map<String, Object> persistResponse(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
+        CitationCheckReport report = queryWorkingSetStore.loadCitationCheckReport(state.getCitationCheckReportRef());
+        QueryAnswerAuditSnapshot answerAuditSnapshot = persistAnswerAudit(state, report);
+        if (answerAuditSnapshot != null) {
+            state.setAnswerAuditRef(queryWorkingSetStore.saveAnswerAudit(state.getQueryId(), answerAuditSnapshot));
+        }
         QueryResponse queryResponse = buildSuccessResponse(state);
         String responseRef = queryWorkingSetStore.saveResponse(state.getQueryId(), queryResponse);
-        if (shouldCacheResponse(queryResponse, state.isAnswerCacheable())) {
+        if (shouldCacheResponse(queryResponse, state.isAnswerCacheable(), report)) {
             queryCacheStore.put(state.getNormalizedQuestion(), withoutQueryId(queryResponse));
             state.setCachedResponseRef(responseRef);
         }
@@ -476,9 +567,15 @@ public class QueryGraphDefinitionFactory {
         return queryGraphConditions.routeAfterReview(state, reviewResult);
     }
 
+    private String routeAfterCitationCheck(QueryGraphState state) {
+        CitationCheckReport report = queryWorkingSetStore.loadCitationCheckReport(state.getCitationCheckReportRef());
+        return queryGraphConditions.routeAfterCitationCheck(state, report);
+    }
+
     private QueryResponse buildSuccessResponse(QueryGraphState state) {
         List<QueryArticleHit> fusedHits = queryWorkingSetStore.loadFusedHits(state.getFusedHitsRef());
         String answer = queryWorkingSetStore.loadAnswer(state.getDraftAnswerRef());
+        CitationCheckReport report = queryWorkingSetStore.loadCitationCheckReport(state.getCitationCheckReportRef());
         return new QueryResponse(
                 answer,
                 toSourceResponses(fusedHits),
@@ -487,7 +584,9 @@ public class QueryGraphDefinitionFactory {
                 state.getReviewStatus(),
                 readAnswerOutcome(state.getAnswerOutcome()),
                 readGenerationMode(state.getGenerationMode()),
-                readModelExecutionStatus(state.getModelExecutionStatus())
+                readModelExecutionStatus(state.getModelExecutionStatus()),
+                report == null ? null : report.toSummary(),
+                null
         );
     }
 
@@ -500,7 +599,9 @@ public class QueryGraphDefinitionFactory {
                 queryResponse.getReviewStatus(),
                 queryResponse.getAnswerOutcome(),
                 queryResponse.getGenerationMode(),
-                queryResponse.getModelExecutionStatus()
+                queryResponse.getModelExecutionStatus(),
+                queryResponse.getCitationCheck(),
+                queryResponse.getDeepResearch()
         );
     }
 
@@ -513,7 +614,9 @@ public class QueryGraphDefinitionFactory {
                 queryResponse.getReviewStatus(),
                 queryResponse.getAnswerOutcome(),
                 queryResponse.getGenerationMode(),
-                queryResponse.getModelExecutionStatus()
+                queryResponse.getModelExecutionStatus(),
+                queryResponse.getCitationCheck(),
+                queryResponse.getDeepResearch()
         );
     }
 
@@ -523,7 +626,11 @@ public class QueryGraphDefinitionFactory {
      * @param queryResponse 查询响应
      * @return 是否允许写缓存
      */
-    private boolean shouldCacheResponse(QueryResponse queryResponse, boolean answerCacheable) {
+    private boolean shouldCacheResponse(
+            QueryResponse queryResponse,
+            boolean answerCacheable,
+            CitationCheckReport report
+    ) {
         if (queryResponse == null) {
             return false;
         }
@@ -537,7 +644,41 @@ public class QueryGraphDefinitionFactory {
         if (queryResponse.getSources().isEmpty() && queryResponse.getArticles().isEmpty()) {
             return false;
         }
+        if (!"PASSED".equals(queryResponse.getReviewStatus())) {
+            return false;
+        }
+        if (report == null) {
+            return isCacheableOutcome(queryResponse.getAnswerOutcome());
+        }
+        if (report.isNoCitation()) {
+            return false;
+        }
+        if (report.getDemotedCount() > 0) {
+            return false;
+        }
+        if (report.getCoverageRate() < CITATION_CHECK_OPTIONS.getMinCitationCoverage()) {
+            return false;
+        }
         return isCacheableOutcome(queryResponse.getAnswerOutcome());
+    }
+
+    private QueryAnswerAuditSnapshot persistAnswerAudit(QueryGraphState state, CitationCheckReport report) {
+        if (queryAnswerAuditPersistenceService == null) {
+            return null;
+        }
+        String answer = queryWorkingSetStore.loadAnswer(state.getDraftAnswerRef());
+        return queryAnswerAuditPersistenceService.persist(
+                state.getQueryId(),
+                state.getCitationRepairAttemptCount() + 1,
+                state.getQuestion(),
+                answer,
+                readAnswerOutcome(state.getAnswerOutcome()),
+                readGenerationMode(state.getGenerationMode()),
+                state.getReviewStatus(),
+                state.isAnswerCacheable(),
+                "query",
+                report
+        );
     }
 
     private boolean isCacheableOutcome(AnswerOutcome answerOutcome) {
@@ -587,6 +728,7 @@ public class QueryGraphDefinitionFactory {
         List<QuerySourceResponse> sourceResponses = new ArrayList<QuerySourceResponse>();
         Set<String> responseKeys = new LinkedHashSet<String>();
         appendSourceResponses(sourceResponses, responseKeys, fusedHits, QueryEvidenceType.ARTICLE);
+        appendSourceResponses(sourceResponses, responseKeys, fusedHits, QueryEvidenceType.GRAPH);
         appendSourceResponses(sourceResponses, responseKeys, fusedHits, QueryEvidenceType.SOURCE);
         appendSourceResponses(sourceResponses, responseKeys, fusedHits, QueryEvidenceType.CONTRIBUTION);
         return sourceResponses;
@@ -655,6 +797,7 @@ public class QueryGraphDefinitionFactory {
         delta.putAll(saveSingleChannelHits(state, CHANNEL_REFKEY, refKeySearchService.search(state.getQuestion(), TOP_K)));
         delta.putAll(saveSingleChannelHits(state, CHANNEL_SOURCE, sourceSearchService.search(state.getQuestion(), TOP_K)));
         delta.putAll(saveSingleChannelHits(state, CHANNEL_CONTRIBUTION, contributionSearchService.search(state.getQuestion(), TOP_K)));
+        delta.putAll(saveSingleChannelHits(state, CHANNEL_GRAPH, graphSearchService.search(state.getQuestion(), TOP_K)));
         delta.putAll(saveSingleChannelHits(state, CHANNEL_ARTICLE_VECTOR, vectorSearchService.search(state.getQuestion(), TOP_K)));
         delta.putAll(saveSingleChannelHits(state, CHANNEL_CHUNK_VECTOR, chunkVectorSearchService.search(state.getQuestion(), TOP_K)));
         return delta;
@@ -675,6 +818,9 @@ public class QueryGraphDefinitionFactory {
         else if (CHANNEL_CONTRIBUTION.equals(channel)) {
             delta.put(QueryGraphStateKeys.CONTRIBUTION_HITS_REF, ref);
         }
+        else if (CHANNEL_GRAPH.equals(channel)) {
+            delta.put(QueryGraphStateKeys.GRAPH_HITS_REF, ref);
+        }
         else if (CHANNEL_ARTICLE_VECTOR.equals(channel)) {
             delta.put(QueryGraphStateKeys.ARTICLE_VECTOR_HITS_REF, ref);
         }
@@ -690,6 +836,7 @@ public class QueryGraphDefinitionFactory {
         channelHits.put(CHANNEL_REFKEY, queryWorkingSetStore.loadHits(state.getRefkeyHitsRef()));
         channelHits.put(CHANNEL_SOURCE, queryWorkingSetStore.loadHits(state.getSourceHitsRef()));
         channelHits.put(CHANNEL_CONTRIBUTION, queryWorkingSetStore.loadHits(state.getContributionHitsRef()));
+        channelHits.put(CHANNEL_GRAPH, queryWorkingSetStore.loadHits(state.getGraphHitsRef()));
         channelHits.put(CHANNEL_ARTICLE_VECTOR, queryWorkingSetStore.loadHits(state.getArticleVectorHitsRef()));
         channelHits.put(CHANNEL_CHUNK_VECTOR, queryWorkingSetStore.loadHits(state.getChunkVectorHitsRef()));
         return channelHits;

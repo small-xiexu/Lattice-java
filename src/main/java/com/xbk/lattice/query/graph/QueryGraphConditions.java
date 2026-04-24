@@ -1,5 +1,7 @@
 package com.xbk.lattice.query.graph;
 
+import com.xbk.lattice.query.citation.CitationCheckOptions;
+import com.xbk.lattice.query.citation.CitationCheckReport;
 import com.xbk.lattice.query.service.QueryReviewProperties;
 import com.xbk.lattice.query.domain.ReviewResult;
 import org.springframework.context.annotation.Profile;
@@ -15,6 +17,8 @@ import org.springframework.stereotype.Component;
 @Component
 @Profile("jdbc")
 public class QueryGraphConditions {
+
+    private static final CitationCheckOptions CITATION_CHECK_OPTIONS = CitationCheckOptions.defaults();
 
     private final QueryReviewProperties queryReviewProperties;
 
@@ -61,13 +65,33 @@ public class QueryGraphConditions {
      * @return 路由键
      */
     public String routeAfterReview(QueryGraphState state, ReviewResult reviewResult) {
-        if (reviewResult != null && reviewResult.isPass()) {
-            return "cache_response";
-        }
         if (queryReviewProperties.isRewriteEnabled()
+                && (reviewResult == null || !reviewResult.isPass())
                 && state.getRewriteAttemptCount() < state.getMaxRewriteRounds()) {
             return "rewrite_answer";
         }
-        return "finalize_response";
+        return "claim_segment";
+    }
+
+    /**
+     * 决定 Citation 检查后的后续节点。
+     *
+     * @param state 当前图状态
+     * @param report Citation 检查报告
+     * @return 路由键
+     */
+    public String routeAfterCitationCheck(QueryGraphState state, CitationCheckReport report) {
+        if (report == null) {
+            return "persist_response";
+        }
+        if (report.isNoCitation()) {
+            return "persist_response";
+        }
+        if (report.getDemotedCount() > 0 || report.getCoverageRate() < CITATION_CHECK_OPTIONS.getMinCitationCoverage()) {
+            if (state.getCitationRepairAttemptCount() < CITATION_CHECK_OPTIONS.getMaxRepairRounds()) {
+                return "citation_repair";
+            }
+        }
+        return "persist_response";
     }
 }

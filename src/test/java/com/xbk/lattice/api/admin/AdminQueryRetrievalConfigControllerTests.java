@@ -62,6 +62,7 @@ class AdminQueryRetrievalConfigControllerTests {
                 .andExpect(jsonPath("$.ftsWeight").value(1.0D))
                 .andExpect(jsonPath("$.sourceWeight").value(1.0D))
                 .andExpect(jsonPath("$.contributionWeight").value(1.0D))
+                .andExpect(jsonPath("$.graphWeight").value(0.9D))
                 .andExpect(jsonPath("$.articleVectorWeight").value(0.6D))
                 .andExpect(jsonPath("$.chunkVectorWeight").value(1.2D))
                 .andExpect(jsonPath("$.rrfK").value(60));
@@ -83,6 +84,7 @@ class AdminQueryRetrievalConfigControllerTests {
                                 + "\"ftsWeight\":1.5,"
                                 + "\"sourceWeight\":0.8,"
                                 + "\"contributionWeight\":1.1,"
+                                + "\"graphWeight\":1.3,"
                                 + "\"articleVectorWeight\":0.7,"
                                 + "\"chunkVectorWeight\":1.6,"
                                 + "\"rrfK\":48"
@@ -92,6 +94,7 @@ class AdminQueryRetrievalConfigControllerTests {
                 .andExpect(jsonPath("$.ftsWeight").value(1.5D))
                 .andExpect(jsonPath("$.sourceWeight").value(0.8D))
                 .andExpect(jsonPath("$.contributionWeight").value(1.1D))
+                .andExpect(jsonPath("$.graphWeight").value(1.3D))
                 .andExpect(jsonPath("$.articleVectorWeight").value(0.7D))
                 .andExpect(jsonPath("$.chunkVectorWeight").value(1.6D))
                 .andExpect(jsonPath("$.rrfK").value(48));
@@ -101,6 +104,7 @@ class AdminQueryRetrievalConfigControllerTests {
         assertThat(state.getFtsWeight()).isEqualTo(1.5D);
         assertThat(state.getSourceWeight()).isEqualTo(0.8D);
         assertThat(state.getContributionWeight()).isEqualTo(1.1D);
+        assertThat(state.getGraphWeight()).isEqualTo(1.3D);
         assertThat(state.getArticleVectorWeight()).isEqualTo(0.7D);
         assertThat(state.getChunkVectorWeight()).isEqualTo(1.6D);
         assertThat(state.getRrfK()).isEqualTo(48);

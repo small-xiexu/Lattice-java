@@ -33,6 +33,10 @@ public class QueryResponse {
 
     private final ModelExecutionStatus modelExecutionStatus;
 
+    private final CitationCheckSummary citationCheck;
+
+    private final DeepResearchSummary deepResearch;
+
     /**
      * 创建查询响应。
      *
@@ -41,7 +45,7 @@ public class QueryResponse {
      * @param articles 命中文章列表
      */
     public QueryResponse(String answer, List<QuerySourceResponse> sources, List<QueryArticleResponse> articles) {
-        this(answer, sources, articles, null, null, null, null, null);
+        this(answer, sources, articles, null, null, null, null, null, null, null);
     }
 
     /**
@@ -60,7 +64,7 @@ public class QueryResponse {
             @JsonProperty("queryId") String queryId,
             @JsonProperty("reviewStatus") String reviewStatus
     ) {
-        this(answer, sources, articles, queryId, reviewStatus, null, null, null);
+        this(answer, sources, articles, queryId, reviewStatus, null, null, null, null, null);
     }
 
     /**
@@ -75,7 +79,6 @@ public class QueryResponse {
      * @param generationMode 生成模式
      * @param modelExecutionStatus 模型执行状态
      */
-    @JsonCreator
     public QueryResponse(
             @JsonProperty("answer") String answer,
             @JsonProperty("sources") List<QuerySourceResponse> sources,
@@ -86,6 +89,36 @@ public class QueryResponse {
             @JsonProperty("generationMode") GenerationMode generationMode,
             @JsonProperty("modelExecutionStatus") ModelExecutionStatus modelExecutionStatus
     ) {
+        this(answer, sources, articles, queryId, reviewStatus, answerOutcome, generationMode, modelExecutionStatus, null, null);
+    }
+
+    /**
+     * 创建查询响应。
+     *
+     * @param answer 答案
+     * @param sources 来源列表
+     * @param articles 命中文章列表
+     * @param queryId 查询标识
+     * @param reviewStatus 审查状态
+     * @param answerOutcome 答案语义
+     * @param generationMode 生成模式
+     * @param modelExecutionStatus 模型执行状态
+     * @param citationCheck 引用核验摘要
+     * @param deepResearch 深度研究摘要
+     */
+    @JsonCreator
+    public QueryResponse(
+            @JsonProperty("answer") String answer,
+            @JsonProperty("sources") List<QuerySourceResponse> sources,
+            @JsonProperty("articles") List<QueryArticleResponse> articles,
+            @JsonProperty("queryId") String queryId,
+            @JsonProperty("reviewStatus") String reviewStatus,
+            @JsonProperty("answerOutcome") AnswerOutcome answerOutcome,
+            @JsonProperty("generationMode") GenerationMode generationMode,
+            @JsonProperty("modelExecutionStatus") ModelExecutionStatus modelExecutionStatus,
+            @JsonProperty("citationCheck") CitationCheckSummary citationCheck,
+            @JsonProperty("deepResearch") DeepResearchSummary deepResearch
+    ) {
         this.answer = answer;
         this.sources = sources;
         this.articles = articles;
@@ -94,6 +127,8 @@ public class QueryResponse {
         this.answerOutcome = answerOutcome;
         this.generationMode = generationMode;
         this.modelExecutionStatus = modelExecutionStatus;
+        this.citationCheck = citationCheck;
+        this.deepResearch = deepResearch;
     }
 
     /**
@@ -166,5 +201,23 @@ public class QueryResponse {
      */
     public ModelExecutionStatus getModelExecutionStatus() {
         return modelExecutionStatus;
+    }
+
+    /**
+     * 获取引用核验摘要。
+     *
+     * @return 引用核验摘要
+     */
+    public CitationCheckSummary getCitationCheck() {
+        return citationCheck;
+    }
+
+    /**
+     * 获取 Deep Research 摘要。
+     *
+     * @return Deep Research 摘要
+     */
+    public DeepResearchSummary getDeepResearch() {
+        return deepResearch;
     }
 }

@@ -85,6 +85,8 @@ public final class CompileGraphStateKeys {
 
     public static final String LLM_BINDING_SNAPSHOT_REF = "llmBindingSnapshotRef";
 
+    public static final String AST_EXTRACT_REPORT_REF = "astExtractReportRef";
+
     public static final String FIX_ATTEMPT_COUNT = "fixAttemptCount";
 
     public static final String MAX_FIX_ROUNDS = "maxFixRounds";
@@ -94,6 +96,12 @@ public final class CompileGraphStateKeys {
     public static final String SNAPSHOT_REQUIRED = "snapshotRequired";
 
     public static final String STEP_LOG_FAILURE_MODE = "stepLogFailureMode";
+
+    public static final String GRAPH_ENTITY_UPSERT_COUNT = "graphEntityUpsertCount";
+
+    public static final String GRAPH_FACT_UPSERT_COUNT = "graphFactUpsertCount";
+
+    public static final String GRAPH_RELATION_UPSERT_COUNT = "graphRelationUpsertCount";
 
     public static final String STEP_SUMMARIES = "stepSummaries";
 

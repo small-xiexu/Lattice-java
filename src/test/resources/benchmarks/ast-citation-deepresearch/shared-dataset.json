@@ -1,0 +1,488 @@
+{
+  "version": "2026-04-24",
+  "citationScenarios": [
+    {
+      "id": "citation_verified_article",
+      "answer": "业务码 12101 会写入 fulfillment_request [[dispatch-table]]",
+      "articles": {
+        "dispatch-table": "# dispatch table\n12101 fulfillment_request\nDigitalServiceImpl"
+      },
+      "sourceFiles": {}
+    },
+    {
+      "id": "citation_demoted_missing_literal",
+      "answer": "业务码 12103 会写入 fulfillment_request [[dispatch-table]]",
+      "articles": {
+        "dispatch-table": "# dispatch table\n12101 fulfillment_request\nDigitalServiceImpl"
+      },
+      "sourceFiles": {}
+    },
+    {
+      "id": "citation_verified_source_file",
+      "answer": "RoutePlanner 暴露了 /payments 路径 [→ src/main/java/payment/RoutePlanner.java]",
+      "articles": {},
+      "sourceFiles": {
+        "src/main/java/payment/RoutePlanner.java": "@RequestMapping(\"/payments\")\nclass RoutePlanner {\n  void route() {}\n}\n"
+      }
+    },
+    {
+      "id": "citation_skip_general_claim",
+      "answer": "这是一个一般性的系统描述 [[payment-routing]]",
+      "articles": {
+        "payment-routing": "Payment Routing 是支付系统的主路由文章。"
+      },
+      "sourceFiles": {}
+    }
+  ],
+  "deepResearchScenarios": [
+    {
+      "id": "deepresearch_complete_coverage",
+      "question": "对比库存并发控制和补偿重试策略",
+      "articles": {
+        "inventory-lock": "库存扣减采用乐观锁版本号校验，inventory_lock_version 会在 compare-and-set 成功后更新。",
+        "retry-queue": "补偿失败后会进入 retry_queue 异步重试，重试任务由 RetryWorker 消费。"
+      },
+      "sourceFiles": {},
+      "layerSummaries": [
+        {
+          "layerIndex": 0,
+          "summaryMarkdown": "分别梳理库存并发控制与补偿重试。"
+        }
+      ],
+      "evidenceCards": [
+        {
+          "evidenceId": "ev#1",
+          "layerIndex": 0,
+          "taskId": "task-lock",
+          "scope": "库存并发控制",
+          "findings": [
+            {
+              "claim": "库存扣减采用乐观锁版本号校验",
+              "quote": "inventory_lock_version compare-and-set",
+              "sourceType": "ARTICLE",
+              "sourceId": "inventory-lock",
+              "confidence": 0.95
+            }
+          ],
+          "gaps": [],
+          "relatedLeads": [],
+          "selectedArticleKeys": [
+            "inventory-lock"
+          ]
+        },
+        {
+          "evidenceId": "ev#2",
+          "layerIndex": 0,
+          "taskId": "task-retry",
+          "scope": "补偿重试策略",
+          "findings": [
+            {
+              "claim": "补偿失败后会进入 retry_queue 异步重试",
+              "quote": "retry_queue handled by RetryWorker",
+              "sourceType": "ARTICLE",
+              "sourceId": "retry-queue",
+              "confidence": 0.91
+            }
+          ],
+          "gaps": [],
+          "relatedLeads": [],
+          "selectedArticleKeys": [
+            "retry-queue"
+          ]
+        }
+      ],
+      "expectedClaims": [
+        "库存扣减采用乐观锁版本号校验",
+        "补偿失败后会进入 retry_queue 异步重试"
+      ],
+      "expectedConflictSurfaced": false,
+      "tsContradictions": [],
+      "tsSynthesis": {
+        "summary": "总体回答 [ev#1] [ev#2]。",
+        "sections": [
+          {
+            "heading": "要点",
+            "sentences": [
+              {
+                "text": "库存扣减采用乐观锁版本号校验",
+                "citations": [
+                  "ev#1"
+                ]
+              },
+              {
+                "text": "补偿失败后会进入 retry_queue 异步重试",
+                "citations": [
+                  "ev#2"
+                ]
+              }
+            ]
+          }
+        ],
+        "gaps": [],
+        "disputes": []
+      }
+    },
+    {
+      "id": "deepresearch_conflict_surfaced",
+      "question": "DPFM 的库存并发到底用什么锁",
+      "articles": {
+        "optimistic-lock": "DPFM 使用乐观锁完成库存版本校验。",
+        "redis-lock": "DPFM 使用 Redis 锁进行库存串行化。"
+      },
+      "sourceFiles": {},
+      "layerSummaries": [
+        {
+          "layerIndex": 0,
+          "summaryMarkdown": "找到两条互相矛盾的锁策略结论。"
+        }
+      ],
+      "evidenceCards": [
+        {
+          "evidenceId": "ev#1",
+          "layerIndex": 0,
+          "taskId": "task-lock-a",
+          "scope": "锁策略 A",
+          "findings": [
+            {
+              "claim": "DPFM 使用乐观锁",
+              "quote": "optimistic lock",
+              "sourceType": "ARTICLE",
+              "sourceId": "optimistic-lock",
+              "confidence": 0.86
+            }
+          ],
+          "gaps": [],
+          "relatedLeads": [],
+          "selectedArticleKeys": [
+            "optimistic-lock"
+          ]
+        },
+        {
+          "evidenceId": "ev#2",
+          "layerIndex": 0,
+          "taskId": "task-lock-b",
+          "scope": "锁策略 B",
+          "findings": [
+            {
+              "claim": "DPFM 使用 Redis 锁",
+              "quote": "redis lock",
+              "sourceType": "ARTICLE",
+              "sourceId": "redis-lock",
+              "confidence": 0.82
+            }
+          ],
+          "gaps": [],
+          "relatedLeads": [],
+          "selectedArticleKeys": [
+            "redis-lock"
+          ]
+        }
+      ],
+      "expectedClaims": [
+        "DPFM 使用乐观锁",
+        "DPFM 使用 Redis 锁"
+      ],
+      "expectedConflictSurfaced": true,
+      "tsContradictions": [
+        {
+          "a": "ev#1",
+          "b": "ev#2",
+          "reason": "conflicting lock strategy"
+        }
+      ],
+      "tsSynthesis": {
+        "summary": "锁策略存在争议 [ev#1] [ev#2]。",
+        "sections": [],
+        "gaps": [],
+        "disputes": [
+          {
+            "topic": "锁策略",
+            "sides": [
+              {
+                "claim": "DPFM 使用乐观锁",
+                "citations": [
+                  "ev#1"
+                ]
+              },
+              {
+                "claim": "DPFM 使用 Redis 锁",
+                "citations": [
+                  "ev#2"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "deepresearch_ts_grounding_loss",
+      "question": "说明库存锁和补偿重试的结论",
+      "articles": {
+        "inventory-lock": "库存扣减采用乐观锁版本号校验，inventory_lock_version 会在 compare-and-set 成功后更新。",
+        "retry-queue": "补偿失败后会进入 retry_queue 异步重试，重试任务由 RetryWorker 消费。"
+      },
+      "sourceFiles": {},
+      "layerSummaries": [
+        {
+          "layerIndex": 0,
+          "summaryMarkdown": "库存锁和补偿重试都有明确证据。"
+        }
+      ],
+      "evidenceCards": [
+        {
+          "evidenceId": "ev#1",
+          "layerIndex": 0,
+          "taskId": "task-lock",
+          "scope": "库存并发控制",
+          "findings": [
+            {
+              "claim": "库存扣减采用乐观锁版本号校验",
+              "quote": "inventory_lock_version compare-and-set",
+              "sourceType": "ARTICLE",
+              "sourceId": "inventory-lock",
+              "confidence": 0.95
+            }
+          ],
+          "gaps": [],
+          "relatedLeads": [],
+          "selectedArticleKeys": [
+            "inventory-lock"
+          ]
+        },
+        {
+          "evidenceId": "ev#2",
+          "layerIndex": 0,
+          "taskId": "task-retry",
+          "scope": "补偿重试策略",
+          "findings": [
+            {
+              "claim": "补偿失败后会进入 retry_queue 异步重试",
+              "quote": "retry_queue handled by RetryWorker",
+              "sourceType": "ARTICLE",
+              "sourceId": "retry-queue",
+              "confidence": 0.52
+            }
+          ],
+          "gaps": [],
+          "relatedLeads": [],
+          "selectedArticleKeys": [
+            "retry-queue"
+          ]
+        }
+      ],
+      "expectedClaims": [
+        "库存扣减采用乐观锁版本号校验",
+        "补偿失败后会进入 retry_queue 异步重试"
+      ],
+      "expectedConflictSurfaced": false,
+      "tsContradictions": [],
+      "tsSynthesis": {
+        "summary": "库存锁有可靠证据 [ev#1]。",
+        "sections": [
+          {
+            "heading": "要点",
+            "sentences": [
+              {
+                "text": "库存扣减采用乐观锁版本号校验",
+                "citations": [
+                  "ev#1"
+                ]
+              },
+              {
+                "text": "补偿失败后会进入 retry_queue 异步重试",
+                "citations": [
+                  "ev#999"
+                ]
+              }
+            ]
+          }
+        ],
+        "gaps": [
+          "TS 合成阶段把第二条证据引用走丢"
+        ],
+        "disputes": []
+      }
+    },
+    {
+      "id": "deepresearch_ts_miss_one_subclaim",
+      "question": "同时说明库存锁、补偿重试和审计回放",
+      "articles": {
+        "inventory-lock": "库存扣减采用乐观锁版本号校验，inventory_lock_version 会在 compare-and-set 成功后更新。",
+        "retry-queue": "补偿失败后会进入 retry_queue 异步重试，重试任务由 RetryWorker 消费。",
+        "audit-replay": "审计回放依赖 audit_replay_job 定时补偿，并会记录 replay cursor。"
+      },
+      "sourceFiles": {},
+      "layerSummaries": [
+        {
+          "layerIndex": 0,
+          "summaryMarkdown": "三条子链路都有对应证据。"
+        }
+      ],
+      "evidenceCards": [
+        {
+          "evidenceId": "ev#1",
+          "layerIndex": 0,
+          "taskId": "task-lock",
+          "scope": "库存并发控制",
+          "findings": [
+            {
+              "claim": "库存扣减采用乐观锁版本号校验",
+              "quote": "inventory_lock_version compare-and-set",
+              "sourceType": "ARTICLE",
+              "sourceId": "inventory-lock",
+              "confidence": 0.95
+            }
+          ],
+          "gaps": [],
+          "relatedLeads": [],
+          "selectedArticleKeys": [
+            "inventory-lock"
+          ]
+        },
+        {
+          "evidenceId": "ev#2",
+          "layerIndex": 0,
+          "taskId": "task-retry",
+          "scope": "补偿重试策略",
+          "findings": [
+            {
+              "claim": "补偿失败后会进入 retry_queue 异步重试",
+              "quote": "retry_queue handled by RetryWorker",
+              "sourceType": "ARTICLE",
+              "sourceId": "retry-queue",
+              "confidence": 0.91
+            }
+          ],
+          "gaps": [],
+          "relatedLeads": [],
+          "selectedArticleKeys": [
+            "retry-queue"
+          ]
+        },
+        {
+          "evidenceId": "ev#3",
+          "layerIndex": 0,
+          "taskId": "task-audit",
+          "scope": "审计回放",
+          "findings": [
+            {
+              "claim": "审计回放依赖 audit_replay_job 定时补偿",
+              "quote": "audit_replay_job with replay cursor",
+              "sourceType": "ARTICLE",
+              "sourceId": "audit-replay",
+              "confidence": 0.89
+            }
+          ],
+          "gaps": [],
+          "relatedLeads": [],
+          "selectedArticleKeys": [
+            "audit-replay"
+          ]
+        }
+      ],
+      "expectedClaims": [
+        "库存扣减采用乐观锁版本号校验",
+        "补偿失败后会进入 retry_queue 异步重试",
+        "审计回放依赖 audit_replay_job 定时补偿"
+      ],
+      "expectedConflictSurfaced": false,
+      "tsContradictions": [],
+      "tsSynthesis": {
+        "summary": "库存锁和补偿重试都有结论 [ev#1] [ev#2]。",
+        "sections": [
+          {
+            "heading": "要点",
+            "sentences": [
+              {
+                "text": "库存扣减采用乐观锁版本号校验",
+                "citations": [
+                  "ev#1"
+                ]
+              },
+              {
+                "text": "补偿失败后会进入 retry_queue 异步重试",
+                "citations": [
+                  "ev#2"
+                ]
+              }
+            ]
+          }
+        ],
+        "gaps": [
+          "TS 合成层遗漏了审计回放结论"
+        ],
+        "disputes": []
+      }
+    }
+  ],
+  "graphScenarios": [
+    {
+      "id": "graph_routeplanner_grounding",
+      "question": "RoutePlanner 调用链",
+      "entities": [
+        {
+          "id": "payment-routing#RoutePlanner",
+          "canonicalName": "payment.routing.RoutePlanner",
+          "simpleName": "RoutePlanner",
+          "entityType": "CLASS",
+          "systemLabel": "payment",
+          "sourceFileId": 101,
+          "anchorRef": "src/main/java/payment/RoutePlanner.java:12-24",
+          "resolutionStatus": "RESOLVED",
+          "metadataJson": "{\"package\":\"payment.routing\"}"
+        }
+      ],
+      "facts": [
+        {
+          "entityId": "payment-routing#RoutePlanner",
+          "predicate": "annotation",
+          "value": "@RequestMapping",
+          "sourceRef": "src/main/java/payment/RoutePlanner.java",
+          "sourceStartLine": 12,
+          "sourceEndLine": 12,
+          "evidenceExcerpt": "@RequestMapping(\"/payments\")",
+          "confidence": 0.95,
+          "extractor": "annotation_extractor"
+        }
+      ],
+      "relations": [
+        {
+          "srcId": "payment-routing#RoutePlanner",
+          "edgeType": "calls",
+          "dstId": "payment.PaymentService.plan",
+          "sourceRef": "src/main/java/payment/RoutePlanner.java",
+          "sourceStartLine": 18,
+          "sourceEndLine": 18,
+          "confidence": 0.8,
+          "extractor": "call_extractor"
+        }
+      ],
+      "articleKeysBySourceFileId": {
+        "101": [
+          "payment-routing"
+        ]
+      },
+      "sourceFiles": {
+        "101": {
+          "id": 101,
+          "sourceId": 1,
+          "filePath": "src/main/java/payment/RoutePlanner.java",
+          "relativePath": "src/main/java/payment/RoutePlanner.java",
+          "contentPreview": "RoutePlanner",
+          "format": "JAVA",
+          "fileSize": 256,
+          "contentText": "class RoutePlanner {}",
+          "metadataJson": "{}",
+          "verbatim": false,
+          "rawPath": "src/main/java/payment/RoutePlanner.java"
+        }
+      },
+      "expectedTopTitleContains": "RoutePlanner",
+      "expectedFactsBlockContains": [
+        "annotation=@RequestMapping",
+        "calls->payment.PaymentService.plan"
+      ]
+    }
+  ]
+}

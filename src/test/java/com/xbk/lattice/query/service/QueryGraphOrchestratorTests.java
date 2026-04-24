@@ -39,19 +39,18 @@ class QueryGraphOrchestratorTests {
         );
         TrackingAnswerGenerationService answerGenerationService = new TrackingAnswerGenerationService(
                 "TODO",
-                "修复后的答案：retry=3"
+                "修复后的答案：retry=3 [[payment-timeout]]"
         );
         InMemoryQueryCacheStore queryCacheStore = new InMemoryQueryCacheStore();
         QueryReviewProperties queryReviewProperties = new QueryReviewProperties();
         queryReviewProperties.setRewriteEnabled(true);
         queryReviewProperties.setMaxRewriteRounds(1);
-        QueryGraphOrchestrator queryGraphOrchestrator = new QueryGraphOrchestrator(
+        QueryGraphOrchestrator queryGraphOrchestrator = QueryGraphTestSupport.createQueryGraphOrchestrator(
                 new FixedFtsSearchService(List.of(articleHit)),
                 new FixedRefKeySearchService(List.of()),
                 new FixedSourceSearchService(List.of()),
                 new FixedContributionSearchService(List.of()),
                 new FixedVectorSearchService(List.of()),
-                new RrfFusionService(),
                 answerGenerationService,
                 queryCacheStore,
                 new ReviewerAgent(
@@ -61,12 +60,13 @@ class QueryGraphOrchestratorTests {
                         ),
                         new ReviewResultParser()
                 ),
-                queryReviewProperties
+                queryReviewProperties,
+                List.of(articleHit)
         );
 
         QueryResponse queryResponse = queryGraphOrchestrator.execute("payment timeout retry=3");
 
-        assertThat(queryResponse.getAnswer()).isEqualTo("修复后的答案：retry=3");
+        assertThat(queryResponse.getAnswer()).isEqualTo("修复后的答案：retry=3 [[payment-timeout]]");
         assertThat(queryResponse.getReviewStatus()).isEqualTo("PASSED");
         assertThat(queryResponse.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
         assertThat(queryResponse.getGenerationMode()).isEqualTo(GenerationMode.LLM);
@@ -80,7 +80,8 @@ class QueryGraphOrchestratorTests {
         assertThat(answerGenerationService.getRevisedScene()).isEqualTo("query");
         assertThat(answerGenerationService.getRevisedRole()).isEqualTo("rewrite");
         assertThat(queryCacheStore.getCachedResponse()).isPresent();
-        assertThat(queryCacheStore.getCachedResponse().orElseThrow().getAnswer()).isEqualTo("修复后的答案：retry=3");
+        assertThat(queryCacheStore.getCachedResponse().orElseThrow().getAnswer())
+                .isEqualTo("修复后的答案：retry=3 [[payment-timeout]]");
     }
 
     /**
@@ -104,13 +105,12 @@ class QueryGraphOrchestratorTests {
         QueryReviewProperties queryReviewProperties = new QueryReviewProperties();
         queryReviewProperties.setRewriteEnabled(true);
         queryReviewProperties.setMaxRewriteRounds(1);
-        QueryGraphOrchestrator queryGraphOrchestrator = new QueryGraphOrchestrator(
+        QueryGraphOrchestrator queryGraphOrchestrator = QueryGraphTestSupport.createQueryGraphOrchestrator(
                 new FixedFtsSearchService(List.of(articleHit)),
                 new FixedRefKeySearchService(List.of()),
                 new FixedSourceSearchService(List.of()),
                 new FixedContributionSearchService(List.of()),
                 new FixedVectorSearchService(List.of()),
-                new RrfFusionService(),
                 answerGenerationService,
                 queryCacheStore,
                 new ReviewerAgent(
@@ -120,7 +120,8 @@ class QueryGraphOrchestratorTests {
                         ),
                         new ReviewResultParser()
                 ),
-                queryReviewProperties
+                queryReviewProperties,
+                List.of(articleHit)
         );
 
         QueryResponse queryResponse = queryGraphOrchestrator.execute("refund status");
@@ -146,24 +147,24 @@ class QueryGraphOrchestratorTests {
                 9.0D
         );
         TrackingAnswerGenerationService answerGenerationService = new TrackingAnswerGenerationService(
-                "结论：failure-rate-threshold=50",
-                "结论：failure-rate-threshold=50"
+                "结论：failure-rate-threshold=50 [[gateway-config]]",
+                "结论：failure-rate-threshold=50 [[gateway-config]]"
         );
         InMemoryQueryCacheStore queryCacheStore = new InMemoryQueryCacheStore();
         QueryReviewProperties queryReviewProperties = new QueryReviewProperties();
         queryReviewProperties.setRewriteEnabled(false);
         TrackingReviewerAgent reviewerAgent = new TrackingReviewerAgent();
-        QueryGraphOrchestrator queryGraphOrchestrator = new QueryGraphOrchestrator(
+        QueryGraphOrchestrator queryGraphOrchestrator = QueryGraphTestSupport.createQueryGraphOrchestrator(
                 new FixedFtsSearchService(List.of(articleHit)),
                 new FixedRefKeySearchService(List.of()),
                 new FixedSourceSearchService(List.of()),
                 new FixedContributionSearchService(List.of()),
                 new FixedVectorSearchService(List.of()),
-                new RrfFusionService(),
                 answerGenerationService,
                 queryCacheStore,
                 reviewerAgent,
-                queryReviewProperties
+                queryReviewProperties,
+                List.of(articleHit)
         );
 
         QueryResponse queryResponse = queryGraphOrchestrator.execute("gateway breaker threshold");
@@ -210,20 +211,20 @@ class QueryGraphOrchestratorTests {
         InMemoryQueryCacheStore queryCacheStore = new InMemoryQueryCacheStore();
         QueryReviewProperties queryReviewProperties = new QueryReviewProperties();
         queryReviewProperties.setRewriteEnabled(false);
-        QueryGraphOrchestrator queryGraphOrchestrator = new QueryGraphOrchestrator(
+        QueryGraphOrchestrator queryGraphOrchestrator = QueryGraphTestSupport.createQueryGraphOrchestrator(
                 new FixedFtsSearchService(List.of(articleHit)),
                 new FixedRefKeySearchService(List.of()),
                 new FixedSourceSearchService(List.of()),
                 new FixedContributionSearchService(List.of()),
                 new FixedVectorSearchService(List.of()),
-                new RrfFusionService(),
                 answerGenerationService,
                 queryCacheStore,
                 new ReviewerAgent(
                         new SequencedReviewerGateway("{\"approved\":true,\"rewriteRequired\":false,\"riskLevel\":\"LOW\",\"issues\":[],\"userFacingRewriteHints\":[],\"cacheWritePolicy\":\"WRITE\"}"),
                         new ReviewResultParser()
                 ),
-                queryReviewProperties
+                queryReviewProperties,
+                List.of(articleHit)
         );
 
         QueryResponse queryResponse = queryGraphOrchestrator.execute("为什么订单服务要走消息队列");
@@ -248,26 +249,26 @@ class QueryGraphOrchestratorTests {
                 10.0D
         );
         TrackingAnswerGenerationService answerGenerationService = new TrackingAnswerGenerationService(
-                "结论：retry=3",
-                "结论：retry=3"
+                "结论：retry=3 [[payment-timeout]]",
+                "结论：retry=3 [[payment-timeout]]"
         );
         InMemoryQueryCacheStore queryCacheStore = new InMemoryQueryCacheStore();
         QueryReviewProperties queryReviewProperties = new QueryReviewProperties();
         queryReviewProperties.setRewriteEnabled(false);
-        QueryGraphOrchestrator queryGraphOrchestrator = new QueryGraphOrchestrator(
+        QueryGraphOrchestrator queryGraphOrchestrator = QueryGraphTestSupport.createQueryGraphOrchestrator(
                 new FixedFtsSearchService(List.of(articleHit)),
                 new FixedRefKeySearchService(List.of()),
                 new FixedSourceSearchService(List.of()),
                 new FixedContributionSearchService(List.of()),
                 new FixedVectorSearchService(List.of()),
-                new RrfFusionService(),
                 answerGenerationService,
                 queryCacheStore,
                 new ReviewerAgent(
                         new SequencedReviewerGateway("{\"approved\":true,\"rewriteRequired\":false,\"riskLevel\":\"LOW\",\"issues\":[],\"userFacingRewriteHints\":[],\"cacheWritePolicy\":\"WRITE\"}"),
                         new ReviewResultParser()
                 ),
-                queryReviewProperties
+                queryReviewProperties,
+                List.of(articleHit)
         );
 
         QueryResponse firstResponse = queryGraphOrchestrator.execute("payment timeout retry=3", "query-001");

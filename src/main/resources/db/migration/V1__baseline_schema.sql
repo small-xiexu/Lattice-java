@@ -642,6 +642,120 @@ CREATE INDEX IF NOT EXISTS idx_article_source_refs_article_key
 CREATE UNIQUE INDEX IF NOT EXISTS uk_article_source_refs_article_source_file_ref_type
     ON article_source_refs (article_key, source_file_id, ref_type);
 
+CREATE TABLE IF NOT EXISTS graph_entities (
+    id VARCHAR(512) PRIMARY KEY,
+    canonical_name VARCHAR(512) NOT NULL,
+    simple_name VARCHAR(255) NOT NULL,
+    entity_type VARCHAR(32) NOT NULL,
+    system_label VARCHAR(128) NOT NULL,
+    source_file_id BIGINT NOT NULL REFERENCES source_files (id) ON DELETE CASCADE,
+    anchor_ref VARCHAR(512) NOT NULL,
+    resolution_status VARCHAR(32) NOT NULL DEFAULT 'RESOLVED',
+    metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE graph_entities IS 'AST 图谱实体表';
+COMMENT ON COLUMN graph_entities.id IS '稳定实体业务主键';
+COMMENT ON COLUMN graph_entities.canonical_name IS '实体全名';
+COMMENT ON COLUMN graph_entities.simple_name IS '实体短名';
+COMMENT ON COLUMN graph_entities.entity_type IS '实体类型';
+COMMENT ON COLUMN graph_entities.system_label IS '业务系统标签';
+COMMENT ON COLUMN graph_entities.source_file_id IS '关联源文件主键';
+COMMENT ON COLUMN graph_entities.anchor_ref IS '源码锚点';
+COMMENT ON COLUMN graph_entities.resolution_status IS '符号解析状态';
+COMMENT ON COLUMN graph_entities.metadata_json IS '实体扩展元数据 JSON';
+
+CREATE INDEX IF NOT EXISTS idx_graph_entities_simple_name
+    ON graph_entities (simple_name);
+
+CREATE INDEX IF NOT EXISTS idx_graph_entities_canonical_name
+    ON graph_entities (canonical_name);
+
+CREATE INDEX IF NOT EXISTS idx_graph_entities_source_file_id
+    ON graph_entities (source_file_id);
+
+CREATE TABLE IF NOT EXISTS graph_facts (
+    id BIGSERIAL PRIMARY KEY,
+    entity_id VARCHAR(512) NOT NULL REFERENCES graph_entities (id) ON DELETE CASCADE,
+    predicate VARCHAR(64) NOT NULL,
+    value TEXT NOT NULL,
+    source_ref VARCHAR(512) NOT NULL,
+    source_start_line INTEGER NOT NULL DEFAULT 0,
+    source_end_line INTEGER NOT NULL DEFAULT 0,
+    evidence_excerpt TEXT NOT NULL DEFAULT '',
+    confidence NUMERIC(5, 4) NOT NULL DEFAULT 0,
+    extractor VARCHAR(64) NOT NULL,
+    asserted_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    superseded_by BIGINT,
+    tombstoned BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+COMMENT ON TABLE graph_facts IS 'AST 图谱事实表';
+COMMENT ON COLUMN graph_facts.entity_id IS '实体主键';
+COMMENT ON COLUMN graph_facts.predicate IS '事实谓词';
+COMMENT ON COLUMN graph_facts.value IS '事实值';
+COMMENT ON COLUMN graph_facts.source_ref IS '证据源路径';
+COMMENT ON COLUMN graph_facts.source_start_line IS '证据起始行号';
+COMMENT ON COLUMN graph_facts.source_end_line IS '证据结束行号';
+COMMENT ON COLUMN graph_facts.evidence_excerpt IS '证据摘录';
+COMMENT ON COLUMN graph_facts.confidence IS '置信度';
+COMMENT ON COLUMN graph_facts.extractor IS '抽取器标识';
+COMMENT ON COLUMN graph_facts.asserted_at IS '断言时间';
+COMMENT ON COLUMN graph_facts.superseded_by IS '被后续记录替代的主键';
+COMMENT ON COLUMN graph_facts.tombstoned IS '是否逻辑删除';
+
+CREATE INDEX IF NOT EXISTS idx_graph_facts_entity_id
+    ON graph_facts (entity_id, asserted_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_graph_facts_source_ref
+    ON graph_facts (source_ref, asserted_at DESC, id DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_graph_facts_active
+    ON graph_facts (entity_id, predicate, value, source_ref, source_start_line, source_end_line)
+    WHERE tombstoned = FALSE
+      AND superseded_by IS NULL;
+
+CREATE TABLE IF NOT EXISTS graph_relations (
+    id BIGSERIAL PRIMARY KEY,
+    src_id VARCHAR(512) NOT NULL REFERENCES graph_entities (id) ON DELETE CASCADE,
+    edge_type VARCHAR(64) NOT NULL,
+    dst_id VARCHAR(512) NOT NULL,
+    source_ref VARCHAR(512) NOT NULL,
+    source_start_line INTEGER NOT NULL DEFAULT 0,
+    source_end_line INTEGER NOT NULL DEFAULT 0,
+    confidence NUMERIC(5, 4) NOT NULL DEFAULT 0,
+    extractor VARCHAR(64) NOT NULL,
+    asserted_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    superseded_by BIGINT,
+    tombstoned BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+COMMENT ON TABLE graph_relations IS 'AST 图谱关系表';
+COMMENT ON COLUMN graph_relations.src_id IS '源实体主键';
+COMMENT ON COLUMN graph_relations.edge_type IS '关系类型';
+COMMENT ON COLUMN graph_relations.dst_id IS '目标实体或符号';
+COMMENT ON COLUMN graph_relations.source_ref IS '证据源路径';
+COMMENT ON COLUMN graph_relations.source_start_line IS '证据起始行号';
+COMMENT ON COLUMN graph_relations.source_end_line IS '证据结束行号';
+COMMENT ON COLUMN graph_relations.confidence IS '置信度';
+COMMENT ON COLUMN graph_relations.extractor IS '抽取器标识';
+COMMENT ON COLUMN graph_relations.asserted_at IS '断言时间';
+COMMENT ON COLUMN graph_relations.superseded_by IS '被后续记录替代的主键';
+COMMENT ON COLUMN graph_relations.tombstoned IS '是否逻辑删除';
+
+CREATE INDEX IF NOT EXISTS idx_graph_relations_src_id
+    ON graph_relations (src_id, asserted_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_graph_relations_source_ref
+    ON graph_relations (source_ref, asserted_at DESC, id DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_graph_relations_active
+    ON graph_relations (src_id, edge_type, dst_id, source_ref, source_start_line, source_end_line)
+    WHERE tombstoned = FALSE
+      AND superseded_by IS NULL;
+
 INSERT INTO knowledge_sources (
     source_code,
     name,
@@ -719,6 +833,7 @@ CREATE TABLE IF NOT EXISTS query_retrieval_settings (
     fts_weight NUMERIC NOT NULL DEFAULT 1.0,
     source_weight NUMERIC NOT NULL DEFAULT 1.0,
     contribution_weight NUMERIC NOT NULL DEFAULT 1.0,
+    graph_weight NUMERIC NOT NULL DEFAULT 0.9,
     article_vector_weight NUMERIC NOT NULL DEFAULT 0.6,
     chunk_vector_weight NUMERIC NOT NULL DEFAULT 1.2,
     rrf_k INTEGER NOT NULL DEFAULT 60,
@@ -730,12 +845,161 @@ COMMENT ON COLUMN query_retrieval_settings.parallel_enabled IS '是否启用并�
 COMMENT ON COLUMN query_retrieval_settings.fts_weight IS 'FTS 召回权重';
 COMMENT ON COLUMN query_retrieval_settings.source_weight IS 'Source 召回权重';
 COMMENT ON COLUMN query_retrieval_settings.contribution_weight IS 'Contribution 召回权重';
+COMMENT ON COLUMN query_retrieval_settings.graph_weight IS 'Graph 召回权重';
 COMMENT ON COLUMN query_retrieval_settings.article_vector_weight IS '文章级向量召回权重';
 COMMENT ON COLUMN query_retrieval_settings.chunk_vector_weight IS 'Chunk 级向量召回权重';
 COMMENT ON COLUMN query_retrieval_settings.rrf_k IS 'RRF 融合 K 值';
 COMMENT ON COLUMN query_retrieval_settings.updated_at IS '更新时间';
 
 INSERT INTO query_retrieval_settings DEFAULT VALUES ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS query_answer_audits (
+    audit_id BIGSERIAL PRIMARY KEY,
+    query_id VARCHAR(64) NOT NULL,
+    answer_version INTEGER NOT NULL,
+    question TEXT NOT NULL,
+    answer_markdown TEXT NOT NULL,
+    answer_outcome VARCHAR(32),
+    generation_mode VARCHAR(32),
+    review_status VARCHAR(32),
+    citation_coverage NUMERIC(5, 4) NOT NULL DEFAULT 0,
+    unsupported_claim_count INTEGER NOT NULL DEFAULT 0,
+    verified_citation_count INTEGER NOT NULL DEFAULT 0,
+    demoted_citation_count INTEGER NOT NULL DEFAULT 0,
+    skipped_citation_count INTEGER NOT NULL DEFAULT 0,
+    cacheable BOOLEAN NOT NULL DEFAULT FALSE,
+    route_type VARCHAR(32) NOT NULL,
+    model_snapshot_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE query_answer_audits IS 'Query 最终答案审计主表';
+COMMENT ON COLUMN query_answer_audits.query_id IS '查询标识';
+COMMENT ON COLUMN query_answer_audits.answer_version IS '答案版本';
+COMMENT ON COLUMN query_answer_audits.question IS '用户问题';
+COMMENT ON COLUMN query_answer_audits.answer_markdown IS '最终答案 Markdown';
+COMMENT ON COLUMN query_answer_audits.answer_outcome IS '答案语义';
+COMMENT ON COLUMN query_answer_audits.generation_mode IS '生成模式';
+COMMENT ON COLUMN query_answer_audits.review_status IS '审查状态';
+COMMENT ON COLUMN query_answer_audits.citation_coverage IS '引用覆盖率';
+COMMENT ON COLUMN query_answer_audits.unsupported_claim_count IS '无法支撑 claim 数';
+COMMENT ON COLUMN query_answer_audits.verified_citation_count IS '已验证引用数';
+COMMENT ON COLUMN query_answer_audits.demoted_citation_count IS '被降级引用数';
+COMMENT ON COLUMN query_answer_audits.skipped_citation_count IS '跳过核验引用数';
+COMMENT ON COLUMN query_answer_audits.cacheable IS '是否允许写缓存';
+COMMENT ON COLUMN query_answer_audits.route_type IS '路由类型';
+COMMENT ON COLUMN query_answer_audits.model_snapshot_json IS '模型快照 JSON';
+
+CREATE INDEX IF NOT EXISTS idx_query_answer_audits_query_id
+    ON query_answer_audits (query_id, created_at DESC, audit_id DESC);
+
+CREATE TABLE IF NOT EXISTS query_answer_claims (
+    claim_id BIGSERIAL PRIMARY KEY,
+    audit_id BIGINT NOT NULL REFERENCES query_answer_audits (audit_id) ON DELETE CASCADE,
+    claim_index INTEGER NOT NULL,
+    claim_text TEXT NOT NULL,
+    claim_status VARCHAR(32) NOT NULL,
+    citation_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE query_answer_claims IS 'Query claim 审计明细表';
+COMMENT ON COLUMN query_answer_claims.audit_id IS '答案审计主键';
+COMMENT ON COLUMN query_answer_claims.claim_index IS 'claim 顺序号';
+COMMENT ON COLUMN query_answer_claims.claim_text IS 'claim 文本';
+COMMENT ON COLUMN query_answer_claims.claim_status IS 'claim 核验状态';
+COMMENT ON COLUMN query_answer_claims.citation_count IS 'claim 对应引用数量';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_query_answer_claims_audit_claim_index
+    ON query_answer_claims (audit_id, claim_index);
+
+CREATE TABLE IF NOT EXISTS query_answer_citations (
+    citation_id BIGSERIAL PRIMARY KEY,
+    audit_id BIGINT NOT NULL REFERENCES query_answer_audits (audit_id) ON DELETE CASCADE,
+    claim_id BIGINT REFERENCES query_answer_claims (claim_id) ON DELETE CASCADE,
+    citation_ordinal INTEGER NOT NULL,
+    citation_literal TEXT NOT NULL,
+    source_type VARCHAR(32) NOT NULL,
+    target_key VARCHAR(512) NOT NULL,
+    validation_status VARCHAR(32) NOT NULL,
+    overlap_score NUMERIC(5, 4) NOT NULL DEFAULT 0,
+    matched_excerpt TEXT NOT NULL DEFAULT '',
+    reason VARCHAR(255) NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE query_answer_citations IS 'Query citation 审计明细表';
+COMMENT ON COLUMN query_answer_citations.audit_id IS '答案审计主键';
+COMMENT ON COLUMN query_answer_citations.claim_id IS 'claim 主键';
+COMMENT ON COLUMN query_answer_citations.citation_ordinal IS '引用顺序号';
+COMMENT ON COLUMN query_answer_citations.citation_literal IS '原始引用字面量';
+COMMENT ON COLUMN query_answer_citations.source_type IS '引用来源类型';
+COMMENT ON COLUMN query_answer_citations.target_key IS '引用目标键';
+COMMENT ON COLUMN query_answer_citations.validation_status IS '核验状态';
+COMMENT ON COLUMN query_answer_citations.overlap_score IS '重叠分';
+COMMENT ON COLUMN query_answer_citations.matched_excerpt IS '命中摘录';
+COMMENT ON COLUMN query_answer_citations.reason IS '核验原因';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_query_answer_citations_audit_ordinal
+    ON query_answer_citations (audit_id, citation_ordinal);
+
+CREATE TABLE IF NOT EXISTS deep_research_runs (
+    run_id BIGSERIAL PRIMARY KEY,
+    query_id VARCHAR(64) NOT NULL,
+    question TEXT NOT NULL,
+    route_reason VARCHAR(255) NOT NULL,
+    plan_json JSONB NOT NULL,
+    layer_count INTEGER NOT NULL,
+    task_count INTEGER NOT NULL,
+    llm_call_count INTEGER NOT NULL,
+    citation_coverage NUMERIC(5, 4) NOT NULL DEFAULT 0,
+    partial_answer BOOLEAN NOT NULL DEFAULT FALSE,
+    has_conflicts BOOLEAN NOT NULL DEFAULT FALSE,
+    final_answer_audit_id BIGINT REFERENCES query_answer_audits (audit_id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE deep_research_runs IS 'Deep Research 运行审计主表';
+COMMENT ON COLUMN deep_research_runs.query_id IS '查询标识';
+COMMENT ON COLUMN deep_research_runs.question IS '查询问题';
+COMMENT ON COLUMN deep_research_runs.route_reason IS '路由原因';
+COMMENT ON COLUMN deep_research_runs.plan_json IS '研究计划 JSON';
+COMMENT ON COLUMN deep_research_runs.layer_count IS '层数';
+COMMENT ON COLUMN deep_research_runs.task_count IS '任务数';
+COMMENT ON COLUMN deep_research_runs.llm_call_count IS 'LLM 调用数';
+COMMENT ON COLUMN deep_research_runs.citation_coverage IS '引用覆盖率';
+COMMENT ON COLUMN deep_research_runs.partial_answer IS '是否部分答案';
+COMMENT ON COLUMN deep_research_runs.has_conflicts IS '是否存在冲突';
+COMMENT ON COLUMN deep_research_runs.final_answer_audit_id IS '最终答案审计主键';
+
+CREATE INDEX IF NOT EXISTS idx_deep_research_runs_query_id
+    ON deep_research_runs (query_id, created_at DESC, run_id DESC);
+
+CREATE TABLE IF NOT EXISTS deep_research_evidence_cards (
+    card_id BIGSERIAL PRIMARY KEY,
+    run_id BIGINT NOT NULL REFERENCES deep_research_runs (run_id) ON DELETE CASCADE,
+    evidence_id VARCHAR(32) NOT NULL,
+    layer_index INTEGER NOT NULL,
+    task_id VARCHAR(64) NOT NULL,
+    scope TEXT NOT NULL,
+    findings_json JSONB NOT NULL,
+    gaps_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    related_leads_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE deep_research_evidence_cards IS 'Deep Research 证据卡审计表';
+COMMENT ON COLUMN deep_research_evidence_cards.run_id IS '运行主键';
+COMMENT ON COLUMN deep_research_evidence_cards.evidence_id IS '证据卡标识';
+COMMENT ON COLUMN deep_research_evidence_cards.layer_index IS '层序号';
+COMMENT ON COLUMN deep_research_evidence_cards.task_id IS '任务标识';
+COMMENT ON COLUMN deep_research_evidence_cards.scope IS '研究范围';
+COMMENT ON COLUMN deep_research_evidence_cards.findings_json IS '证据发现 JSON';
+COMMENT ON COLUMN deep_research_evidence_cards.gaps_json IS '证据缺口 JSON';
+COMMENT ON COLUMN deep_research_evidence_cards.related_leads_json IS '后续线索 JSON';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deep_research_evidence_cards_run_evidence
+    ON deep_research_evidence_cards (run_id, evidence_id);
 
 CREATE TABLE IF NOT EXISTS agent_model_bindings (
     id BIGSERIAL PRIMARY KEY,
@@ -863,6 +1127,21 @@ BEGIN
         CREATE INDEX IF NOT EXISTS idx_article_chunk_vector_index_concept
             ON article_chunk_vector_index (concept_id, chunk_index);
 
+        EXECUTE format(
+            'CREATE TABLE IF NOT EXISTS graph_entity_vectors (
+                entity_id VARCHAR(512) PRIMARY KEY REFERENCES graph_entities (id) ON DELETE CASCADE,
+                model_profile_id BIGINT NOT NULL REFERENCES llm_model_profiles (id),
+                embedding_dimensions INTEGER NOT NULL,
+                content_hash VARCHAR(64) NOT NULL,
+                embedding %s(1536) NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )',
+            vector_type_name
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_graph_entity_vectors_updated_at
+            ON graph_entity_vectors (updated_at DESC);
+
     END IF;
 END $$;
 
@@ -889,6 +1168,15 @@ BEGIN
         EXECUTE 'COMMENT ON COLUMN article_chunk_vector_index.content_hash IS ''Chunk 内容哈希''';
         EXECUTE 'COMMENT ON COLUMN article_chunk_vector_index.embedding IS ''Chunk 向量嵌入''';
         EXECUTE 'COMMENT ON COLUMN article_chunk_vector_index.updated_at IS ''向量索引更新时间''';
+    END IF;
+    IF to_regclass(current_schema() || '.graph_entity_vectors') IS NOT NULL THEN
+        EXECUTE 'COMMENT ON TABLE graph_entity_vectors IS ''图谱实体向量索引表''';
+        EXECUTE 'COMMENT ON COLUMN graph_entity_vectors.entity_id IS ''关联图谱实体主键''';
+        EXECUTE 'COMMENT ON COLUMN graph_entity_vectors.model_profile_id IS ''Embedding profile 主键''';
+        EXECUTE 'COMMENT ON COLUMN graph_entity_vectors.embedding_dimensions IS ''向量维度''';
+        EXECUTE 'COMMENT ON COLUMN graph_entity_vectors.content_hash IS ''图谱 grounding 内容哈希''';
+        EXECUTE 'COMMENT ON COLUMN graph_entity_vectors.embedding IS ''图谱实体向量嵌入''';
+        EXECUTE 'COMMENT ON COLUMN graph_entity_vectors.updated_at IS ''向量索引更新时间''';
     END IF;
 END $$;
 

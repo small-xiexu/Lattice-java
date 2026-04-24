@@ -24,6 +24,8 @@ public class AdminQueryRetrievalConfigRequest {
 
     private Double contributionWeight;
 
+    private Double graphWeight;
+
     private Double articleVectorWeight;
 
     private Double chunkVectorWeight;

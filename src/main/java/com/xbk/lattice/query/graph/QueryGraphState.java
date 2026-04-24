@@ -42,6 +42,8 @@ public class QueryGraphState {
 
     private String contributionHitsRef;
 
+    private String graphHitsRef;
+
     private String articleVectorHitsRef;
 
     private String chunkVectorHitsRef;
@@ -59,6 +61,12 @@ public class QueryGraphState {
     private String cachedResponseRef;
 
     private String finalResponseRef;
+
+    private String claimSegmentsRef;
+
+    private String citationCheckReportRef;
+
+    private String answerAuditRef;
 
     private String llmBindingSnapshotRef;
 
@@ -81,4 +89,6 @@ public class QueryGraphState {
     private int rewriteAttemptCount;
 
     private int maxRewriteRounds;
+
+    private int citationRepairAttemptCount;
 }

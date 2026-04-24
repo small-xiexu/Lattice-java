@@ -1,6 +1,9 @@
 package com.xbk.lattice.query.graph;
 
 import com.xbk.lattice.api.query.QueryResponse;
+import com.xbk.lattice.query.citation.CitationCheckReport;
+import com.xbk.lattice.query.citation.ClaimSegment;
+import com.xbk.lattice.query.citation.QueryAnswerAuditSnapshot;
 import com.xbk.lattice.query.domain.ReviewResult;
 import com.xbk.lattice.query.service.QueryArticleHit;
 import org.springframework.context.annotation.Profile;
@@ -52,6 +55,9 @@ public class InMemoryQueryWorkingSetStore implements QueryWorkingSetStore {
     @Override
     @SuppressWarnings("unchecked")
     public List<List<QueryArticleHit>> loadRetrievedHitGroups(String ref) {
+        if (!hasRef(ref)) {
+            return Collections.emptyList();
+        }
         Object value = store.get(ref);
         if (!(value instanceof List<?>)) {
             return Collections.emptyList();
@@ -91,6 +97,9 @@ public class InMemoryQueryWorkingSetStore implements QueryWorkingSetStore {
     @Override
     @SuppressWarnings("unchecked")
     public List<QueryArticleHit> loadHits(String ref) {
+        if (!hasRef(ref)) {
+            return Collections.emptyList();
+        }
         Object value = store.get(ref);
         if (!(value instanceof List<?>)) {
             return Collections.emptyList();
@@ -121,6 +130,9 @@ public class InMemoryQueryWorkingSetStore implements QueryWorkingSetStore {
     @Override
     @SuppressWarnings("unchecked")
     public List<QueryArticleHit> loadFusedHits(String ref) {
+        if (!hasRef(ref)) {
+            return Collections.emptyList();
+        }
         Object value = store.get(ref);
         if (!(value instanceof List<?>)) {
             return Collections.emptyList();
@@ -151,6 +163,9 @@ public class InMemoryQueryWorkingSetStore implements QueryWorkingSetStore {
      */
     @Override
     public String loadAnswer(String ref) {
+        if (!hasRef(ref)) {
+            return null;
+        }
         Object value = store.get(ref);
         return value == null ? null : String.valueOf(value);
     }
@@ -177,9 +192,109 @@ public class InMemoryQueryWorkingSetStore implements QueryWorkingSetStore {
      */
     @Override
     public ReviewResult loadReviewResult(String ref) {
+        if (!hasRef(ref)) {
+            return null;
+        }
         Object value = store.get(ref);
         if (value instanceof ReviewResult) {
             return (ReviewResult) value;
+        }
+        return null;
+    }
+
+    /**
+     * 保存 claim 分段结果。
+     *
+     * @param queryId 查询标识
+     * @param claimSegments claim 分段
+     * @return 工作集引用
+     */
+    @Override
+    public String saveClaimSegments(String queryId, List<ClaimSegment> claimSegments) {
+        String ref = buildRef(queryId, "claim-segments");
+        store.put(ref, new ArrayList<ClaimSegment>(claimSegments));
+        return ref;
+    }
+
+    /**
+     * 读取 claim 分段结果。
+     *
+     * @param ref 工作集引用
+     * @return claim 分段
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<ClaimSegment> loadClaimSegments(String ref) {
+        if (!hasRef(ref)) {
+            return Collections.emptyList();
+        }
+        Object value = store.get(ref);
+        if (!(value instanceof List<?>)) {
+            return Collections.emptyList();
+        }
+        return new ArrayList<ClaimSegment>((List<ClaimSegment>) value);
+    }
+
+    /**
+     * 保存 Citation 检查报告。
+     *
+     * @param queryId 查询标识
+     * @param report Citation 检查报告
+     * @return 工作集引用
+     */
+    @Override
+    public String saveCitationCheckReport(String queryId, CitationCheckReport report) {
+        String ref = buildRef(queryId, "citation-check-report");
+        store.put(ref, report);
+        return ref;
+    }
+
+    /**
+     * 读取 Citation 检查报告。
+     *
+     * @param ref 工作集引用
+     * @return Citation 检查报告
+     */
+    @Override
+    public CitationCheckReport loadCitationCheckReport(String ref) {
+        if (!hasRef(ref)) {
+            return null;
+        }
+        Object value = store.get(ref);
+        if (value instanceof CitationCheckReport) {
+            return (CitationCheckReport) value;
+        }
+        return null;
+    }
+
+    /**
+     * 保存答案审计快照。
+     *
+     * @param queryId 查询标识
+     * @param answerAuditSnapshot 答案审计快照
+     * @return 工作集引用
+     */
+    @Override
+    public String saveAnswerAudit(String queryId, QueryAnswerAuditSnapshot answerAuditSnapshot) {
+        String ref = buildRef(queryId, "answer-audit");
+        store.put(ref, answerAuditSnapshot);
+        return ref;
+    }
+
+    /**
+     * 读取答案审计快照。
+     *
+     * @param ref 工作集引用
+     * @return 答案审计快照
+     */
+    @Override
+    public QueryAnswerAuditSnapshot loadAnswerAudit(String ref) {
+        if (!hasRef(ref)) {
+            return null;
+        }
+        Object value = store.get(ref);
+        if (value instanceof QueryAnswerAuditSnapshot) {
+            return (QueryAnswerAuditSnapshot) value;
         }
         return null;
     }
@@ -206,6 +321,9 @@ public class InMemoryQueryWorkingSetStore implements QueryWorkingSetStore {
      */
     @Override
     public QueryResponse loadResponse(String ref) {
+        if (!hasRef(ref)) {
+            return null;
+        }
         Object value = store.get(ref);
         if (value instanceof QueryResponse) {
             return (QueryResponse) value;
@@ -237,5 +355,9 @@ public class InMemoryQueryWorkingSetStore implements QueryWorkingSetStore {
      */
     private String buildRef(String queryId, String suffix) {
         return queryId + ":" + suffix;
+    }
+
+    private boolean hasRef(String ref) {
+        return ref != null && !ref.isBlank();
     }
 }

@@ -6,7 +6,10 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 文章来源关联 JDBC 仓储
@@ -82,6 +85,49 @@ public class ArticleSourceRefJdbcRepository {
                 this::mapRecord,
                 articleKey
         );
+    }
+
+    /**
+     * 按源文件主键批量查询关联的文章键。
+     *
+     * @param sourceFileIds 源文件主键列表
+     * @return sourceFileId -> articleKey 列表
+     */
+    public Map<Long, List<String>> findArticleKeysBySourceFileIds(List<Long> sourceFileIds) {
+        Map<Long, List<String>> articleKeysBySourceFileId = new LinkedHashMap<Long, List<String>>();
+        if (jdbcTemplate == null || sourceFileIds == null || sourceFileIds.isEmpty()) {
+            return articleKeysBySourceFileId;
+        }
+        StringBuilder sqlBuilder = new StringBuilder();
+        sqlBuilder.append("""
+                select source_file_id, article_key
+                from article_source_refs
+                where source_file_id in (
+                """);
+        for (int index = 0; index < sourceFileIds.size(); index++) {
+            if (index > 0) {
+                sqlBuilder.append(", ");
+            }
+            sqlBuilder.append("?");
+        }
+        sqlBuilder.append(") order by created_at asc, id asc");
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sqlBuilder.toString(), sourceFileIds.toArray());
+        for (Map<String, Object> row : rows) {
+            Number sourceFileId = (Number) row.get("source_file_id");
+            if (sourceFileId == null) {
+                continue;
+            }
+            Long sourceFileKey = Long.valueOf(sourceFileId.longValue());
+            List<String> articleKeys = articleKeysBySourceFileId.computeIfAbsent(
+                    sourceFileKey,
+                    ignored -> new ArrayList<String>()
+            );
+            Object articleKey = row.get("article_key");
+            if (articleKey != null) {
+                articleKeys.add(String.valueOf(articleKey));
+            }
+        }
+        return articleKeysBySourceFileId;
     }
 
     private ArticleSourceRefRecord mapRecord(ResultSet resultSet, int rowNum) throws SQLException {

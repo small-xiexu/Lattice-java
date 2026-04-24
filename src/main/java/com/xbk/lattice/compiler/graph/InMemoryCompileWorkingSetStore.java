@@ -1,5 +1,6 @@
 package com.xbk.lattice.compiler.graph;
 
+import com.xbk.lattice.compiler.ast.domain.AstGraphExtractReport;
 import com.xbk.lattice.compiler.domain.AnalyzedConcept;
 import com.xbk.lattice.compiler.domain.MergedConcept;
 import com.xbk.lattice.compiler.domain.RawSource;
@@ -175,6 +176,16 @@ public class InMemoryCompileWorkingSetStore implements CompileWorkingSetStore {
     }
 
     @Override
+    public String saveAstExtractReport(String jobId, AstGraphExtractReport astGraphExtractReport) {
+        return savePayload(jobId, "ast_extract_report", astGraphExtractReport);
+    }
+
+    @Override
+    public AstGraphExtractReport loadAstExtractReport(String ref) {
+        return readPayload(ref);
+    }
+
+    @Override
     public void deleteByJobId(String jobId) {
         List<String> refs = new ArrayList<String>();
         for (String ref : payloadStore.keySet()) {
@@ -197,6 +208,7 @@ public class InMemoryCompileWorkingSetStore implements CompileWorkingSetStore {
         versionStore.remove(jobId + ":review_partition");
         versionStore.remove(jobId + ":accepted_articles");
         versionStore.remove(jobId + ":needs_human_review_articles");
+        versionStore.remove(jobId + ":ast_extract_report");
     }
 
     private String savePayload(String jobId, String payloadType, Object payload) {

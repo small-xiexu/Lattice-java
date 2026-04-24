@@ -44,6 +44,7 @@ public class QueryGraphStateMapper {
         state.setRefkeyHitsRef(readString(stateMap, QueryGraphStateKeys.REFKEY_HITS_REF));
         state.setSourceHitsRef(readString(stateMap, QueryGraphStateKeys.SOURCE_HITS_REF));
         state.setContributionHitsRef(readString(stateMap, QueryGraphStateKeys.CONTRIBUTION_HITS_REF));
+        state.setGraphHitsRef(readString(stateMap, QueryGraphStateKeys.GRAPH_HITS_REF));
         state.setArticleVectorHitsRef(readString(stateMap, QueryGraphStateKeys.ARTICLE_VECTOR_HITS_REF));
         state.setChunkVectorHitsRef(readString(stateMap, QueryGraphStateKeys.CHUNK_VECTOR_HITS_REF));
         state.setFusedHitsRef(readString(stateMap, QueryGraphStateKeys.FUSED_HITS_REF));
@@ -53,6 +54,9 @@ public class QueryGraphStateMapper {
         state.setReviewResultRef(readString(stateMap, QueryGraphStateKeys.REVIEW_RESULT_REF));
         state.setCachedResponseRef(readString(stateMap, QueryGraphStateKeys.CACHED_RESPONSE_REF));
         state.setFinalResponseRef(readString(stateMap, QueryGraphStateKeys.FINAL_RESPONSE_REF));
+        state.setClaimSegmentsRef(readString(stateMap, QueryGraphStateKeys.CLAIM_SEGMENTS_REF));
+        state.setCitationCheckReportRef(readString(stateMap, QueryGraphStateKeys.CITATION_CHECK_REPORT_REF));
+        state.setAnswerAuditRef(readString(stateMap, QueryGraphStateKeys.ANSWER_AUDIT_REF));
         state.setLlmBindingSnapshotRef(readString(stateMap, QueryGraphStateKeys.LLM_BINDING_SNAPSHOT_REF));
         state.setAnswerRoute(readString(stateMap, QueryGraphStateKeys.ANSWER_ROUTE));
         state.setReviewRoute(readString(stateMap, QueryGraphStateKeys.REVIEW_ROUTE));
@@ -64,6 +68,7 @@ public class QueryGraphStateMapper {
         state.setAnswerCacheable(readBoolean(stateMap, QueryGraphStateKeys.ANSWER_CACHEABLE));
         state.setRewriteAttemptCount(readInt(stateMap, QueryGraphStateKeys.REWRITE_ATTEMPT_COUNT));
         state.setMaxRewriteRounds(readInt(stateMap, QueryGraphStateKeys.MAX_REWRITE_ROUNDS));
+        state.setCitationRepairAttemptCount(readInt(stateMap, QueryGraphStateKeys.CITATION_REPAIR_ATTEMPT_COUNT));
         return state;
     }
 
@@ -90,6 +95,7 @@ public class QueryGraphStateMapper {
         values.put(QueryGraphStateKeys.REFKEY_HITS_REF, state.getRefkeyHitsRef());
         values.put(QueryGraphStateKeys.SOURCE_HITS_REF, state.getSourceHitsRef());
         values.put(QueryGraphStateKeys.CONTRIBUTION_HITS_REF, state.getContributionHitsRef());
+        values.put(QueryGraphStateKeys.GRAPH_HITS_REF, state.getGraphHitsRef());
         values.put(QueryGraphStateKeys.ARTICLE_VECTOR_HITS_REF, state.getArticleVectorHitsRef());
         values.put(QueryGraphStateKeys.CHUNK_VECTOR_HITS_REF, state.getChunkVectorHitsRef());
         values.put(QueryGraphStateKeys.FUSED_HITS_REF, state.getFusedHitsRef());
@@ -99,6 +105,9 @@ public class QueryGraphStateMapper {
         values.put(QueryGraphStateKeys.REVIEW_RESULT_REF, state.getReviewResultRef());
         values.put(QueryGraphStateKeys.CACHED_RESPONSE_REF, state.getCachedResponseRef());
         values.put(QueryGraphStateKeys.FINAL_RESPONSE_REF, state.getFinalResponseRef());
+        values.put(QueryGraphStateKeys.CLAIM_SEGMENTS_REF, state.getClaimSegmentsRef());
+        values.put(QueryGraphStateKeys.CITATION_CHECK_REPORT_REF, state.getCitationCheckReportRef());
+        values.put(QueryGraphStateKeys.ANSWER_AUDIT_REF, state.getAnswerAuditRef());
         values.put(QueryGraphStateKeys.LLM_BINDING_SNAPSHOT_REF, state.getLlmBindingSnapshotRef());
         values.put(QueryGraphStateKeys.ANSWER_ROUTE, state.getAnswerRoute());
         values.put(QueryGraphStateKeys.REVIEW_ROUTE, state.getReviewRoute());
@@ -110,6 +119,7 @@ public class QueryGraphStateMapper {
         values.put(QueryGraphStateKeys.ANSWER_CACHEABLE, state.isAnswerCacheable());
         values.put(QueryGraphStateKeys.REWRITE_ATTEMPT_COUNT, state.getRewriteAttemptCount());
         values.put(QueryGraphStateKeys.MAX_REWRITE_ROUNDS, state.getMaxRewriteRounds());
+        values.put(QueryGraphStateKeys.CITATION_REPAIR_ATTEMPT_COUNT, state.getCitationRepairAttemptCount());
         return values;
     }
 

@@ -44,7 +44,7 @@ class ReviewerAgentTests {
     @Test
     void shouldReturnParsedReviewResultWhenGatewaySucceeds() {
         ReviewerAgent reviewerAgent = new ReviewerAgent(
-                new StaticReviewerGateway("{\"pass\":true,\"issues\":[]}"),
+                new StaticReviewerGateway("{\"approved\":true,\"rewriteRequired\":false,\"riskLevel\":\"LOW\",\"issues\":[],\"userFacingRewriteHints\":[],\"cacheWritePolicy\":\"WRITE\"}"),
                 new ReviewResultParser()
         );
 
@@ -63,7 +63,9 @@ class ReviewerAgentTests {
      */
     @Test
     void shouldDelegateScopedReviewArgumentsToGateway() {
-        CapturingReviewerGateway reviewerGateway = new CapturingReviewerGateway("{\"pass\":true,\"issues\":[]}");
+        CapturingReviewerGateway reviewerGateway = new CapturingReviewerGateway(
+                "{\"approved\":true,\"rewriteRequired\":false,\"riskLevel\":\"LOW\",\"issues\":[],\"userFacingRewriteHints\":[],\"cacheWritePolicy\":\"WRITE\"}"
+        );
         ReviewerAgent reviewerAgent = new ReviewerAgent(reviewerGateway, new ReviewResultParser());
 
         ReviewResult reviewResult = reviewerAgent.review(

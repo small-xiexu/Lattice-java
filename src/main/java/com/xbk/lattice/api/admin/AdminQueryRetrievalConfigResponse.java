@@ -17,6 +17,8 @@ public class AdminQueryRetrievalConfigResponse {
 
     private final double contributionWeight;
 
+    private final double graphWeight;
+
     private final double articleVectorWeight;
 
     private final double chunkVectorWeight;
@@ -30,6 +32,7 @@ public class AdminQueryRetrievalConfigResponse {
      * @param ftsWeight FTS 权重
      * @param sourceWeight Source 权重
      * @param contributionWeight Contribution 权重
+     * @param graphWeight Graph 权重
      * @param articleVectorWeight 文章向量权重
      * @param chunkVectorWeight Chunk 向量权重
      * @param rrfK RRF K 值
@@ -39,6 +42,7 @@ public class AdminQueryRetrievalConfigResponse {
             double ftsWeight,
             double sourceWeight,
             double contributionWeight,
+            double graphWeight,
             double articleVectorWeight,
             double chunkVectorWeight,
             int rrfK
@@ -47,6 +51,7 @@ public class AdminQueryRetrievalConfigResponse {
         this.ftsWeight = ftsWeight;
         this.sourceWeight = sourceWeight;
         this.contributionWeight = contributionWeight;
+        this.graphWeight = graphWeight;
         this.articleVectorWeight = articleVectorWeight;
         this.chunkVectorWeight = chunkVectorWeight;
         this.rrfK = rrfK;
@@ -86,6 +91,15 @@ public class AdminQueryRetrievalConfigResponse {
      */
     public double getContributionWeight() {
         return contributionWeight;
+    }
+
+    /**
+     * 返回 Graph 权重。
+     *
+     * @return Graph 权重
+     */
+    public double getGraphWeight() {
+        return graphWeight;
     }
 
     /**

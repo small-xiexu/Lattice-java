@@ -38,21 +38,29 @@ class QueryFacadeServiceCacheTests {
         CountingFtsSearchService ftsSearchService = new CountingFtsSearchService(List.of(articleHit));
         CountingRefKeySearchService refKeySearchService = new CountingRefKeySearchService(List.of());
         SequencedAnswerGenerationService answerGenerationService = new SequencedAnswerGenerationService();
-        QueryFacadeService queryFacadeService = new QueryFacadeService(
+        FakeQueryCacheStore queryCacheStore = new FakeQueryCacheStore();
+        QueryGraphOrchestrator queryGraphOrchestrator = QueryGraphTestSupport.createQueryGraphOrchestrator(
                 ftsSearchService,
                 refKeySearchService,
-                new RrfFusionService(),
+                new SourceSearchService(null),
+                new ContributionSearchService(null),
+                new VectorSearchService(),
                 answerGenerationService,
-                new FakeQueryCacheStore(),
+                queryCacheStore,
                 new ReviewerAgent(new StaticReviewerGateway(), new ReviewResultParser()),
+                new QueryReviewProperties(),
+                List.of(articleHit)
+        );
+        QueryFacadeService queryFacadeService = QueryGraphTestSupport.createQueryFacadeService(
+                queryGraphOrchestrator,
                 new CountingPendingQueryManager()
         );
 
         QueryResponse firstResponse = queryFacadeService.query("payment timeout retry=3");
         QueryResponse secondResponse = queryFacadeService.query("payment timeout retry=3");
 
-        assertThat(firstResponse.getAnswer()).isEqualTo("answer-1");
-        assertThat(secondResponse.getAnswer()).isEqualTo("answer-1");
+        assertThat(firstResponse.getAnswer()).isEqualTo("answer-1 [[payment-timeout]]");
+        assertThat(secondResponse.getAnswer()).isEqualTo("answer-1 [[payment-timeout]]");
         assertThat(ftsSearchService.getInvocationCount()).isEqualTo(1);
         assertThat(refKeySearchService.getInvocationCount()).isEqualTo(1);
         assertThat(answerGenerationService.getInvocationCount()).isEqualTo(1);
@@ -73,7 +81,7 @@ class QueryFacadeServiceCacheTests {
          */
         @Override
         public String review(String reviewPrompt) {
-            return "{\"pass\":true,\"issues\":[]}";
+            return "{\"approved\":true,\"rewriteRequired\":false,\"riskLevel\":\"LOW\",\"issues\":[],\"userFacingRewriteHints\":[],\"cacheWritePolicy\":\"WRITE\"}";
         }
     }
 
@@ -319,7 +327,7 @@ class QueryFacadeServiceCacheTests {
         ) {
             invocationCount++;
             return new QueryAnswerPayload(
-                    "answer-" + invocationCount,
+                    "answer-" + invocationCount + " [[payment-timeout]]",
                     AnswerOutcome.SUCCESS,
                     GenerationMode.LLM,
                     ModelExecutionStatus.SUCCESS,

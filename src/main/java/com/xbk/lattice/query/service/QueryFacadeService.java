@@ -1,8 +1,10 @@
 package com.xbk.lattice.query.service;
 
+import com.xbk.lattice.api.query.QueryRequest;
 import com.xbk.lattice.api.query.QueryResponse;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import com.xbk.lattice.observability.StructuredEventLogger;
+import com.xbk.lattice.query.deepresearch.service.DeepResearchRouter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -25,6 +27,10 @@ public class QueryFacadeService {
 
     private final QueryGraphOrchestrator queryGraphOrchestrator;
 
+    private final DeepResearchOrchestrator deepResearchOrchestrator;
+
+    private final DeepResearchRouter deepResearchRouter;
+
     private final PendingQueryManager pendingQueryManager;
 
     private final StructuredEventLogger structuredEventLogger;
@@ -33,93 +39,23 @@ public class QueryFacadeService {
      * 创建查询门面服务。
      *
      * @param queryGraphOrchestrator 问答图编排器
+     * @param deepResearchOrchestrator Deep Research 编排器
+     * @param deepResearchRouter Deep Research 路由器
      * @param pendingQueryManager PendingQuery 管理器
      */
     @Autowired
     public QueryFacadeService(
             QueryGraphOrchestrator queryGraphOrchestrator,
+            DeepResearchOrchestrator deepResearchOrchestrator,
+            DeepResearchRouter deepResearchRouter,
             PendingQueryManager pendingQueryManager,
             StructuredEventLogger structuredEventLogger
     ) {
         this.queryGraphOrchestrator = queryGraphOrchestrator;
+        this.deepResearchOrchestrator = deepResearchOrchestrator;
+        this.deepResearchRouter = deepResearchRouter;
         this.pendingQueryManager = pendingQueryManager;
         this.structuredEventLogger = structuredEventLogger;
-    }
-
-    /**
-     * 创建兼容单测的查询门面服务。
-     *
-     * @param ftsSearchService FTS 检索服务
-     * @param refKeySearchService 引用词检索服务
-     * @param sourceSearchService 源文件检索服务
-     * @param contributionSearchService Contribution 检索服务
-     * @param vectorSearchService 向量检索服务
-     * @param rrfFusionService RRF 融合服务
-     * @param answerGenerationService 答案生成服务
-     * @param queryCacheStore 查询缓存存储
-     * @param reviewerAgent 审查代理
-     * @param pendingQueryManager PendingQuery 管理器
-     */
-    public QueryFacadeService(
-            FtsSearchService ftsSearchService,
-            RefKeySearchService refKeySearchService,
-            SourceSearchService sourceSearchService,
-            ContributionSearchService contributionSearchService,
-            VectorSearchService vectorSearchService,
-            RrfFusionService rrfFusionService,
-            AnswerGenerationService answerGenerationService,
-            QueryCacheStore queryCacheStore,
-            ReviewerAgent reviewerAgent,
-            PendingQueryManager pendingQueryManager
-    ) {
-        this.queryGraphOrchestrator = new QueryGraphOrchestrator(
-                ftsSearchService,
-                refKeySearchService,
-                sourceSearchService,
-                contributionSearchService,
-                vectorSearchService,
-                rrfFusionService,
-                answerGenerationService,
-                queryCacheStore,
-                reviewerAgent,
-                new QueryReviewProperties()
-        );
-        this.pendingQueryManager = pendingQueryManager;
-        this.structuredEventLogger = null;
-    }
-
-    /**
-     * 创建兼容单测的查询门面服务。
-     *
-     * @param ftsSearchService FTS 检索服务
-     * @param refKeySearchService 引用词检索服务
-     * @param rrfFusionService RRF 融合服务
-     * @param answerGenerationService 答案生成服务
-     * @param queryCacheStore 查询缓存存储
-     * @param reviewerAgent 审查代理
-     * @param pendingQueryManager PendingQuery 管理器
-     */
-    public QueryFacadeService(
-            FtsSearchService ftsSearchService,
-            RefKeySearchService refKeySearchService,
-            RrfFusionService rrfFusionService,
-            AnswerGenerationService answerGenerationService,
-            QueryCacheStore queryCacheStore,
-            ReviewerAgent reviewerAgent,
-            PendingQueryManager pendingQueryManager
-    ) {
-        this(
-                ftsSearchService,
-                refKeySearchService,
-                new SourceSearchService(null),
-                new ContributionSearchService(null),
-                new VectorSearchService(),
-                rrfFusionService,
-                answerGenerationService,
-                queryCacheStore,
-                reviewerAgent,
-                pendingQueryManager
-        );
     }
 
     /**
@@ -129,10 +65,23 @@ public class QueryFacadeService {
      * @return 查询响应
      */
     public QueryResponse query(String question) {
+        QueryRequest queryRequest = new QueryRequest();
+        queryRequest.setQuestion(question);
+        return query(queryRequest);
+    }
+
+    /**
+     * 执行最小知识查询。
+     *
+     * @param queryRequest 查询请求
+     * @return 查询响应
+     */
+    public QueryResponse query(QueryRequest queryRequest) {
         String queryId = UUID.randomUUID().toString();
+        String question = queryRequest == null ? null : queryRequest.getQuestion();
         logQueryReceived(queryId, question);
         try {
-            QueryResponse baseResponse = queryGraphOrchestrator.execute(question, queryId);
+            QueryResponse baseResponse = routeAndExecute(queryRequest, queryId);
             QueryResponse finalResponse = shouldAttachPendingQuery(baseResponse)
                     ? attachPendingQuery(question, baseResponse)
                     : baseResponse;
@@ -143,6 +92,24 @@ public class QueryFacadeService {
             logQueryCompleted(new QueryResponse(null, List.of(), List.of(), queryId, null, null, null, null), "FAILED", exception);
             throw exception;
         }
+    }
+
+    /**
+     * 按请求路由执行查询。
+     *
+     * @param queryRequest 查询请求
+     * @param queryId 查询标识
+     * @return 查询响应
+     */
+    private QueryResponse routeAndExecute(QueryRequest queryRequest, String queryId) {
+        if (queryRequest != null
+                && deepResearchOrchestrator != null
+                && deepResearchRouter != null
+                && deepResearchRouter.shouldRoute(queryRequest)) {
+            return deepResearchOrchestrator.execute(queryRequest, queryId);
+        }
+        String question = queryRequest == null ? null : queryRequest.getQuestion();
+        return queryGraphOrchestrator.execute(question, queryId);
     }
 
     /**
@@ -162,7 +129,9 @@ public class QueryFacadeService {
                 baseResponse.getReviewStatus(),
                 baseResponse.getAnswerOutcome(),
                 baseResponse.getGenerationMode(),
-                baseResponse.getModelExecutionStatus()
+                baseResponse.getModelExecutionStatus(),
+                baseResponse.getCitationCheck(),
+                baseResponse.getDeepResearch()
         );
     }
 

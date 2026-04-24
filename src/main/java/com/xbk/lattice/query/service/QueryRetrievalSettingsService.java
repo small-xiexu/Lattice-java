@@ -62,6 +62,7 @@ public class QueryRetrievalSettingsService {
                 1.0D,
                 1.0D,
                 1.0D,
+                0.9D,
                 0.6D,
                 1.2D,
                 60
@@ -75,6 +76,7 @@ public class QueryRetrievalSettingsService {
      * @param ftsWeight FTS 权重
      * @param sourceWeight Source 权重
      * @param contributionWeight Contribution 权重
+     * @param graphWeight Graph 权重
      * @param articleVectorWeight 文章向量权重
      * @param chunkVectorWeight Chunk 向量权重
      * @param rrfK RRF K 值
@@ -86,6 +88,7 @@ public class QueryRetrievalSettingsService {
             double ftsWeight,
             double sourceWeight,
             double contributionWeight,
+            double graphWeight,
             double articleVectorWeight,
             double chunkVectorWeight,
             int rrfK
@@ -96,6 +99,7 @@ public class QueryRetrievalSettingsService {
                     ftsWeight,
                     sourceWeight,
                     contributionWeight,
+                    graphWeight,
                     articleVectorWeight,
                     chunkVectorWeight,
                     rrfK
@@ -106,6 +110,7 @@ public class QueryRetrievalSettingsService {
                 ftsWeight,
                 sourceWeight,
                 contributionWeight,
+                graphWeight,
                 articleVectorWeight,
                 chunkVectorWeight,
                 rrfK

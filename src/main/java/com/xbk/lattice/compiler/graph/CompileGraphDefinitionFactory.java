@@ -7,6 +7,7 @@ import com.xbk.lattice.compiler.graph.node.AnalyzeBatchesNode;
 import com.xbk.lattice.compiler.graph.node.CaptureRepoSnapshotNode;
 import com.xbk.lattice.compiler.graph.node.CompileNewArticlesNode;
 import com.xbk.lattice.compiler.graph.node.EnhanceExistingArticlesNode;
+import com.xbk.lattice.compiler.graph.node.ExtractAstGraphNode;
 import com.xbk.lattice.compiler.graph.node.FinalizeJobNode;
 import com.xbk.lattice.compiler.graph.node.FixReviewIssuesNode;
 import com.xbk.lattice.compiler.graph.node.GenerateSynthesisArtifactsNode;
@@ -47,6 +48,8 @@ public class CompileGraphDefinitionFactory {
     private final PersistSourceFileChunksNode persistSourceFileChunksNode;
 
     private final GroupSourcesNode groupSourcesNode;
+
+    private final ExtractAstGraphNode extractAstGraphNode;
 
     private final SplitBatchesNode splitBatchesNode;
 
@@ -92,6 +95,7 @@ public class CompileGraphDefinitionFactory {
      * @param persistSourceFilesNode 落盘源文件节点
      * @param persistSourceFileChunksNode 落盘源文件分块节点
      * @param groupSourcesNode 源文件分组节点
+     * @param extractAstGraphNode AST 图谱抽取节点
      * @param splitBatchesNode 批次切分节点
      * @param analyzeBatchesNode 批次分析节点
      * @param mergeConceptsNode 概念归并节点
@@ -117,6 +121,7 @@ public class CompileGraphDefinitionFactory {
             PersistSourceFilesNode persistSourceFilesNode,
             PersistSourceFileChunksNode persistSourceFileChunksNode,
             GroupSourcesNode groupSourcesNode,
+            ExtractAstGraphNode extractAstGraphNode,
             SplitBatchesNode splitBatchesNode,
             AnalyzeBatchesNode analyzeBatchesNode,
             MergeConceptsNode mergeConceptsNode,
@@ -141,6 +146,7 @@ public class CompileGraphDefinitionFactory {
         this.persistSourceFilesNode = persistSourceFilesNode;
         this.persistSourceFileChunksNode = persistSourceFileChunksNode;
         this.groupSourcesNode = groupSourcesNode;
+        this.extractAstGraphNode = extractAstGraphNode;
         this.splitBatchesNode = splitBatchesNode;
         this.analyzeBatchesNode = analyzeBatchesNode;
         this.mergeConceptsNode = mergeConceptsNode;
@@ -173,6 +179,7 @@ public class CompileGraphDefinitionFactory {
         stateGraph.addNode("ingest_sources", AsyncNodeAction.node_async(ingestSourcesNode::execute));
         stateGraph.addNode("persist_source_files", AsyncNodeAction.node_async(persistSourceFilesNode::execute));
         stateGraph.addNode("persist_source_file_chunks", AsyncNodeAction.node_async(persistSourceFileChunksNode::execute));
+        stateGraph.addNode("extract_ast_graph", AsyncNodeAction.node_async(extractAstGraphNode::execute));
         stateGraph.addNode("group_sources", AsyncNodeAction.node_async(groupSourcesNode::execute));
         stateGraph.addNode("split_batches", AsyncNodeAction.node_async(splitBatchesNode::execute));
         stateGraph.addNode("analyze_batches", AsyncNodeAction.node_async(analyzeBatchesNode::execute));
@@ -193,7 +200,8 @@ public class CompileGraphDefinitionFactory {
         stateGraph.addEdge("initialize_job", "ingest_sources");
         stateGraph.addEdge("ingest_sources", "persist_source_files");
         stateGraph.addEdge("persist_source_files", "persist_source_file_chunks");
-        stateGraph.addEdge("persist_source_file_chunks", "group_sources");
+        stateGraph.addEdge("persist_source_file_chunks", "extract_ast_graph");
+        stateGraph.addEdge("extract_ast_graph", "group_sources");
         stateGraph.addEdge("group_sources", "split_batches");
         stateGraph.addEdge("split_batches", "analyze_batches");
         stateGraph.addEdge("analyze_batches", "merge_concepts");

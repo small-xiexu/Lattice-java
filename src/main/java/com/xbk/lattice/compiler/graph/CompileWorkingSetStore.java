@@ -1,5 +1,6 @@
 package com.xbk.lattice.compiler.graph;
 
+import com.xbk.lattice.compiler.ast.domain.AstGraphExtractReport;
 import com.xbk.lattice.compiler.domain.AnalyzedConcept;
 import com.xbk.lattice.compiler.domain.MergedConcept;
 import com.xbk.lattice.compiler.domain.RawSource;
@@ -221,6 +222,23 @@ public interface CompileWorkingSetStore {
      * @return 待人工复核文章集合
      */
     List<ArticleReviewEnvelope> loadNeedsHumanReviewArticles(String ref);
+
+    /**
+     * 保存 AST 图谱抽取报告。
+     *
+     * @param jobId 作业标识
+     * @param astGraphExtractReport 抽取报告
+     * @return 引用标识
+     */
+    String saveAstExtractReport(String jobId, AstGraphExtractReport astGraphExtractReport);
+
+    /**
+     * 读取 AST 图谱抽取报告。
+     *
+     * @param ref 引用标识
+     * @return 抽取报告
+     */
+    AstGraphExtractReport loadAstExtractReport(String ref);
 
     /**
      * 按作业清理工作集。

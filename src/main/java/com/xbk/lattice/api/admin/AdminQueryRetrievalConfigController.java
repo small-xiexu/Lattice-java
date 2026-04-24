@@ -56,6 +56,7 @@ public class AdminQueryRetrievalConfigController {
                 request.getFtsWeight().doubleValue(),
                 request.getSourceWeight().doubleValue(),
                 request.getContributionWeight().doubleValue(),
+                request.getGraphWeight().doubleValue(),
                 request.getArticleVectorWeight().doubleValue(),
                 request.getChunkVectorWeight().doubleValue(),
                 request.getRrfK().intValue()
@@ -75,6 +76,7 @@ public class AdminQueryRetrievalConfigController {
                 state.getFtsWeight(),
                 state.getSourceWeight(),
                 state.getContributionWeight(),
+                state.getGraphWeight(),
                 state.getArticleVectorWeight(),
                 state.getChunkVectorWeight(),
                 state.getRrfK()
@@ -96,6 +98,7 @@ public class AdminQueryRetrievalConfigController {
         validateWeight(request.getFtsWeight(), "ftsWeight");
         validateWeight(request.getSourceWeight(), "sourceWeight");
         validateWeight(request.getContributionWeight(), "contributionWeight");
+        validateWeight(request.getGraphWeight(), "graphWeight");
         validateWeight(request.getArticleVectorWeight(), "articleVectorWeight");
         validateWeight(request.getChunkVectorWeight(), "chunkVectorWeight");
         if (request.getRrfK() == null || request.getRrfK().intValue() <= 0) {

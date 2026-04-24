@@ -38,11 +38,14 @@ public class AnswerGenerationService {
             1. 只能输出 JSON，不要输出 Markdown 正文、代码块或解释性前后缀
             2. JSON 结构必须是 {"answerMarkdown":"...","answerOutcome":"SUCCESS|INSUFFICIENT_EVIDENCE|NO_RELEVANT_KNOWLEDGE|PARTIAL_ANSWER","answerCacheable":true|false}
             3. answerMarkdown 字段内部必须是面向最终用户的 Markdown
-            4. 优先引用 ARTICLE / SOURCE / CONTRIBUTION 中直接可证实的信息
-            5. 如果信息不足，要明确指出缺口，不要编造；此时 answerOutcome 必须为 INSUFFICIENT_EVIDENCE 或 PARTIAL_ANSWER
-            6. 没有相关知识时 answerOutcome 必须为 NO_RELEVANT_KNOWLEDGE，answerCacheable 必须为 false
-            7. 只有在 answerOutcome=SUCCESS 且答案可稳定复用时，answerCacheable 才能为 true
-            8. 回答语言使用简体中文，保留必要英文术语或原始配置项
+            4. 每个关键结论段落末尾必须追加至少一个可解析引用
+            5. 文章引用格式只能是 [[article-key]] 或 [[article-key|显示标签]]
+            6. 源文件引用格式只能是 [→ relative/path/File.java] 或 [→ relative/path/File.java, section]
+            7. 优先引用 ARTICLE / SOURCE / CONTRIBUTION 中直接可证实的信息
+            8. 如果信息不足，要明确指出缺口，不要编造；此时 answerOutcome 必须为 INSUFFICIENT_EVIDENCE 或 PARTIAL_ANSWER
+            9. 没有相关知识时 answerOutcome 必须为 NO_RELEVANT_KNOWLEDGE，answerCacheable 必须为 false
+            10. 只有在 answerOutcome=SUCCESS 且答案可稳定复用时，answerCacheable 才能为 true
+            11. 回答语言使用简体中文，保留必要英文术语或原始配置项
             """;
 
     private static final String SYSTEM_QUERY_REVISE = """
@@ -63,11 +66,14 @@ public class AnswerGenerationService {
             1. 只能输出 JSON，不要输出 Markdown 正文、代码块或解释性前后缀
             2. JSON 结构必须是 {"answerMarkdown":"...","answerOutcome":"SUCCESS|INSUFFICIENT_EVIDENCE|NO_RELEVANT_KNOWLEDGE|PARTIAL_ANSWER","answerCacheable":true|false}
             3. answerMarkdown 字段内部必须直接输出最终答案，不要复述“审查结论”“修订说明”“问题单”或缺陷列表
-            4. 对有证据支撑的内容，给出明确结论，并保留关键阈值、地址、字段名等原始值
-            5. 对证据不足或无法确认的子问题，明确写“当前证据不足”或“暂无法确认”
-            6. 不要编造，不要输出 TODO，不要把 REVIEW FINDINGS 原样粘贴到 answerMarkdown 中
-            7. 只有在 answerOutcome=SUCCESS 且答案可稳定复用时，answerCacheable 才能为 true
-            8. 回答语言使用简体中文
+            4. 每个关键结论段落末尾必须追加至少一个可解析引用
+            5. 文章引用格式只能是 [[article-key]] 或 [[article-key|显示标签]]
+            6. 源文件引用格式只能是 [→ relative/path/File.java] 或 [→ relative/path/File.java, section]
+            7. 对有证据支撑的内容，给出明确结论，并保留关键阈值、地址、字段名等原始值
+            8. 对证据不足或无法确认的子问题，明确写“当前证据不足”或“暂无法确认”
+            9. 不要编造，不要输出 TODO，不要把 REVIEW FINDINGS 原样粘贴到 answerMarkdown 中
+            10. 只有在 answerOutcome=SUCCESS 且答案可稳定复用时，answerCacheable 才能为 true
+            11. 回答语言使用简体中文
             """;
 
     private final LlmGateway llmGateway;
@@ -108,16 +114,19 @@ public class AnswerGenerationService {
         answerBuilder.append(articleHit.getTitle());
         if (!matchedLines.isEmpty()) {
             answerBuilder.append("：").append(String.join("；", matchedLines));
+            answerBuilder.append(" ").append(resolveCitationLiteral(articleHit));
             return answerBuilder.toString();
         }
 
         String description = extractDescription(articleHit.getMetadataJson());
         if (!description.isEmpty()) {
             answerBuilder.append("：").append(description);
+            answerBuilder.append(" ").append(resolveCitationLiteral(articleHit));
             return answerBuilder.toString();
         }
 
         answerBuilder.append("：").append(articleHit.getContent());
+        answerBuilder.append(" ").append(resolveCitationLiteral(articleHit));
         return answerBuilder.toString();
     }
 
@@ -682,6 +691,7 @@ public class AnswerGenerationService {
         promptBuilder.append(question.trim()).append("\n\n");
         appendEvidenceSection(promptBuilder, "CONTRIBUTION EVIDENCE", groupedHits.get(QueryEvidenceType.CONTRIBUTION));
         appendEvidenceSection(promptBuilder, "ARTICLE EVIDENCE", groupedHits.get(QueryEvidenceType.ARTICLE));
+        appendEvidenceSection(promptBuilder, "GRAPH EVIDENCE", groupedHits.get(QueryEvidenceType.GRAPH));
         appendEvidenceSection(promptBuilder, "SOURCE EVIDENCE", groupedHits.get(QueryEvidenceType.SOURCE));
         return promptBuilder.toString().trim();
     }
@@ -711,6 +721,7 @@ public class AnswerGenerationService {
         promptBuilder.append(correction == null ? "" : correction.trim()).append("\n\n");
         appendEvidenceSection(promptBuilder, "CONTRIBUTION EVIDENCE", groupedHits.get(QueryEvidenceType.CONTRIBUTION));
         appendEvidenceSection(promptBuilder, "ARTICLE EVIDENCE", groupedHits.get(QueryEvidenceType.ARTICLE));
+        appendEvidenceSection(promptBuilder, "GRAPH EVIDENCE", groupedHits.get(QueryEvidenceType.GRAPH));
         appendEvidenceSection(promptBuilder, "SOURCE EVIDENCE", groupedHits.get(QueryEvidenceType.SOURCE));
         return promptBuilder.toString().trim();
     }
@@ -740,6 +751,7 @@ public class AnswerGenerationService {
         promptBuilder.append(reviewFindings == null ? "" : reviewFindings.trim()).append("\n\n");
         appendEvidenceSection(promptBuilder, "CONTRIBUTION EVIDENCE", groupedHits.get(QueryEvidenceType.CONTRIBUTION));
         appendEvidenceSection(promptBuilder, "ARTICLE EVIDENCE", groupedHits.get(QueryEvidenceType.ARTICLE));
+        appendEvidenceSection(promptBuilder, "GRAPH EVIDENCE", groupedHits.get(QueryEvidenceType.GRAPH));
         appendEvidenceSection(promptBuilder, "SOURCE EVIDENCE", groupedHits.get(QueryEvidenceType.SOURCE));
         return promptBuilder.toString().trim();
     }
@@ -783,6 +795,7 @@ public class AnswerGenerationService {
             promptBuilder.append("- title: ").append(queryArticleHit.getTitle()).append("\n");
             promptBuilder.append("  id: ").append(queryArticleHit.getConceptId()).append("\n");
             promptBuilder.append("  sources: ").append(String.join(", ", queryArticleHit.getSourcePaths())).append("\n");
+            promptBuilder.append("  citation: ").append(resolveCitationLiteral(queryArticleHit)).append("\n");
             promptBuilder.append("  content: ").append(queryArticleHit.getContent()).append("\n");
             promptBuilder.append("  metadata: ").append(queryArticleHit.getMetadataJson()).append("\n");
         }
@@ -804,6 +817,7 @@ public class AnswerGenerationService {
         markdownBuilder.append(question.trim()).append("\n\n");
         appendFallbackSection(markdownBuilder, "用户反馈证据", groupedHits.get(QueryEvidenceType.CONTRIBUTION));
         appendFallbackSection(markdownBuilder, "文章证据", groupedHits.get(QueryEvidenceType.ARTICLE));
+        appendFallbackSection(markdownBuilder, "图谱证据", groupedHits.get(QueryEvidenceType.GRAPH));
         appendFallbackSection(markdownBuilder, "源文件证据", groupedHits.get(QueryEvidenceType.SOURCE));
         return markdownBuilder.toString().trim();
     }
@@ -835,6 +849,7 @@ public class AnswerGenerationService {
         markdownBuilder.append("- 纠正输入：").append(correction == null ? "" : correction.trim()).append("\n\n");
         appendFallbackSection(markdownBuilder, "用户反馈证据", groupedHits.get(QueryEvidenceType.CONTRIBUTION));
         appendFallbackSection(markdownBuilder, "文章证据", groupedHits.get(QueryEvidenceType.ARTICLE));
+        appendFallbackSection(markdownBuilder, "图谱证据", groupedHits.get(QueryEvidenceType.GRAPH));
         appendFallbackSection(markdownBuilder, "源文件证据", groupedHits.get(QueryEvidenceType.SOURCE));
         return markdownBuilder.toString().trim();
     }
@@ -860,7 +875,11 @@ public class AnswerGenerationService {
             if (!queryArticleHit.getSourcePaths().isEmpty()) {
                 markdownBuilder.append(" (").append(String.join(", ", queryArticleHit.getSourcePaths())).append(")");
             }
-            markdownBuilder.append("：").append(extractEvidenceSnippet(queryArticleHit.getContent())).append("\n");
+            markdownBuilder.append("：")
+                    .append(extractEvidenceSnippet(queryArticleHit.getContent()))
+                    .append(" ")
+                    .append(resolveCitationLiteral(queryArticleHit))
+                    .append("\n");
         }
         markdownBuilder.append("\n");
     }
@@ -877,5 +896,28 @@ public class AnswerGenerationService {
             return normalizedContent;
         }
         return normalizedContent.substring(0, 180) + "...";
+    }
+
+    /**
+     * 解析单条证据对应的标准引用文本。
+     *
+     * @param queryArticleHit 证据命中
+     * @return 引用文本
+     */
+    private String resolveCitationLiteral(QueryArticleHit queryArticleHit) {
+        if (queryArticleHit == null) {
+            return "";
+        }
+        if (!queryArticleHit.getSourcePaths().isEmpty()) {
+            return "[→ " + queryArticleHit.getSourcePaths().get(0) + "]";
+        }
+        String articleKey = queryArticleHit.getArticleKey();
+        if (articleKey == null || articleKey.isBlank()) {
+            articleKey = queryArticleHit.getConceptId();
+        }
+        if (articleKey == null || articleKey.isBlank()) {
+            return "";
+        }
+        return "[[" + articleKey + "]]";
     }
 }

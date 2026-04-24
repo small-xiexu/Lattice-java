@@ -41,6 +41,8 @@ public final class QueryGraphStateKeys {
 
     public static final String CONTRIBUTION_HITS_REF = "contributionHitsRef";
 
+    public static final String GRAPH_HITS_REF = "graphHitsRef";
+
     public static final String ARTICLE_VECTOR_HITS_REF = "articleVectorHitsRef";
 
     public static final String CHUNK_VECTOR_HITS_REF = "chunkVectorHitsRef";
@@ -58,6 +60,12 @@ public final class QueryGraphStateKeys {
     public static final String CACHED_RESPONSE_REF = "cachedResponseRef";
 
     public static final String FINAL_RESPONSE_REF = "finalResponseRef";
+
+    public static final String CLAIM_SEGMENTS_REF = "claimSegmentsRef";
+
+    public static final String CITATION_CHECK_REPORT_REF = "citationCheckReportRef";
+
+    public static final String ANSWER_AUDIT_REF = "answerAuditRef";
 
     public static final String LLM_BINDING_SNAPSHOT_REF = "llmBindingSnapshotRef";
 
@@ -80,6 +88,8 @@ public final class QueryGraphStateKeys {
     public static final String REWRITE_ATTEMPT_COUNT = "rewriteAttemptCount";
 
     public static final String MAX_REWRITE_ROUNDS = "maxRewriteRounds";
+
+    public static final String CITATION_REPAIR_ATTEMPT_COUNT = "citationRepairAttemptCount";
 
     private QueryGraphStateKeys() {
     }

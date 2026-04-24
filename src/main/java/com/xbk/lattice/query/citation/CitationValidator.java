@@ -1,0 +1,246 @@
+package com.xbk.lattice.query.citation;
+
+import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
+import com.xbk.lattice.infra.persistence.ArticleRecord;
+import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
+import com.xbk.lattice.infra.persistence.SourceFileRecord;
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Citation 校验器
+ *
+ * 职责：对单条引用执行规则校验，并输出重叠分与命中摘录
+ *
+ * @author xiexu
+ */
+@Component
+@Profile("jdbc")
+public class CitationValidator {
+
+    private static final Pattern NUMERIC_LITERAL_PATTERN = Pattern.compile("\\b(\\d{3,6})\\b");
+
+    private static final Pattern SNAKE_CASE_PATTERN = Pattern.compile("\\b([a-z][a-z0-9]*(?:_[a-z0-9]+){1,})\\b");
+
+    private static final Pattern FQN_PATTERN = Pattern.compile("\\b(com(?:\\.[A-Za-z_][\\w$]*){2,})\\b");
+
+    private static final Pattern HTTP_PATH_PATTERN = Pattern.compile("(/[-A-Za-z0-9_./]+)");
+
+    private static final Pattern JAVA_SYMBOL_PATTERN = Pattern.compile(
+            "\\b([A-Z][A-Za-z0-9]*(?:Mapper|Service|ServiceImpl|Impl|Controller|Dao))\\b"
+    );
+
+    private final ArticleJdbcRepository articleJdbcRepository;
+
+    private final SourceFileJdbcRepository sourceFileJdbcRepository;
+
+    /**
+     * 创建 Citation 校验器。
+     *
+     * @param articleJdbcRepository 文章仓储
+     * @param sourceFileJdbcRepository 源文件仓储
+     */
+    public CitationValidator(
+            ArticleJdbcRepository articleJdbcRepository,
+            SourceFileJdbcRepository sourceFileJdbcRepository
+    ) {
+        this.articleJdbcRepository = articleJdbcRepository;
+        this.sourceFileJdbcRepository = sourceFileJdbcRepository;
+    }
+
+    /**
+     * 校验单条引用。
+     *
+     * @param citation 引用
+     * @return 校验结果
+     */
+    public CitationValidationResult validate(Citation citation) {
+        if (citation == null) {
+            return new CitationValidationResult(null, null, CitationValidationStatus.DEMOTED, 0.0D, "citation_missing", "", -1);
+        }
+        List<String> hardFactTokens = extractHardFactTokens(citation.getClaimText());
+        if (hardFactTokens.isEmpty()) {
+            return new CitationValidationResult(
+                    citation.getTargetKey(),
+                    citation.getSourceType(),
+                    CitationValidationStatus.SKIPPED,
+                    0.0D,
+                    "no_hard_fact_literals",
+                    "",
+                    citation.getOrdinal()
+            );
+        }
+        if (citation.getSourceType() == CitationSourceType.SOURCE_FILE) {
+            SourceFileRecord sourceFileRecord = sourceFileJdbcRepository.findByPath(citation.getTargetKey()).orElse(null);
+            if (sourceFileRecord == null) {
+                return new CitationValidationResult(
+                        citation.getTargetKey(),
+                        citation.getSourceType(),
+                        CitationValidationStatus.SKIPPED,
+                        0.0D,
+                        "source_file_not_found_skip",
+                        "",
+                        citation.getOrdinal()
+                );
+            }
+            double overlapScore = calculateOverlapScore(hardFactTokens, sourceFileRecord.getContentText());
+            if (overlapScore >= 1.0D) {
+                return new CitationValidationResult(
+                        citation.getTargetKey(),
+                        citation.getSourceType(),
+                        CitationValidationStatus.VERIFIED,
+                        overlapScore,
+                        "source_rule_overlap_verified",
+                        extractMatchedExcerpt(sourceFileRecord.getContentText(), hardFactTokens),
+                        citation.getOrdinal()
+                );
+            }
+            return new CitationValidationResult(
+                    citation.getTargetKey(),
+                    citation.getSourceType(),
+                    CitationValidationStatus.DEMOTED,
+                    overlapScore,
+                    "source_insufficient_overlap",
+                    extractMatchedExcerpt(sourceFileRecord.getContentText(), hardFactTokens),
+                    citation.getOrdinal()
+            );
+        }
+        ArticleRecord articleRecord = articleJdbcRepository.findByArticleKey(citation.getTargetKey())
+                .or(() -> articleJdbcRepository.findByConceptId(citation.getTargetKey()))
+                .orElse(null);
+        if (articleRecord == null) {
+            return new CitationValidationResult(
+                    citation.getTargetKey(),
+                    citation.getSourceType(),
+                    CitationValidationStatus.NOT_FOUND,
+                    0.0D,
+                    "article_not_found",
+                    "",
+                    citation.getOrdinal()
+            );
+        }
+        double overlapScore = calculateOverlapScore(hardFactTokens, buildEvidenceText(articleRecord));
+        if (overlapScore >= 1.0D) {
+            return new CitationValidationResult(
+                    citation.getTargetKey(),
+                    citation.getSourceType(),
+                    CitationValidationStatus.VERIFIED,
+                    overlapScore,
+                    "rule_overlap_verified",
+                    extractMatchedExcerpt(articleRecord.getContent(), hardFactTokens),
+                    citation.getOrdinal()
+            );
+        }
+        return new CitationValidationResult(
+                citation.getTargetKey(),
+                citation.getSourceType(),
+                CitationValidationStatus.DEMOTED,
+                overlapScore,
+                "insufficient_overlap",
+                extractMatchedExcerpt(articleRecord.getContent(), hardFactTokens),
+                citation.getOrdinal()
+        );
+    }
+
+    private String buildEvidenceText(ArticleRecord articleRecord) {
+        StringBuilder textBuilder = new StringBuilder();
+        if (articleRecord.getTitle() != null) {
+            textBuilder.append(articleRecord.getTitle()).append('\n');
+        }
+        if (articleRecord.getSummary() != null) {
+            textBuilder.append(articleRecord.getSummary()).append('\n');
+        }
+        if (articleRecord.getContent() != null) {
+            textBuilder.append(articleRecord.getContent());
+        }
+        return textBuilder.toString();
+    }
+
+    private double calculateOverlapScore(List<String> hardFactTokens, String evidenceText) {
+        Set<String> claimTokens = new LinkedHashSet<String>(hardFactTokens);
+        if (claimTokens.isEmpty()) {
+            return 0.0D;
+        }
+        Set<String> evidenceTokens = tokenize(evidenceText);
+        if (evidenceTokens.isEmpty()) {
+            return 0.0D;
+        }
+        int matchedCount = 0;
+        for (String claimToken : claimTokens) {
+            if (evidenceTokens.contains(claimToken)) {
+                matchedCount++;
+            }
+        }
+        return matchedCount * 1.0D / claimTokens.size();
+    }
+
+    private List<String> extractHardFactTokens(String claimText) {
+        List<String> hardFactTokens = new ArrayList<String>();
+        if (claimText == null || claimText.isBlank()) {
+            return hardFactTokens;
+        }
+        appendMatches(hardFactTokens, NUMERIC_LITERAL_PATTERN.matcher(claimText));
+        appendMatches(hardFactTokens, SNAKE_CASE_PATTERN.matcher(claimText));
+        appendMatches(hardFactTokens, FQN_PATTERN.matcher(claimText));
+        appendMatches(hardFactTokens, HTTP_PATH_PATTERN.matcher(claimText));
+        appendMatches(hardFactTokens, JAVA_SYMBOL_PATTERN.matcher(claimText));
+        return hardFactTokens;
+    }
+
+    private void appendMatches(List<String> hardFactTokens, Matcher matcher) {
+        while (matcher.find()) {
+            String literal = matcher.group(1);
+            if (literal == null || literal.isBlank()) {
+                continue;
+            }
+            if (!hardFactTokens.contains(literal)) {
+                hardFactTokens.add(literal);
+            }
+        }
+    }
+
+    private Set<String> tokenize(String content) {
+        Set<String> tokens = new LinkedHashSet<String>();
+        if (content == null || content.isBlank()) {
+            return tokens;
+        }
+        String[] parts = content.toLowerCase(Locale.ROOT).split("[^\\p{IsAlphabetic}\\p{IsDigit}_./-]+");
+        for (String part : parts) {
+            if (part != null && !part.isBlank() && part.length() >= 2) {
+                tokens.add(part);
+            }
+        }
+        return tokens;
+    }
+
+    private String extractMatchedExcerpt(String content, List<String> hardFactTokens) {
+        if (content == null || content.isBlank()) {
+            return "";
+        }
+        if (hardFactTokens == null || hardFactTokens.isEmpty()) {
+            return content.length() <= 200 ? content : content.substring(0, 200);
+        }
+        String[] lines = content.split("\\R");
+        for (String line : lines) {
+            String normalizedLine = line == null ? "" : line.trim().toLowerCase(Locale.ROOT);
+            if (normalizedLine.isBlank()) {
+                continue;
+            }
+            for (String hardFactToken : hardFactTokens) {
+                String normalizedToken = hardFactToken == null ? "" : hardFactToken.trim().toLowerCase(Locale.ROOT);
+                if (!normalizedToken.isBlank() && normalizedLine.contains(normalizedToken)) {
+                    return line.length() <= 200 ? line : line.substring(0, 200);
+                }
+            }
+        }
+        return content.length() <= 200 ? content : content.substring(0, 200);
+    }
+}

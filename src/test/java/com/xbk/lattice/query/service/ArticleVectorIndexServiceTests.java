@@ -320,6 +320,21 @@ class ArticleVectorIndexServiceTests {
                     .filter(record -> record.getArticleKey().equals(articleKey))
                     .findFirst();
         }
+
+        @Override
+        public int countAll() {
+            return savedRecords.size();
+        }
+
+        @Override
+        public Optional<String> findEmbeddingColumnType() {
+            return Optional.empty();
+        }
+
+        @Override
+        public void alignEmbeddingColumnDimensions(int targetDimensions) {
+            // 测试替身不依赖真实数据库 schema，对齐动作在这里视为 no-op。
+        }
     }
 
     /**

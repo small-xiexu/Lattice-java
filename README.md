@@ -17,7 +17,7 @@
 - `execution_llm_snapshots`：每次 compile / query 都会留下运行时快照，知道当时到底命中了什么连接、模型和绑定。
 - `article_snapshots` / `repo_snapshots`：知识资产自带历史、回档、导出，不是回答完就烟消云散。
 
-`Spring Boot 3.5` · `Spring AI Alibaba Graph` · `PostgreSQL` · `Redis` · `Web / HTTP API / CLI / MCP`
+`Spring Boot 3.5` · `Spring AI Alibaba Graph` · `PostgreSQL` · `Redis` · `OpenAI 兼容 / Anthropic / Ollama` · `Web / HTTP API / CLI / MCP`
 
 ---
 
@@ -89,6 +89,16 @@
 - 当时冻结下来的模型快照是什么
 - 后续配置变更会影响哪些新任务，不会污染哪些历史结果
 
+支持的 LLM 客户端：OpenAI 兼容接口（通义、DeepSeek、智谱等）、Anthropic 原生 API、Ollama 本地模型，统一在连接配置页接入，不需要改代码。
+
+### 5. 可插拔文档解析，OCR 路由可配置
+
+文档解析层与编译层解耦。PDF、图片（png）、Office 文档（Word / Excel / PowerPoint）等非纯文本格式，会先经过一个独立的可插拔解析模块：
+
+- 纯文本与 Office 类文件走**本地提取器**（PDFBox、Apache POI），不依赖外部服务。
+- 扫描件、图片等需要 OCR 的场景，可配置接入 **Aliyun OCR**、**Google Document AI**、**Tencent OCR** 或 **TextInXParse**，通过 Policy 规则按文件类型自动路由。
+- 所有解析连接（Provider Connection）与路由策略（Route Policy）均可在 `/admin/settings` 页面配置，Provider 可插拔，切换不需要重启或改代码。
+
 ---
 
 ## 对比传统 RAG
@@ -100,7 +110,7 @@
 | Agent 用法 | 常见是 prompt 内自检或单模型一步出结果 | 固定角色链：`writer / reviewer / fixer`、`answer / reviewer / rewrite` |
 | 模型管理 | 配置常散落在页面参数或业务代码里 | 统一 connections、models、bindings、execution snapshots |
 | 反馈沉淀 | 常停留在聊天记录里 | `pending -> confirm/correct/discard -> contribution` |
-| 治理能力 | 很少追踪版本、回滚和导出 | 内建 snapshot、history、rollback、vault export |
+| 治理能力 | 很少追踪版本、回滚和导出 | 内建 snapshot、history、rollback、vault export；lint、link-enhance、inspect、propagate、omission、dependency-graph |
 | 对外交付 | 页面、API、CLI、MCP 常各自为政 | 多入口复用同一套知识后端 |
 
 一句话说，传统 RAG 更偏向“先检索，再临时生成”，邪修智库更偏向“先把知识编译成稳定资产，再基于这套资产回答、治理和演进”。
@@ -109,12 +119,12 @@
 
 ## 支持的能力
 
-- 多源 ingest：支持 `md`、`yaml`、`json`、`java`、`pdf`、`xlsx`、`drawio`、`png` 等类型。
+- 多源 ingest：支持 `md`、`yaml`、`json`、`java`、`pdf`、`xlsx`、`doc`、`docx`、`ppt`、`pptx`、`drawio`、`png` 等类型；PDF、图片与 Office 文档支持接入可插拔 OCR 提供方（Aliyun、Google Document AI、Tencent、TextInXParse）。
 - 知识编译：不是直接切块入库，而是走 `analyze -> writer -> reviewer -> fixer -> persist` 的编译链。
 - 知识问答：不只是 `search -> answer`，而是 `retrieve -> answer -> reviewer -> rewrite -> finalize` 的问答链。
 - 反馈闭环：支持 `confirm`、`correct`、`discard`，确认后的结果可以沉淀为 contribution。
-- 治理能力：支持 quality、coverage、lifecycle、snapshot、history、rollback、vault export。
-- 多入口交付：Web、HTTP API、CLI、MCP 共用统一知识服务层。
+- 治理能力：支持 quality、coverage、lifecycle、snapshot、history、rollback、vault export；内建 lint（规则检查 + LLM 自动修复）、link-enhance（破损链接修复与 depends_on 同步）、inspect（巡检问题确认与答案导入）、propagate（下游传播重写）、omission（覆盖遗漏检测）、dependency-graph（依赖图分析）。
+- 多入口交付：Web、HTTP API、CLI（14 个子命令）、MCP（30+ 工具）共用统一知识服务层。
 
 ---
 
@@ -429,6 +439,25 @@ export LATTICE_SERVER_URL=http://127.0.0.1:8080
 ./bin/lattice-cli query "邪修智库支持哪些开发者接入方式？"
 ```
 
+#### CLI 子命令速查
+
+| 子命令 | 说明 |
+| --- | --- |
+| `status` | 查看服务健康与知识库统计 |
+| `query` | 提问并返回答案与来源引用 |
+| `search` | 只检索，不生成答案 |
+| `compile` | 触发编译任务 |
+| `source-list` | 列出已注册的知识源 |
+| `source-sync` | 触发指定知识源同步 |
+| `lint` | 运行治理 lint 检查 |
+| `history` | 查看文章快照历史 |
+| `diff` | 查看 repo 变更对比 |
+| `rollback` | 将文章回滚到指定快照 |
+| `repo-baseline` | 设置 repo 基线 |
+| `vault-export` | 导出知识库 vault |
+| `vault-sync` | 同步 vault |
+| `serve` | 以服务模式启动（内嵌 MCP stdio bridge） |
+
 ### 3. MCP
 
 如果你的客户端支持远端 HTTP MCP，可以直接接这个地址：
@@ -461,9 +490,21 @@ export LATTICE_SERVER_URL=http://127.0.0.1:8080
 
 接通后，建议按这个顺序做第一次验证：
 
-1. 先执行 `tools/list`，确认能看到 `lattice_status`、`lattice_query` 等工具。
+1. 先执行 `tools/list`，确认能看到 30+ 个工具（`lattice_status`、`lattice_query`、`lattice_compile`、`lattice_lint`、`lattice_snapshot` 等）。
 2. 再调用 `lattice_status`，确认返回健康状态与知识库统计。
 3. 最后调用 `lattice_query`，确认返回 `answer`、`sourcePaths` 或 `pendingQueryId`。
+
+MCP 工具覆盖的主要能力分组：
+
+| 分组 | 工具 |
+| --- | --- |
+| 问答与反馈 | `lattice_query`、`lattice_query_pending`、`lattice_query_correct`、`lattice_query_confirm`、`lattice_query_discard` |
+| 检索与文档 | `lattice_search`、`lattice_get`、`lattice_doc_toc`、`lattice_doc_read` |
+| 编译与同步 | `lattice_compile`、`lattice_source_list`、`lattice_source_sync` |
+| 治理 | `lattice_lint`、`lattice_lint_fix`、`lattice_quality`、`lattice_coverage`、`lattice_omissions`、`lattice_lifecycle`、`lattice_lifecycle_deprecate`、`lattice_lifecycle_archive`、`lattice_lifecycle_activate`、`lattice_link_enhance` |
+| 巡检与传播 | `lattice_inspect`、`lattice_import_answers`、`lattice_correct`、`lattice_propagate` |
+| 快照与历史 | `lattice_snapshot`、`lattice_history`、`lattice_rollback` |
+| 状态 | `lattice_status` |
 
 如果 `lattice_query` 产生了 pending 结果，记得继续 `confirm`、`correct` 或 `discard`，不要把待处理记录一直留在队列里。
 

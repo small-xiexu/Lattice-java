@@ -42,7 +42,7 @@ public class QueryRetrievalSettingsJdbcRepository {
         List<QueryRetrievalSettingsState> states = jdbcTemplate.query(
                 """
                         select parallel_enabled, fts_weight, source_weight, contribution_weight,
-                               article_vector_weight, chunk_vector_weight, rrf_k
+                               graph_weight, article_vector_weight, chunk_vector_weight, rrf_k
                         from query_retrieval_settings
                         where id = 1
                         """,
@@ -51,6 +51,7 @@ public class QueryRetrievalSettingsJdbcRepository {
                         resultSet.getDouble("fts_weight"),
                         resultSet.getDouble("source_weight"),
                         resultSet.getDouble("contribution_weight"),
+                        resultSet.getDouble("graph_weight"),
                         resultSet.getDouble("article_vector_weight"),
                         resultSet.getDouble("chunk_vector_weight"),
                         resultSet.getInt("rrf_k")
@@ -73,13 +74,14 @@ public class QueryRetrievalSettingsJdbcRepository {
                 """
                         insert into query_retrieval_settings (
                             id, parallel_enabled, fts_weight, source_weight, contribution_weight,
-                            article_vector_weight, chunk_vector_weight, rrf_k, updated_at
-                        ) values (?, ?, ?, ?, ?, ?, ?, ?, current_timestamp)
+                            graph_weight, article_vector_weight, chunk_vector_weight, rrf_k, updated_at
+                        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, current_timestamp)
                         on conflict (id) do update set
                             parallel_enabled = excluded.parallel_enabled,
                             fts_weight = excluded.fts_weight,
                             source_weight = excluded.source_weight,
                             contribution_weight = excluded.contribution_weight,
+                            graph_weight = excluded.graph_weight,
                             article_vector_weight = excluded.article_vector_weight,
                             chunk_vector_weight = excluded.chunk_vector_weight,
                             rrf_k = excluded.rrf_k,
@@ -90,6 +92,7 @@ public class QueryRetrievalSettingsJdbcRepository {
                 Double.valueOf(state.getFtsWeight()),
                 Double.valueOf(state.getSourceWeight()),
                 Double.valueOf(state.getContributionWeight()),
+                Double.valueOf(state.getGraphWeight()),
                 Double.valueOf(state.getArticleVectorWeight()),
                 Double.valueOf(state.getChunkVectorWeight()),
                 Integer.valueOf(state.getRrfK())
