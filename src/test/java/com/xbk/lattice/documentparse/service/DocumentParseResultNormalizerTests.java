@@ -2,7 +2,7 @@ package com.xbk.lattice.documentparse.service;
 
 import com.xbk.lattice.compiler.domain.RawSource;
 import com.xbk.lattice.documentparse.domain.DocumentParseMode;
-import com.xbk.lattice.documentparse.domain.DocumentParseResult;
+import com.xbk.lattice.documentparse.domain.model.ParseOutput;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,10 +22,12 @@ class DocumentParseResultNormalizerTests {
     @Test
     void shouldNormalizeDocumentParseResultIntoRawSource() {
         DocumentParseResultNormalizer normalizer = new DocumentParseResultNormalizer();
-        DocumentParseResult result = new DocumentParseResult(
+        ParseOutput parseOutput = new ParseOutput(
                 Long.valueOf(12L),
                 "docs/scan.png",
                 "image ocr text",
+                "",
+                "",
                 "png",
                 256L,
                 DocumentParseMode.OCR_IMAGE,
@@ -35,7 +37,7 @@ class DocumentParseResultNormalizerTests {
                 "docs/scan.png"
         );
 
-        RawSource rawSource = normalizer.normalize(result);
+        RawSource rawSource = normalizer.normalize(parseOutput);
 
         assertThat(rawSource.getSourceId()).isEqualTo(Long.valueOf(12L));
         assertThat(rawSource.getRelativePath()).isEqualTo("docs/scan.png");
@@ -46,5 +48,6 @@ class DocumentParseResultNormalizerTests {
         assertThat(rawSource.getMetadataJson()).contains("\"page\":1");
         assertThat(rawSource.getMetadataJson()).contains("\"ocrApplied\":true");
         assertThat(rawSource.getMetadataJson()).contains("\"relativePath\":\"docs/scan.png\"");
+        assertThat(rawSource.getMetadataJson()).contains("\"contentFormat\":\"plain_text\"");
     }
 }

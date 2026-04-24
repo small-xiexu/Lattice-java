@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>邪修智库｜系统配置</title>
-    <link rel="stylesheet" href="/admin/admin.css?v=20260423-admin-align-3">
+    <link rel="stylesheet" href="/admin/admin.css?v=20260423-admin-align-4">
 </head>
 <body>
 <div class="app-shell">
@@ -362,7 +362,7 @@
                             <div class="settings-parse-layout top-gap">
                                 <div class="sub-panel settings-parse-primary">
                                     <h3>识别服务连接</h3>
-                                    <p class="muted">维护 OCR / Document AI 供应商连接。访问凭证可直接填写 Token，也可粘贴 JSON 凭证。</p>
+                                    <p class="muted">维护 OCR / Document AI 供应商连接。供应商类型、凭证字段和扩展配置会根据 Provider Descriptor 动态变化。</p>
                                     <div class="form-grid top-gap">
                                         <input id="document-parse-connection-id" type="hidden">
                                         <label>
@@ -371,28 +371,28 @@
                                         </label>
                                         <label>
                                             <span>供应商类型</span>
-                                            <select id="document-parse-provider-type">
-                                                <option value="tencent_ocr">腾讯云 OCR</option>
-                                                <option value="aliyun_ocr">阿里云 OCR</option>
-                                                <option value="google_document_ai">Google Document AI</option>
-                                            </select>
+                                            <select id="document-parse-provider-type"></select>
                                         </label>
                                         <label>
                                             <span>Base URL</span>
-                                            <input id="document-parse-base-url" type="text" placeholder="https://ocr.tencentcloudapi.com">
-                                        </label>
-                                        <label>
-                                            <span>接口路径</span>
-                                            <input id="document-parse-endpoint-path" type="text" placeholder="/ocr/v1/general-basic">
+                                            <input id="document-parse-base-url" type="text" placeholder="根据所选 Provider 自动带入默认值">
                                         </label>
                                         <label class="field-span-2">
-                                            <span>访问凭证（更新时留空表示不修改）</span>
-                                            <textarea id="document-parse-credential" placeholder="{&quot;secretId&quot;:&quot;...&quot;,&quot;secretKey&quot;:&quot;...&quot;}"></textarea>
+                                            <span>Provider 能力说明</span>
+                                            <div id="document-parse-provider-hints" class="table-shell compact-table"></div>
                                         </label>
                                         <label class="checkbox-row">
                                             <input id="document-parse-connection-enabled" type="checkbox" checked>
                                             <span>启用该连接</span>
                                         </label>
+                                    </div>
+                                    <div class="top-gap">
+                                        <p class="muted">访问凭证。编辑已有连接时，留空表示保持原凭证不变。</p>
+                                        <div id="document-parse-credential-fields" class="form-grid top-gap"></div>
+                                    </div>
+                                    <div class="top-gap">
+                                        <p class="muted">扩展配置。这里通常用于接口路径、厂商专属配置或额外参数。</p>
+                                        <div id="document-parse-config-fields" class="form-grid top-gap"></div>
                                     </div>
                                     <div class="button-row wrap top-gap">
                                         <button id="test-document-parse-connection" class="secondary-btn" type="button">测试连接</button>
@@ -403,31 +403,31 @@
 
                                 <div class="sub-panel settings-parse-secondary">
                                     <h3>识别策略</h3>
-                                    <p class="muted">控制默认识别连接，以及图片识别、扫描 PDF 识别和识别后整理开关。</p>
+                                    <p class="muted">分别指定图片 OCR、扫描 PDF OCR 的默认连接，并维护识别后整理与降级策略。</p>
                                     <div class="form-grid top-gap">
                                         <label>
-                                            <span>默认识别连接</span>
-                                            <select id="document-parse-default-connection-id"></select>
+                                            <span>图片 OCR 默认连接</span>
+                                            <select id="document-parse-image-connection-id"></select>
+                                        </label>
+                                        <label>
+                                            <span>扫描 PDF OCR 默认连接</span>
+                                            <select id="document-parse-scanned-pdf-connection-id"></select>
                                         </label>
                                         <label>
                                             <span>识别后整理模型</span>
                                             <select id="document-parse-cleanup-model-profile-id"></select>
                                         </label>
                                         <label class="checkbox-row">
-                                            <input id="document-parse-image-ocr-enabled" type="checkbox">
-                                            <span>启用图片识别（OCR）</span>
-                                        </label>
-                                        <label class="checkbox-row">
-                                            <input id="document-parse-scanned-pdf-ocr-enabled" type="checkbox">
-                                            <span>启用扫描 PDF 识别（OCR）</span>
-                                        </label>
-                                        <label class="checkbox-row">
                                             <input id="document-parse-cleanup-enabled" type="checkbox">
                                             <span>启用识别后整理</span>
                                         </label>
+                                        <label class="field-span-2">
+                                            <span>降级策略 JSON</span>
+                                            <textarea id="document-parse-fallback-policy-json" placeholder="{&quot;allowTextOnlyFallback&quot;:true}"></textarea>
+                                        </label>
                                     </div>
                                     <div class="button-row wrap top-gap">
-                                        <button id="save-document-parse-settings" class="primary-btn" type="button">保存设置</button>
+                                        <button id="save-document-parse-policy" class="primary-btn" type="button">保存策略</button>
                                     </div>
                                 </div>
                             </div>
@@ -436,13 +436,13 @@
                         <section class="panel">
                             <div class="panel-title-row">
                                 <div>
-                                    <h2>当前识别配置</h2>
-                                    <p>这里展示 OCR 默认连接、开关状态和当前已维护的识别连接。</p>
+                                    <h2>当前连接与策略</h2>
+                                    <p>这里展示当前生效的路由策略，以及已经维护的 OCR / 文档识别连接。</p>
                                 </div>
                             </div>
 
                             <div class="sub-panel top-gap">
-                                <h3>识别策略概览</h3>
+                                <h3>路由策略概览</h3>
                                 <div id="document-parse-settings-summary" class="table-shell top-gap"></div>
                             </div>
 
@@ -660,6 +660,6 @@
 </div>
 <script src="/admin/admin-tabs.js?v=20260419-tabs-1"></script>
 <script src="/admin/settings.js?v=20260420-settings-3"></script>
-<script src="/admin/settings-page.js?v=20260423-admin-align-2"></script>
+<script src="/admin/settings-page.js?v=20260423-admin-align-4"></script>
 </body>
 </html>

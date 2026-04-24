@@ -10,6 +10,7 @@ import com.xbk.lattice.compiler.node.BatchSplitNode;
 import com.xbk.lattice.compiler.node.CrossGroupMergeNode;
 import com.xbk.lattice.compiler.node.GroupNode;
 import com.xbk.lattice.compiler.node.IngestNode;
+import com.xbk.lattice.documentparse.application.DocumentParseApplicationService;
 import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
@@ -69,6 +70,7 @@ public class SourceIngestSupport {
      * @param sourceFileChunkJdbcRepository 源文件 chunk 仓储
      * @param compilationWalStore 编译 WAL 存储
      * @param articleVectorIndexService 向量索引服务
+     * @param documentParseApplicationService 文档解析应用服务
      */
     public SourceIngestSupport(
             CompilerProperties compilerProperties,
@@ -81,9 +83,10 @@ public class SourceIngestSupport {
             SourceFileJdbcRepository sourceFileJdbcRepository,
             SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
             CompilationWalStore compilationWalStore,
-            ArticleVectorIndexService articleVectorIndexService
+            ArticleVectorIndexService articleVectorIndexService,
+            DocumentParseApplicationService documentParseApplicationService
     ) {
-        this.ingestNode = new IngestNode(compilerProperties);
+        this.ingestNode = new IngestNode(compilerProperties, documentParseApplicationService);
         this.groupNode = new GroupNode(compilerProperties);
         this.batchSplitNode = new BatchSplitNode(
                 compilerProperties,
@@ -104,7 +107,8 @@ public class SourceIngestSupport {
                 articleChunkJdbcRepository,
                 sourceFileJdbcRepository,
                 sourceFileChunkJdbcRepository,
-                articleVectorIndexService
+                articleVectorIndexService,
+                documentParseApplicationService
         );
     }
 

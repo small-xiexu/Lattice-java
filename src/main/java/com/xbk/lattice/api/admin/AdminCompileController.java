@@ -3,6 +3,7 @@ package com.xbk.lattice.api.admin;
 import com.xbk.lattice.admin.service.AdminUploadWorkspaceService;
 import com.xbk.lattice.compiler.service.ChunkRebuildResult;
 import com.xbk.lattice.compiler.service.ChunkRebuildService;
+import com.xbk.lattice.compiler.service.CompileJobDerivedStatusResolver;
 import com.xbk.lattice.compiler.service.CompileJobService;
 import com.xbk.lattice.infra.persistence.CompileJobRecord;
 import org.springframework.context.annotation.Profile;
@@ -38,21 +39,26 @@ public class AdminCompileController {
 
     private final ChunkRebuildService chunkRebuildService;
 
+    private final CompileJobDerivedStatusResolver compileJobDerivedStatusResolver;
+
     /**
      * 创建管理侧编译控制器。
      *
      * @param compileJobService 编译作业服务
      * @param adminUploadWorkspaceService 上传暂存服务
      * @param chunkRebuildService chunk 全量重建服务
+     * @param compileJobDerivedStatusResolver 编译作业派生状态解析器
      */
     public AdminCompileController(
             CompileJobService compileJobService,
             AdminUploadWorkspaceService adminUploadWorkspaceService,
-            ChunkRebuildService chunkRebuildService
+            ChunkRebuildService chunkRebuildService,
+            CompileJobDerivedStatusResolver compileJobDerivedStatusResolver
     ) {
         this.compileJobService = compileJobService;
         this.adminUploadWorkspaceService = adminUploadWorkspaceService;
         this.chunkRebuildService = chunkRebuildService;
+        this.compileJobDerivedStatusResolver = compileJobDerivedStatusResolver;
     }
 
     /**
@@ -160,6 +166,15 @@ public class AdminCompileController {
                 compileJobRecord.isIncremental(),
                 compileJobRecord.getOrchestrationMode(),
                 compileJobRecord.getStatus(),
+                compileJobDerivedStatusResolver.resolve(compileJobRecord),
+                compileJobRecord.getWorkerId(),
+                compileJobRecord.getCurrentStep(),
+                compileJobRecord.getProgressCurrent(),
+                compileJobRecord.getProgressTotal(),
+                compileJobRecord.getProgressMessage(),
+                compileJobRecord.getLastHeartbeatAt() == null ? null : compileJobRecord.getLastHeartbeatAt().toString(),
+                compileJobRecord.getRunningExpiresAt() == null ? null : compileJobRecord.getRunningExpiresAt().toString(),
+                compileJobRecord.getErrorCode(),
                 compileJobRecord.getPersistedCount(),
                 compileJobRecord.getErrorMessage(),
                 compileJobRecord.getAttemptCount(),

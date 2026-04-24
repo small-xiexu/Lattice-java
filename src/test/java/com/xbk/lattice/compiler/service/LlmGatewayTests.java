@@ -9,12 +9,17 @@ import com.xbk.lattice.compiler.config.LlmProperties;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import com.xbk.lattice.llm.service.LlmCallResult;
 import com.xbk.lattice.llm.service.LlmClient;
+import com.xbk.lattice.llm.service.LlmClientFactory;
 import com.xbk.lattice.llm.service.LlmInvocationEnvelope;
 import com.xbk.lattice.llm.service.LlmInvocationExecutor;
 import com.xbk.lattice.llm.service.LlmRouteResolution;
 import com.xbk.lattice.llm.service.PromptCacheWritePolicy;
+import com.xbk.lattice.observability.StructuredEventLogger;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
+import org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatProperties;
+import org.springframework.ai.model.anthropic.autoconfigure.AnthropicConnectionProperties;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -24,6 +29,7 @@ import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -546,6 +552,109 @@ class LlmGatewayTests {
     }
 
     /**
+     * 验证 snapshot-backed OpenAI legacy 路径在关闭 ChatClient 后，仍由上层统一重试并成功返回。
+     */
+    @Test
+    void shouldRetrySnapshotBackedLegacyOpenAiInvocationWhenChatClientIsDisabled() throws IOException {
+        StubOpenAiChatServer stubServer = new StubOpenAiChatServer("legacy-retry-answer", 1);
+        stubServer.start();
+        try {
+            MDC.put("sourceSyncRunId", "701");
+            MDC.put("rootTraceId", "trace-701");
+            MDC.put("traceId", "trace-701");
+            FakeLlmClient compileClient = new FakeLlmClient("legacy-answer", 120, 30);
+            LlmProperties llmProperties = createProperties();
+            llmProperties.getChatClient().setEnabled(false);
+            CapturingStructuredEventLogger structuredEventLogger = new CapturingStructuredEventLogger();
+            StubExecutionLlmSnapshotService snapshotService = new StubExecutionLlmSnapshotService();
+            snapshotService.route = new LlmRouteResolution(
+                    ExecutionLlmSnapshotService.QUERY_SCOPE_TYPE,
+                    "query-retry-1",
+                    ExecutionLlmSnapshotService.QUERY_SCENE,
+                    ExecutionLlmSnapshotService.ROLE_ANSWER,
+                    Long.valueOf(11L),
+                    Long.valueOf(22L),
+                    Integer.valueOf(3),
+                    "query.answer.codex.retry",
+                    "openai",
+                    stubServer.getBaseUrl(),
+                    "test-key",
+                    "gpt-5.4",
+                    new BigDecimal("0.2"),
+                    Integer.valueOf(96),
+                    Integer.valueOf(30),
+                    "{\"reasoning_effort\":\"medium\"}",
+                    new BigDecimal("0.001"),
+                    new BigDecimal("0.002"),
+                    true
+            );
+            LlmInvocationExecutor llmInvocationExecutor = new LlmInvocationExecutor(
+                    new com.xbk.lattice.llm.service.ChatClientRegistry(
+                            RestClient.builder(),
+                            WebClient.builder(),
+                            new ObjectMapper(),
+                            new com.xbk.lattice.llm.service.AdvisorChainFactory()
+                    ),
+                    llmProperties,
+                    structuredEventLogger
+            );
+            LlmClientFactory llmClientFactory = new LlmClientFactory(
+                    RestClient.builder(),
+                    new ObjectMapper(),
+                    new AnthropicConnectionProperties(),
+                    new AnthropicChatProperties()
+            );
+            LlmGateway llmGateway = new LlmGateway(
+                    compileClient,
+                    new FakeLlmClient("review-result", 60, 10),
+                    new FakeRedisKeyValueStore(),
+                    llmProperties,
+                    llmClientFactory,
+                    snapshotService,
+                    llmInvocationExecutor,
+                    "",
+                    "",
+                    "",
+                    "",
+                    structuredEventLogger
+            );
+
+            LlmInvocationEnvelope envelope = llmGateway.invokeRawWithScope(
+                    "query-retry-1",
+                    ExecutionLlmSnapshotService.QUERY_SCENE,
+                    ExecutionLlmSnapshotService.ROLE_ANSWER,
+                    "query-answer",
+                    "你是查询助手",
+                    "请解释为什么 legacy 路径仍然会重试"
+            );
+
+            assertThat(envelope.getContent()).isEqualTo("legacy-retry-answer");
+            assertThat(stubServer.getRequestCount()).isEqualTo(2);
+            assertThat(stubServer.getCapturedModels()).containsExactly("gpt-5.4", "gpt-5.4");
+            assertThat(compileClient.getCallCount()).isZero();
+            RecordedEvent retryEvent = structuredEventLogger.findWarnEvent("llm_retry_attempt_failed");
+            assertThat(retryEvent).isNotNull();
+            assertThat(retryEvent.getFields()).containsEntry("queryId", "query-retry-1");
+            assertThat(retryEvent.getFields()).containsEntry("routeLabel", "query.answer.codex.retry");
+            assertThat(retryEvent.getFields()).containsEntry("providerType", "openai");
+            assertThat(retryEvent.getFields()).containsEntry("baseUrl", stubServer.getBaseUrl());
+            assertThat(retryEvent.getFields()).containsEntry("modelName", "gpt-5.4");
+            assertThat(retryEvent.getFields()).containsEntry("attemptNo", Integer.valueOf(1));
+            assertThat(retryEvent.getFields()).containsEntry("maxAttempts", Integer.valueOf(5));
+            assertThat(retryEvent.getFields()).containsEntry("willRetry", Boolean.TRUE);
+            assertThat(retryEvent.getFields()).containsEntry("sourceSyncRunId", Long.valueOf(701L));
+            assertThat(retryEvent.getFields()).containsEntry("clientRequestId", "trace-701");
+            assertThat(retryEvent.getFields()).containsEntry("statusCode", Integer.valueOf(502));
+            assertThat(retryEvent.getFields()).containsEntry("errorCode", "LLM_UPSTREAM_5XX");
+            assertThat(String.valueOf(retryEvent.getFields().get("errorSummary"))).contains("temporary upstream failure");
+        }
+        finally {
+            MDC.clear();
+            stubServer.stop();
+        }
+    }
+
+    /**
      * 验证文本生成入口会在 snapshot OpenAI 路径下走动态 ChatClient，并保留 legacy L1 cache 写入语义。
      */
     @Test
@@ -668,6 +777,7 @@ class LlmGatewayTests {
         assertThat(routeResolution.isSnapshotBacked()).isFalse();
         assertThat(routeResolution.getModelName()).isEqualTo("gpt-5.4");
         assertThat(routeResolution.getBaseUrl()).isEqualTo("http://127.0.0.1:18086");
+        assertThat(routeResolution.getTimeoutSeconds()).isEqualTo(Integer.valueOf(90));
         assertThat(snapshotService.lastScopeType).isEqualTo(ExecutionLlmSnapshotService.COMPILE_SCOPE_TYPE);
         assertThat(snapshotService.lastScopeId).isEqualTo("admin-correction:1:ops");
         assertThat(snapshotService.lastScene).isEqualTo(ExecutionLlmSnapshotService.COMPILE_SCENE);
@@ -832,12 +942,19 @@ class LlmGatewayTests {
 
         private final String answerText;
 
+        private final int transientFailureCount;
+
         private final AtomicInteger requestCount = new AtomicInteger();
 
         private final List<String> capturedModels = new CopyOnWriteArrayList<String>();
 
         private StubOpenAiChatServer(String answerText) throws IOException {
+            this(answerText, 0);
+        }
+
+        private StubOpenAiChatServer(String answerText, int transientFailureCount) throws IOException {
             this.answerText = answerText;
+            this.transientFailureCount = transientFailureCount;
             this.httpServer = HttpServer.create(new InetSocketAddress(0), 0);
             HttpHandler handler = new ChatCompletionsHandler();
             httpServer.createContext("/v1/chat/completions", handler);
@@ -868,10 +985,18 @@ class LlmGatewayTests {
 
             @Override
             public void handle(HttpExchange exchange) throws IOException {
-                requestCount.incrementAndGet();
+                int currentAttempt = requestCount.incrementAndGet();
                 String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
                 JsonNode rootNode = OBJECT_MAPPER.readTree(requestBody);
                 capturedModels.add(rootNode.path("model").asText());
+                if (currentAttempt <= transientFailureCount) {
+                    byte[] responseBytes = "{\"error\":\"temporary upstream failure\"}".getBytes(StandardCharsets.UTF_8);
+                    exchange.getResponseHeaders().add("Content-Type", "application/json");
+                    exchange.sendResponseHeaders(502, responseBytes.length);
+                    exchange.getResponseBody().write(responseBytes);
+                    exchange.close();
+                    return;
+                }
                 String responseBody = """
                         {
                           "id": "chatcmpl_test",
@@ -978,6 +1103,66 @@ class LlmGatewayTests {
                 exchange.getResponseBody().write(responseBytes);
                 exchange.close();
             }
+        }
+    }
+
+    /**
+     * 结构化事件日志捕获器。
+     *
+     * 职责：记录测试期间的结构化 WARN 事件
+     *
+     * @author xiexu
+     */
+    private static class CapturingStructuredEventLogger extends StructuredEventLogger {
+
+        private final List<RecordedEvent> warnEvents = new ArrayList<RecordedEvent>();
+
+        @Override
+        public void warn(String eventName, Map<String, Object> fields, Throwable throwable) {
+            warnEvents.add(new RecordedEvent(eventName, new LinkedHashMap<String, Object>(fields), throwable));
+        }
+
+        private RecordedEvent findWarnEvent(String eventName) {
+            for (RecordedEvent warnEvent : warnEvents) {
+                if (eventName.equals(warnEvent.getEventName())) {
+                    return warnEvent;
+                }
+            }
+            return null;
+        }
+    }
+
+    /**
+     * 已记录结构化事件。
+     *
+     * 职责：承载事件名、字段与异常，便于断言
+     *
+     * @author xiexu
+     */
+    private static class RecordedEvent {
+
+        private final String eventName;
+
+        private final Map<String, Object> fields;
+
+        private final Throwable throwable;
+
+        private RecordedEvent(String eventName, Map<String, Object> fields, Throwable throwable) {
+            this.eventName = eventName;
+            this.fields = fields;
+            this.throwable = throwable;
+        }
+
+        private String getEventName() {
+            return eventName;
+        }
+
+        private Map<String, Object> getFields() {
+            return fields;
+        }
+
+        private Throwable getThrowable() {
+            return throwable;
         }
     }
 }

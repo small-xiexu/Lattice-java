@@ -1,21 +1,23 @@
-package com.xbk.lattice.documentparse.domain;
+package com.xbk.lattice.documentparse.domain.model;
 
 import java.time.OffsetDateTime;
 
 /**
- * 文档解析供应商连接配置
+ * 文档解析连接
  *
- * 职责：表示后台维护的单条文档解析连接记录
+ * 职责：表示单条 OCR / Document AI 供应商连接配置
  *
  * @author xiexu
  */
-public class DocumentParseProviderConnection {
+public class ProviderConnection {
 
     public static final String PROVIDER_TENCENT_OCR = "tencent_ocr";
 
     public static final String PROVIDER_ALIYUN_OCR = "aliyun_ocr";
 
     public static final String PROVIDER_GOOGLE_DOCUMENT_AI = "google_document_ai";
+
+    public static final String PROVIDER_TEXTIN_XPARSE = "textin_xparse";
 
     private final Long id;
 
@@ -25,13 +27,11 @@ public class DocumentParseProviderConnection {
 
     private final String baseUrl;
 
-    private final String endpointPath;
-
     private final String credentialCiphertext;
 
     private final String credentialMask;
 
-    private final String extraConfigJson;
+    private final String configJson;
 
     private final boolean enabled;
 
@@ -44,31 +44,29 @@ public class DocumentParseProviderConnection {
     private final OffsetDateTime updatedAt;
 
     /**
-     * 创建文档解析连接配置。
+     * 创建文档解析连接。
      *
      * @param id 主键
      * @param connectionCode 连接编码
      * @param providerType 供应商类型
      * @param baseUrl 基础地址
-     * @param endpointPath 接口路径
-     * @param credentialCiphertext 加密后的访问凭证
+     * @param credentialCiphertext 加密后的凭证
      * @param credentialMask 凭证脱敏值
-     * @param extraConfigJson 扩展配置
+     * @param configJson 配置 JSON
      * @param enabled 是否启用
      * @param createdBy 创建人
      * @param updatedBy 更新人
      * @param createdAt 创建时间
      * @param updatedAt 更新时间
      */
-    public DocumentParseProviderConnection(
+    public ProviderConnection(
             Long id,
             String connectionCode,
             String providerType,
             String baseUrl,
-            String endpointPath,
             String credentialCiphertext,
             String credentialMask,
-            String extraConfigJson,
+            String configJson,
             boolean enabled,
             String createdBy,
             String updatedBy,
@@ -79,10 +77,9 @@ public class DocumentParseProviderConnection {
         this.connectionCode = connectionCode;
         this.providerType = providerType;
         this.baseUrl = baseUrl;
-        this.endpointPath = endpointPath;
         this.credentialCiphertext = credentialCiphertext;
         this.credentialMask = credentialMask;
-        this.extraConfigJson = extraConfigJson;
+        this.configJson = configJson;
         this.enabled = enabled;
         this.createdBy = createdBy;
         this.updatedBy = updatedBy;
@@ -127,39 +124,30 @@ public class DocumentParseProviderConnection {
     }
 
     /**
-     * 返回接口路径。
+     * 返回加密后的凭证。
      *
-     * @return 接口路径
-     */
-    public String getEndpointPath() {
-        return endpointPath;
-    }
-
-    /**
-     * 返回加密后的访问凭证。
-     *
-     * @return 加密后的访问凭证
+     * @return 加密后的凭证
      */
     public String getCredentialCiphertext() {
         return credentialCiphertext;
     }
 
     /**
-     * 返回脱敏后的访问凭证。
+     * 返回凭证脱敏值。
      *
-     * @return 脱敏后的访问凭证
+     * @return 凭证脱敏值
      */
     public String getCredentialMask() {
         return credentialMask;
     }
 
     /**
-     * 返回扩展配置。
+     * 返回配置 JSON。
      *
-     * @return 扩展配置
+     * @return 配置 JSON
      */
-    public String getExtraConfigJson() {
-        return extraConfigJson;
+    public String getConfigJson() {
+        return configJson;
     }
 
     /**

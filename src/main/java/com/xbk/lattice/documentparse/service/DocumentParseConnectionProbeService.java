@@ -2,27 +2,22 @@ package com.xbk.lattice.documentparse.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xbk.lattice.documentparse.domain.DocumentParseProviderConnection;
+import com.xbk.lattice.documentparse.application.OcrProviderRegistry;
+import com.xbk.lattice.documentparse.domain.model.ProviderConnection;
+import com.xbk.lattice.documentparse.domain.model.ProviderDescriptor;
+import com.xbk.lattice.documentparse.domain.model.ProviderProbeResult;
 import com.xbk.lattice.llm.service.LlmSecretCryptoService;
 import org.springframework.context.annotation.Profile;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestClientResponseException;
 
-import java.net.Proxy;
-import java.time.Duration;
-import java.util.Locale;
 import java.util.Optional;
 
 /**
  * 文档解析连接探测服务
  *
- * 职责：根据后台连接信息或页面临时输入，探测 OCR / Document AI 接口是否可达
+ * 职责：根据后台连接信息或页面临时输入，调用对应 Adapter 的 probe 能力验证连接可用性
  *
  * @author xiexu
  */
@@ -30,33 +25,36 @@ import java.util.Optional;
 @Profile("jdbc")
 public class DocumentParseConnectionProbeService {
 
-    private static final int DEFAULT_TIMEOUT_SECONDS = 15;
-
-    private final RestClient.Builder restClientBuilder;
-
     private final ObjectMapper objectMapper;
 
-    private final DocumentParseAdminService documentParseAdminService;
+    private final DocumentParseConnectionAdminService documentParseConnectionAdminService;
+
+    private final DocumentParseProviderDescriptorService documentParseProviderDescriptorService;
+
+    private final OcrProviderRegistry ocrProviderRegistry;
 
     private final LlmSecretCryptoService llmSecretCryptoService;
 
     /**
      * 创建文档解析连接探测服务。
      *
-     * @param restClientBuilder RestClient 构建器
      * @param objectMapper Jackson 对象映射器
-     * @param documentParseAdminService 文档解析后台服务
+     * @param documentParseConnectionAdminService 连接后台服务
+     * @param documentParseProviderDescriptorService Provider Descriptor 服务
+     * @param ocrProviderRegistry OCR Provider 注册表
      * @param llmSecretCryptoService 密钥加解密服务
      */
     public DocumentParseConnectionProbeService(
-            RestClient.Builder restClientBuilder,
             ObjectMapper objectMapper,
-            DocumentParseAdminService documentParseAdminService,
+            DocumentParseConnectionAdminService documentParseConnectionAdminService,
+            DocumentParseProviderDescriptorService documentParseProviderDescriptorService,
+            OcrProviderRegistry ocrProviderRegistry,
             LlmSecretCryptoService llmSecretCryptoService
     ) {
-        this.restClientBuilder = restClientBuilder;
         this.objectMapper = objectMapper;
-        this.documentParseAdminService = documentParseAdminService;
+        this.documentParseConnectionAdminService = documentParseConnectionAdminService;
+        this.documentParseProviderDescriptorService = documentParseProviderDescriptorService;
+        this.ocrProviderRegistry = ocrProviderRegistry;
         this.llmSecretCryptoService = llmSecretCryptoService;
     }
 
@@ -66,47 +64,34 @@ public class DocumentParseConnectionProbeService {
      * @param connectionId 已保存连接主键
      * @param providerType 页面输入的供应商类型
      * @param baseUrl 页面输入的基础地址
-     * @param endpointPath 页面输入的接口路径
-     * @param credential 页面输入的访问凭证
+     * @param credentialJson 页面输入的凭证 JSON
+     * @param configJson 页面输入的扩展配置 JSON
      * @return 探测结果
      */
     public ProbeResult probe(
             Long connectionId,
             String providerType,
             String baseUrl,
-            String endpointPath,
-            String credential
+            String credentialJson,
+            String configJson
     ) {
-        String effectiveProviderType = StringUtils.hasText(providerType)
-                ? normalizeProviderType(providerType)
-                : "";
+        String effectiveProviderType = normalizeProviderType(providerType);
         try {
-            ResolvedConnectionConfig resolvedConfig = resolveConnection(
+            ProviderConnection resolvedConnection = resolveConnection(
                     connectionId,
                     providerType,
                     baseUrl,
-                    endpointPath,
-                    credential
+                    credentialJson,
+                    configJson
             );
-            effectiveProviderType = resolvedConfig.providerType;
-            long startedAt = System.nanoTime();
-            probeEndpoint(resolvedConfig);
-            Long latencyMs = Long.valueOf(Math.max(1L, (System.nanoTime() - startedAt) / 1_000_000L));
+            effectiveProviderType = resolvedConnection.getProviderType();
+            ProviderProbeResult providerProbeResult = ocrProviderRegistry.probe(resolvedConnection);
             return new ProbeResult(
-                    true,
-                    resolvedConfig.providerType,
-                    latencyMs,
-                    resolvedConfig.baseUrl + resolvedConfig.endpointPath,
-                    "文档解析连接可用，耗时 " + latencyMs + " ms"
-            );
-        }
-        catch (RestClientResponseException exception) {
-            return new ProbeResult(
-                    false,
-                    effectiveProviderType,
-                    null,
-                    null,
-                    buildFailureMessage(effectiveProviderType, exception)
+                    providerProbeResult.isSuccess(),
+                    providerProbeResult.getProviderType(),
+                    providerProbeResult.getLatencyMs(),
+                    providerProbeResult.getEndpoint(),
+                    providerProbeResult.getMessage()
             );
         }
         catch (RestClientException | IllegalArgumentException | IllegalStateException exception) {
@@ -120,146 +105,99 @@ public class DocumentParseConnectionProbeService {
         }
     }
 
-    private ResolvedConnectionConfig resolveConnection(
+    /**
+     * 解析最终连接配置。
+     *
+     * @param connectionId 已保存连接主键
+     * @param providerType 页面输入的供应商类型
+     * @param baseUrl 页面输入的基础地址
+     * @param credentialJson 页面输入的凭证 JSON
+     * @param configJson 页面输入的扩展配置 JSON
+     * @return 可用于探测的连接配置
+     */
+    private ProviderConnection resolveConnection(
             Long connectionId,
             String providerType,
             String baseUrl,
-            String endpointPath,
-            String credential
+            String credentialJson,
+            String configJson
     ) {
-        Optional<DocumentParseProviderConnection> existingConnection = connectionId == null
+        Optional<ProviderConnection> existingConnection = connectionId == null
                 ? Optional.empty()
-                : documentParseAdminService.findConnection(connectionId);
+                : documentParseConnectionAdminService.findConnection(connectionId);
         String resolvedProviderType = StringUtils.hasText(providerType)
-                ? normalizeProviderType(providerType)
-                : existingConnection.map(DocumentParseProviderConnection::getProviderType)
-                .map(this::normalizeProviderType)
-                .orElse("");
+                ? documentParseProviderDescriptorService.requireProviderType(providerType)
+                : existingConnection.map(ProviderConnection::getProviderType)
+                .map(documentParseProviderDescriptorService::requireProviderType)
+                .orElseThrow(() -> new IllegalArgumentException("请先选择文档解析供应商"));
         String resolvedBaseUrl = StringUtils.hasText(baseUrl)
                 ? normalizeBaseUrl(baseUrl)
-                : existingConnection.map(DocumentParseProviderConnection::getBaseUrl)
+                : existingConnection.map(ProviderConnection::getBaseUrl)
                 .map(this::normalizeBaseUrl)
                 .orElse("");
-        String resolvedEndpointPath = StringUtils.hasText(endpointPath)
-                ? normalizeEndpointPath(endpointPath)
-                : existingConnection.map(DocumentParseProviderConnection::getEndpointPath)
-                .map(this::normalizeEndpointPath)
-                .orElseGet(() -> defaultEndpointPath(resolvedProviderType));
-        String resolvedCredential = StringUtils.hasText(credential)
-                ? credential.trim()
-                : existingConnection.map(DocumentParseProviderConnection::getCredentialCiphertext)
+        String resolvedCredentialJson = StringUtils.hasText(credentialJson)
+                ? normalizeJsonObject(credentialJson, "credentialJson")
+                : existingConnection.map(ProviderConnection::getCredentialCiphertext)
                 .filter(StringUtils::hasText)
                 .map(llmSecretCryptoService::decrypt)
+                .map(value -> normalizeJsonObject(value, "credentialJson"))
                 .orElse("");
-        if (!StringUtils.hasText(resolvedProviderType)) {
-            throw new IllegalArgumentException("请先选择文档解析供应商");
-        }
+        String resolvedConfigJson = StringUtils.hasText(configJson)
+                ? normalizeJsonObject(configJson, "configJson")
+                : existingConnection.map(ProviderConnection::getConfigJson)
+                .map(value -> normalizeJsonObject(value, "configJson"))
+                .orElse("{}");
         if (!StringUtils.hasText(resolvedBaseUrl)) {
             throw new IllegalArgumentException("请先填写接口地址");
         }
-        if (!StringUtils.hasText(resolvedEndpointPath)) {
-            throw new IllegalArgumentException("请先填写接口路径");
+        if (!StringUtils.hasText(resolvedCredentialJson)) {
+            throw new IllegalArgumentException("请先填写凭证 JSON");
         }
-        return new ResolvedConnectionConfig(
+        return new ProviderConnection(
+                existingConnection.map(ProviderConnection::getId).orElse(null),
+                existingConnection.map(ProviderConnection::getConnectionCode).orElse("probe-only"),
                 resolvedProviderType,
                 resolvedBaseUrl,
-                resolvedEndpointPath,
-                resolvedCredential
+                llmSecretCryptoService.encrypt(resolvedCredentialJson),
+                "已配置 JSON 凭证",
+                resolvedConfigJson,
+                existingConnection.map(ProviderConnection::isEnabled).orElse(Boolean.TRUE).booleanValue(),
+                existingConnection.map(ProviderConnection::getCreatedBy).orElse("admin"),
+                "admin",
+                existingConnection.map(ProviderConnection::getCreatedAt).orElse(null),
+                existingConnection.map(ProviderConnection::getUpdatedAt).orElse(null)
         );
     }
 
-    private void probeEndpoint(ResolvedConnectionConfig resolvedConfig) {
-        RestClient.Builder builder = restClientBuilder.clone()
-                .requestFactory(createRequestFactory())
-                .baseUrl(resolvedConfig.baseUrl)
-                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
-        applyCredentialHeaders(builder, resolvedConfig);
-        RestClient client = builder.build();
-        client.post()
-                .uri(resolvedConfig.endpointPath)
-                .body("""
-                        {"probe":true}
-                        """)
-                .retrieve()
-                .toBodilessEntity();
-    }
-
-    private void applyCredentialHeaders(
-            RestClient.Builder builder,
-            ResolvedConnectionConfig resolvedConfig
-    ) {
-        if (!StringUtils.hasText(resolvedConfig.credential)) {
-            return;
-        }
-        String credential = resolvedConfig.credential.trim();
-        JsonNode credentialNode = parseCredential(credential);
-        if (credentialNode == null) {
-            builder.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + credential);
-            return;
-        }
-        addHeaderIfPresent(builder, HttpHeaders.AUTHORIZATION, "Bearer " + readCredentialValue(
-                credentialNode,
-                "apiKey",
-                "token",
-                "bearerToken"
-        ));
-        addHeaderIfPresent(builder, "x-api-key", readCredentialValue(credentialNode, "xApiKey", "apiKey"));
-        addHeaderIfPresent(builder, "x-secret-id", readCredentialValue(credentialNode, "secretId"));
-        addHeaderIfPresent(builder, "x-secret-key", readCredentialValue(credentialNode, "secretKey"));
-        addHeaderIfPresent(builder, "x-access-key-id", readCredentialValue(credentialNode, "accessKeyId"));
-        addHeaderIfPresent(builder, "x-access-key-secret", readCredentialValue(credentialNode, "accessKeySecret"));
-        addHeaderIfPresent(builder, "x-project-id", readCredentialValue(credentialNode, "projectId"));
-    }
-
-    private void addHeaderIfPresent(RestClient.Builder builder, String headerName, String headerValue) {
-        if (StringUtils.hasText(headerValue)) {
-            builder.defaultHeader(headerName, headerValue);
-        }
-    }
-
-    private String readCredentialValue(JsonNode credentialNode, String... fieldNames) {
-        for (String fieldName : fieldNames) {
-            JsonNode valueNode = credentialNode.path(fieldName);
-            if (!valueNode.isMissingNode() && !valueNode.isNull() && StringUtils.hasText(valueNode.asText())) {
-                return valueNode.asText().trim();
-            }
-        }
-        return "";
-    }
-
-    private JsonNode parseCredential(String credential) {
-        if (!credential.startsWith("{")) {
-            return null;
+    /**
+     * 规范化 JSON 对象字符串。
+     *
+     * @param jsonValue JSON 字符串
+     * @param fieldName 字段名
+     * @return 规范化后的 JSON 字符串
+     */
+    private String normalizeJsonObject(String jsonValue, String fieldName) {
+        if (!StringUtils.hasText(jsonValue)) {
+            return "";
         }
         try {
-            return objectMapper.readTree(credential);
+            JsonNode jsonNode = objectMapper.readTree(jsonValue.trim());
+            if (!jsonNode.isObject()) {
+                throw new IllegalArgumentException(fieldName + "必须是 JSON 对象");
+            }
+            return objectMapper.writeValueAsString(jsonNode);
         }
         catch (Exception exception) {
-            throw new IllegalArgumentException("credential 不是合法 JSON");
+            throw new IllegalArgumentException(fieldName + "不是合法 JSON", exception);
         }
     }
 
-    private SimpleClientHttpRequestFactory createRequestFactory() {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        int timeoutMillis = Math.toIntExact(Duration.ofSeconds(DEFAULT_TIMEOUT_SECONDS).toMillis());
-        requestFactory.setConnectTimeout(timeoutMillis);
-        requestFactory.setReadTimeout(timeoutMillis);
-        requestFactory.setProxy(Proxy.NO_PROXY);
-        return requestFactory;
-    }
-
-    private String normalizeProviderType(String providerType) {
-        String normalized = StringUtils.hasText(providerType)
-                ? providerType.trim().toLowerCase(Locale.ROOT)
-                : "";
-        if (DocumentParseProviderConnection.PROVIDER_TENCENT_OCR.equals(normalized)
-                || DocumentParseProviderConnection.PROVIDER_ALIYUN_OCR.equals(normalized)
-                || DocumentParseProviderConnection.PROVIDER_GOOGLE_DOCUMENT_AI.equals(normalized)) {
-            return normalized;
-        }
-        throw new IllegalArgumentException("不支持的文档解析供应商: " + providerType);
-    }
-
+    /**
+     * 规范化基础地址。
+     *
+     * @param baseUrl 基础地址
+     * @return 规范化后的基础地址
+     */
     private String normalizeBaseUrl(String baseUrl) {
         String normalized = baseUrl == null ? "" : baseUrl.trim();
         while (normalized.endsWith("/")) {
@@ -268,31 +206,66 @@ public class DocumentParseConnectionProbeService {
         return normalized;
     }
 
-    private String normalizeEndpointPath(String endpointPath) {
-        String normalized = endpointPath == null ? "" : endpointPath.trim();
-        if (!StringUtils.hasText(normalized)) {
+    /**
+     * 尝试规范化 Provider 类型。
+     *
+     * @param providerType Provider 类型
+     * @return 规范化后的 Provider 类型
+     */
+    private String normalizeProviderType(String providerType) {
+        if (!StringUtils.hasText(providerType)) {
             return "";
         }
-        return normalized.startsWith("/") ? normalized : "/" + normalized;
+        try {
+            return documentParseProviderDescriptorService.requireProviderType(providerType);
+        }
+        catch (IllegalArgumentException exception) {
+            return providerType.trim();
+        }
     }
 
-    private String defaultEndpointPath(String providerType) {
-        if (DocumentParseProviderConnection.PROVIDER_ALIYUN_OCR.equals(providerType)) {
-            return "/ocr/v1/general";
-        }
-        if (DocumentParseProviderConnection.PROVIDER_GOOGLE_DOCUMENT_AI.equals(providerType)) {
-            return "/v1/documents:process";
-        }
-        return "/ocr/v1/general-basic";
-    }
-
+    /**
+     * 构造失败提示信息。
+     *
+     * @param providerType Provider 类型
+     * @param exception 异常
+     * @return 失败提示信息
+     */
     private String buildFailureMessage(String providerType, Exception exception) {
-        String providerLabel = StringUtils.hasText(providerType) ? providerType : "document-parse";
-        String message = exception.getMessage();
-        if (!StringUtils.hasText(message)) {
-            message = exception.getClass().getSimpleName();
+        String providerLabel = documentParseProviderDescriptorService.findDescriptor(providerType)
+                .map(ProviderDescriptor::getDisplayName)
+                .filter(StringUtils::hasText)
+                .orElseGet(() -> StringUtils.hasText(providerType) ? providerType : "文档解析服务");
+        String message = resolveFailureDetail(exception);
+        if (message.startsWith(providerLabel)) {
+            return message;
         }
         return providerLabel + " 连接失败: " + message;
+    }
+
+    /**
+     * 提取适合管理台直接展示的失败原因。
+     *
+     * @param exception 异常
+     * @return 失败原因
+     */
+    private String resolveFailureDetail(Exception exception) {
+        Throwable current = exception;
+        String message = "";
+        while (current != null) {
+            if (StringUtils.hasText(current.getMessage())) {
+                message = current.getMessage().trim();
+            }
+            Throwable next = current.getCause();
+            if (next == null || next == current) {
+                break;
+            }
+            current = next;
+        }
+        if (StringUtils.hasText(message)) {
+            return message;
+        }
+        return exception.getClass().getSimpleName();
     }
 
     /**
@@ -319,9 +292,9 @@ public class DocumentParseConnectionProbeService {
          *
          * @param success 是否成功
          * @param providerType 供应商类型
-         * @param latencyMs 耗时
-         * @param endpoint 探测地址
-         * @param message 提示信息
+         * @param latencyMs 耗时毫秒
+         * @param endpoint 命中的接口地址
+         * @param message 结果说明
          */
         public ProbeResult(
                 boolean success,
@@ -356,53 +329,30 @@ public class DocumentParseConnectionProbeService {
         }
 
         /**
-         * 返回耗时。
+         * 返回耗时毫秒。
          *
-         * @return 耗时
+         * @return 耗时毫秒
          */
         public Long getLatencyMs() {
             return latencyMs;
         }
 
         /**
-         * 返回探测地址。
+         * 返回命中的接口地址。
          *
-         * @return 探测地址
+         * @return 命中的接口地址
          */
         public String getEndpoint() {
             return endpoint;
         }
 
         /**
-         * 返回提示信息。
+         * 返回结果说明。
          *
-         * @return 提示信息
+         * @return 结果说明
          */
         public String getMessage() {
             return message;
-        }
-    }
-
-    private static class ResolvedConnectionConfig {
-
-        private final String providerType;
-
-        private final String baseUrl;
-
-        private final String endpointPath;
-
-        private final String credential;
-
-        private ResolvedConnectionConfig(
-                String providerType,
-                String baseUrl,
-                String endpointPath,
-                String credential
-        ) {
-            this.providerType = providerType;
-            this.baseUrl = baseUrl;
-            this.endpointPath = endpointPath;
-            this.credential = credential;
         }
     }
 }

@@ -74,6 +74,7 @@ class AnthropicMessageApiLlmClientTests {
         assertThat(result.getContent()).isEqualTo("review ok");
         assertThat(result.getInputTokens()).isEqualTo(11);
         assertThat(result.getOutputTokens()).isEqualTo(7);
+        assertThat(result.getProviderRequestId()).isEqualTo("msg_test");
         assertThat(apiKeyHeader.get()).isEqualTo("test-anthropic-key");
         assertThat(contentTypeHeader.get()).contains("application/json");
         assertThat(requestBody.get()).contains("\"system\":\"review-system\"");
@@ -117,6 +118,7 @@ class AnthropicMessageApiLlmClientTests {
         assertThat(result.getContent()).isEqualTo("review ok");
         assertThat(result.getInputTokens()).isEqualTo(11);
         assertThat(result.getOutputTokens()).isEqualTo(7);
+        assertThat(result.getProviderRequestId()).isEqualTo("msg_test");
     }
 
     /**

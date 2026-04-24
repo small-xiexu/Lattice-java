@@ -38,6 +38,8 @@ public class LlmProperties {
 
     private final ChatClient chatClient = new ChatClient();
 
+    private final CompileTimeout compileTimeout = new CompileTimeout();
+
     private final Pricing pricing = new Pricing();
 
     /**
@@ -239,6 +241,15 @@ public class LlmProperties {
     }
 
     /**
+     * 获取编译角色默认超时配置。
+     *
+     * @return 编译角色默认超时配置
+     */
+    public CompileTimeout getCompileTimeout() {
+        return compileTimeout;
+    }
+
+    /**
      * 获取价格配置。
      *
      * @return 价格配置
@@ -424,6 +435,76 @@ public class LlmProperties {
          */
         public void setGovernanceJsonEnabled(boolean governanceJsonEnabled) {
             this.governanceJsonEnabled = governanceJsonEnabled;
+        }
+    }
+
+    /**
+     * 编译角色默认超时配置。
+     *
+     * 职责：为 writer / reviewer / fixer 提供显式超时秒数
+     *
+     * @author xiexu
+     */
+    public static class CompileTimeout {
+
+        private int writerSeconds = 90;
+
+        private int reviewerSeconds = 60;
+
+        private int fixerSeconds = 60;
+
+        /**
+         * 返回 writer 默认超时秒数。
+         *
+         * @return writer 默认超时秒数
+         */
+        public int getWriterSeconds() {
+            return writerSeconds;
+        }
+
+        /**
+         * 设置 writer 默认超时秒数。
+         *
+         * @param writerSeconds writer 默认超时秒数
+         */
+        public void setWriterSeconds(int writerSeconds) {
+            this.writerSeconds = writerSeconds;
+        }
+
+        /**
+         * 返回 reviewer 默认超时秒数。
+         *
+         * @return reviewer 默认超时秒数
+         */
+        public int getReviewerSeconds() {
+            return reviewerSeconds;
+        }
+
+        /**
+         * 设置 reviewer 默认超时秒数。
+         *
+         * @param reviewerSeconds reviewer 默认超时秒数
+         */
+        public void setReviewerSeconds(int reviewerSeconds) {
+            this.reviewerSeconds = reviewerSeconds;
+        }
+
+        /**
+         * 返回 fixer 默认超时秒数。
+         *
+         * @return fixer 默认超时秒数
+         */
+        public int getFixerSeconds() {
+            return fixerSeconds;
+        }
+
+        /**
+         * 设置 fixer 默认超时秒数。
+         *
+         * @param fixerSeconds fixer 默认超时秒数
+         */
+        public void setFixerSeconds(int fixerSeconds) {
+            this.fixerSeconds = fixerSeconds;
         }
     }
 

@@ -3,6 +3,7 @@ package com.xbk.lattice.compiler.graph;
 import com.alibaba.cloud.ai.graph.GraphLifecycleListener;
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.xbk.lattice.compiler.config.CompileGraphProperties;
+import com.xbk.lattice.compiler.service.CompileJobLeaseManager;
 import com.xbk.lattice.observability.StructuredEventLogger;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
@@ -41,6 +42,8 @@ public class CompileGraphLifecycleListener implements GraphLifecycleListener {
 
     private final StructuredEventLogger structuredEventLogger;
 
+    private final CompileJobLeaseManager compileJobLeaseManager;
+
     private final Map<String, ConcurrentLinkedDeque<StepExecutionHandle>> inflightHandleMap =
             new ConcurrentHashMap<String, ConcurrentLinkedDeque<StepExecutionHandle>>();
 
@@ -53,18 +56,21 @@ public class CompileGraphLifecycleListener implements GraphLifecycleListener {
      * @param graphStepLogger Graph 步骤日志器
      * @param compileGraphProperties 编译图配置
      * @param structuredEventLogger 结构化事件日志器
+     * @param compileJobLeaseManager 编译作业租约管理器
      */
     @Autowired
     public CompileGraphLifecycleListener(
             CompileGraphStateMapper compileGraphStateMapper,
             GraphStepLogger graphStepLogger,
             CompileGraphProperties compileGraphProperties,
-            StructuredEventLogger structuredEventLogger
+            StructuredEventLogger structuredEventLogger,
+            CompileJobLeaseManager compileJobLeaseManager
     ) {
         this.compileGraphStateMapper = compileGraphStateMapper;
         this.graphStepLogger = graphStepLogger;
         this.compileGraphProperties = compileGraphProperties;
         this.structuredEventLogger = structuredEventLogger;
+        this.compileJobLeaseManager = compileJobLeaseManager;
     }
 
     CompileGraphLifecycleListener(
@@ -72,7 +78,7 @@ public class CompileGraphLifecycleListener implements GraphLifecycleListener {
             GraphStepLogger graphStepLogger,
             CompileGraphProperties compileGraphProperties
     ) {
-        this(compileGraphStateMapper, graphStepLogger, compileGraphProperties, null);
+        this(compileGraphStateMapper, graphStepLogger, compileGraphProperties, null, null);
     }
 
     /**
@@ -87,6 +93,7 @@ public class CompileGraphLifecycleListener implements GraphLifecycleListener {
     public void before(String nodeId, Map<String, Object> state, RunnableConfig config, Long curTime) {
         CompileGraphState graphState = compileGraphStateMapper.fromMap(state);
         bindTraceContext(graphState);
+        touchCurrentStep(graphState.getJobId(), nodeId);
         logStructuredStepEvent("compile_graph_step_started", nodeId, graphState, "STARTED", null);
         if (!compileGraphProperties.isPersistStepLog()) {
             return;
@@ -260,6 +267,19 @@ public class CompileGraphLifecycleListener implements GraphLifecycleListener {
     private boolean isFailMode() {
         String failureMode = compileGraphProperties.getStepLogFailureMode();
         return "fail".equalsIgnoreCase(failureMode);
+    }
+
+    /**
+     * 刷新当前步骤心跳。
+     *
+     * @param jobId 作业标识
+     * @param nodeId 节点标识
+     */
+    private void touchCurrentStep(String jobId, String nodeId) {
+        if (compileJobLeaseManager == null || jobId == null || jobId.isBlank()) {
+            return;
+        }
+        compileJobLeaseManager.touchCurrentStep(jobId, nodeId, "正在执行节点：" + nodeId);
     }
 
     private void logStructuredStepEvent(

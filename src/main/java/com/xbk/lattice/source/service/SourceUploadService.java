@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xbk.lattice.compiler.service.CompileJobService;
+import com.xbk.lattice.compiler.service.CompileJobDerivedStatusResolver;
 import com.xbk.lattice.compiler.service.CompileJobStatuses;
 import com.xbk.lattice.compiler.service.CompileOrchestrationModes;
 import com.xbk.lattice.infra.persistence.CompileJobRecord;
@@ -52,6 +53,8 @@ public class SourceUploadService {
 
     private final CompileJobService compileJobService;
 
+    private final CompileJobDerivedStatusResolver compileJobDerivedStatusResolver;
+
     private final SourceSnapshotJdbcRepository sourceSnapshotJdbcRepository;
 
     /**
@@ -62,6 +65,7 @@ public class SourceUploadService {
      * @param sourceService 资料源服务
      * @param sourceSyncService 同步运行服务
      * @param compileJobService 编译作业服务
+     * @param compileJobDerivedStatusResolver 编译作业派生状态解析器
      * @param sourceSnapshotJdbcRepository 资料源快照仓储
      */
     public SourceUploadService(
@@ -70,6 +74,7 @@ public class SourceUploadService {
             SourceService sourceService,
             SourceSyncService sourceSyncService,
             CompileJobService compileJobService,
+            CompileJobDerivedStatusResolver compileJobDerivedStatusResolver,
             SourceSnapshotJdbcRepository sourceSnapshotJdbcRepository
     ) {
         this.bundleFeatureExtractor = bundleFeatureExtractor;
@@ -77,6 +82,7 @@ public class SourceUploadService {
         this.sourceService = sourceService;
         this.sourceSyncService = sourceSyncService;
         this.compileJobService = compileJobService;
+        this.compileJobDerivedStatusResolver = compileJobDerivedStatusResolver;
         this.sourceSnapshotJdbcRepository = sourceSnapshotJdbcRepository;
     }
 
@@ -536,6 +542,14 @@ public class SourceUploadService {
                 run.getMatchedSourceId(),
                 run.getCompileJobId(),
                 compileJobRecord == null ? null : compileJobRecord.getStatus(),
+                compileJobRecord == null ? null : compileJobDerivedStatusResolver.resolve(compileJobRecord),
+                compileJobRecord == null ? null : compileJobRecord.getCurrentStep(),
+                compileJobRecord == null ? null : Integer.valueOf(compileJobRecord.getProgressCurrent()),
+                compileJobRecord == null ? null : Integer.valueOf(compileJobRecord.getProgressTotal()),
+                compileJobRecord == null ? null : compileJobRecord.getProgressMessage(),
+                compileJobRecord == null ? null : formatTime(compileJobRecord.getLastHeartbeatAt()),
+                compileJobRecord == null ? null : formatTime(compileJobRecord.getRunningExpiresAt()),
+                compileJobRecord == null ? null : compileJobRecord.getErrorCode(),
                 run.getManifestHash(),
                 evidenceNode.path("message").asText(defaultMessage(run)),
                 run.getErrorMessage(),

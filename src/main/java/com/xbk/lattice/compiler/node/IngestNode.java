@@ -2,6 +2,7 @@ package com.xbk.lattice.compiler.node;
 
 import com.xbk.lattice.compiler.config.CompilerProperties;
 import com.xbk.lattice.compiler.domain.RawSource;
+import com.xbk.lattice.documentparse.application.DocumentParseApplicationService;
 import com.xbk.lattice.documentparse.extractor.DocTextExtractor;
 import com.xbk.lattice.documentparse.extractor.ExcelTextExtractor;
 import com.xbk.lattice.documentparse.extractor.PdfTextExtractor;
@@ -47,6 +48,10 @@ public class IngestNode {
             new HashSet<String>(Arrays.asList("png", "jpg", "jpeg", "gif", "svg", "drawio"))
     );
 
+    private static final Set<String> DOCUMENT_PARSE_IMAGE_FORMATS = Collections.unmodifiableSet(
+            new HashSet<String>(Arrays.asList("png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff"))
+    );
+
     private static final Set<String> SKIPPED_DIRECTORIES = Collections.unmodifiableSet(
             new HashSet<String>(Arrays.asList(".git", "target", "dist", "node_modules"))
     );
@@ -63,18 +68,34 @@ public class IngestNode {
 
     private final PptTextExtractor pptTextExtractor;
 
+    private final DocumentParseApplicationService documentParseApplicationService;
+
     /**
      * 创建文件采集节点。
      *
      * @param compilerProperties 编译配置
      */
     public IngestNode(CompilerProperties compilerProperties) {
+        this(compilerProperties, null);
+    }
+
+    /**
+     * 创建文件采集节点。
+     *
+     * @param compilerProperties 编译配置
+     * @param documentParseApplicationService 文档解析应用服务
+     */
+    public IngestNode(
+            CompilerProperties compilerProperties,
+            DocumentParseApplicationService documentParseApplicationService
+    ) {
         this.compilerProperties = compilerProperties;
         this.pdfTextExtractor = new PdfTextExtractor();
         this.excelTextExtractor = new ExcelTextExtractor();
         this.wordTextExtractor = new WordTextExtractor();
         this.docTextExtractor = new DocTextExtractor();
         this.pptTextExtractor = new PptTextExtractor();
+        this.documentParseApplicationService = documentParseApplicationService;
     }
 
     /**
@@ -133,6 +154,12 @@ public class IngestNode {
      */
     private RawSource readSource(Path sourceDir, Path path) {
         String format = extractFormat(path.getFileName().toString());
+        if (shouldDelegateToDocumentParse(format)) {
+            RawSource parsedRawSource = readDocumentParsedSource(sourceDir, path);
+            if (parsedRawSource != null) {
+                return parsedRawSource;
+            }
+        }
         if (SUPPORTED_TEXT_FORMATS.contains(format)) {
             return readTextSource(sourceDir, path);
         }
@@ -155,6 +182,57 @@ public class IngestNode {
             return readImagePlaceholder(sourceDir, path, format);
         }
         return null;
+    }
+
+    /**
+     * 判断当前格式是否应优先委托新文档解析入口。
+     *
+     * @param format 文件格式
+     * @return 是否走新文档解析入口
+     */
+    private boolean shouldDelegateToDocumentParse(String format) {
+        if (documentParseApplicationService == null) {
+            return false;
+        }
+        return SUPPORTED_TEXT_FORMATS.contains(format)
+                || SUPPORTED_DOCUMENT_FORMATS.contains(format)
+                || DOCUMENT_PARSE_IMAGE_FORMATS.contains(format);
+    }
+
+    /**
+     * 通过新文档解析入口读取源文件。
+     *
+     * @param sourceDir 源目录
+     * @param path 文件路径
+     * @return 原始源文件；无有效正文时返回 null
+     */
+    private RawSource readDocumentParsedSource(Path sourceDir, Path path) {
+        try {
+            RawSource parsedRawSource = documentParseApplicationService.parseRawSource(sourceDir, path);
+            if (parsedRawSource == null) {
+                return null;
+            }
+            String trimmedContent = trimContent(parsedRawSource.getContent());
+            if (trimmedContent == null || trimmedContent.isBlank()) {
+                return null;
+            }
+            return RawSource.parsed(
+                    parsedRawSource.getSourceId(),
+                    parsedRawSource.getRelativePath(),
+                    trimmedContent,
+                    parsedRawSource.getFormat(),
+                    parsedRawSource.getFileSize(),
+                    parsedRawSource.getMetadataJson(),
+                    parsedRawSource.isVerbatim(),
+                    parsedRawSource.getRawPath(),
+                    parsedRawSource.getParseMode(),
+                    parsedRawSource.getParseProvider()
+            );
+        }
+        catch (IOException ex) {
+            log.warn("Failed to parse source through document parse path: {}", path, ex);
+            return null;
+        }
     }
 
     /**

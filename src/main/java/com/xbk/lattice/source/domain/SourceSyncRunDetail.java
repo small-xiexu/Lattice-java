@@ -33,6 +33,22 @@ public class SourceSyncRunDetail {
 
     private final String compileJobStatus;
 
+    private final String compileDerivedStatus;
+
+    private final String compileCurrentStep;
+
+    private final Integer compileProgressCurrent;
+
+    private final Integer compileProgressTotal;
+
+    private final String compileProgressMessage;
+
+    private final String compileLastHeartbeatAt;
+
+    private final String compileRunningExpiresAt;
+
+    private final String compileErrorCode;
+
     private final String manifestHash;
 
     private final String message;
@@ -65,6 +81,14 @@ public class SourceSyncRunDetail {
      * @param matchedSourceId 命中的资料源主键
      * @param compileJobId 编译作业主键
      * @param compileJobStatus 编译作业状态
+     * @param compileDerivedStatus 编译作业派生状态
+     * @param compileCurrentStep 编译当前步骤
+     * @param compileProgressCurrent 编译当前进度
+     * @param compileProgressTotal 编译总进度
+     * @param compileProgressMessage 编译进度提示
+     * @param compileLastHeartbeatAt 编译最近心跳时间
+     * @param compileRunningExpiresAt 编译租约到期时间
+     * @param compileErrorCode 编译错误码
      * @param manifestHash manifest 哈希
      * @param message 提示信息
      * @param errorMessage 错误信息
@@ -87,6 +111,14 @@ public class SourceSyncRunDetail {
             Long matchedSourceId,
             String compileJobId,
             String compileJobStatus,
+            String compileDerivedStatus,
+            String compileCurrentStep,
+            Integer compileProgressCurrent,
+            Integer compileProgressTotal,
+            String compileProgressMessage,
+            String compileLastHeartbeatAt,
+            String compileRunningExpiresAt,
+            String compileErrorCode,
             String manifestHash,
             String message,
             String errorMessage,
@@ -108,6 +140,14 @@ public class SourceSyncRunDetail {
         this.matchedSourceId = matchedSourceId;
         this.compileJobId = compileJobId;
         this.compileJobStatus = compileJobStatus;
+        this.compileDerivedStatus = compileDerivedStatus;
+        this.compileCurrentStep = compileCurrentStep;
+        this.compileProgressCurrent = compileProgressCurrent;
+        this.compileProgressTotal = compileProgressTotal;
+        this.compileProgressMessage = compileProgressMessage;
+        this.compileLastHeartbeatAt = compileLastHeartbeatAt;
+        this.compileRunningExpiresAt = compileRunningExpiresAt;
+        this.compileErrorCode = compileErrorCode;
         this.manifestHash = manifestHash;
         this.message = message;
         this.errorMessage = errorMessage;
@@ -161,6 +201,38 @@ public class SourceSyncRunDetail {
 
     public String getCompileJobStatus() {
         return compileJobStatus;
+    }
+
+    public String getCompileDerivedStatus() {
+        return compileDerivedStatus;
+    }
+
+    public String getCompileCurrentStep() {
+        return compileCurrentStep;
+    }
+
+    public Integer getCompileProgressCurrent() {
+        return compileProgressCurrent;
+    }
+
+    public Integer getCompileProgressTotal() {
+        return compileProgressTotal;
+    }
+
+    public String getCompileProgressMessage() {
+        return compileProgressMessage;
+    }
+
+    public String getCompileLastHeartbeatAt() {
+        return compileLastHeartbeatAt;
+    }
+
+    public String getCompileRunningExpiresAt() {
+        return compileRunningExpiresAt;
+    }
+
+    public String getCompileErrorCode() {
+        return compileErrorCode;
     }
 
     public String getManifestHash() {

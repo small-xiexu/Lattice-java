@@ -49,8 +49,8 @@ public class AdminDocumentParseConnectionTestController {
                 request.getConnectionId(),
                 request.getProviderType(),
                 request.getBaseUrl(),
-                request.getEndpointPath(),
-                request.getCredential()
+                request.getCredentialJson(),
+                request.getConfigJson()
         );
         return new AdminDocumentParseConnectionTestResponse(
                 result.isSuccess(),
@@ -79,9 +79,9 @@ public class AdminDocumentParseConnectionTestController {
 
         private String baseUrl;
 
-        private String endpointPath;
+        private String credentialJson;
 
-        private String credential;
+        private String configJson;
     }
 
     /**

@@ -198,6 +198,8 @@ class IngestNodeTests {
         assertThat(wordSource.getContent()).contains("retry=3");
         assertThat(legacyWordSource.getRelativePath()).isEqualTo("docs/legacy-brief.doc");
         assertThat(legacyWordSource.getMetadataJson()).contains("legacyWord");
+        assertThat(legacyWordSource.getMetadataJson()).contains("extractionStrategy");
+        assertThat(legacyWordSource.getMetadataJson()).contains("listFormattingPreserved");
         assertThat(legacyWordSource.getContent()).contains("Legacy DOC payment timeout");
         assertThat(legacyWordSource.getContent()).contains("retry=3");
         assertThat(pptSource.getRelativePath()).isEqualTo("docs/briefing.pptx");

@@ -2,16 +2,21 @@ package com.xbk.lattice.compiler.service;
 
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
+import com.xbk.lattice.compiler.config.CompileJobProperties;
 import com.xbk.lattice.infra.persistence.CompileJobJdbcRepository;
 import com.xbk.lattice.infra.persistence.CompileJobRecord;
+import com.xbk.lattice.llm.service.LlmRetryExhaustedException;
+import com.xbk.lattice.llm.service.LlmRetrySupport;
 import com.xbk.lattice.observability.StructuredEventLogger;
 import com.xbk.lattice.source.domain.KnowledgeSource;
 import com.xbk.lattice.source.infra.KnowledgeSourceJdbcRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.ai.retry.TransientAiException;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientException;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -36,6 +41,12 @@ public class CompileJobService {
 
     private static final String LEGACY_DEFAULT_SOURCE_CODE = "legacy-default";
 
+    private static final String ERROR_CODE_COMPILE_TOTAL_BUDGET_EXCEEDED = "COMPILE_TOTAL_BUDGET_EXCEEDED";
+
+    private static final String ERROR_CODE_COMPILE_IO_ERROR = "COMPILE_IO_ERROR";
+
+    private static final String ERROR_CODE_COMPILE_EXECUTION_FAILED = "COMPILE_EXECUTION_FAILED";
+
     private final CompileJobJdbcRepository compileJobJdbcRepository;
 
     private final CompileOrchestratorRegistry compileOrchestratorRegistry;
@@ -45,6 +56,10 @@ public class CompileJobService {
     private final StructuredEventLogger structuredEventLogger;
 
     private final Tracer tracer;
+
+    private final CompileJobProperties compileJobProperties;
+
+    private final CompileJobLeaseManager compileJobLeaseManager;
 
     /**
      * 创建编译作业服务。
@@ -57,13 +72,17 @@ public class CompileJobService {
             CompileOrchestratorRegistry compileOrchestratorRegistry,
             KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository,
             StructuredEventLogger structuredEventLogger,
-            ObjectProvider<Tracer> tracerProvider
+            ObjectProvider<Tracer> tracerProvider,
+            CompileJobProperties compileJobProperties,
+            CompileJobLeaseManager compileJobLeaseManager
     ) {
         this.compileJobJdbcRepository = compileJobJdbcRepository;
         this.compileOrchestratorRegistry = compileOrchestratorRegistry;
         this.knowledgeSourceJdbcRepository = knowledgeSourceJdbcRepository;
         this.structuredEventLogger = structuredEventLogger;
         this.tracer = tracerProvider.getIfAvailable();
+        this.compileJobProperties = compileJobProperties;
+        this.compileJobLeaseManager = compileJobLeaseManager;
     }
 
     /**
@@ -115,6 +134,15 @@ public class CompileJobService {
                 incremental,
                 CompileOrchestrationModes.normalize(orchestrationMode),
                 CompileJobStatuses.QUEUED,
+                null,
+                null,
+                null,
+                null,
+                0,
+                0,
+                null,
+                null,
+                null,
                 0,
                 null,
                 0,
@@ -161,9 +189,16 @@ public class CompileJobService {
         }
         String jobId = nextQueuedJob.orElseThrow().getJobId();
         OffsetDateTime startedAt = OffsetDateTime.now();
-        if (!compileJobJdbcRepository.markRunning(jobId, startedAt)) {
+        OffsetDateTime runningExpiresAt = startedAt.plusSeconds(compileJobProperties.getLeaseDurationSeconds());
+        if (!compileJobJdbcRepository.markRunning(
+                jobId,
+                compileJobProperties.getWorkerId(),
+                startedAt,
+                runningExpiresAt
+        )) {
             return Optional.empty();
         }
+        compileJobLeaseManager.registerRunningJob(jobId);
         return Optional.of(executeRunningJob(jobId));
     }
 
@@ -201,9 +236,16 @@ public class CompileJobService {
      */
     private CompileJobRecord executeJob(String jobId) {
         OffsetDateTime startedAt = OffsetDateTime.now();
-        if (!compileJobJdbcRepository.markRunning(jobId, startedAt)) {
+        OffsetDateTime runningExpiresAt = startedAt.plusSeconds(compileJobProperties.getLeaseDurationSeconds());
+        if (!compileJobJdbcRepository.markRunning(
+                jobId,
+                compileJobProperties.getWorkerId(),
+                startedAt,
+                runningExpiresAt
+        )) {
             return getRequiredJob(jobId);
         }
+        compileJobLeaseManager.registerRunningJob(jobId);
         return executeRunningJob(jobId);
     }
 
@@ -215,7 +257,7 @@ public class CompileJobService {
      */
     private CompileJobRecord executeRunningJob(String jobId) {
         CompileJobRecord compileJobRecord = getRequiredJob(jobId);
-        Map<String, String> previousTraceContext = bindTraceContext(compileJobRecord.getRootTraceId());
+        Map<String, String> previousTraceContext = bindTraceContext(compileJobRecord);
         logCompileStarted(compileJobRecord);
         try {
             KnowledgeSource knowledgeSource = resolveKnowledgeSource(compileJobRecord.getSourceId());
@@ -235,13 +277,22 @@ public class CompileJobService {
             return completedJob;
         }
         catch (IOException | RuntimeException ex) {
-            log.error("Compile job execution failed jobId: {}, sourceDir: {}", jobId, compileJobRecord.getSourceDir(), ex);
-            compileJobJdbcRepository.markFailed(jobId, ex.getMessage(), OffsetDateTime.now());
+            String errorCode = resolveFailureErrorCode(ex);
+            String errorMessage = resolveFailureErrorMessage(ex);
+            log.error(
+                    "Compile job execution failed jobId: {}, sourceDir: {}, errorCode: {}",
+                    jobId,
+                    compileJobRecord.getSourceDir(),
+                    errorCode,
+                    ex
+            );
+            compileJobJdbcRepository.markFailed(jobId, errorCode, errorMessage, OffsetDateTime.now());
             CompileJobRecord failedJob = getRequiredJob(jobId);
             logCompileCompleted(failedJob, ex);
             return failedJob;
         }
         finally {
+            compileJobLeaseManager.cancelJob(jobId);
             restoreTraceContext(previousTraceContext);
         }
     }
@@ -310,14 +361,84 @@ public class CompileJobService {
         fields.put("status", compileJobRecord.getStatus());
         fields.put("persistedCount", compileJobRecord.getPersistedCount());
         fields.put("attemptCount", compileJobRecord.getAttemptCount());
+        if (compileJobRecord.getErrorCode() != null && !compileJobRecord.getErrorCode().isBlank()) {
+            fields.put("errorCode", compileJobRecord.getErrorCode());
+        }
         if (compileJobRecord.getErrorMessage() != null && !compileJobRecord.getErrorMessage().isBlank()) {
             fields.put("error", compileJobRecord.getErrorMessage());
+            fields.put("errorSummary", compileJobRecord.getErrorMessage());
         }
         if (throwable != null) {
             structuredEventLogger.error("compile_completed", fields, throwable);
             return;
         }
         structuredEventLogger.info("compile_completed", fields);
+    }
+
+    /**
+     * 解析编译失败错误码。
+     *
+     * @param throwable 异常
+     * @return 编译失败错误码
+     */
+    private String resolveFailureErrorCode(Throwable throwable) {
+        if (throwable instanceof BudgetExceededException) {
+            return ERROR_CODE_COMPILE_TOTAL_BUDGET_EXCEEDED;
+        }
+        if (isLlmFailure(throwable)) {
+            String llmErrorCode = LlmRetrySupport.resolveErrorCode(throwable);
+            if (!"LLM_CALL_FAILED".equals(llmErrorCode)) {
+                return llmErrorCode;
+            }
+        }
+        Throwable rootCause = rootCause(throwable);
+        if (rootCause instanceof IOException) {
+            return ERROR_CODE_COMPILE_IO_ERROR;
+        }
+        return ERROR_CODE_COMPILE_EXECUTION_FAILED;
+    }
+
+    /**
+     * 解析编译失败错误摘要。
+     *
+     * @param throwable 异常
+     * @return 编译失败错误摘要
+     */
+    private String resolveFailureErrorMessage(Throwable throwable) {
+        if (throwable instanceof BudgetExceededException) {
+            return throwable.getMessage();
+        }
+        if (isLlmFailure(throwable)) {
+            String llmErrorCode = LlmRetrySupport.resolveErrorCode(throwable);
+            if (!"LLM_CALL_FAILED".equals(llmErrorCode)) {
+                return LlmRetrySupport.resolveErrorSummary(throwable);
+            }
+        }
+        Throwable rootCause = rootCause(throwable);
+        String message = rootCause == null ? null : rootCause.getMessage();
+        if (message != null && !message.isBlank()) {
+            return message;
+        }
+        return rootCause == null ? throwable.getClass().getSimpleName() : rootCause.getClass().getSimpleName();
+    }
+
+    /**
+     * 判断异常链是否来源于 LLM 调用。
+     *
+     * @param throwable 异常
+     * @return 是否为 LLM 调用异常
+     */
+    private boolean isLlmFailure(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null && current.getCause() != current) {
+            if (current instanceof LlmRetryExhaustedException
+                    || current instanceof TransientAiException
+                    || current instanceof RestClientException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     /**
@@ -365,20 +486,41 @@ public class CompileJobService {
     /**
      * 绑定编译作业执行期的追踪上下文。
      *
-     * @param rootTraceId 根追踪标识
+     * @param compileJobRecord 编译作业记录
      * @return 绑定前的上下文快照
      */
-    private Map<String, String> bindTraceContext(String rootTraceId) {
+    private Map<String, String> bindTraceContext(CompileJobRecord compileJobRecord) {
         Map<String, String> previousValues = new LinkedHashMap<String, String>();
         rememberTraceValue(previousValues, "traceId");
         rememberTraceValue(previousValues, "rootTraceId");
         rememberTraceValue(previousValues, "spanId");
+        rememberTraceValue(previousValues, "clientRequestId");
+        rememberTraceValue(previousValues, "compileJobId");
+        rememberTraceValue(previousValues, "sourceSyncRunId");
+        if (compileJobRecord == null) {
+            return previousValues;
+        }
+        String rootTraceId = trimToNull(compileJobRecord.getRootTraceId());
+        if (compileJobRecord.getJobId() != null && !compileJobRecord.getJobId().isBlank()) {
+            MDC.put("compileJobId", compileJobRecord.getJobId());
+        }
+        else {
+            MDC.remove("compileJobId");
+        }
+        if (compileJobRecord.getSourceSyncRunId() != null) {
+            MDC.put("sourceSyncRunId", String.valueOf(compileJobRecord.getSourceSyncRunId()));
+        }
+        else {
+            MDC.remove("sourceSyncRunId");
+        }
         if (rootTraceId == null || rootTraceId.isBlank()) {
+            MDC.remove("clientRequestId");
             return previousValues;
         }
         MDC.put("traceId", rootTraceId);
         MDC.put("rootTraceId", rootTraceId);
         MDC.remove("spanId");
+        MDC.put("clientRequestId", rootTraceId);
         return previousValues;
     }
 
@@ -409,6 +551,23 @@ public class CompileJobService {
      */
     private void rememberTraceValue(Map<String, String> previousValues, String key) {
         previousValues.put(key, MDC.get(key));
+    }
+
+    /**
+     * 返回根因异常。
+     *
+     * @param throwable 异常
+     * @return 根因异常
+     */
+    private Throwable rootCause(Throwable throwable) {
+        if (throwable == null) {
+            return null;
+        }
+        Throwable current = throwable;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current;
     }
 
     /**

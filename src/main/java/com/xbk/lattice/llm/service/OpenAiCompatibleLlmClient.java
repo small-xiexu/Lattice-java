@@ -9,17 +9,12 @@ import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestClientResponseException;
 
-import java.io.EOFException;
 import java.io.IOException;
 import java.net.Proxy;
 import java.net.ProxySelector;
 import java.net.SocketAddress;
 import java.net.URI;
-import java.net.SocketException;
-import java.net.SocketTimeoutException;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -37,10 +32,6 @@ import java.util.Map;
  */
 @Slf4j
 public class OpenAiCompatibleLlmClient implements LlmClient {
-
-    private static final int MAX_RETRY_ATTEMPTS = 5;
-
-    private static final long BASE_RETRY_BACKOFF_MILLIS = 300L;
 
     private static final ProxySelector NO_PROXY_SELECTOR = new ProxySelector() {
         @Override
@@ -137,85 +128,13 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     @Override
     public LlmCallResult call(String systemPrompt, String userPrompt) {
         String requestJson = serialize(buildRequestBody(systemPrompt, userPrompt));
-        byte[] responseBytes = executeRequestWithRetry(requestJson);
+        byte[] responseBytes = restClient.post()
+                .uri(completionPath)
+                .body(requestJson)
+                .retrieve()
+                .body(byte[].class);
         String responseJson = decodeResponse(responseBytes);
         return parseResponse(systemPrompt, userPrompt, responseJson);
-    }
-
-    private byte[] executeRequestWithRetry(String requestJson) {
-        RuntimeException lastException = null;
-        for (int attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
-            try {
-                return restClient.post()
-                        .uri(completionPath)
-                        .body(requestJson)
-                        .retrieve()
-                        .body(byte[].class);
-            }
-            catch (RuntimeException exception) {
-                lastException = exception;
-                if (!isRetryable(exception) || attempt >= MAX_RETRY_ATTEMPTS) {
-                    throw exception;
-                }
-                log.warn(
-                        "OpenAI compatible request failed on attempt {}/{} and will retry: {}",
-                        attempt,
-                        MAX_RETRY_ATTEMPTS,
-                        summarizeException(exception)
-                );
-                sleepBeforeRetry(attempt);
-            }
-        }
-        throw lastException == null
-                ? new IllegalStateException("OpenAI compatible request failed without exception")
-                : lastException;
-    }
-
-    private boolean isRetryable(RuntimeException exception) {
-        if (exception instanceof RestClientResponseException responseException) {
-            int statusCode = responseException.getStatusCode().value();
-            return statusCode == 408
-                    || statusCode == 409
-                    || statusCode == 425
-                    || statusCode == 429
-                    || statusCode >= 500;
-        }
-        if (!(exception instanceof RestClientException) && !(exception instanceof IllegalStateException)) {
-            return false;
-        }
-        Throwable rootCause = rootCause(exception);
-        return rootCause instanceof EOFException
-                || rootCause instanceof SocketException
-                || rootCause instanceof SocketTimeoutException
-                || rootCause instanceof IOException;
-    }
-
-    private Throwable rootCause(Throwable throwable) {
-        Throwable current = throwable;
-        while (current.getCause() != null && current.getCause() != current) {
-            current = current.getCause();
-        }
-        return current;
-    }
-
-    private String summarizeException(Throwable throwable) {
-        Throwable rootCause = rootCause(throwable);
-        String message = rootCause.getMessage();
-        if (!StringUtils.hasText(message)) {
-            return rootCause.getClass().getSimpleName();
-        }
-        return rootCause.getClass().getSimpleName() + ": " + message;
-    }
-
-    private void sleepBeforeRetry(int attempt) {
-        long backoffMillis = BASE_RETRY_BACKOFF_MILLIS * attempt;
-        try {
-            Thread.sleep(backoffMillis);
-        }
-        catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("OpenAI compatible request retry interrupted", exception);
-        }
     }
 
     private Map<String, Object> buildRequestBody(String systemPrompt, String userPrompt) {
@@ -319,7 +238,7 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             String content = extractContent(firstChoice.path("message").path("content"));
             int inputTokens = readTokenCount(rootNode.path("usage").path("prompt_tokens"), systemPrompt + userPrompt);
             int outputTokens = readTokenCount(rootNode.path("usage").path("completion_tokens"), content);
-            return new LlmCallResult(content, inputTokens, outputTokens);
+            return new LlmCallResult(content, inputTokens, outputTokens, readText(rootNode, "id"));
         }
         catch (JsonProcessingException exception) {
             throw new IllegalStateException("Failed to parse OpenAI response", exception);
@@ -354,6 +273,17 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             return tokenNode.asInt();
         }
         return estimateTokens(fallbackText);
+    }
+
+    private String readText(JsonNode node, String fieldName) {
+        if (node == null || fieldName == null || fieldName.isBlank()) {
+            return null;
+        }
+        String value = node.path(fieldName).asText();
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value;
     }
 
     private int estimateTokens(String text) {

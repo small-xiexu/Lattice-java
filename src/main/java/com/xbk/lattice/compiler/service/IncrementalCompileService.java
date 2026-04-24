@@ -16,6 +16,7 @@ import com.xbk.lattice.compiler.node.GroupNode;
 import com.xbk.lattice.compiler.node.IngestNode;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
 import com.xbk.lattice.compiler.prompt.SchemaAwarePrompts;
+import com.xbk.lattice.documentparse.application.DocumentParseApplicationService;
 import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
@@ -129,7 +130,96 @@ public class IncrementalCompileService {
                 sourceFileJdbcRepository,
                 null,
                 new ArticleVectorIndexService(),
-                new ArticleChunkVectorIndexService()
+                new ArticleChunkVectorIndexService(),
+                null
+        );
+    }
+
+    /**
+     * 创建增量编译服务。
+     *
+     * @param compilerProperties 编译配置
+     * @param llmGateway LLM 网关
+     * @param articleReviewerGateway 文章审查网关
+     * @param reviewFixService 审查修复服务
+     * @param synthesisArtifactsService 合成产物服务
+     * @param articleJdbcRepository 文章仓储
+     * @param articleChunkJdbcRepository 文章 chunk 仓储
+     * @param sourceFileJdbcRepository 源文件仓储
+     * @param sourceFileChunkJdbcRepository 源文件 chunk 仓储
+     * @param articleVectorIndexService 文章向量索引服务
+     * @param documentParseApplicationService 文档解析应用服务
+     */
+    public IncrementalCompileService(
+            CompilerProperties compilerProperties,
+            LlmGateway llmGateway,
+            ArticleReviewerGateway articleReviewerGateway,
+            ReviewFixService reviewFixService,
+            SynthesisArtifactsService synthesisArtifactsService,
+            ArticleJdbcRepository articleJdbcRepository,
+            ArticleChunkJdbcRepository articleChunkJdbcRepository,
+            SourceFileJdbcRepository sourceFileJdbcRepository,
+            SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
+            ArticleVectorIndexService articleVectorIndexService,
+            DocumentParseApplicationService documentParseApplicationService
+    ) {
+        this(
+                compilerProperties,
+                llmGateway,
+                articleReviewerGateway,
+                reviewFixService,
+                synthesisArtifactsService,
+                articleJdbcRepository,
+                articleChunkJdbcRepository,
+                sourceFileJdbcRepository,
+                sourceFileChunkJdbcRepository,
+                articleVectorIndexService,
+                new ArticleChunkVectorIndexService(),
+                documentParseApplicationService
+        );
+    }
+
+    /**
+     * 创建增量编译服务。
+     *
+     * @param compilerProperties 编译配置
+     * @param llmGateway LLM 网关
+     * @param articleReviewerGateway 文章审查网关
+     * @param reviewFixService 审查修复服务
+     * @param synthesisArtifactsService 合成产物服务
+     * @param articleJdbcRepository 文章仓储
+     * @param articleChunkJdbcRepository 文章 chunk 仓储
+     * @param sourceFileJdbcRepository 源文件仓储
+     * @param sourceFileChunkJdbcRepository 源文件 chunk 仓储
+     * @param articleVectorIndexService 文章向量索引服务
+     * @param articleChunkVectorIndexService 文章分块向量索引服务
+     */
+    public IncrementalCompileService(
+            CompilerProperties compilerProperties,
+            LlmGateway llmGateway,
+            ArticleReviewerGateway articleReviewerGateway,
+            ReviewFixService reviewFixService,
+            SynthesisArtifactsService synthesisArtifactsService,
+            ArticleJdbcRepository articleJdbcRepository,
+            ArticleChunkJdbcRepository articleChunkJdbcRepository,
+            SourceFileJdbcRepository sourceFileJdbcRepository,
+            SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
+            ArticleVectorIndexService articleVectorIndexService,
+            ArticleChunkVectorIndexService articleChunkVectorIndexService
+    ) {
+        this(
+                compilerProperties,
+                llmGateway,
+                articleReviewerGateway,
+                reviewFixService,
+                synthesisArtifactsService,
+                articleJdbcRepository,
+                articleChunkJdbcRepository,
+                sourceFileJdbcRepository,
+                sourceFileChunkJdbcRepository,
+                articleVectorIndexService,
+                articleChunkVectorIndexService,
+                null
         );
     }
 
@@ -170,7 +260,8 @@ public class IncrementalCompileService {
                 sourceFileJdbcRepository,
                 sourceFileChunkJdbcRepository,
                 articleVectorIndexService,
-                new ArticleChunkVectorIndexService()
+                new ArticleChunkVectorIndexService(),
+                null
         );
     }
 
@@ -188,6 +279,7 @@ public class IncrementalCompileService {
      * @param sourceFileChunkJdbcRepository 源文件 chunk 仓储
      * @param articleVectorIndexService 文章向量索引服务
      * @param articleChunkVectorIndexService 文章分块向量索引服务
+     * @param documentParseApplicationService 文档解析应用服务
      */
     public IncrementalCompileService(
             CompilerProperties compilerProperties,
@@ -200,9 +292,10 @@ public class IncrementalCompileService {
             SourceFileJdbcRepository sourceFileJdbcRepository,
             SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
             ArticleVectorIndexService articleVectorIndexService,
-            ArticleChunkVectorIndexService articleChunkVectorIndexService
+            ArticleChunkVectorIndexService articleChunkVectorIndexService,
+            DocumentParseApplicationService documentParseApplicationService
     ) {
-        this.ingestNode = new IngestNode(compilerProperties);
+        this.ingestNode = new IngestNode(compilerProperties, documentParseApplicationService);
         this.groupNode = new GroupNode(compilerProperties);
         this.batchSplitNode = new BatchSplitNode(
                 compilerProperties,
@@ -271,7 +364,9 @@ public class IncrementalCompileService {
                 articleChunkJdbcRepository,
                 sourceFileJdbcRepository,
                 sourceFileChunkJdbcRepository,
-                new ArticleVectorIndexService()
+                new ArticleVectorIndexService(),
+                new ArticleChunkVectorIndexService(),
+                null
         );
     }
 

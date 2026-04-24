@@ -115,7 +115,6 @@
             event.preventDefault();
             event.stopPropagation();
         }
-        closeUploadPickerMenu();
         const filesInput = document.getElementById("compile-files");
         if (!filesInput) {
             return;
@@ -1063,16 +1062,35 @@
         }
 
         const runs = Array.isArray(state.recentRuns) ? state.recentRuns.slice().sort(compareRunsByRequestedAtDesc) : [];
+        const stalledRun = runs.find(function (item) {
+            return resolveRunDisplayStatus(item) === "STALLED";
+        });
+        if (stalledRun) {
+            return {
+                tone: "danger",
+                title: "有一批资料疑似卡住了",
+                description: buildKnowledgeHelpDescription(
+                        "最近同步运行已经长时间没有推进，先看当前步骤、最近心跳和原因摘要，再决定是否重新同步资料源。",
+                        buildRunReasonSummary(stalledRun)
+                ),
+                actions: [
+                    {label: "查看最近同步运行", action: "knowledge-runs", className: "primary-btn"},
+                    {label: "回资料导入", action: "knowledge-upload", className: "ghost-btn"}
+                ],
+                faqKey: "upload-delay"
+            };
+        }
+
         const failedRun = runs.find(function (item) {
-            return normalizeStatus(item.status) === "FAILED";
+            return resolveRunDisplayStatus(item) === "FAILED" || normalizeStatus(item.status) === "FAILED";
         });
         if (failedRun) {
             return {
                 tone: "danger",
                 title: "最近一次入库失败了",
                 description: buildKnowledgeHelpDescription(
-                        "先看最近同步运行里的错误信息，再判断是资料格式、解析方式还是连接问题。",
-                        failedRun.errorMessage || ""
+                        "先看最近同步运行里的原因摘要，再判断是资料格式、解析方式、网络链路还是模型上游异常。",
+                        buildRunReasonSummary(failedRun)
                 ),
                 actions: [
                     {label: "查看最近同步运行", action: "knowledge-runs", className: "primary-btn"},
@@ -1472,23 +1490,26 @@
         }
         const effectiveItems = items || [];
         const runningCount = effectiveItems.filter(function (item) {
-            return isPollingStatus(item.status);
+            return resolveRunDisplayStatus(item) === "RUNNING";
         }).length;
         const waitingCount = effectiveItems.filter(function (item) {
             return normalizeStatus(item.status) === "WAIT_CONFIRM";
         }).length;
+        const stalledCount = effectiveItems.filter(function (item) {
+            return resolveRunDisplayStatus(item) === "STALLED";
+        }).length;
         const successCount = effectiveItems.filter(function (item) {
-            const normalized = normalizeStatus(item.status);
+            const normalized = resolveRunDisplayStatus(item);
             return normalized === "SUCCEEDED" || normalized === "SKIPPED_NO_CHANGE";
         }).length;
         const failedCount = effectiveItems.filter(function (item) {
-            return normalizeStatus(item.status) === "FAILED";
+            return resolveRunDisplayStatus(item) === "FAILED" || normalizeStatus(item.status) === "FAILED";
         }).length;
         const cards = [
             {
-                label: "进行中",
+                label: "运行中",
                 value: runningCount,
-                note: runningCount > 0 ? "系统仍在继续处理这些资料" : "当前没有正在执行的同步",
+                note: runningCount > 0 ? "系统仍在持续推进这些资料" : "当前没有正在推进的同步",
                 tone: runningCount > 0 ? "warning" : ""
             },
             {
@@ -1496,6 +1517,12 @@
                 value: waitingCount,
                 note: waitingCount > 0 ? "需要人工判断新建还是合并" : "当前没有需要人工确认的任务",
                 tone: waitingCount > 0 ? "warning" : "success"
+            },
+            {
+                label: "疑似卡住",
+                value: stalledCount,
+                note: stalledCount > 0 ? "建议查看最近推进时间并重新同步" : "当前没有疑似卡住的任务",
+                tone: stalledCount > 0 ? "danger" : "success"
             },
             {
                 label: "已完成",
@@ -1539,6 +1566,7 @@
                 + "<div class='meta-row'>"
                 + renderBadge(item.sourceType || "UPLOAD")
                 + renderBadge(item.status)
+                + renderDerivedStatusBadge(item)
                 + renderBadge(item.syncAction || item.resolverDecision || "AUTO")
                 + "</div>"
                 + "<div class='run-spotlight-time'>提交 " + escapeHtml(formatDateTime(item.requestedAt)) + "</div>"
@@ -1550,20 +1578,19 @@
                 + "<span class='surface-chip'>下一步：" + escapeHtml(stageInfo.nextStep) + "</span>"
                 + "</div>"
                 + buildRunProgressStrip(item, stageInfo)
+                + buildRunRuntimeSnapshot(item)
                 + "<div class='run-spotlight-footnotes'>"
                 + "<p class='run-spotlight-note'><strong>来源概况：</strong>" + escapeHtml(buildRunSourcePreview(item)) + "</p>"
                 + "<p class='run-spotlight-note'><strong>任务线索：</strong>" + escapeHtml(buildRunOperationalNote(item)) + "</p>"
                 + "</div>"
-                + (item.errorMessage
-                ? "<div class='job-error'><strong>错误信息</strong><p>" + escapeHtml(item.errorMessage) + "</p></div>"
-                : "")
+                + buildRunFailurePanel(item)
                 + buildRunActions(item)
                 + "</article>";
     }
 
     function buildRunProgressStrip(item, stageInfo) {
         const steps = ["资料接收", "自动识别", "物化编译", "完成收口"];
-        const normalized = normalizeStatus(item.status);
+        const normalized = resolveRunDisplayStatus(item);
         return "<div class='run-progress-strip'>"
                 + steps.map(function (stepLabel, index) {
                     let stepClass = "pending";
@@ -1589,7 +1616,7 @@
     }
 
     function getRunStageInfo(item) {
-        const normalized = normalizeStatus(item.status);
+        const normalized = resolveRunDisplayStatus(item);
         if (normalized === "MATCHING") {
             return {label: "自动识别中", nextStep: "判断新建、更新还是追加", stepIndex: 1, tone: "warning"};
         }
@@ -1603,7 +1630,20 @@
             return {label: "等待编译", nextStep: "排队进入知识编译任务", stepIndex: 2, tone: "warning"};
         }
         if (normalized === "RUNNING") {
-            return {label: "编译入库中", nextStep: "写入知识库并生成结果", stepIndex: 2, tone: "warning"};
+            return {
+                label: resolveRunStepLabel(item),
+                nextStep: "继续等待当前步骤推进",
+                stepIndex: resolveRunStepIndex(item),
+                tone: "warning"
+            };
+        }
+        if (normalized === "STALLED") {
+            return {
+                label: "疑似卡住",
+                nextStep: "查看最近推进时间并重新同步资料源",
+                stepIndex: resolveRunStepIndex(item),
+                tone: "danger"
+            };
         }
         if (normalized === "SUCCEEDED") {
             return {label: "处理完成", nextStep: "可以查看已入库内容或继续问答", stepIndex: 3, tone: "success"};
@@ -1614,8 +1654,8 @@
         if (normalized === "FAILED") {
             return {
                 label: "处理失败",
-                nextStep: "查看错误信息后重试",
-                stepIndex: item.compileJobId ? 2 : 1,
+                nextStep: item.sourceId ? "检查原因摘要后重新同步资料源" : "检查资料并重新提交",
+                stepIndex: resolveRunStepIndex(item),
                 tone: "danger"
             };
         }
@@ -1647,11 +1687,17 @@
         if (item.syncAction) {
             parts.push("动作：" + getBadgeLabel(item.syncAction));
         }
-        if (item.compileJobStatus) {
-            parts.push("编译：" + getBadgeLabel(item.compileJobStatus));
+        if (resolveRunDisplayStatus(item)) {
+            parts.push("运行态：" + getBadgeLabel(resolveRunDisplayStatus(item)));
         }
-        if (item.updatedAt) {
-            parts.push("最近更新 " + formatDateTime(item.updatedAt));
+        if (item.compileCurrentStep) {
+            parts.push("步骤：" + resolveRunStepLabel(item));
+        }
+        if (item.compileErrorCode) {
+            parts.push("错误码：" + item.compileErrorCode);
+        }
+        if (resolveRunLastProgressAt(item)) {
+            parts.push("最近推进 " + formatDateTime(resolveRunLastProgressAt(item)));
         }
         return parts.length > 0 ? parts.join(" · ") : "系统正在继续处理这条同步任务";
     }
@@ -1669,15 +1715,15 @@
             return "<div class='job-card'>"
                     + "<div class='meta-row'>"
                     + renderBadge(item.status)
+                    + renderDerivedStatusBadge(item)
                     + renderBadge(item.syncAction || item.resolverDecision || "AUTO")
                     + renderBadge(item.sourceType || "UPLOAD")
                     + "</div>"
                     + "<h4>" + escapeHtml(getRunTitle(item)) + "</h4>"
                     + "<p class='item-summary'>" + escapeHtml(getRunSummary(item)) + "</p>"
                     + "<p class='job-meta-line'>" + escapeHtml(getRunMetaLine(item)) + "</p>"
-                    + (item.errorMessage
-                    ? "<div class='job-error'><strong>错误信息</strong><p>" + escapeHtml(item.errorMessage) + "</p></div>"
-                    : "")
+                    + buildRunRuntimeSnapshot(item)
+                    + buildRunFailurePanel(item)
                     + buildRunActions(item)
                     + "</div>";
         }).join("");
@@ -1694,29 +1740,59 @@
                 );
             });
         });
+        container.querySelectorAll("[data-resync-source]").forEach(function (button) {
+            button.addEventListener("click", async function () {
+                const sourceId = parseOptionalInteger(button.dataset.resyncSource);
+                if (sourceId == null) {
+                    return;
+                }
+                const confirmed = window.confirm("将重新同步资料源 " + sourceId + "，确认继续吗？");
+                if (!confirmed) {
+                    return;
+                }
+                try {
+                    const run = await requestSourceSync(sourceId);
+                    activateKnowledgeTab("knowledge-runs");
+                    await handleSubmittedRun(run, "已重新提交资料源同步");
+                }
+                catch (error) {
+                    showError("重新同步资料源失败", error);
+                }
+            });
+        });
     }
 
     function buildRunActions(item) {
-        if (normalizeStatus(item.status) !== "WAIT_CONFIRM") {
-            return "";
-        }
-        const buttons = [
-            "<button class='ghost-btn' data-confirm-run='" + escapeHtml(String(item.runId))
-                    + "' data-confirm-decision='NEW_SOURCE' type='button'>确认为新资料源</button>"
-        ];
-        if (item.matchedSourceId) {
-            buttons.push(
-                    "<button class='secondary-btn' data-confirm-run='" + escapeHtml(String(item.runId))
-                    + "' data-confirm-decision='EXISTING_SOURCE_APPEND' data-confirm-source-id='"
-                    + escapeHtml(String(item.matchedSourceId))
-                    + "' type='button'>追加到候选资料源</button>"
-            );
+        const buttons = [];
+        if (normalizeStatus(item.status) === "WAIT_CONFIRM") {
             buttons.push(
                     "<button class='ghost-btn' data-confirm-run='" + escapeHtml(String(item.runId))
-                    + "' data-confirm-decision='EXISTING_SOURCE_UPDATE' data-confirm-source-id='"
-                    + escapeHtml(String(item.matchedSourceId))
-                    + "' type='button'>按更新覆盖候选资料源</button>"
+                            + "' data-confirm-decision='NEW_SOURCE' type='button'>确认为新资料源</button>"
             );
+            if (item.matchedSourceId) {
+                buttons.push(
+                        "<button class='secondary-btn' data-confirm-run='" + escapeHtml(String(item.runId))
+                                + "' data-confirm-decision='EXISTING_SOURCE_APPEND' data-confirm-source-id='"
+                                + escapeHtml(String(item.matchedSourceId))
+                                + "' type='button'>追加到候选资料源</button>"
+                );
+                buttons.push(
+                        "<button class='ghost-btn' data-confirm-run='" + escapeHtml(String(item.runId))
+                                + "' data-confirm-decision='EXISTING_SOURCE_UPDATE' data-confirm-source-id='"
+                                + escapeHtml(String(item.matchedSourceId))
+                                + "' type='button'>按更新覆盖候选资料源</button>"
+                );
+            }
+        }
+        if (shouldShowResyncAction(item)) {
+            buttons.push(
+                    "<button class='" + escapeHtml(resolveRunActionButtonClass(item))
+                            + "' data-resync-source='" + escapeHtml(String(item.sourceId))
+                            + "' type='button'>" + escapeHtml(resolveRunActionLabel(item)) + "</button>"
+            );
+        }
+        if (buttons.length === 0) {
+            return "";
         }
         return "<div class='card-actions'>" + buttons.join("") + "</div>";
     }
@@ -1780,16 +1856,278 @@
         return "资料同步运行 #" + String(item.runId);
     }
 
+    function renderDerivedStatusBadge(item) {
+        const derivedStatus = resolveRunDisplayStatus(item);
+        if (!derivedStatus || derivedStatus === normalizeStatus(item && item.status)) {
+            return "";
+        }
+        return renderBadge(derivedStatus);
+    }
+
+    function resolveRunDisplayStatus(item) {
+        const derivedStatus = normalizeStatus(item && item.compileDerivedStatus);
+        if (derivedStatus) {
+            return derivedStatus;
+        }
+        const compileStatus = normalizeStatus(item && item.compileJobStatus);
+        if (compileStatus) {
+            return compileStatus;
+        }
+        return normalizeStatus(item && item.status);
+    }
+
+    function resolveRunErrorCode(item) {
+        return normalizeStatus(item && item.compileErrorCode);
+    }
+
+    function resolveRunStepLabel(item) {
+        const currentStep = normalizeStatus(item && item.compileCurrentStep);
+        if (currentStep) {
+            return getCompileStepLabel(currentStep);
+        }
+        const displayStatus = resolveRunDisplayStatus(item);
+        if (displayStatus === "RUNNING") {
+            return "编译入库中";
+        }
+        if (displayStatus === "COMPILE_QUEUED") {
+            return "等待编译";
+        }
+        if (displayStatus === "WAIT_CONFIRM") {
+            return "等待人工确认";
+        }
+        return getBadgeLabel(displayStatus || (item && item.status));
+    }
+
+    function getCompileStepLabel(step) {
+        const labels = {
+            INITIALIZE_JOB: "初始化任务",
+            INGEST_SOURCES: "读取资料文件",
+            PERSIST_SOURCE_FILES: "登记资料文件",
+            PERSIST_SOURCE_FILE_CHUNKS: "切分原始资料",
+            GROUP_SOURCES: "整理资料分组",
+            SPLIT_BATCHES: "拆分分析批次",
+            ANALYZE_BATCHES: "分析知识点",
+            MERGE_CONCEPTS: "合并概念",
+            ENHANCE_EXISTING_ARTICLES: "补强已有文章",
+            COMPILE_NEW_ARTICLES: "生成文章草稿",
+            REVIEW_ARTICLES: "审查文章草稿",
+            FIX_REVIEW_ISSUES: "修复审查问题",
+            PERSIST_ARTICLES: "写入知识库",
+            REBUILD_ARTICLE_CHUNKS: "重建知识切片",
+            REBUILD_ARTICLE_VECTORS: "刷新文章向量",
+            REBUILD_SOURCE_VECTORS: "刷新资料向量",
+            CAPTURE_REPO_SNAPSHOT: "记录仓库快照",
+            FINALIZE_JOB: "完成收口"
+        };
+        return labels[normalizeStatus(step)] || String(step || "").replaceAll("_", " ");
+    }
+
+    function resolveRunStepIndex(item) {
+        const currentStep = normalizeStatus(item && item.compileCurrentStep);
+        const stageByStep = {
+            INITIALIZE_JOB: 0,
+            INGEST_SOURCES: 1,
+            PERSIST_SOURCE_FILES: 1,
+            PERSIST_SOURCE_FILE_CHUNKS: 1,
+            GROUP_SOURCES: 1,
+            SPLIT_BATCHES: 1,
+            ANALYZE_BATCHES: 1,
+            MERGE_CONCEPTS: 1,
+            ENHANCE_EXISTING_ARTICLES: 2,
+            COMPILE_NEW_ARTICLES: 2,
+            REVIEW_ARTICLES: 2,
+            FIX_REVIEW_ISSUES: 2,
+            PERSIST_ARTICLES: 2,
+            REBUILD_ARTICLE_CHUNKS: 3,
+            REBUILD_ARTICLE_VECTORS: 3,
+            REBUILD_SOURCE_VECTORS: 3,
+            CAPTURE_REPO_SNAPSHOT: 3,
+            FINALIZE_JOB: 3
+        };
+        if (currentStep && Object.prototype.hasOwnProperty.call(stageByStep, currentStep)) {
+            return stageByStep[currentStep];
+        }
+        const displayStatus = resolveRunDisplayStatus(item);
+        if (displayStatus === "MATCHING" || displayStatus === "WAIT_CONFIRM") {
+            return 1;
+        }
+        if (displayStatus === "MATERIALIZING" || displayStatus === "COMPILE_QUEUED"
+                || displayStatus === "RUNNING" || displayStatus === "STALLED"
+                || displayStatus === "FAILED") {
+            return item && item.compileJobId ? 2 : 1;
+        }
+        if (displayStatus === "SUCCEEDED" || displayStatus === "SKIPPED_NO_CHANGE") {
+            return 3;
+        }
+        return 0;
+    }
+
+    function resolveRunProgressText(item) {
+        const current = Number(item && item.compileProgressCurrent);
+        const total = Number(item && item.compileProgressTotal);
+        const progressMessage = compactDisplayMessage(item && item.compileProgressMessage);
+        if (Number.isFinite(total) && total > 0 && Number.isFinite(current) && current > 0) {
+            return String(current) + " / " + String(total)
+                    + (progressMessage ? " · " + progressMessage : "");
+        }
+        if (progressMessage) {
+            return progressMessage;
+        }
+        const displayStatus = resolveRunDisplayStatus(item);
+        if (displayStatus === "WAIT_CONFIRM") {
+            return "等待人工确认";
+        }
+        if (displayStatus === "COMPILE_QUEUED") {
+            return "等待后台 worker 领取";
+        }
+        if (displayStatus === "SKIPPED_NO_CHANGE") {
+            return "无需重新编译";
+        }
+        return "等待下一步刷新";
+    }
+
+    function resolveRunLastProgressAt(item) {
+        return item && (item.compileLastHeartbeatAt || item.updatedAt || item.requestedAt)
+                ? (item.compileLastHeartbeatAt || item.updatedAt || item.requestedAt)
+                : "";
+    }
+
+    function buildRunReasonSummary(item) {
+        const displayStatus = resolveRunDisplayStatus(item);
+        const errorCode = resolveRunErrorCode(item);
+        if (displayStatus === "WAIT_CONFIRM") {
+            return item && item.message
+                    ? compactDisplayMessage(item.message)
+                    : "系统无法自动判断该资料包应新建还是合并，需要人工确认。";
+        }
+        if (displayStatus === "SKIPPED_NO_CHANGE") {
+            return "资料包与最近一次成功快照一致，本次跳过重新编译。";
+        }
+        if (errorCode) {
+            return resolveErrorCodeSummary(errorCode);
+        }
+        if (displayStatus === "STALLED") {
+            return "任务长时间没有新的心跳或进度更新，建议重新同步资料源。";
+        }
+        if (displayStatus === "FAILED") {
+            const message = item && item.errorMessage ? compactDisplayMessage(item.errorMessage) : "";
+            return message || "同步运行失败，请检查资料源配置、网络链路或上传内容。";
+        }
+        if (displayStatus === "RUNNING") {
+            return compactDisplayMessage(item && item.compileProgressMessage) || "系统仍在推进当前编译步骤。";
+        }
+        if (displayStatus === "COMPILE_QUEUED") {
+            return "识别与物化已完成，正在等待编译任务开始执行。";
+        }
+        if (displayStatus === "SUCCEEDED") {
+            return compactDisplayMessage(item && item.message) || "资料已经完成解析并写入知识库。";
+        }
+        return compactDisplayMessage(item && item.message) || "同步状态已更新。";
+    }
+
+    function resolveErrorCodeSummary(errorCode) {
+        const labels = {
+            COMPILE_STALE_TIMEOUT: "任务长时间没有心跳，系统已按超时失败自动收口。",
+            COMPILE_IO_ERROR: "编译读取资料失败，请先检查目录、文件内容或访问权限。",
+            COMPILE_EXECUTION_FAILED: "编译过程中出现异常，请结合当前步骤后重新同步资料源。",
+            COMPILE_TOTAL_BUDGET_EXCEEDED: "本次编译已触达系统保护阈值，任务被主动终止。",
+            LLM_REQUEST_TIMEOUT: "模型调用超时，系统没有在预期时间内拿到上游响应。",
+            LLM_UPSTREAM_5XX: "模型上游服务返回 5xx 异常，建议稍后重新同步。",
+            LLM_RETRY_EXHAUSTED: "模型调用多次重试后仍失败，本次任务已停止继续放大等待。",
+            LLM_TRANSPORT_ERROR: "模型请求链路异常，请检查网络、网关或代理配置。",
+            LLM_RETRYABLE_HTTP_ERROR: "模型上游暂时拒绝请求，可稍后重新同步。",
+            LLM_HTTP_ERROR: "模型上游返回了非预期 HTTP 状态，请检查模型路由配置。",
+            LLM_TRANSIENT_AI_ERROR: "模型调用出现瞬时异常，本次任务未能稳定恢复。",
+            LLM_CALL_FAILED: "模型调用失败，请重新同步后再观察。"
+        };
+        return labels[normalizeStatus(errorCode)] || "系统返回了稳定错误码，请结合当前步骤继续排查。";
+    }
+
+    function compactDisplayMessage(message) {
+        const normalized = sanitizeDisplayMessage(message);
+        if (!normalized) {
+            return "";
+        }
+        return normalized.length > 88 ? normalized.slice(0, 85) + "..." : normalized;
+    }
+
+    function buildRunRuntimeSnapshot(item) {
+        return "<div class='run-runtime-grid'>"
+                + buildRunRuntimeItem("编译态", getBadgeLabel(resolveRunDisplayStatus(item) || item.status))
+                + buildRunRuntimeItem("当前步骤", resolveRunStepLabel(item))
+                + buildRunRuntimeItem("当前进度", resolveRunProgressText(item))
+                + buildRunRuntimeItem("最近推进", formatDateTime(resolveRunLastProgressAt(item)))
+                + buildRunRuntimeItem(
+                        "原因摘要",
+                        buildRunReasonSummary(item),
+                        true
+                )
+                + "</div>";
+    }
+
+    function buildRunRuntimeItem(label, value, wide) {
+        const className = wide ? "run-runtime-item run-runtime-item-wide" : "run-runtime-item";
+        return "<div class='" + className + "'>"
+                + "<span class='run-runtime-label'>" + escapeHtml(label) + "</span>"
+                + "<strong class='run-runtime-value'>" + escapeHtml(value || "暂无") + "</strong>"
+                + "</div>";
+    }
+
+    function buildRunFailurePanel(item) {
+        const displayStatus = resolveRunDisplayStatus(item);
+        if (displayStatus !== "FAILED" && displayStatus !== "STALLED") {
+            return "";
+        }
+        const errorCode = resolveRunErrorCode(item);
+        return "<div class='job-error'><strong>失败收口</strong><p>"
+                + escapeHtml(buildRunReasonSummary(item))
+                + "</p>"
+                + (errorCode
+                ? "<p class='job-error-meta'>错误码：" + escapeHtml(errorCode) + "</p>"
+                : "")
+                + "</div>";
+    }
+
+    function shouldShowResyncAction(item) {
+        const sourceId = parseOptionalInteger(item && item.sourceId);
+        if (sourceId == null) {
+            return false;
+        }
+        const displayStatus = resolveRunDisplayStatus(item);
+        return displayStatus === "FAILED"
+                || displayStatus === "STALLED"
+                || displayStatus === "SUCCEEDED"
+                || displayStatus === "SKIPPED_NO_CHANGE";
+    }
+
+    function resolveRunActionLabel(item) {
+        const displayStatus = resolveRunDisplayStatus(item);
+        if (displayStatus === "FAILED" || displayStatus === "STALLED") {
+            return "重新同步当前资料源";
+        }
+        return "再次同步当前资料源";
+    }
+
+    function resolveRunActionButtonClass(item) {
+        const displayStatus = resolveRunDisplayStatus(item);
+        return displayStatus === "FAILED" || displayStatus === "STALLED"
+                ? "secondary-btn"
+                : "ghost-btn";
+    }
+
     function getRunSummary(item) {
-        const normalized = normalizeStatus(item.status);
+        const normalized = resolveRunDisplayStatus(item);
         if (normalized === "WAIT_CONFIRM") {
-            return item.message || "系统无法自动判断该资料包应新建还是合并，需要人工确认。";
+            return buildRunReasonSummary(item);
         }
         if (normalized === "SKIPPED_NO_CHANGE") {
             return "资料内容与最近一次成功快照一致，本次跳过编译。";
         }
+        if (normalized === "STALLED") {
+            return "当前任务疑似卡住，先看最近推进时间和原因摘要，再决定是否重新同步。";
+        }
         if (normalized === "FAILED") {
-            return item.errorMessage || "同步运行失败，请根据错误信息检查资料源配置。";
+            return buildRunReasonSummary(item);
         }
         if (normalized === "SUCCEEDED") {
             return item.message || "同步成功，资料已经完成解析并写入知识库。";
@@ -1798,7 +2136,7 @@
             return "识别与物化已完成，正在等待编译任务执行。";
         }
         if (normalized === "RUNNING") {
-            return "编译任务执行中，入库完成后页面会自动刷新。";
+            return compactDisplayMessage(item && item.compileProgressMessage) || "编译任务执行中，入库完成后页面会自动刷新。";
         }
         if (normalized === "MATERIALIZING") {
             return "正在拉取 Git / 复制服务器目录并准备标准化源文件。";
@@ -1814,27 +2152,31 @@
             item.sourceType ? "类型：" + getBadgeLabel(item.sourceType) : "",
             item.resolverDecision ? "决策：" + getBadgeLabel(item.resolverDecision) : "",
             item.syncAction ? "动作：" + getBadgeLabel(item.syncAction) : "",
+            resolveRunDisplayStatus(item) ? "运行态：" + getBadgeLabel(resolveRunDisplayStatus(item)) : "",
             item.requestedAt ? "提交于 " + formatDateTime(item.requestedAt) : ""
         ].filter(Boolean).join(" · ");
     }
 
     function buildRunCompletionMessage(run) {
-        const normalized = normalizeStatus(run.status);
+        const normalized = resolveRunDisplayStatus(run) || normalizeStatus(run.status);
         if (normalized === "SKIPPED_NO_CHANGE") {
             return getRunTitle(run) + " 已检查完成，本次没有发现变化。";
         }
         if (normalized === "WAIT_CONFIRM") {
             return getRunTitle(run) + " 需要人工确认归并方式。";
         }
+        if (normalized === "STALLED") {
+            return getRunTitle(run) + " 长时间没有推进，建议查看当前步骤后重新同步资料源。";
+        }
         if (normalized === "FAILED") {
-            return getRunTitle(run) + " 处理失败，请检查资料源或上传内容。";
+            return getRunTitle(run) + " 处理失败：" + buildRunReasonSummary(run);
         }
         return getRunTitle(run) + " 已处理完成，并已更新页面状态。";
     }
 
     function resolveRunNoticeTone(run) {
-        const normalized = normalizeStatus(run.status);
-        if (normalized === "FAILED" || normalized === "WAIT_CONFIRM") {
+        const normalized = resolveRunDisplayStatus(run) || normalizeStatus(run.status);
+        if (normalized === "FAILED" || normalized === "WAIT_CONFIRM" || normalized === "STALLED") {
             return "warning";
         }
         if (normalized === "SKIPPED_NO_CHANGE") {
@@ -2377,7 +2719,7 @@
                 || normalized === "NORMAL") {
             className += " success";
         }
-        else if (normalized === "FAILED" || normalized === "ARCHIVED") {
+        else if (normalized === "FAILED" || normalized === "ARCHIVED" || normalized === "STALLED") {
             className += " danger";
         }
         else {
@@ -2521,6 +2863,39 @@
         return normalized.length > 60 ? normalized.slice(0, 57) + "..." : normalized;
     }
 
+    function sanitizeDisplayMessage(message) {
+        const normalized = String(message || "")
+                .split(/\r?\n/)
+                .filter(function (line) {
+                    const compactLine = String(line || "").trim();
+                    return compactLine && !compactLine.startsWith("at ");
+                })
+                .join(" ")
+                .replace(/\s+/g, " ")
+                .trim();
+        if (!normalized) {
+            return "";
+        }
+        return normalized
+                .replace(/\b[a-zA-Z0-9_$.]+Exception:\s*/g, "")
+                .replace(/\b[a-zA-Z0-9_$.]+Error:\s*/g, "")
+                .replace(/\bjava\.[^:]+:\s*/g, "");
+    }
+
+    function resolveHttpErrorDisplayMessage(error) {
+        const payload = error && error.payload ? error.payload : null;
+        const code = normalizeStatus(payload && payload.code);
+        if (code === "SOURCE_SYNC_CONFLICT") {
+            return "当前资料源已经有运行中的同步任务，请等它结束后再试。";
+        }
+        const payloadMessage = payload && payload.message ? sanitizeDisplayMessage(payload.message) : "";
+        if (payloadMessage) {
+            return compactDisplayMessage(payloadMessage);
+        }
+        const fallbackMessage = sanitizeDisplayMessage(error && error.message ? error.message : String(error));
+        return fallbackMessage ? compactDisplayMessage(fallbackMessage) : "系统未返回更多可展示的信息。";
+    }
+
     function setStatus(message, tone, persist) {
         const resolvedTone = tone || "info";
         const resolvedPersist = typeof persist === "boolean"
@@ -2544,7 +2919,7 @@
     }
 
     function showError(prefix, error) {
-        const message = error && error.message ? error.message : String(error);
+        const message = resolveHttpErrorDisplayMessage(error);
         setStatus(prefix + "：" + message, "danger");
     }
 
@@ -2582,6 +2957,7 @@
             NEEDS_HUMAN_REVIEW: "需人工复核",
             SUCCEEDED: "成功",
             FAILED: "失败",
+            STALLED: "疑似卡住",
             RUNNING: "编译中",
             QUEUED: "排队中",
             MATCHING: "识别中",
@@ -2656,6 +3032,16 @@
     }
 
     if (typeof globalThis !== "undefined" && globalThis.__LATTICE_ADMIN_TEST__) {
+        globalThis.__LATTICE_ADMIN_TEST__.runs = {
+            resolveRunDisplayStatus: resolveRunDisplayStatus,
+            resolveRunStepLabel: resolveRunStepLabel,
+            resolveRunProgressText: resolveRunProgressText,
+            buildRunReasonSummary: buildRunReasonSummary,
+            buildRunRuntimeSnapshot: buildRunRuntimeSnapshot,
+            shouldShowResyncAction: shouldShowResyncAction,
+            sanitizeDisplayMessage: sanitizeDisplayMessage,
+            resolveHttpErrorDisplayMessage: resolveHttpErrorDisplayMessage
+        };
         globalThis.__LATTICE_ADMIN_TEST__.article = {
             resolveArticleDisplayTitle: resolveArticleDisplayTitle,
             resolveArticleSummary: resolveArticleSummary,

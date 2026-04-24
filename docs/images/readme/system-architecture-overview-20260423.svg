@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="920" viewBox="0 0 1440 920" role="img" aria-labelledby="title desc">
+  <title id="title">邪修智库系统分层总览架构图</title>
+  <desc id="desc">按使用入口层、统一接入与应用层、编排与模型层、知识与反馈资产层、存储与运行层分层展示邪修智库的整体架构。</desc>
+  <style>
+    .bg { fill: #ffffff; }
+    .layer-label { font: 500 26px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; fill: #445045; text-anchor: end; }
+    .group-title { font: 600 18px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; fill: #314036; }
+    .box-text { font: 500 16px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; fill: #243128; }
+    .box-subtext { font: 500 12px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; fill: #445045; }
+    .outer { stroke-width: 3; rx: 12; ry: 12; }
+    .inner { fill: #fffefb; stroke: #5c655f; stroke-width: 1.5; rx: 8; ry: 8; }
+    .divider { stroke: #cfd5ce; stroke-width: 2; stroke-dasharray: 8 8; }
+    .flow { stroke: #3f4743; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#3f4743"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1440" height="920"/>
+
+  <line class="divider" x1="60" y1="160" x2="1380" y2="160"/>
+  <line class="divider" x1="60" y1="310" x2="1380" y2="310"/>
+  <line class="divider" x1="60" y1="530" x2="1380" y2="530"/>
+  <line class="divider" x1="60" y1="715" x2="1380" y2="715"/>
+
+  <rect class="outer" x="250" y="36" width="1030" height="86" fill="#baf3d8" stroke="#4b9d75"/>
+  <text class="group-title" x="726" y="59" text-anchor="middle">统一接入入口</text>
+  <rect class="inner" x="282" y="62" width="140" height="42"/>
+  <rect class="inner" x="448" y="62" width="160" height="42"/>
+  <rect class="inner" x="634" y="62" width="120" height="42"/>
+  <rect class="inner" x="780" y="62" width="92" height="42"/>
+  <rect class="inner" x="898" y="62" width="180" height="42"/>
+  <text class="box-text" x="352" y="89" text-anchor="middle">工作台</text>
+  <text class="box-text" x="528" y="89" text-anchor="middle">知识问答页</text>
+  <text class="box-text" x="694" y="89" text-anchor="middle">HTTP API</text>
+  <text class="box-text" x="826" y="89" text-anchor="middle">CLI</text>
+  <text class="box-text" x="988" y="89" text-anchor="middle">MCP Server</text>
+
+  <rect class="outer" x="250" y="184" width="1030" height="96" fill="#dfffad" stroke="#7fa63d"/>
+  <text class="group-title" x="765" y="208" text-anchor="middle">Spring Boot 应用服务</text>
+  <rect class="inner" x="276" y="212" width="260" height="46"/>
+  <rect class="inner" x="570" y="212" width="180" height="46"/>
+  <rect class="inner" x="776" y="212" width="180" height="46"/>
+  <rect class="inner" x="982" y="212" width="258" height="46"/>
+  <text class="box-text" x="406" y="231" text-anchor="middle">统一 Controller</text>
+  <text class="box-subtext" x="406" y="250" text-anchor="middle">Admin / Query / Feedback</text>
+  <text class="box-text" x="660" y="241" text-anchor="middle">CompileAppService</text>
+  <text class="box-text" x="866" y="241" text-anchor="middle">QueryAppService</text>
+  <text class="box-text" x="1111" y="241" text-anchor="middle">Config / Governance Service</text>
+
+  <rect class="outer" x="210" y="344" width="1110" height="140" fill="#ffd8b0" stroke="#c98538"/>
+  <text class="group-title" x="765" y="368" text-anchor="middle">Graph 编排、模型中心与治理能力</text>
+  <rect class="inner" x="242" y="382" width="232" height="64"/>
+  <rect class="inner" x="498" y="382" width="232" height="64"/>
+  <rect class="inner" x="754" y="382" width="204" height="64"/>
+  <rect class="inner" x="982" y="382" width="178" height="64"/>
+  <rect class="inner" x="1184" y="382" width="128" height="64"/>
+  <text class="box-text" x="358" y="402" text-anchor="middle">Compile Graph</text>
+  <text class="box-subtext" x="358" y="421" text-anchor="middle">
+    <tspan x="358">Analyze -&gt; Writer -&gt;</tspan>
+    <tspan x="358" dy="15">Reviewer -&gt; Fixer</tspan>
+  </text>
+  <text class="box-text" x="614" y="402" text-anchor="middle">Query Graph</text>
+  <text class="box-subtext" x="614" y="421" text-anchor="middle">
+    <tspan x="614">Retrieve -&gt; Answer -&gt;</tspan>
+    <tspan x="614" dy="15">Reviewer -&gt; Rewrite</tspan>
+  </text>
+  <text class="box-text" x="856" y="402" text-anchor="middle">模型中心</text>
+  <text class="box-subtext" x="856" y="421" text-anchor="middle">
+    <tspan x="856">Connections / Models /</tspan>
+    <tspan x="856" dy="15">Bindings</tspan>
+  </text>
+  <text class="box-text" x="1071" y="402" text-anchor="middle">Execution Snapshot</text>
+  <text class="box-subtext" x="1071" y="421" text-anchor="middle">
+    <tspan x="1071">运行时</tspan>
+    <tspan x="1071" dy="15">冻结配置</tspan>
+  </text>
+  <text class="box-text" x="1248" y="402" text-anchor="middle">模型治理</text>
+  <text class="box-subtext" x="1248" y="421" text-anchor="middle">
+    <tspan x="1248">审计追踪</tspan>
+  </text>
+
+  <rect class="outer" x="250" y="555" width="1030" height="110" fill="#c9f5b7" stroke="#67a453"/>
+  <text class="group-title" x="765" y="579" text-anchor="middle">知识与反馈资产</text>
+  <rect class="inner" x="278" y="593" width="180" height="50"/>
+  <rect class="inner" x="486" y="593" width="184" height="50"/>
+  <rect class="inner" x="698" y="593" width="204" height="50"/>
+  <rect class="inner" x="930" y="593" width="180" height="50"/>
+  <text class="box-text" x="368" y="610" text-anchor="middle">源资料</text>
+  <text class="box-subtext" x="368" y="626" text-anchor="middle">
+    <tspan x="368">Files / Git /</tspan>
+    <tspan x="368" dy="14">Metadata</tspan>
+  </text>
+  <text class="box-text" x="578" y="610" text-anchor="middle">知识资产</text>
+  <text class="box-subtext" x="578" y="626" text-anchor="middle">
+    <tspan x="578">Articles / Chunks /</tspan>
+    <tspan x="578" dy="14">Vectors</tspan>
+  </text>
+  <text class="box-text" x="800" y="610" text-anchor="middle">问答反馈</text>
+  <text class="box-subtext" x="800" y="626" text-anchor="middle">
+    <tspan x="800">Pending Queries /</tspan>
+    <tspan x="800" dy="14">Contributions</tspan>
+  </text>
+  <text class="box-text" x="1020" y="610" text-anchor="middle">快照治理</text>
+  <text class="box-subtext" x="1020" y="626" text-anchor="middle">
+    <tspan x="1020">Snapshot / Rollback /</tspan>
+    <tspan x="1020" dy="14">Export</tspan>
+  </text>
+
+  <rect class="outer" x="224" y="748" width="1082" height="114" fill="#b8d8ff" stroke="#5b8bc8"/>
+  <text class="group-title" x="765" y="772" text-anchor="middle">运行与存储基础设施</text>
+  <rect class="inner" x="252" y="782" width="190" height="58"/>
+  <rect class="inner" x="478" y="782" width="142" height="58"/>
+  <rect class="inner" x="656" y="782" width="170" height="58"/>
+  <rect class="inner" x="862" y="782" width="416" height="58"/>
+  <text class="box-text" x="347" y="806" text-anchor="middle">PostgreSQL</text>
+  <text class="box-subtext" x="347" y="827" text-anchor="middle">业务数据 + 向量数据</text>
+  <text class="box-text" x="549" y="806" text-anchor="middle">Redis</text>
+  <text class="box-subtext" x="549" y="827" text-anchor="middle">任务状态 / 缓存</text>
+  <text class="box-text" x="741" y="806" text-anchor="middle">本地上传 / Git 仓库</text>
+  <text class="box-text" x="1070" y="806" text-anchor="middle">Spring Boot Runtime</text>
+  <text class="box-subtext" x="1070" y="827" text-anchor="middle">Web / API / CLI / MCP</text>
+
+  <path class="flow" d="M 765 122 L 765 184"/>
+  <path class="flow" d="M 765 280 L 765 344"/>
+  <path class="flow" d="M 765 484 L 765 555"/>
+  <path class="flow" d="M 765 665 L 765 748"/>
+
+  <text class="layer-label" x="220" y="98">使用入口层</text>
+  <text class="layer-label" x="220" y="250">统一接入与应用层</text>
+  <text class="layer-label" x="190" y="425">编排与模型层</text>
+  <text class="layer-label" x="220" y="615">知识与反馈资产层</text>
+  <text class="layer-label" x="220" y="824">存储与运行层</text>
+</svg>

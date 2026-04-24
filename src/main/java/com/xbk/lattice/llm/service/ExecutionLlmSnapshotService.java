@@ -223,7 +223,7 @@ public class ExecutionLlmSnapshotService {
                     llmProperties.getReviewerModel(),
                     null,
                     null,
-                    null,
+                    Integer.valueOf(resolveCompileRoleTimeoutSeconds(scene, agentRole, null)),
                     "{}",
                     llmProperties.getPricing().getReviewerInputPricePer1kTokens(),
                     llmProperties.getPricing().getReviewerOutputPricePer1kTokens(),
@@ -245,7 +245,7 @@ public class ExecutionLlmSnapshotService {
                 llmProperties.getCompileModel(),
                 null,
                 null,
-                null,
+                Integer.valueOf(resolveCompileRoleTimeoutSeconds(scene, agentRole, null)),
                 "{}",
                 llmProperties.getPricing().getCompileInputPricePer1kTokens(),
                 llmProperties.getPricing().getCompileOutputPricePer1kTokens(),
@@ -285,7 +285,7 @@ public class ExecutionLlmSnapshotService {
                 modelProfile.getModelName(),
                 modelProfile.getTemperature(),
                 modelProfile.getMaxTokens(),
-                modelProfile.getTimeoutSeconds(),
+                Integer.valueOf(resolveCompileRoleTimeoutSeconds(scene, binding.getAgentRole(), modelProfile.getTimeoutSeconds())),
                 modelProfile.getExtraOptionsJson(),
                 modelProfile.getInputPricePer1kTokens(),
                 modelProfile.getOutputPricePer1kTokens(),
@@ -306,6 +306,32 @@ public class ExecutionLlmSnapshotService {
             return "fallback";
         }
         return modelName.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private int resolveCompileRoleTimeoutSeconds(String scene, String agentRole, Integer configuredTimeoutSeconds) {
+        if (configuredTimeoutSeconds != null && configuredTimeoutSeconds.intValue() > 0) {
+            return configuredTimeoutSeconds.intValue();
+        }
+        if (!COMPILE_SCENE.equals(resolveScene(scene))) {
+            return 300;
+        }
+        if (ROLE_WRITER.equals(agentRole)) {
+            return llmProperties.getCompileTimeout().getWriterSeconds();
+        }
+        if (ROLE_REVIEWER.equals(agentRole)) {
+            return llmProperties.getCompileTimeout().getReviewerSeconds();
+        }
+        if (ROLE_FIXER.equals(agentRole)) {
+            return llmProperties.getCompileTimeout().getFixerSeconds();
+        }
+        return 300;
+    }
+
+    private String resolveScene(String scene) {
+        if (scene == null || scene.isBlank()) {
+            return COMPILE_SCENE;
+        }
+        return scene.trim().toLowerCase(Locale.ROOT);
     }
 
     private String normalizeProviderType(String routeOrProvider) {

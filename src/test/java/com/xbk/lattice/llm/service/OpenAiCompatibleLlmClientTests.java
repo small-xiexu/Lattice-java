@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * OpenAiCompatibleLlmClient 测试
@@ -98,6 +99,7 @@ class OpenAiCompatibleLlmClientTests {
         assertThat(result.getContent()).isEqualTo("answer ok");
         assertThat(result.getInputTokens()).isEqualTo(9);
         assertThat(result.getOutputTokens()).isEqualTo(4);
+        assertThat(result.getProviderRequestId()).isEqualTo("chatcmpl_test");
         assertThat(authorizationHeader.get()).isEqualTo("Bearer test-openai-key");
         assertThat(contentTypeHeader.get()).contains("application/json");
         assertThat(requestBody.get()).contains("\"model\":\"gpt-5.4\"");
@@ -106,24 +108,20 @@ class OpenAiCompatibleLlmClientTests {
     }
 
     /**
-     * 验证客户端在网关首次直接断开连接时会自动重试并成功拿到响应。
+     * 验证客户端在网关直接断开连接时会立即失败，不再自行重试。
      *
      * @throws Exception 异常
      */
     @Test
-    void shouldRetryWhenGatewayClosesConnectionBeforeResponse() throws Exception {
+    void shouldFailFastWhenGatewayClosesConnectionBeforeResponse() throws Exception {
         AtomicInteger requestCount = new AtomicInteger();
         socketServer = new ServerSocket(0);
         executorService = Executors.newSingleThreadExecutor();
         socketServerFuture = executorService.submit(() -> {
-            while (requestCount.get() < 2) {
+            while (requestCount.get() < 1) {
                 try (Socket socket = socketServer.accept()) {
                     consumeHttpRequest(socket.getInputStream());
-                    int currentAttempt = requestCount.incrementAndGet();
-                    if (currentAttempt == 1) {
-                        continue;
-                    }
-                    writeSuccessResponse(socket.getOutputStream(), "application/octet-stream");
+                    requestCount.incrementAndGet();
                 }
             }
             return null;
@@ -140,31 +138,26 @@ class OpenAiCompatibleLlmClientTests {
                 null
         );
 
-        LlmCallResult result = llmClient.call("query-system", "query-user");
-
-        assertThat(result.getContent()).isEqualTo("answer ok");
-        assertThat(requestCount.get()).isEqualTo(2);
+        assertThatThrownBy(() -> llmClient.call("query-system", "query-user"))
+                .isInstanceOf(RuntimeException.class);
+        assertThat(requestCount.get()).isEqualTo(1);
     }
 
     /**
-     * 验证客户端在连续三次断流后仍会继续重试，并在第四次成功拿到响应。
+     * 验证客户端不会为连接提前断开维护内部重试预算。
      *
      * @throws Exception 异常
      */
     @Test
-    void shouldRetryUpToFiveAttemptsWhenGatewayClosesConnectionRepeatedly() throws Exception {
+    void shouldStopAfterSingleAttemptWhenGatewayClosesConnectionRepeatedly() throws Exception {
         AtomicInteger requestCount = new AtomicInteger();
         socketServer = new ServerSocket(0);
         executorService = Executors.newSingleThreadExecutor();
         socketServerFuture = executorService.submit(() -> {
-            while (requestCount.get() < 4) {
+            while (requestCount.get() < 1) {
                 try (Socket socket = socketServer.accept()) {
                     consumeHttpRequest(socket.getInputStream());
-                    int currentAttempt = requestCount.incrementAndGet();
-                    if (currentAttempt <= 3) {
-                        continue;
-                    }
-                    writeSuccessResponse(socket.getOutputStream(), "application/octet-stream");
+                    requestCount.incrementAndGet();
                 }
             }
             return null;
@@ -181,37 +174,27 @@ class OpenAiCompatibleLlmClientTests {
                 null
         );
 
-        LlmCallResult result = llmClient.call("query-system", "query-user");
-
-        assertThat(result.getContent()).isEqualTo("answer ok");
-        assertThat(requestCount.get()).isEqualTo(4);
+        assertThatThrownBy(() -> llmClient.call("query-system", "query-user"))
+                .isInstanceOf(RuntimeException.class);
+        assertThat(requestCount.get()).isEqualTo(1);
     }
 
     /**
-     * 验证客户端会对可恢复的 5xx 响应执行重试。
+     * 验证客户端收到可恢复的 5xx 响应时会立即抛错，不再自行重试。
      *
      * @throws IOException IO 异常
      */
     @Test
-    void shouldRetryWhenGatewayReturnsRecoverableServerError() throws IOException {
+    void shouldFailFastWhenGatewayReturnsRecoverableServerError() throws IOException {
         AtomicInteger requestCount = new AtomicInteger();
         httpServer = HttpServer.create(new InetSocketAddress(0), 0);
         httpServer.createContext("/v1/chat/completions", exchange -> {
-            int currentAttempt = requestCount.incrementAndGet();
-            if (currentAttempt == 1) {
-                byte[] responseBytes = "{\"error\":\"temporary upstream failure\"}".getBytes(StandardCharsets.UTF_8);
-                exchange.getResponseHeaders().add("Content-Type", "application/json");
-                exchange.sendResponseHeaders(502, responseBytes.length);
-                exchange.getResponseBody().write(responseBytes);
-                exchange.close();
-                return;
-            }
-            new SuccessHandler(
-                    new AtomicReference<String>(),
-                    new AtomicReference<String>(),
-                    new AtomicReference<String>(),
-                    "application/octet-stream"
-            ).handle(exchange);
+            requestCount.incrementAndGet();
+            byte[] responseBytes = "{\"error\":\"temporary upstream failure\"}".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(502, responseBytes.length);
+            exchange.getResponseBody().write(responseBytes);
+            exchange.close();
         });
         httpServer.start();
         int port = httpServer.getAddress().getPort();
@@ -227,10 +210,10 @@ class OpenAiCompatibleLlmClientTests {
                 null
         );
 
-        LlmCallResult result = llmClient.call("query-system", "query-user");
-
-        assertThat(result.getContent()).isEqualTo("answer ok");
-        assertThat(requestCount.get()).isEqualTo(2);
+        assertThatThrownBy(() -> llmClient.call("query-system", "query-user"))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("502");
+        assertThat(requestCount.get()).isEqualTo(1);
     }
 
     private void consumeHttpRequest(InputStream inputStream) throws IOException {

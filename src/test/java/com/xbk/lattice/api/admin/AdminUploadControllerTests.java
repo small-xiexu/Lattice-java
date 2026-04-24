@@ -2,7 +2,10 @@ package com.xbk.lattice.api.admin;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xbk.lattice.compiler.config.CompileJobProperties;
+import com.xbk.lattice.compiler.service.CompileJobLeaseManager;
 import com.xbk.lattice.compiler.service.CompileJobService;
+import com.xbk.lattice.infra.persistence.CompileJobJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.source.domain.KnowledgeSource;
 import com.xbk.lattice.source.service.SourceService;
@@ -17,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -63,6 +67,15 @@ class AdminUploadControllerTests {
     private ArticleJdbcRepository articleJdbcRepository;
 
     @Autowired
+    private CompileJobJdbcRepository compileJobJdbcRepository;
+
+    @Autowired
+    private CompileJobLeaseManager compileJobLeaseManager;
+
+    @Autowired
+    private CompileJobProperties compileJobProperties;
+
+    @Autowired
     private SourceService sourceService;
 
     /**
@@ -101,7 +114,13 @@ class AdminUploadControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SUCCEEDED"))
                 .andExpect(jsonPath("$.sourceId").value(sourceId))
-                .andExpect(jsonPath("$.compileJobStatus").value("SUCCEEDED"));
+                .andExpect(jsonPath("$.compileJobStatus").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.compileDerivedStatus").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.compileCurrentStep").value("finalize_job"))
+                .andExpect(jsonPath("$.compileProgressCurrent").value(1))
+                .andExpect(jsonPath("$.compileProgressTotal").value(1))
+                .andExpect(jsonPath("$.compileProgressMessage").value("编译完成"))
+                .andExpect(jsonPath("$.compileLastHeartbeatAt").isNotEmpty());
 
         mockMvc.perform(get("/api/v1/admin/sources/" + sourceId + "/runs"))
                 .andExpect(status().isOk())
@@ -254,6 +273,91 @@ class AdminUploadControllerTests {
                 .andExpect(jsonPath("$.status").value("SUCCEEDED"))
                 .andExpect(jsonPath("$.sourceId").value(existingSource.getId()))
                 .andExpect(jsonPath("$.compileJobStatus").value("SUCCEEDED"));
+    }
+
+    /**
+     * 验证运行中的 compile / review / fix 子阶段都会通过 source-runs 暴露当前步骤与进度。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldExposeRunningCompileReviewAndFixProgressViaSourceRuns() throws Exception {
+        resetTables();
+        MockMultipartFile sourceFile = new MockMultipartFile(
+                "files",
+                "payments/readme.md",
+                MediaType.TEXT_PLAIN_VALUE,
+                """
+                        # Payments Docs
+
+                        retry=3
+                        """.getBytes(StandardCharsets.UTF_8)
+        );
+
+        String responseBody = mockMvc.perform(multipart("/api/v1/admin/uploads").file(sourceFile))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPILE_QUEUED"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        Long runId = readLong(responseBody, "runId");
+        String compileJobId = jdbcTemplate.queryForObject(
+                "select compile_job_id from lattice_phase_e_upload_test.source_sync_runs where id = ?",
+                String.class,
+                runId
+        );
+        OffsetDateTime startedAt = OffsetDateTime.now();
+        compileJobJdbcRepository.markRunning(
+                compileJobId,
+                compileJobProperties.getWorkerId(),
+                startedAt,
+                startedAt.plusSeconds(compileJobProperties.getLeaseDurationSeconds())
+        );
+
+        compileJobLeaseManager.touchProgress(
+                compileJobId,
+                "compile_new_articles",
+                1,
+                3,
+                "正在生成文章（1/3）：payment-timeout"
+        );
+        mockMvc.perform(get("/api/v1/admin/source-runs/" + runId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RUNNING"))
+                .andExpect(jsonPath("$.compileDerivedStatus").value("RUNNING"))
+                .andExpect(jsonPath("$.compileCurrentStep").value("compile_new_articles"))
+                .andExpect(jsonPath("$.compileProgressCurrent").value(1))
+                .andExpect(jsonPath("$.compileProgressTotal").value(3))
+                .andExpect(jsonPath("$.compileProgressMessage").value("正在生成文章（1/3）：payment-timeout"))
+                .andExpect(jsonPath("$.compileLastHeartbeatAt").isNotEmpty());
+
+        compileJobLeaseManager.touchProgress(
+                compileJobId,
+                "review_articles",
+                2,
+                3,
+                "正在审查文章（2/3）：payment-timeout"
+        );
+        mockMvc.perform(get("/api/v1/admin/source-runs/" + runId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.compileCurrentStep").value("review_articles"))
+                .andExpect(jsonPath("$.compileProgressCurrent").value(2))
+                .andExpect(jsonPath("$.compileProgressTotal").value(3))
+                .andExpect(jsonPath("$.compileProgressMessage").value("正在审查文章（2/3）：payment-timeout"));
+
+        compileJobLeaseManager.touchProgress(
+                compileJobId,
+                "fix_review_issues",
+                1,
+                1,
+                "正在修复审查问题（1/1）：payment-timeout"
+        );
+        mockMvc.perform(get("/api/v1/admin/source-runs/" + runId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.compileCurrentStep").value("fix_review_issues"))
+                .andExpect(jsonPath("$.compileProgressCurrent").value(1))
+                .andExpect(jsonPath("$.compileProgressTotal").value(1))
+                .andExpect(jsonPath("$.compileProgressMessage").value("正在修复审查问题（1/1）：payment-timeout"));
     }
 
     /**

@@ -303,6 +303,15 @@ CREATE TABLE IF NOT EXISTS compile_jobs (
     incremental BOOLEAN NOT NULL DEFAULT FALSE,
     orchestration_mode VARCHAR(32) NOT NULL DEFAULT 'state_graph',
     status VARCHAR(32) NOT NULL,
+    worker_id VARCHAR(128),
+    last_heartbeat_at TIMESTAMPTZ,
+    running_expires_at TIMESTAMPTZ,
+    current_step VARCHAR(64),
+    progress_current INTEGER NOT NULL DEFAULT 0,
+    progress_total INTEGER NOT NULL DEFAULT 0,
+    progress_message TEXT,
+    progress_updated_at TIMESTAMPTZ,
+    error_code VARCHAR(64),
     persisted_count INTEGER NOT NULL DEFAULT 0,
     error_message TEXT,
     attempt_count INTEGER NOT NULL DEFAULT 0,
@@ -320,6 +329,15 @@ COMMENT ON COLUMN compile_jobs.root_trace_id IS '异步编译链路根追踪标�
 COMMENT ON COLUMN compile_jobs.incremental IS '是否为增量编译';
 COMMENT ON COLUMN compile_jobs.orchestration_mode IS '编排模式';
 COMMENT ON COLUMN compile_jobs.status IS '任务状态';
+COMMENT ON COLUMN compile_jobs.worker_id IS '当前持有任务的 worker 标识';
+COMMENT ON COLUMN compile_jobs.last_heartbeat_at IS '最近一次运行心跳时间';
+COMMENT ON COLUMN compile_jobs.running_expires_at IS '当前运行租约到期时间';
+COMMENT ON COLUMN compile_jobs.current_step IS '当前执行步骤';
+COMMENT ON COLUMN compile_jobs.progress_current IS '当前已完成子任务数量';
+COMMENT ON COLUMN compile_jobs.progress_total IS '当前总子任务数量';
+COMMENT ON COLUMN compile_jobs.progress_message IS '当前进度说明';
+COMMENT ON COLUMN compile_jobs.progress_updated_at IS '最近一次进度更新时间';
+COMMENT ON COLUMN compile_jobs.error_code IS '机器可识别错误码';
 COMMENT ON COLUMN compile_jobs.persisted_count IS '已落库文章数量';
 COMMENT ON COLUMN compile_jobs.error_message IS '失败错误信息';
 COMMENT ON COLUMN compile_jobs.attempt_count IS '已尝试次数';
@@ -329,6 +347,9 @@ COMMENT ON COLUMN compile_jobs.finished_at IS '任务结束时间';
 
 CREATE INDEX IF NOT EXISTS idx_compile_jobs_status_requested_at
     ON compile_jobs (status, requested_at DESC, job_id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_compile_jobs_status_running_expires_at
+    ON compile_jobs (status, running_expires_at, job_id);
 
 CREATE TABLE IF NOT EXISTS compile_job_steps (
     id BIGSERIAL PRIMARY KEY,
@@ -454,15 +475,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_llm_model_profiles_model_code
 CREATE INDEX IF NOT EXISTS idx_llm_model_profiles_connection_enabled
     ON llm_model_profiles (connection_id, enabled, id DESC);
 
-CREATE TABLE IF NOT EXISTS document_parse_provider_connections (
+CREATE TABLE IF NOT EXISTS document_parse_connections (
     id BIGSERIAL PRIMARY KEY,
     connection_code VARCHAR(64) NOT NULL,
     provider_type VARCHAR(64) NOT NULL,
     base_url VARCHAR(512) NOT NULL,
-    endpoint_path VARCHAR(256) NOT NULL,
     credential_ciphertext TEXT NOT NULL DEFAULT '',
-    credential_mask VARCHAR(128) NOT NULL DEFAULT '',
-    extra_config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    credential_mask VARCHAR(255) NOT NULL DEFAULT '',
+    config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_by VARCHAR(64) NOT NULL DEFAULT 'system',
     updated_by VARCHAR(64) NOT NULL DEFAULT 'system',
@@ -470,54 +490,59 @@ CREATE TABLE IF NOT EXISTS document_parse_provider_connections (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-COMMENT ON TABLE document_parse_provider_connections IS '文档解析供应商连接配置表';
-COMMENT ON COLUMN document_parse_provider_connections.connection_code IS '连接编码';
-COMMENT ON COLUMN document_parse_provider_connections.provider_type IS '供应商类型';
-COMMENT ON COLUMN document_parse_provider_connections.base_url IS '基础地址';
-COMMENT ON COLUMN document_parse_provider_connections.endpoint_path IS '接口路径';
-COMMENT ON COLUMN document_parse_provider_connections.credential_ciphertext IS '加密后的访问凭证';
-COMMENT ON COLUMN document_parse_provider_connections.credential_mask IS '脱敏展示值';
-COMMENT ON COLUMN document_parse_provider_connections.extra_config_json IS '供应商扩展配置';
-COMMENT ON COLUMN document_parse_provider_connections.enabled IS '是否启用';
-COMMENT ON COLUMN document_parse_provider_connections.created_by IS '创建人';
-COMMENT ON COLUMN document_parse_provider_connections.updated_by IS '更新人';
-COMMENT ON COLUMN document_parse_provider_connections.created_at IS '创建时间';
-COMMENT ON COLUMN document_parse_provider_connections.updated_at IS '更新时间';
+COMMENT ON TABLE document_parse_connections IS '文档解析连接配置表';
+COMMENT ON COLUMN document_parse_connections.connection_code IS '连接编码';
+COMMENT ON COLUMN document_parse_connections.provider_type IS '供应商类型';
+COMMENT ON COLUMN document_parse_connections.base_url IS '基础地址';
+COMMENT ON COLUMN document_parse_connections.credential_ciphertext IS '加密后的凭证 JSON';
+COMMENT ON COLUMN document_parse_connections.credential_mask IS '凭证脱敏展示';
+COMMENT ON COLUMN document_parse_connections.config_json IS '供应商配置 JSON';
+COMMENT ON COLUMN document_parse_connections.enabled IS '是否启用';
+COMMENT ON COLUMN document_parse_connections.created_by IS '创建人';
+COMMENT ON COLUMN document_parse_connections.updated_by IS '更新人';
+COMMENT ON COLUMN document_parse_connections.created_at IS '创建时间';
+COMMENT ON COLUMN document_parse_connections.updated_at IS '更新时间';
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_document_parse_provider_connections_connection_code
-    ON document_parse_provider_connections (connection_code);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_document_parse_connections_connection_code
+    ON document_parse_connections (connection_code);
 
-CREATE INDEX IF NOT EXISTS idx_document_parse_provider_connections_enabled
-    ON document_parse_provider_connections (enabled, id DESC);
+CREATE INDEX IF NOT EXISTS idx_document_parse_connections_enabled
+    ON document_parse_connections (enabled, id DESC);
 
-CREATE TABLE IF NOT EXISTS document_parse_settings (
+CREATE TABLE IF NOT EXISTS document_parse_route_policies (
     id BIGSERIAL PRIMARY KEY,
-    config_scope VARCHAR(32) NOT NULL,
-    default_connection_id BIGINT REFERENCES document_parse_provider_connections (id),
-    image_ocr_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-    scanned_pdf_ocr_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    policy_scope VARCHAR(32) NOT NULL,
+    image_connection_id BIGINT REFERENCES document_parse_connections (id),
+    scanned_pdf_connection_id BIGINT REFERENCES document_parse_connections (id),
     cleanup_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     cleanup_model_profile_id BIGINT REFERENCES llm_model_profiles (id),
+    fallback_policy_json JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_by VARCHAR(64) NOT NULL DEFAULT 'system',
     updated_by VARCHAR(64) NOT NULL DEFAULT 'system',
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-COMMENT ON TABLE document_parse_settings IS '文档解析全局设置表';
-COMMENT ON COLUMN document_parse_settings.config_scope IS '配置范围，V1 固定 default';
-COMMENT ON COLUMN document_parse_settings.default_connection_id IS '默认文档解析连接';
-COMMENT ON COLUMN document_parse_settings.image_ocr_enabled IS '是否启用图片 OCR';
-COMMENT ON COLUMN document_parse_settings.scanned_pdf_ocr_enabled IS '是否启用扫描 PDF OCR';
-COMMENT ON COLUMN document_parse_settings.cleanup_enabled IS '是否启用 OCR 后整理';
-COMMENT ON COLUMN document_parse_settings.cleanup_model_profile_id IS '后整理模型档案';
-COMMENT ON COLUMN document_parse_settings.created_by IS '创建人';
-COMMENT ON COLUMN document_parse_settings.updated_by IS '更新人';
-COMMENT ON COLUMN document_parse_settings.created_at IS '创建时间';
-COMMENT ON COLUMN document_parse_settings.updated_at IS '更新时间';
+COMMENT ON TABLE document_parse_route_policies IS '文档解析路由策略表';
+COMMENT ON COLUMN document_parse_route_policies.policy_scope IS '策略作用域';
+COMMENT ON COLUMN document_parse_route_policies.image_connection_id IS '图片 OCR 默认连接';
+COMMENT ON COLUMN document_parse_route_policies.scanned_pdf_connection_id IS '扫描 PDF OCR 默认连接';
+COMMENT ON COLUMN document_parse_route_policies.cleanup_enabled IS '是否启用 OCR 后整理';
+COMMENT ON COLUMN document_parse_route_policies.cleanup_model_profile_id IS '后整理模型档案';
+COMMENT ON COLUMN document_parse_route_policies.fallback_policy_json IS '降级策略 JSON';
+COMMENT ON COLUMN document_parse_route_policies.created_by IS '创建人';
+COMMENT ON COLUMN document_parse_route_policies.updated_by IS '更新人';
+COMMENT ON COLUMN document_parse_route_policies.created_at IS '创建时间';
+COMMENT ON COLUMN document_parse_route_policies.updated_at IS '更新时间';
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_document_parse_settings_scope
-    ON document_parse_settings (config_scope);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_document_parse_route_policies_scope
+    ON document_parse_route_policies (policy_scope);
+
+CREATE INDEX IF NOT EXISTS idx_document_parse_route_policies_image_connection
+    ON document_parse_route_policies (image_connection_id);
+
+CREATE INDEX IF NOT EXISTS idx_document_parse_route_policies_scanned_connection
+    ON document_parse_route_policies (scanned_pdf_connection_id);
 
 CREATE TABLE IF NOT EXISTS source_credentials (
     id BIGSERIAL PRIMARY KEY,

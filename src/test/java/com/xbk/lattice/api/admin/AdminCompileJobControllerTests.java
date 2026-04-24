@@ -90,6 +90,9 @@ class AdminCompileJobControllerTests {
                                 + "}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("QUEUED"))
+                .andExpect(jsonPath("$.derivedStatus").value("QUEUED"))
+                .andExpect(jsonPath("$.progressCurrent").value(0))
+                .andExpect(jsonPath("$.progressTotal").value(0))
                 .andExpect(jsonPath("$.orchestrationMode").value("state_graph"))
                 .andReturn()
                 .getResponse()
@@ -107,7 +110,14 @@ class AdminCompileJobControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.jobId").value(jobId))
                 .andExpect(jsonPath("$.status").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.derivedStatus").value("SUCCEEDED"))
                 .andExpect(jsonPath("$.persistedCount").value(1))
+                .andExpect(jsonPath("$.workerId").isNotEmpty())
+                .andExpect(jsonPath("$.currentStep").value("finalize_job"))
+                .andExpect(jsonPath("$.progressCurrent").value(1))
+                .andExpect(jsonPath("$.progressTotal").value(1))
+                .andExpect(jsonPath("$.progressMessage").value("编译完成"))
+                .andExpect(jsonPath("$.lastHeartbeatAt").isNotEmpty())
                 .andExpect(jsonPath("$.orchestrationMode").value("state_graph"));
 
         assertThat(articleJdbcRepository.findByConceptId("payment-timeout")).isPresent();
@@ -285,10 +295,11 @@ class AdminCompileJobControllerTests {
      * 验证失败作业可从管理侧重试。
      *
      * @param tempDir 临时目录
+     * @param output 控制台输出
      * @throws Exception 测试异常
      */
     @Test
-    void shouldRetryFailedCompileJobViaAdminApi(@TempDir Path tempDir) throws Exception {
+    void shouldRetryFailedCompileJobViaAdminApi(@TempDir Path tempDir, CapturedOutput output) throws Exception {
         resetTables();
         Path missingDir = tempDir.resolve("missing-dir");
 
@@ -310,7 +321,16 @@ class AdminCompileJobControllerTests {
 
         mockMvc.perform(get("/api/v1/admin/jobs/" + jobId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("FAILED"));
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.errorCode").value("COMPILE_IO_ERROR"))
+                .andExpect(jsonPath("$.errorMessage").isNotEmpty());
+
+        List<JsonNode> structuredEvents = parseStructuredEvents(output.getOut());
+        JsonNode compileCompletedEvent = findStructuredEvent(structuredEvents, "compile_completed", "compileJobId", jobId);
+        assertThat(compileCompletedEvent).isNotNull();
+        assertThat(compileCompletedEvent.path("status").asText()).isEqualTo("FAILED");
+        assertThat(compileCompletedEvent.path("errorCode").asText()).isEqualTo("COMPILE_IO_ERROR");
+        assertThat(compileCompletedEvent.path("errorSummary").asText()).isNotBlank();
 
         mockMvc.perform(post("/api/v1/admin/jobs/" + jobId + "/retry"))
                 .andExpect(status().isOk())

@@ -15,6 +15,8 @@ public class LlmCallResult {
 
     private final int outputTokens;
 
+    private final String providerRequestId;
+
     /**
      * 创建 LLM 调用结果。
      *
@@ -23,9 +25,22 @@ public class LlmCallResult {
      * @param outputTokens 输出 token 数
      */
     public LlmCallResult(String content, int inputTokens, int outputTokens) {
+        this(content, inputTokens, outputTokens, null);
+    }
+
+    /**
+     * 创建 LLM 调用结果。
+     *
+     * @param content 模型输出文本
+     * @param inputTokens 输入 token 数
+     * @param outputTokens 输出 token 数
+     * @param providerRequestId 上游请求标识
+     */
+    public LlmCallResult(String content, int inputTokens, int outputTokens, String providerRequestId) {
         this.content = content;
         this.inputTokens = inputTokens;
         this.outputTokens = outputTokens;
+        this.providerRequestId = providerRequestId;
     }
 
     /**
@@ -53,5 +68,14 @@ public class LlmCallResult {
      */
     public int getOutputTokens() {
         return outputTokens;
+    }
+
+    /**
+     * 获取上游请求标识。
+     *
+     * @return 上游请求标识
+     */
+    public String getProviderRequestId() {
+        return providerRequestId;
     }
 }

@@ -156,7 +156,7 @@ public class ChatClientRegistry {
                 .toolCallingManager(DefaultToolCallingManager.builder()
                         .observationRegistry(ObservationRegistry.NOOP)
                         .build())
-                .retryTemplate(RetryTemplate.defaultInstance())
+                .retryTemplate(createNoRetryTemplate())
                 .observationRegistry(ObservationRegistry.NOOP)
                 .build();
         ChatClient chatClient = ChatClient.builder(chatModel)
@@ -182,7 +182,7 @@ public class ChatClientRegistry {
                 DefaultToolCallingManager.builder()
                         .observationRegistry(ObservationRegistry.NOOP)
                         .build(),
-                RetryTemplate.defaultInstance(),
+                createNoRetryTemplate(),
                 ObservationRegistry.NOOP
         );
         ChatClient chatClient = ChatClient.builder(chatModel)
@@ -200,6 +200,17 @@ public class ChatClientRegistry {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(Duration.ofSeconds(resolvedTimeoutSeconds));
         return restClientBuilder.clone().requestFactory(new BufferingClientHttpRequestFactory(requestFactory));
+    }
+
+    /**
+     * 创建单次请求模板，避免与上层调用执行器形成双层重试。
+     *
+     * @return 单次请求模板
+     */
+    private RetryTemplate createNoRetryTemplate() {
+        return RetryTemplate.builder()
+                .maxAttempts(1)
+                .build();
     }
 
     private OpenAiChatOptions buildDefaultOptions(LlmRouteResolution routeResolution) {

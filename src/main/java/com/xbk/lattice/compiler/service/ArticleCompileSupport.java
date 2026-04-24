@@ -23,6 +23,7 @@ import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import com.xbk.lattice.query.domain.ReviewResult;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -52,6 +53,8 @@ public class ArticleCompileSupport {
 
     private final FixerAgent fixerAgent;
 
+    private final CompileJobLeaseManager compileJobLeaseManager;
+
     /**
      * 创建编译文章认知支撑服务。
      *
@@ -69,7 +72,8 @@ public class ArticleCompileSupport {
             ReviewFixService reviewFixService,
             SourceFileJdbcRepository sourceFileJdbcRepository,
             LlmProperties llmProperties,
-            ExecutionLlmSnapshotService executionLlmSnapshotService
+            ExecutionLlmSnapshotService executionLlmSnapshotService,
+            ObjectProvider<CompileJobLeaseManager> compileJobLeaseManagerProvider
     ) {
         this(
                 compilerProperties,
@@ -77,7 +81,8 @@ public class ArticleCompileSupport {
                 articleReviewerGateway,
                 reviewFixService,
                 sourceFileJdbcRepository,
-                new AgentModelRouter(executionLlmSnapshotService, llmProperties)
+                new AgentModelRouter(executionLlmSnapshotService, llmProperties),
+                compileJobLeaseManagerProvider.getIfAvailable()
         );
     }
 
@@ -103,7 +108,8 @@ public class ArticleCompileSupport {
                 articleReviewerGateway,
                 reviewFixService,
                 sourceFileJdbcRepository,
-                new AgentModelRouter(llmGateway)
+                new AgentModelRouter(llmGateway),
+                null
         );
     }
 
@@ -113,7 +119,8 @@ public class ArticleCompileSupport {
             ArticleReviewerGateway articleReviewerGateway,
             ReviewFixService reviewFixService,
             SourceFileJdbcRepository sourceFileJdbcRepository,
-            AgentModelRouter agentModelRouter
+            AgentModelRouter agentModelRouter,
+            CompileJobLeaseManager compileJobLeaseManager
     ) {
         this.compileArticleNode = new CompileArticleNode(
                 llmGateway,
@@ -127,6 +134,7 @@ public class ArticleCompileSupport {
         this.writerAgent = new DefaultWriterAgent(this.compileArticleNode, this.agentModelRouter);
         this.reviewerAgent = new DefaultReviewerAgent(articleReviewerGateway, this.agentModelRouter);
         this.fixerAgent = new DefaultFixerAgent(reviewFixService, this.agentModelRouter);
+        this.compileJobLeaseManager = compileJobLeaseManager;
     }
 
     /**
@@ -178,7 +186,16 @@ public class ArticleCompileSupport {
             String scene
     ) {
         List<ArticleRecord> draftArticles = new ArrayList<ArticleRecord>();
-        for (MergedConcept mergedConcept : mergedConcepts) {
+        int total = mergedConcepts.size();
+        for (int index = 0; index < mergedConcepts.size(); index++) {
+            MergedConcept mergedConcept = mergedConcepts.get(index);
+            touchProgress(
+                    scopeId,
+                    "compile_new_articles",
+                    index + 1,
+                    total,
+                    buildCompileDraftProgressMessage(index + 1, total, mergedConcept)
+            );
             WriterResult writerResult = writerAgent.write(new WriterTask(
                     mergedConcept,
                     sourceDir,
@@ -219,7 +236,16 @@ public class ArticleCompileSupport {
             String scene
     ) {
         List<ArticleReviewEnvelope> reviewedArticles = new ArrayList<ArticleReviewEnvelope>();
-        for (ArticleRecord draftArticle : draftArticles) {
+        int total = draftArticles.size();
+        for (int index = 0; index < draftArticles.size(); index++) {
+            ArticleRecord draftArticle = draftArticles.get(index);
+            touchProgress(
+                    scopeId,
+                    "review_articles",
+                    index + 1,
+                    total,
+                    buildReviewProgressMessage(index + 1, total, draftArticle)
+            );
             String sourceContents = compileArticleNode.buildSourceContents(
                     draftArticle.getSourcePaths(),
                     draftArticle.getSourceId()
@@ -275,7 +301,16 @@ public class ArticleCompileSupport {
             String scene
     ) {
         List<ArticleReviewEnvelope> fixedArticles = new ArrayList<ArticleReviewEnvelope>();
-        for (ArticleReviewEnvelope reviewEnvelope : reviewedArticles) {
+        int total = reviewedArticles.size();
+        for (int index = 0; index < reviewedArticles.size(); index++) {
+            ArticleReviewEnvelope reviewEnvelope = reviewedArticles.get(index);
+            touchProgress(
+                    scopeId,
+                    "fix_review_issues",
+                    index + 1,
+                    total,
+                    buildFixProgressMessage(index + 1, total, reviewEnvelope)
+            );
             if (reviewEnvelope.getReviewResult() == null || reviewEnvelope.getReviewResult().isPass()) {
                 fixedArticles.add(reviewEnvelope);
                 continue;
@@ -324,6 +359,121 @@ public class ArticleCompileSupport {
                 reviewStatus,
                 reviewEnvelope.getArticle().getContent()
         );
+    }
+
+    /**
+     * 构建编译新文章阶段的进度提示文案。
+     *
+     * @param current 当前进度
+     * @param total 总进度
+     * @param mergedConcept 当前概念
+     * @return 进度提示文案
+     */
+    private String buildCompileDraftProgressMessage(int current, int total, MergedConcept mergedConcept) {
+        return CompileJobProgressMessageFormatter.format(
+                "正在生成文章",
+                current,
+                total,
+                resolveMergedConceptLabel(mergedConcept)
+        );
+    }
+
+    /**
+     * 构建审查阶段的进度提示文案。
+     *
+     * @param current 当前进度
+     * @param total 总进度
+     * @param draftArticle 当前草稿文章
+     * @return 进度提示文案
+     */
+    private String buildReviewProgressMessage(int current, int total, ArticleRecord draftArticle) {
+        return CompileJobProgressMessageFormatter.format(
+                "正在审查文章",
+                current,
+                total,
+                resolveArticleLabel(draftArticle)
+        );
+    }
+
+    /**
+     * 构建修复阶段的进度提示文案。
+     *
+     * @param current 当前进度
+     * @param total 总进度
+     * @param reviewEnvelope 当前审查包裹
+     * @return 进度提示文案
+     */
+    private String buildFixProgressMessage(int current, int total, ArticleReviewEnvelope reviewEnvelope) {
+        return CompileJobProgressMessageFormatter.format(
+                "正在修复文章",
+                current,
+                total,
+                resolveReviewEnvelopeLabel(reviewEnvelope)
+        );
+    }
+
+    /**
+     * 刷新作业级运行进度快照。
+     *
+     * @param jobId 作业标识
+     * @param currentStep 当前步骤
+     * @param current 当前进度
+     * @param total 总进度
+     * @param progressMessage 进度提示文案
+     */
+    private void touchProgress(String jobId, String currentStep, int current, int total, String progressMessage) {
+        if (compileJobLeaseManager == null || jobId == null || jobId.isBlank()) {
+            return;
+        }
+        compileJobLeaseManager.touchProgress(jobId, currentStep, current, total, progressMessage);
+    }
+
+    /**
+     * 解析合并概念标签。
+     *
+     * @param mergedConcept 合并概念
+     * @return 展示标签
+     */
+    private String resolveMergedConceptLabel(MergedConcept mergedConcept) {
+        if (mergedConcept == null) {
+            return null;
+        }
+        if (mergedConcept.getConceptId() != null && !mergedConcept.getConceptId().isBlank()) {
+            return mergedConcept.getConceptId();
+        }
+        return mergedConcept.getTitle();
+    }
+
+    /**
+     * 解析文章标签。
+     *
+     * @param articleRecord 文章记录
+     * @return 展示标签
+     */
+    private String resolveArticleLabel(ArticleRecord articleRecord) {
+        if (articleRecord == null) {
+            return null;
+        }
+        if (articleRecord.getConceptId() != null && !articleRecord.getConceptId().isBlank()) {
+            return articleRecord.getConceptId();
+        }
+        if (articleRecord.getTitle() != null && !articleRecord.getTitle().isBlank()) {
+            return articleRecord.getTitle();
+        }
+        return articleRecord.getArticleKey();
+    }
+
+    /**
+     * 解析审查包裹对应的文章标签。
+     *
+     * @param reviewEnvelope 审查包裹
+     * @return 展示标签
+     */
+    private String resolveReviewEnvelopeLabel(ArticleReviewEnvelope reviewEnvelope) {
+        if (reviewEnvelope == null) {
+            return null;
+        }
+        return resolveArticleLabel(reviewEnvelope.getArticle());
     }
 
     /**

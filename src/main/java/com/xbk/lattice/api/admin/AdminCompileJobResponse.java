@@ -23,6 +23,24 @@ public class AdminCompileJobResponse {
 
     private final String status;
 
+    private final String derivedStatus;
+
+    private final String workerId;
+
+    private final String currentStep;
+
+    private final int progressCurrent;
+
+    private final int progressTotal;
+
+    private final String progressMessage;
+
+    private final String lastHeartbeatAt;
+
+    private final String runningExpiresAt;
+
+    private final String errorCode;
+
     private final int persistedCount;
 
     private final String errorMessage;
@@ -44,6 +62,15 @@ public class AdminCompileJobResponse {
      * @param incremental 是否增量编译
      * @param orchestrationMode 编排模式
      * @param status 状态
+     * @param derivedStatus 派生展示状态
+     * @param workerId worker 标识
+     * @param currentStep 当前执行步骤
+     * @param progressCurrent 当前进度数量
+     * @param progressTotal 总进度数量
+     * @param progressMessage 进度提示文案
+     * @param lastHeartbeatAt 最近心跳时间
+     * @param runningExpiresAt 运行租约到期时间
+     * @param errorCode 错误码
      * @param persistedCount 持久化数量
      * @param errorMessage 错误信息
      * @param attemptCount 尝试次数
@@ -58,6 +85,15 @@ public class AdminCompileJobResponse {
             boolean incremental,
             String orchestrationMode,
             String status,
+            String derivedStatus,
+            String workerId,
+            String currentStep,
+            int progressCurrent,
+            int progressTotal,
+            String progressMessage,
+            String lastHeartbeatAt,
+            String runningExpiresAt,
+            String errorCode,
             int persistedCount,
             String errorMessage,
             int attemptCount,
@@ -71,6 +107,15 @@ public class AdminCompileJobResponse {
         this.incremental = incremental;
         this.orchestrationMode = orchestrationMode;
         this.status = status;
+        this.derivedStatus = derivedStatus;
+        this.workerId = workerId;
+        this.currentStep = currentStep;
+        this.progressCurrent = progressCurrent;
+        this.progressTotal = progressTotal;
+        this.progressMessage = progressMessage;
+        this.lastHeartbeatAt = lastHeartbeatAt;
+        this.runningExpiresAt = runningExpiresAt;
+        this.errorCode = errorCode;
         this.persistedCount = persistedCount;
         this.errorMessage = errorMessage;
         this.attemptCount = attemptCount;
@@ -131,6 +176,87 @@ public class AdminCompileJobResponse {
      */
     public String getStatus() {
         return status;
+    }
+
+    /**
+     * 获取派生展示状态。
+     *
+     * @return 派生展示状态
+     */
+    public String getDerivedStatus() {
+        return derivedStatus;
+    }
+
+    /**
+     * 获取 worker 标识。
+     *
+     * @return worker 标识
+     */
+    public String getWorkerId() {
+        return workerId;
+    }
+
+    /**
+     * 获取当前执行步骤。
+     *
+     * @return 当前执行步骤
+     */
+    public String getCurrentStep() {
+        return currentStep;
+    }
+
+    /**
+     * 获取当前进度数量。
+     *
+     * @return 当前进度数量
+     */
+    public int getProgressCurrent() {
+        return progressCurrent;
+    }
+
+    /**
+     * 获取总进度数量。
+     *
+     * @return 总进度数量
+     */
+    public int getProgressTotal() {
+        return progressTotal;
+    }
+
+    /**
+     * 获取进度提示文案。
+     *
+     * @return 进度提示文案
+     */
+    public String getProgressMessage() {
+        return progressMessage;
+    }
+
+    /**
+     * 获取最近心跳时间。
+     *
+     * @return 最近心跳时间
+     */
+    public String getLastHeartbeatAt() {
+        return lastHeartbeatAt;
+    }
+
+    /**
+     * 获取运行租约到期时间。
+     *
+     * @return 运行租约到期时间
+     */
+    public String getRunningExpiresAt() {
+        return runningExpiresAt;
+    }
+
+    /**
+     * 获取错误码。
+     *
+     * @return 错误码
+     */
+    public String getErrorCode() {
+        return errorCode;
     }
 
     /**

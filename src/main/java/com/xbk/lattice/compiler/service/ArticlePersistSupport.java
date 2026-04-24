@@ -10,6 +10,7 @@ import com.xbk.lattice.infra.persistence.ArticleSourceRefRecord;
 import com.xbk.lattice.query.service.ArticleChunkVectorIndexService;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
 import com.xbk.lattice.query.service.QueryCacheStore;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -45,6 +46,8 @@ public class ArticlePersistSupport {
 
     private final ArticleSourceRefJdbcRepository articleSourceRefJdbcRepository;
 
+    private final CompileJobLeaseManager compileJobLeaseManager;
+
     private QueryCacheStore queryCacheStore;
 
     private LlmGateway llmGateway;
@@ -78,7 +81,8 @@ public class ArticlePersistSupport {
                 articleVectorIndexService,
                 articleChunkVectorIndexService,
                 sourceIngestSupport,
-                null
+                (ArticleSourceRefJdbcRepository) null,
+                (CompileJobLeaseManager) null
         );
     }
 
@@ -103,7 +107,45 @@ public class ArticlePersistSupport {
             ArticleVectorIndexService articleVectorIndexService,
             ArticleChunkVectorIndexService articleChunkVectorIndexService,
             SourceIngestSupport sourceIngestSupport,
-            ArticleSourceRefJdbcRepository articleSourceRefJdbcRepository
+            ArticleSourceRefJdbcRepository articleSourceRefJdbcRepository,
+            ObjectProvider<CompileJobLeaseManager> compileJobLeaseManagerProvider
+    ) {
+        this(
+                articleCompileSupport,
+                articleJdbcRepository,
+                articleChunkJdbcRepository,
+                compilationWalStore,
+                articleVectorIndexService,
+                articleChunkVectorIndexService,
+                sourceIngestSupport,
+                articleSourceRefJdbcRepository,
+                compileJobLeaseManagerProvider.getIfAvailable()
+        );
+    }
+
+    /**
+     * 创建编译文章落库支撑服务。
+     *
+     * @param articleCompileSupport 编译文章认知支撑服务
+     * @param articleJdbcRepository 文章仓储
+     * @param articleChunkJdbcRepository 文章 chunk 仓储
+     * @param compilationWalStore 编译 WAL 存储
+     * @param articleVectorIndexService 文章向量索引服务
+     * @param articleChunkVectorIndexService 文章分块向量索引服务
+     * @param sourceIngestSupport 编译源数据支撑服务
+     * @param articleSourceRefJdbcRepository 来源关联仓储
+     * @param compileJobLeaseManager 编译作业租约管理器
+     */
+    private ArticlePersistSupport(
+            ArticleCompileSupport articleCompileSupport,
+            ArticleJdbcRepository articleJdbcRepository,
+            ArticleChunkJdbcRepository articleChunkJdbcRepository,
+            CompilationWalStore compilationWalStore,
+            ArticleVectorIndexService articleVectorIndexService,
+            ArticleChunkVectorIndexService articleChunkVectorIndexService,
+            SourceIngestSupport sourceIngestSupport,
+            ArticleSourceRefJdbcRepository articleSourceRefJdbcRepository,
+            CompileJobLeaseManager compileJobLeaseManager
     ) {
         this.articleCompileSupport = articleCompileSupport;
         this.articleJdbcRepository = articleJdbcRepository;
@@ -113,6 +155,7 @@ public class ArticlePersistSupport {
         this.articleChunkVectorIndexService = articleChunkVectorIndexService;
         this.sourceIngestSupport = sourceIngestSupport;
         this.articleSourceRefJdbcRepository = articleSourceRefJdbcRepository;
+        this.compileJobLeaseManager = compileJobLeaseManager;
     }
 
     /**
@@ -176,7 +219,10 @@ public class ArticlePersistSupport {
             java.util.Map<String, Long> sourceFileIdsByPath
     ) {
         int persistedCount = 0;
-        for (ArticleReviewEnvelope reviewEnvelope : reviewedArticles) {
+        int total = reviewedArticles.size();
+        for (int index = 0; index < reviewedArticles.size(); index++) {
+            ArticleReviewEnvelope reviewEnvelope = reviewedArticles.get(index);
+            touchPersistProgress(jobId, index + 1, total, reviewEnvelope);
             ArticleRecord articleRecord = finalizeArticleForPersist(reviewEnvelope);
             articleRecord = ensureSourceAwareIdentifiers(articleRecord, sourceId, sourceCode);
             articleJdbcRepository.upsert(articleRecord);
@@ -278,6 +324,52 @@ public class ArticlePersistSupport {
                 articleRecord.getConfidence(),
                 articleRecord.getReviewStatus()
         );
+    }
+
+    /**
+     * 刷新文章落库阶段的运行进度。
+     *
+     * @param jobId 作业标识
+     * @param current 当前进度
+     * @param total 总进度
+     * @param reviewEnvelope 当前文章包裹
+     */
+    private void touchPersistProgress(String jobId, int current, int total, ArticleReviewEnvelope reviewEnvelope) {
+        if (compileJobLeaseManager == null || jobId == null || jobId.isBlank()) {
+            return;
+        }
+        compileJobLeaseManager.touchProgress(
+                jobId,
+                "persist_articles",
+                current,
+                total,
+                CompileJobProgressMessageFormatter.format(
+                        "正在落库文章",
+                        current,
+                        total,
+                        resolveReviewEnvelopeLabel(reviewEnvelope)
+                )
+        );
+    }
+
+    /**
+     * 解析审查包裹对应的文章标签。
+     *
+     * @param reviewEnvelope 审查包裹
+     * @return 展示标签
+     */
+    private String resolveReviewEnvelopeLabel(ArticleReviewEnvelope reviewEnvelope) {
+        if (reviewEnvelope == null || reviewEnvelope.getArticle() == null) {
+            return null;
+        }
+        ArticleRecord articleRecord = reviewEnvelope.getArticle();
+        if (articleRecord.getConceptId() != null && !articleRecord.getConceptId().isBlank()) {
+            return articleRecord.getConceptId();
+        }
+        if (articleRecord.getTitle() != null && !articleRecord.getTitle().isBlank()) {
+            return articleRecord.getTitle();
+        }
+        return articleRecord.getArticleKey();
     }
 
     private void replaceArticleSourceRefs(

@@ -287,7 +287,7 @@ public class AnthropicMessageApiLlmClient implements LlmClient {
             String content = extractContent(rootNode.path("content"));
             int inputTokens = readTokenCount(rootNode.path("usage").path("input_tokens"), systemPrompt + userPrompt);
             int outputTokens = readTokenCount(rootNode.path("usage").path("output_tokens"), content);
-            return new LlmCallResult(content, inputTokens, outputTokens);
+            return new LlmCallResult(content, inputTokens, outputTokens, readText(rootNode, "id"));
         }
         catch (JsonProcessingException exception) {
             throw new IllegalStateException("Failed to parse Anthropic response", exception);
@@ -325,6 +325,17 @@ public class AnthropicMessageApiLlmClient implements LlmClient {
             return tokenNode.asInt();
         }
         return estimateTokens(fallbackText);
+    }
+
+    private String readText(JsonNode node, String fieldName) {
+        if (node == null || fieldName == null || fieldName.isBlank()) {
+            return null;
+        }
+        String value = node.path(fieldName).asText();
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value;
     }
 
     /**

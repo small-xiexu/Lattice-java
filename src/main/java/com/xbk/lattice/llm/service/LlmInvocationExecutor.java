@@ -1,22 +1,20 @@
 package com.xbk.lattice.llm.service;
 
 import com.xbk.lattice.compiler.config.LlmProperties;
+import com.xbk.lattice.observability.StructuredEventLogger;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestClientResponseException;
 
-import java.io.EOFException;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.net.SocketException;
-import java.net.SocketTimeoutException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * LLM 调用执行器
@@ -30,13 +28,11 @@ import java.util.Locale;
 @Profile("jdbc")
 public class LlmInvocationExecutor {
 
-    private static final int MAX_RETRY_ATTEMPTS = 5;
-
-    private static final long BASE_RETRY_BACKOFF_MILLIS = 300L;
-
     private final ChatClientRegistry chatClientRegistry;
 
     private final LlmProperties llmProperties;
+
+    private final StructuredEventLogger structuredEventLogger;
 
     /**
      * 创建 LLM 调用执行器。
@@ -44,9 +40,24 @@ public class LlmInvocationExecutor {
      * @param chatClientRegistry 动态 ChatClient 注册表
      * @param llmProperties LLM 配置
      */
-    public LlmInvocationExecutor(ChatClientRegistry chatClientRegistry, LlmProperties llmProperties) {
+    public LlmInvocationExecutor(
+            ChatClientRegistry chatClientRegistry,
+            LlmProperties llmProperties,
+            StructuredEventLogger structuredEventLogger
+    ) {
         this.chatClientRegistry = chatClientRegistry;
         this.llmProperties = llmProperties;
+        this.structuredEventLogger = structuredEventLogger;
+    }
+
+    /**
+     * 创建无结构化日志观测器的 LLM 调用执行器。
+     *
+     * @param chatClientRegistry 动态 ChatClient 注册表
+     * @param llmProperties LLM 配置
+     */
+    public LlmInvocationExecutor(ChatClientRegistry chatClientRegistry, LlmProperties llmProperties) {
+        this(chatClientRegistry, llmProperties, null);
     }
 
     /**
@@ -109,39 +120,123 @@ public class LlmInvocationExecutor {
             String systemPrompt,
             String userPrompt
     ) {
-        RuntimeException lastException = null;
-        for (int attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
-            try {
-                return chatClientRegistry.getOrCreate(routeResolution)
+        return LlmRetrySupport.executeWithRetry(
+                "ChatClient invocation",
+                routeResolution,
+                invocationContext == null ? "" : invocationContext.getPurpose(),
+                retryObservation -> logRetryAttempt(routeResolution, invocationContext, retryObservation),
+                () -> chatClientRegistry.getOrCreate(routeResolution)
                         .getChatClient()
                         .prompt()
                         .advisors(spec -> spec.params(invocationContext.toAdvisorParams()))
                         .system(systemPrompt)
                         .user(userPrompt)
                         .call()
-                        .chatClientResponse();
+                        .chatClientResponse()
+        );
+    }
+
+    private void logRetryAttempt(
+            LlmRouteResolution routeResolution,
+            LlmInvocationContext invocationContext,
+            LlmRetrySupport.RetryObservation retryObservation
+    ) {
+        if (structuredEventLogger == null || retryObservation == null) {
+            return;
+        }
+        Map<String, Object> fields = new LinkedHashMap<String, Object>();
+        if (routeResolution != null) {
+            fields.put("scene", routeResolution.getScene());
+            fields.put("agentRole", routeResolution.getAgentRole());
+            fields.put("scopeType", routeResolution.getScopeType());
+            fields.put("scopeId", routeResolution.getScopeId());
+            fields.put("routeLabel", routeResolution.getRouteLabel());
+            fields.put("providerType", routeResolution.getProviderType());
+            fields.put("baseUrl", routeResolution.getBaseUrl());
+            fields.put("modelName", routeResolution.getModelName());
+            if ("query_request".equals(routeResolution.getScopeType())) {
+                fields.put("queryId", routeResolution.getScopeId());
             }
-            catch (RuntimeException exception) {
-                lastException = exception;
-                if (!isRetryable(exception) || attempt >= MAX_RETRY_ATTEMPTS) {
-                    throw exception;
-                }
-                String routeLabel = routeResolution == null ? "" : routeResolution.getRouteLabel();
-                String purpose = invocationContext == null ? "" : invocationContext.getPurpose();
-                log.warn(
-                        "ChatClient invocation failed on attempt {}/{} and will retry. routeLabel: {}, purpose: {}, reason: {}",
-                        attempt,
-                        MAX_RETRY_ATTEMPTS,
-                        routeLabel,
-                        purpose,
-                        summarizeException(exception)
-                );
-                sleepBeforeRetry(attempt);
+            if ("compile_job".equals(routeResolution.getScopeType())) {
+                fields.put("compileJobId", routeResolution.getScopeId());
             }
         }
-        throw lastException == null
-                ? new IllegalStateException("ChatClient invocation failed without exception")
-                : lastException;
+        fields.put("purpose", invocationContext == null ? "" : invocationContext.getPurpose());
+        fields.put("attemptNo", Integer.valueOf(retryObservation.getAttemptNo()));
+        fields.put("maxAttempts", Integer.valueOf(retryObservation.getMaxAttempts()));
+        fields.put("willRetry", Boolean.valueOf(retryObservation.isWillRetry()));
+        fields.put("backoffMs", Long.valueOf(retryObservation.getBackoffMillis()));
+        putSourceSyncRunId(fields);
+        putClientRequestId(fields);
+        if (retryObservation.getStatusCode() != null) {
+            fields.put("statusCode", retryObservation.getStatusCode());
+        }
+        String providerRequestId = LlmRetrySupport.resolveProviderRequestId(retryObservation.getException());
+        if (providerRequestId != null && !providerRequestId.isBlank()) {
+            fields.put("providerRequestId", providerRequestId);
+        }
+        fields.put("errorCode", retryObservation.getErrorCode());
+        fields.put("errorSummary", retryObservation.getErrorSummary());
+        structuredEventLogger.warn("llm_retry_attempt_failed", fields, retryObservation.getException());
+    }
+
+    /**
+     * 从 MDC 注入资料同步运行标识。
+     *
+     * @param fields 结构化字段
+     */
+    private void putSourceSyncRunId(Map<String, Object> fields) {
+        if (fields == null || fields.containsKey("sourceSyncRunId")) {
+            return;
+        }
+        String sourceSyncRunId = trimToNull(MDC.get("sourceSyncRunId"));
+        if (sourceSyncRunId == null) {
+            return;
+        }
+        try {
+            fields.put("sourceSyncRunId", Long.valueOf(sourceSyncRunId));
+        }
+        catch (NumberFormatException exception) {
+            fields.put("sourceSyncRunId", sourceSyncRunId);
+        }
+    }
+
+    /**
+     * 从 MDC 注入客户端请求标识。
+     *
+     * @param fields 结构化字段
+     */
+    private void putClientRequestId(Map<String, Object> fields) {
+        if (fields == null || fields.containsKey("clientRequestId")) {
+            return;
+        }
+        String clientRequestId = resolveClientRequestId();
+        if (clientRequestId != null) {
+            fields.put("clientRequestId", clientRequestId);
+        }
+    }
+
+    private String resolveClientRequestId() {
+        String clientRequestId = trimToNull(MDC.get("clientRequestId"));
+        if (clientRequestId != null) {
+            return clientRequestId;
+        }
+        String rootTraceId = trimToNull(MDC.get("rootTraceId"));
+        if (rootTraceId != null) {
+            return rootTraceId;
+        }
+        return trimToNull(MDC.get("traceId"));
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmedValue = value.trim();
+        if (trimmedValue.isEmpty()) {
+            return null;
+        }
+        return trimmedValue;
     }
 
     private String extractContent(ChatClientResponse response) {
@@ -160,53 +255,6 @@ public class LlmInvocationExecutor {
             return tokenCount.intValue();
         }
         return estimateTokens(fallbackText);
-    }
-
-    private boolean isRetryable(RuntimeException exception) {
-        if (exception instanceof RestClientResponseException responseException) {
-            int statusCode = responseException.getStatusCode().value();
-            return statusCode == 408
-                    || statusCode == 409
-                    || statusCode == 425
-                    || statusCode == 429
-                    || statusCode >= 500;
-        }
-        if (!(exception instanceof RestClientException) && !(exception instanceof IllegalStateException)) {
-            return false;
-        }
-        Throwable rootCause = rootCause(exception);
-        return rootCause instanceof EOFException
-                || rootCause instanceof SocketException
-                || rootCause instanceof SocketTimeoutException
-                || rootCause instanceof IOException;
-    }
-
-    private Throwable rootCause(Throwable throwable) {
-        Throwable current = throwable;
-        while (current.getCause() != null && current.getCause() != current) {
-            current = current.getCause();
-        }
-        return current;
-    }
-
-    private String summarizeException(Throwable throwable) {
-        Throwable rootCause = rootCause(throwable);
-        String message = rootCause.getMessage();
-        if (message == null || message.isBlank()) {
-            return rootCause.getClass().getSimpleName();
-        }
-        return rootCause.getClass().getSimpleName() + ": " + message;
-    }
-
-    private void sleepBeforeRetry(int attempt) {
-        long backoffMillis = BASE_RETRY_BACKOFF_MILLIS * attempt;
-        try {
-            Thread.sleep(backoffMillis);
-        }
-        catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("ChatClient invocation retry interrupted", exception);
-        }
     }
 
     private int estimateTokens(String text) {

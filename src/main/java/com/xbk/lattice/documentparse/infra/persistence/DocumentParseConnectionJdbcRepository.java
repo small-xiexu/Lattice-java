@@ -1,6 +1,6 @@
-package com.xbk.lattice.documentparse.infra;
+package com.xbk.lattice.documentparse.infra.persistence;
 
-import com.xbk.lattice.documentparse.domain.DocumentParseProviderConnection;
+import com.xbk.lattice.documentparse.domain.model.ProviderConnection;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -18,13 +18,13 @@ import java.util.Optional;
 /**
  * 文档解析连接 JDBC 仓储
  *
- * 职责：提供 document_parse_provider_connections 表的增删改查能力
+ * 职责：提供 document_parse_connections 表的增删改查能力
  *
  * @author xiexu
  */
 @Repository
 @Profile("jdbc")
-public class DocumentParseProviderConnectionJdbcRepository {
+public class DocumentParseConnectionJdbcRepository {
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -33,7 +33,7 @@ public class DocumentParseProviderConnectionJdbcRepository {
      *
      * @param jdbcTemplate JDBC 模板
      */
-    public DocumentParseProviderConnectionJdbcRepository(JdbcTemplate jdbcTemplate) {
+    public DocumentParseConnectionJdbcRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -43,7 +43,7 @@ public class DocumentParseProviderConnectionJdbcRepository {
      * @param connection 连接配置
      * @return 保存后的连接配置
      */
-    public DocumentParseProviderConnection save(DocumentParseProviderConnection connection) {
+    public ProviderConnection save(ProviderConnection connection) {
         if (connection.getId() == null) {
             return insert(connection);
         }
@@ -56,16 +56,16 @@ public class DocumentParseProviderConnectionJdbcRepository {
      *
      * @return 连接配置列表
      */
-    public List<DocumentParseProviderConnection> findAll() {
+    public List<ProviderConnection> findAll() {
         return jdbcTemplate.query(
                 """
-                        select id, connection_code, provider_type, base_url, endpoint_path,
-                               credential_ciphertext, credential_mask, extra_config_json,
+                        select id, connection_code, provider_type, base_url,
+                               credential_ciphertext, credential_mask, config_json,
                                enabled, created_by, updated_by, created_at, updated_at
-                        from document_parse_provider_connections
+                        from document_parse_connections
                         order by id desc
                         """,
-                this::mapRecord
+                this::mapRow
         );
     }
 
@@ -75,22 +75,22 @@ public class DocumentParseProviderConnectionJdbcRepository {
      * @param id 主键
      * @return 连接配置
      */
-    public Optional<DocumentParseProviderConnection> findById(Long id) {
-        List<DocumentParseProviderConnection> items = jdbcTemplate.query(
+    public Optional<ProviderConnection> findById(Long id) {
+        List<ProviderConnection> records = jdbcTemplate.query(
                 """
-                        select id, connection_code, provider_type, base_url, endpoint_path,
-                               credential_ciphertext, credential_mask, extra_config_json,
+                        select id, connection_code, provider_type, base_url,
+                               credential_ciphertext, credential_mask, config_json,
                                enabled, created_by, updated_by, created_at, updated_at
-                        from document_parse_provider_connections
+                        from document_parse_connections
                         where id = ?
                         """,
-                this::mapRecord,
+                this::mapRow,
                 id
         );
-        if (items.isEmpty()) {
+        if (records.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(items.get(0));
+        return Optional.of(records.get(0));
     }
 
     /**
@@ -99,60 +99,59 @@ public class DocumentParseProviderConnectionJdbcRepository {
      * @param id 主键
      */
     public void deleteById(Long id) {
-        jdbcTemplate.update("delete from document_parse_provider_connections where id = ?", id);
+        jdbcTemplate.update("delete from document_parse_connections where id = ?", id);
     }
 
-    private DocumentParseProviderConnection insert(DocumentParseProviderConnection connection) {
+    /**
+     * 插入连接配置。
+     *
+     * @param connection 连接配置
+     * @return 保存后的连接配置
+     */
+    private ProviderConnection insert(ProviderConnection connection) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(dbConnection -> {
             PreparedStatement preparedStatement = dbConnection.prepareStatement(
                     """
-                            insert into document_parse_provider_connections (
-                                connection_code, provider_type, base_url, endpoint_path,
-                                credential_ciphertext, credential_mask, extra_config_json,
+                            insert into document_parse_connections (
+                                connection_code, provider_type, base_url,
+                                credential_ciphertext, credential_mask, config_json,
                                 enabled, created_by, updated_by
                             )
-                            values (?, ?, ?, ?, ?, ?, cast(? as jsonb), ?, ?, ?)
+                            values (?, ?, ?, ?, ?, cast(? as jsonb), ?, ?, ?)
                             """,
                     Statement.RETURN_GENERATED_KEYS
             );
             preparedStatement.setString(1, connection.getConnectionCode());
             preparedStatement.setString(2, connection.getProviderType());
             preparedStatement.setString(3, connection.getBaseUrl());
-            preparedStatement.setString(4, connection.getEndpointPath());
-            preparedStatement.setString(5, connection.getCredentialCiphertext());
-            preparedStatement.setString(6, connection.getCredentialMask());
-            preparedStatement.setString(7, connection.getExtraConfigJson());
-            preparedStatement.setBoolean(8, connection.isEnabled());
-            preparedStatement.setString(9, connection.getCreatedBy());
-            preparedStatement.setString(10, connection.getUpdatedBy());
+            preparedStatement.setString(4, connection.getCredentialCiphertext());
+            preparedStatement.setString(5, connection.getCredentialMask());
+            preparedStatement.setString(6, connection.getConfigJson());
+            preparedStatement.setBoolean(7, connection.isEnabled());
+            preparedStatement.setString(8, connection.getCreatedBy());
+            preparedStatement.setString(9, connection.getUpdatedBy());
             return preparedStatement;
         }, keyHolder);
-        Number key;
-        Object generatedId = keyHolder.getKeys() == null ? null : keyHolder.getKeys().get("id");
-        if (generatedId instanceof Number) {
-            key = (Number) generatedId;
-        }
-        else {
-            key = keyHolder.getKey();
-        }
-        if (key == null) {
-            throw new IllegalStateException("Failed to insert document_parse_provider_connections");
-        }
+        Number key = resolveGeneratedKey(keyHolder, "document_parse_connections");
         return findById(key.longValue()).orElseThrow();
     }
 
-    private void update(DocumentParseProviderConnection connection) {
+    /**
+     * 更新连接配置。
+     *
+     * @param connection 连接配置
+     */
+    private void update(ProviderConnection connection) {
         jdbcTemplate.update(
                 """
-                        update document_parse_provider_connections
+                        update document_parse_connections
                         set connection_code = ?,
                             provider_type = ?,
                             base_url = ?,
-                            endpoint_path = ?,
                             credential_ciphertext = ?,
                             credential_mask = ?,
-                            extra_config_json = cast(? as jsonb),
+                            config_json = cast(? as jsonb),
                             enabled = ?,
                             updated_by = ?,
                             updated_at = current_timestamp
@@ -161,26 +160,51 @@ public class DocumentParseProviderConnectionJdbcRepository {
                 connection.getConnectionCode(),
                 connection.getProviderType(),
                 connection.getBaseUrl(),
-                connection.getEndpointPath(),
                 connection.getCredentialCiphertext(),
                 connection.getCredentialMask(),
-                connection.getExtraConfigJson(),
+                connection.getConfigJson(),
                 connection.isEnabled(),
                 connection.getUpdatedBy(),
                 connection.getId()
         );
     }
 
-    private DocumentParseProviderConnection mapRecord(ResultSet resultSet, int rowNum) throws SQLException {
-        return new DocumentParseProviderConnection(
+    /**
+     * 解析主键生成结果。
+     *
+     * @param keyHolder 主键持有器
+     * @param tableName 表名
+     * @return 主键
+     */
+    private Number resolveGeneratedKey(KeyHolder keyHolder, String tableName) {
+        Object generatedId = keyHolder.getKeys() == null ? null : keyHolder.getKeys().get("id");
+        if (generatedId instanceof Number) {
+            return (Number) generatedId;
+        }
+        Number key = keyHolder.getKey();
+        if (key != null) {
+            return key;
+        }
+        throw new IllegalStateException("Failed to insert " + tableName);
+    }
+
+    /**
+     * 映射连接配置记录。
+     *
+     * @param resultSet 结果集
+     * @param rowNum 行号
+     * @return 连接配置记录
+     * @throws SQLException SQL 异常
+     */
+    private ProviderConnection mapRow(ResultSet resultSet, int rowNum) throws SQLException {
+        return new ProviderConnection(
                 resultSet.getLong("id"),
                 resultSet.getString("connection_code"),
                 resultSet.getString("provider_type"),
                 resultSet.getString("base_url"),
-                resultSet.getString("endpoint_path"),
                 resultSet.getString("credential_ciphertext"),
                 resultSet.getString("credential_mask"),
-                resultSet.getString("extra_config_json"),
+                resultSet.getString("config_json"),
                 resultSet.getBoolean("enabled"),
                 resultSet.getString("created_by"),
                 resultSet.getString("updated_by"),

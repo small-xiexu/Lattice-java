@@ -1,31 +1,31 @@
-package com.xbk.lattice.documentparse.domain;
+package com.xbk.lattice.documentparse.domain.model;
 
 import java.time.OffsetDateTime;
 
 /**
- * 文档解析全局设置
+ * 文档解析路由策略
  *
- * 职责：表示文档解析配置层的全局开关与默认连接
+ * 职责：定义图片 OCR、扫描 PDF OCR 与后整理能力的默认路由
  *
  * @author xiexu
  */
-public class DocumentParseSettings {
+public class ParseRoutePolicy {
 
     public static final String DEFAULT_SCOPE = "default";
 
     private final Long id;
 
-    private final String configScope;
+    private final String policyScope;
 
-    private final Long defaultConnectionId;
+    private final Long imageConnectionId;
 
-    private final boolean imageOcrEnabled;
-
-    private final boolean scannedPdfOcrEnabled;
+    private final Long scannedPdfConnectionId;
 
     private final boolean cleanupEnabled;
 
     private final Long cleanupModelProfileId;
+
+    private final String fallbackPolicyJson;
 
     private final String createdBy;
 
@@ -36,40 +36,40 @@ public class DocumentParseSettings {
     private final OffsetDateTime updatedAt;
 
     /**
-     * 创建文档解析全局设置。
+     * 创建文档解析路由策略。
      *
      * @param id 主键
-     * @param configScope 配置范围
-     * @param defaultConnectionId 默认连接主键
-     * @param imageOcrEnabled 图片 OCR 开关
-     * @param scannedPdfOcrEnabled 扫描 PDF OCR 开关
-     * @param cleanupEnabled 后整理开关
+     * @param policyScope 策略作用域
+     * @param imageConnectionId 图片 OCR 默认连接
+     * @param scannedPdfConnectionId 扫描 PDF OCR 默认连接
+     * @param cleanupEnabled 是否启用后整理
      * @param cleanupModelProfileId 后整理模型主键
+     * @param fallbackPolicyJson 降级策略 JSON
      * @param createdBy 创建人
      * @param updatedBy 更新人
      * @param createdAt 创建时间
      * @param updatedAt 更新时间
      */
-    public DocumentParseSettings(
+    public ParseRoutePolicy(
             Long id,
-            String configScope,
-            Long defaultConnectionId,
-            boolean imageOcrEnabled,
-            boolean scannedPdfOcrEnabled,
+            String policyScope,
+            Long imageConnectionId,
+            Long scannedPdfConnectionId,
             boolean cleanupEnabled,
             Long cleanupModelProfileId,
+            String fallbackPolicyJson,
             String createdBy,
             String updatedBy,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt
     ) {
         this.id = id;
-        this.configScope = configScope;
-        this.defaultConnectionId = defaultConnectionId;
-        this.imageOcrEnabled = imageOcrEnabled;
-        this.scannedPdfOcrEnabled = scannedPdfOcrEnabled;
+        this.policyScope = policyScope;
+        this.imageConnectionId = imageConnectionId;
+        this.scannedPdfConnectionId = scannedPdfConnectionId;
         this.cleanupEnabled = cleanupEnabled;
         this.cleanupModelProfileId = cleanupModelProfileId;
+        this.fallbackPolicyJson = fallbackPolicyJson;
         this.createdBy = createdBy;
         this.updatedBy = updatedBy;
         this.createdAt = createdAt;
@@ -77,19 +77,19 @@ public class DocumentParseSettings {
     }
 
     /**
-     * 返回默认空配置。
+     * 返回默认空策略。
      *
-     * @return 默认空配置
+     * @return 默认空策略
      */
-    public static DocumentParseSettings defaultSettings() {
-        return new DocumentParseSettings(
+    public static ParseRoutePolicy defaultPolicy() {
+        return new ParseRoutePolicy(
                 null,
                 DEFAULT_SCOPE,
                 null,
-                false,
-                false,
+                null,
                 false,
                 null,
+                "{}",
                 "system",
                 "system",
                 null,
@@ -107,45 +107,36 @@ public class DocumentParseSettings {
     }
 
     /**
-     * 返回配置范围。
+     * 返回策略作用域。
      *
-     * @return 配置范围
+     * @return 策略作用域
      */
-    public String getConfigScope() {
-        return configScope;
+    public String getPolicyScope() {
+        return policyScope;
     }
 
     /**
-     * 返回默认连接主键。
+     * 返回图片 OCR 默认连接。
      *
-     * @return 默认连接主键
+     * @return 图片 OCR 默认连接
      */
-    public Long getDefaultConnectionId() {
-        return defaultConnectionId;
+    public Long getImageConnectionId() {
+        return imageConnectionId;
     }
 
     /**
-     * 返回图片 OCR 开关。
+     * 返回扫描 PDF OCR 默认连接。
      *
-     * @return 图片 OCR 开关
+     * @return 扫描 PDF OCR 默认连接
      */
-    public boolean isImageOcrEnabled() {
-        return imageOcrEnabled;
+    public Long getScannedPdfConnectionId() {
+        return scannedPdfConnectionId;
     }
 
     /**
-     * 返回扫描 PDF OCR 开关。
+     * 返回是否启用后整理。
      *
-     * @return 扫描 PDF OCR 开关
-     */
-    public boolean isScannedPdfOcrEnabled() {
-        return scannedPdfOcrEnabled;
-    }
-
-    /**
-     * 返回后整理开关。
-     *
-     * @return 后整理开关
+     * @return 是否启用后整理
      */
     public boolean isCleanupEnabled() {
         return cleanupEnabled;
@@ -158,6 +149,15 @@ public class DocumentParseSettings {
      */
     public Long getCleanupModelProfileId() {
         return cleanupModelProfileId;
+    }
+
+    /**
+     * 返回降级策略 JSON。
+     *
+     * @return 降级策略 JSON
+     */
+    public String getFallbackPolicyJson() {
+        return fallbackPolicyJson;
     }
 
     /**

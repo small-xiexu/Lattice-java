@@ -11,11 +11,13 @@ import com.xbk.lattice.llm.service.LlmClientFactory;
 import com.xbk.lattice.llm.service.LlmInvocationContext;
 import com.xbk.lattice.llm.service.LlmInvocationEnvelope;
 import com.xbk.lattice.llm.service.LlmInvocationExecutor;
+import com.xbk.lattice.llm.service.LlmRetrySupport;
 import com.xbk.lattice.llm.service.LlmRouteResolution;
 import com.xbk.lattice.llm.service.PromptCacheWritePolicy;
 import com.xbk.lattice.observability.StructuredEventLogger;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatProperties;
 import org.springframework.ai.model.anthropic.autoconfigure.AnthropicConnectionProperties;
 import org.springframework.ai.openai.OpenAiChatModel;
@@ -651,7 +653,13 @@ public class LlmGateway {
                     cacheKey
             );
         }
-        LlmCallResult llmCallResult = resolveClient(routeResolution).call(systemPrompt, userPrompt);
+        LlmCallResult llmCallResult = LlmRetrySupport.executeWithRetry(
+                "Legacy llm invocation",
+                routeResolution,
+                purpose,
+                retryObservation -> logRetryAttempt(routeResolution, purpose, retryObservation),
+                () -> resolveClient(routeResolution).call(systemPrompt, userPrompt)
+        );
         long latencyMs = (System.nanoTime() - startedAtNs) / 1_000_000L;
         return LlmInvocationEnvelope.from(
                 llmCallResult.getContent(),
@@ -782,11 +790,26 @@ public class LlmGateway {
         if (llmCallResult != null) {
             fields.put("inputTokens", llmCallResult.getInputTokens());
             fields.put("outputTokens", llmCallResult.getOutputTokens());
+            if (llmCallResult.getProviderRequestId() != null && !llmCallResult.getProviderRequestId().isBlank()) {
+                fields.put("providerRequestId", llmCallResult.getProviderRequestId());
+            }
         }
         if (estimatedCost != null) {
             fields.put("estimatedCostUsd", estimatedCost);
         }
+        putSourceSyncRunId(fields);
+        putClientRequestId(fields);
         if (throwable != null) {
+            Integer statusCode = LlmRetrySupport.resolveStatusCode(throwable);
+            if (statusCode != null) {
+                fields.put("statusCode", statusCode);
+            }
+            String providerRequestId = LlmRetrySupport.resolveProviderRequestId(throwable);
+            if (providerRequestId != null && !providerRequestId.isBlank()) {
+                fields.put("providerRequestId", providerRequestId);
+            }
+            fields.put("errorCode", LlmRetrySupport.resolveErrorCode(throwable));
+            fields.put("errorSummary", LlmRetrySupport.resolveErrorSummary(throwable));
             fields.put("error", throwable.getMessage());
             structuredEventLogger.error(eventName, fields, throwable);
             return;
@@ -808,6 +831,7 @@ public class LlmGateway {
             fields.put("scopeId", routeResolution.getScopeId());
             fields.put("routeLabel", routeResolution.getRouteLabel());
             fields.put("providerType", routeResolution.getProviderType());
+            fields.put("baseUrl", routeResolution.getBaseUrl());
             fields.put("modelName", routeResolution.getModelName());
             if (ExecutionLlmSnapshotService.QUERY_SCOPE_TYPE.equals(routeResolution.getScopeType())) {
                 fields.put("queryId", routeResolution.getScopeId());
@@ -818,8 +842,95 @@ public class LlmGateway {
         }
         fields.put("purpose", purpose);
         fields.put("status", status);
+        fields.put("maxAttempts", Integer.valueOf(LlmRetrySupport.maxAttempts()));
         fields.put("latencyMs", Long.valueOf((System.nanoTime() - startedAtNs) / 1_000_000L));
         return fields;
+    }
+
+    private void logRetryAttempt(
+            LlmRouteResolution routeResolution,
+            String purpose,
+            LlmRetrySupport.RetryObservation retryObservation
+    ) {
+        if (structuredEventLogger == null || retryObservation == null) {
+            return;
+        }
+        Map<String, Object> fields = buildLlmEventFields(routeResolution, purpose, "FAILED", System.nanoTime());
+        fields.put("attemptNo", Integer.valueOf(retryObservation.getAttemptNo()));
+        fields.put("maxAttempts", Integer.valueOf(retryObservation.getMaxAttempts()));
+        fields.put("willRetry", Boolean.valueOf(retryObservation.isWillRetry()));
+        fields.put("backoffMs", Long.valueOf(retryObservation.getBackoffMillis()));
+        putSourceSyncRunId(fields);
+        putClientRequestId(fields);
+        if (retryObservation.getStatusCode() != null) {
+            fields.put("statusCode", retryObservation.getStatusCode());
+        }
+        String providerRequestId = LlmRetrySupport.resolveProviderRequestId(retryObservation.getException());
+        if (providerRequestId != null && !providerRequestId.isBlank()) {
+            fields.put("providerRequestId", providerRequestId);
+        }
+        fields.put("errorCode", retryObservation.getErrorCode());
+        fields.put("errorSummary", retryObservation.getErrorSummary());
+        structuredEventLogger.warn("llm_retry_attempt_failed", fields, retryObservation.getException());
+    }
+
+    /**
+     * 从 MDC 注入资料同步运行标识。
+     *
+     * @param fields 结构化字段
+     */
+    private void putSourceSyncRunId(Map<String, Object> fields) {
+        if (fields == null || fields.containsKey("sourceSyncRunId")) {
+            return;
+        }
+        String sourceSyncRunId = trimToNull(MDC.get("sourceSyncRunId"));
+        if (sourceSyncRunId == null) {
+            return;
+        }
+        try {
+            fields.put("sourceSyncRunId", Long.valueOf(sourceSyncRunId));
+        }
+        catch (NumberFormatException exception) {
+            fields.put("sourceSyncRunId", sourceSyncRunId);
+        }
+    }
+
+    /**
+     * 从 MDC 注入客户端请求标识。
+     *
+     * @param fields 结构化字段
+     */
+    private void putClientRequestId(Map<String, Object> fields) {
+        if (fields == null || fields.containsKey("clientRequestId")) {
+            return;
+        }
+        String clientRequestId = resolveClientRequestId();
+        if (clientRequestId != null) {
+            fields.put("clientRequestId", clientRequestId);
+        }
+    }
+
+    private String resolveClientRequestId() {
+        String clientRequestId = trimToNull(MDC.get("clientRequestId"));
+        if (clientRequestId != null) {
+            return clientRequestId;
+        }
+        String rootTraceId = trimToNull(MDC.get("rootTraceId"));
+        if (rootTraceId != null) {
+            return rootTraceId;
+        }
+        return trimToNull(MDC.get("traceId"));
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmedValue = value.trim();
+        if (trimmedValue.isEmpty()) {
+            return null;
+        }
+        return trimmedValue;
     }
 
     /**
@@ -1049,7 +1160,7 @@ public class LlmGateway {
                 llmProperties.getReviewerModel(),
                 null,
                 null,
-                null,
+                Integer.valueOf(resolveBootstrapTimeoutSeconds(scene, normalizedRole)),
                 "{}",
                 llmProperties.getPricing().getReviewerInputPricePer1kTokens(),
                 llmProperties.getPricing().getReviewerOutputPricePer1kTokens(),
@@ -1073,7 +1184,7 @@ public class LlmGateway {
                 llmProperties.getCompileModel(),
                 null,
                 null,
-                null,
+                Integer.valueOf(resolveBootstrapTimeoutSeconds(scene, normalizedRole)),
                 "{}",
                 llmProperties.getPricing().getCompileInputPricePer1kTokens(),
                 llmProperties.getPricing().getCompileOutputPricePer1kTokens(),
@@ -1117,6 +1228,23 @@ public class LlmGateway {
             return ExecutionLlmSnapshotService.COMPILE_SCENE;
         }
         return scene.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private int resolveBootstrapTimeoutSeconds(String scene, String agentRole) {
+        String normalizedScene = normalizeScene(scene);
+        if (!ExecutionLlmSnapshotService.COMPILE_SCENE.equals(normalizedScene)) {
+            return 300;
+        }
+        if (ROLE_WRITER.equals(agentRole)) {
+            return llmProperties.getCompileTimeout().getWriterSeconds();
+        }
+        if (ROLE_REVIEWER.equals(agentRole)) {
+            return llmProperties.getCompileTimeout().getReviewerSeconds();
+        }
+        if (ROLE_FIXER.equals(agentRole)) {
+            return llmProperties.getCompileTimeout().getFixerSeconds();
+        }
+        return 300;
     }
 
     private String normalizeAgentRole(String agentRole) {

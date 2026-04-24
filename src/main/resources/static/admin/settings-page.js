@@ -54,6 +54,14 @@
         query: "知识问答"
     };
 
+    const SETTINGS_TOAST_AUTO_DISMISS_MS = 4200;
+
+    const settingsToastState = {
+        timeoutId: 0,
+        removeTimerId: 0,
+        toast: null
+    };
+
     const state = {
         llmConnections: [],
         llmModels: [],
@@ -62,8 +70,9 @@
         vectorConfig: null,
         vectorStatus: null,
         retrievalConfig: null,
+        documentParseProviders: [],
         documentParseConnections: [],
-        documentParseSettings: null,
+        documentParsePolicy: null,
         helpState: {
             lastSaveType: "",
             lastSaveSucceeded: false,
@@ -102,7 +111,9 @@
         document.getElementById("reset-llm-model").addEventListener("click", resetLlmModelForm);
         document.getElementById("llm-model-kind").addEventListener("change", syncLlmModelKindForm);
         document.getElementById("save-llm-binding").addEventListener("click", saveLlmBinding);
-        document.getElementById("reset-llm-binding").addEventListener("click", resetLlmBindingForm);
+        document.getElementById("reset-llm-binding").addEventListener("click", function () {
+            resetLlmBindingForm({preserveScene: true});
+        });
         document.getElementById("llm-binding-scene").addEventListener("change", function () {
             renderLlmBindingRoleOptions();
             renderLlmModelOptions();
@@ -122,8 +133,8 @@
         document.getElementById("test-document-parse-connection").addEventListener("click", testDocumentParseConnection);
         document.getElementById("save-document-parse-connection").addEventListener("click", saveDocumentParseConnection);
         document.getElementById("reset-document-parse-connection").addEventListener("click", resetDocumentParseConnectionForm);
-        document.getElementById("save-document-parse-settings").addEventListener("click", saveDocumentParseSettings);
-        document.getElementById("document-parse-provider-type").addEventListener("change", syncDocumentParseEndpointSuggestion);
+        document.getElementById("save-document-parse-policy").addEventListener("click", saveDocumentParsePolicy);
+        document.getElementById("document-parse-provider-type").addEventListener("change", handleDocumentParseProviderChange);
         document.getElementById("refresh-vector-status").addEventListener("click", refreshVectorMaintenance);
         document.getElementById("save-vector-config").addEventListener("click", saveVectorConfig);
         document.getElementById("rebuild-vector-index").addEventListener("click", rebuildVectorIndex);
@@ -144,8 +155,9 @@
                 fetchJson("/api/v1/admin/llm/connections"),
                 fetchJson("/api/v1/admin/llm/models"),
                 fetchJson("/api/v1/admin/llm/bindings"),
+                fetchJson("/api/v1/admin/document-parse/providers"),
                 fetchJson("/api/v1/admin/document-parse/connections"),
-                fetchJson("/api/v1/admin/document-parse/settings"),
+                fetchJson("/api/v1/admin/document-parse/policies/default"),
                 fetchJson("/api/v1/admin/vector/config"),
                 fetchJson("/api/v1/admin/vector/status"),
                 fetchJson("/api/v1/admin/query/retrieval/config")
@@ -153,11 +165,12 @@
             state.llmConnections = responses[0].items || [];
             state.llmModels = responses[1].items || [];
             state.llmBindings = responses[2].items || [];
-            state.documentParseConnections = responses[3].items || [];
-            state.documentParseSettings = responses[4] || null;
-            state.vectorConfig = responses[5] || null;
-            state.vectorStatus = responses[6] || null;
-            state.retrievalConfig = responses[7] || null;
+            state.documentParseProviders = responses[3].items || [];
+            state.documentParseConnections = responses[4].items || [];
+            state.documentParsePolicy = responses[5] || null;
+            state.vectorConfig = responses[6] || null;
+            state.vectorStatus = responses[7] || null;
+            state.retrievalConfig = responses[8] || null;
             renderLlmConnectionOptions();
             renderLlmBindingRoleOptions();
             renderLlmModelOptions();
@@ -169,16 +182,16 @@
             fillVectorConfigForm(state.vectorConfig || {});
             renderVectorStatusSummary(state.vectorStatus || {});
             renderVectorMaintenanceCard();
-            renderDocumentParseConnectionOptions();
+            renderDocumentParseProviderOptions();
+            renderDocumentParsePolicyConnectionOptions();
             renderDocumentParseCleanupModelOptions();
-            renderDocumentParseSettingsForm();
+            renderDocumentParsePolicyForm();
             renderDocumentParseConnectionList(state.documentParseConnections);
-            renderDocumentParseSettingsSummary(state.documentParseSettings);
+            renderDocumentParsePolicySummary(state.documentParsePolicy);
             fillRetrievalConfigForm(state.retrievalConfig || {});
             renderRetrievalConfigSummary(state.retrievalConfig || {});
             syncLlmModelKindForm();
             syncVectorProfileSelectionState();
-            syncDocumentParseEndpointSuggestion();
             renderSettingsOverviewBoard();
             syncSettingsFaqOpenState();
             if (showSuccessFeedback) {
@@ -367,8 +380,9 @@
 
     async function saveLlmBinding() {
         const id = document.getElementById("llm-binding-id").value.trim();
+        const currentScene = document.getElementById("llm-binding-scene").value || "compile";
         const payload = {
-            scene: document.getElementById("llm-binding-scene").value,
+            scene: currentScene,
             agentRole: document.getElementById("llm-binding-agent-role").value,
             primaryModelProfileId: parseOptionalInteger(document.getElementById("llm-binding-primary-model-id").value),
             enabled: document.getElementById("llm-binding-enabled").checked
@@ -392,7 +406,7 @@
                 bindingRecentlyChanged: true
             });
             setStatus(id ? "角色绑定已更新" : "角色绑定已创建", "success");
-            resetLlmBindingForm();
+            resetLlmBindingForm({scene: currentScene});
             await loadAiConfig(false);
         }
         catch (error) {
@@ -591,10 +605,14 @@
     async function testDocumentParseConnection() {
         const button = document.getElementById("test-document-parse-connection");
         const connectionId = parseOptionalInteger(document.getElementById("document-parse-connection-id").value);
-        const providerType = document.getElementById("document-parse-provider-type").value;
+        const providerType = document.getElementById("document-parse-provider-type").value || getDefaultDocumentParseProviderType();
         const baseUrl = document.getElementById("document-parse-base-url").value.trim();
-        const endpointPath = document.getElementById("document-parse-endpoint-path").value.trim();
-        const credential = document.getElementById("document-parse-credential").value.trim();
+        const descriptor = findDocumentParseProviderDescriptor(providerType);
+        const credentialJson = buildDocumentParseCredentialJson(descriptor, !connectionId);
+        const configJson = buildDocumentParseConfigJson(descriptor);
+        if (credentialJson === null || configJson === null) {
+            return;
+        }
         if (!baseUrl && !connectionId) {
             setStatus("请先填写识别服务接口地址，再测试连接", "warning");
             return;
@@ -608,8 +626,8 @@
                     connectionId: connectionId,
                     providerType: providerType,
                     baseUrl: baseUrl,
-                    endpointPath: endpointPath,
-                    credential: credential
+                    credentialJson: credentialJson,
+                    configJson: configJson
                 })
             });
             updateSettingsHelpState({
@@ -634,23 +652,23 @@
 
     async function saveDocumentParseConnection() {
         const id = document.getElementById("document-parse-connection-id").value.trim();
+        const providerType = document.getElementById("document-parse-provider-type").value || getDefaultDocumentParseProviderType();
+        const descriptor = findDocumentParseProviderDescriptor(providerType);
+        const credentialJson = buildDocumentParseCredentialJson(descriptor, !id);
+        const configJson = buildDocumentParseConfigJson(descriptor);
+        if (credentialJson === null || configJson === null) {
+            return;
+        }
         const payload = {
             connectionCode: document.getElementById("document-parse-connection-code").value.trim(),
-            providerType: document.getElementById("document-parse-provider-type").value,
+            providerType: providerType,
             baseUrl: document.getElementById("document-parse-base-url").value.trim(),
-            endpointPath: document.getElementById("document-parse-endpoint-path").value.trim(),
-            credential: document.getElementById("document-parse-credential").value.trim(),
+            credentialJson: credentialJson,
+            configJson: configJson,
             enabled: document.getElementById("document-parse-connection-enabled").checked
         };
         if (!payload.connectionCode || !payload.baseUrl) {
             setStatus("请填写识别服务连接名称和接口地址", "warning");
-            return;
-        }
-        if (!payload.endpointPath) {
-            payload.endpointPath = getDocumentParseDefaultEndpoint(payload.providerType);
-        }
-        if (!id && !payload.credential) {
-            setStatus("新增识别服务连接时必须填写访问凭证", "warning");
             return;
         }
         try {
@@ -675,23 +693,25 @@
         }
     }
 
-    async function saveDocumentParseSettings() {
+    async function saveDocumentParsePolicy() {
         const payload = {
-            defaultConnectionId: parseOptionalInteger(document.getElementById("document-parse-default-connection-id").value),
-            imageOcrEnabled: document.getElementById("document-parse-image-ocr-enabled").checked,
-            scannedPdfOcrEnabled: document.getElementById("document-parse-scanned-pdf-ocr-enabled").checked,
+            imageConnectionId: parseOptionalInteger(document.getElementById("document-parse-image-connection-id").value),
+            scannedPdfConnectionId: parseOptionalInteger(
+                    document.getElementById("document-parse-scanned-pdf-connection-id").value
+            ),
             cleanupEnabled: document.getElementById("document-parse-cleanup-enabled").checked,
             cleanupModelProfileId: parseOptionalInteger(
                     document.getElementById("document-parse-cleanup-model-profile-id").value
-            )
+            ),
+            fallbackPolicyJson: document.getElementById("document-parse-fallback-policy-json").value.trim() || "{}"
         };
         try {
-            await fetchJson("/api/v1/admin/document-parse/settings", {
+            await fetchJson("/api/v1/admin/document-parse/policies/default", {
                 method: "PUT",
                 body: JSON.stringify(payload)
             });
             updateSettingsHelpState({
-                lastSaveType: "document-parse-settings",
+                lastSaveType: "document-parse-policy",
                 lastSaveSucceeded: true,
                 lastTestFailed: false,
                 documentParseTestFailed: false
@@ -742,12 +762,13 @@
         if (!window.confirm("将删除该角色绑定，确认继续吗？")) {
             return;
         }
+        const currentScene = document.getElementById("llm-binding-scene").value || "compile";
         try {
             await fetchJson("/api/v1/admin/llm/bindings/" + encodeURIComponent(id), {
                 method: "DELETE"
             });
             setStatus("角色绑定已删除", "success");
-            resetLlmBindingForm();
+            resetLlmBindingForm({scene: currentScene});
             await loadAiConfig(false);
         }
         catch (error) {
@@ -826,13 +847,14 @@
         if (!item) {
             return;
         }
+        const configValues = parseJsonObjectString(item.configJson || "{}");
         document.getElementById("document-parse-connection-id").value = item.id;
         document.getElementById("document-parse-connection-code").value = item.connectionCode || "";
-        document.getElementById("document-parse-provider-type").value = item.providerType || "tencent_ocr";
+        renderDocumentParseProviderOptions(item.providerType || getDefaultDocumentParseProviderType());
         document.getElementById("document-parse-base-url").value = item.baseUrl || "";
-        document.getElementById("document-parse-endpoint-path").value = item.endpointPath || "";
-        document.getElementById("document-parse-credential").value = "";
         document.getElementById("document-parse-connection-enabled").checked = !!item.enabled;
+        renderDocumentParseProviderHints(item.providerType || getDefaultDocumentParseProviderType());
+        renderDocumentParseDynamicFields(item.providerType || getDefaultDocumentParseProviderType(), {}, configValues, true);
     }
 
     function resetLlmConnectionForm() {
@@ -854,9 +876,14 @@
         syncLlmModelKindForm();
     }
 
-    function resetLlmBindingForm() {
+    function resetLlmBindingForm(options) {
+        const preserveScene = !!(options && options.preserveScene);
+        const requestedScene = options && options.scene ? options.scene : "";
+        const scene = requestedScene || (preserveScene
+                ? (document.getElementById("llm-binding-scene").value || "compile")
+                : "compile");
         document.getElementById("llm-binding-id").value = "";
-        document.getElementById("llm-binding-scene").value = "compile";
+        document.getElementById("llm-binding-scene").value = scene;
         document.getElementById("llm-binding-enabled").checked = true;
         renderLlmBindingRoleOptions();
         renderLlmModelOptions();
@@ -866,11 +893,12 @@
     function resetDocumentParseConnectionForm() {
         document.getElementById("document-parse-connection-id").value = "";
         document.getElementById("document-parse-connection-code").value = "";
-        document.getElementById("document-parse-provider-type").value = "tencent_ocr";
+        const providerType = getDefaultDocumentParseProviderType();
+        renderDocumentParseProviderOptions(providerType);
         document.getElementById("document-parse-base-url").value = "";
-        document.getElementById("document-parse-endpoint-path").value = getDocumentParseDefaultEndpoint("tencent_ocr");
-        document.getElementById("document-parse-credential").value = "";
         document.getElementById("document-parse-connection-enabled").checked = true;
+        renderDocumentParseProviderHints(providerType);
+        renderDocumentParseDynamicFields(providerType, {}, {}, false);
     }
 
     function syncLlmModelKindForm() {
@@ -899,20 +927,45 @@
         }
     }
 
-    function renderDocumentParseConnectionOptions() {
-        const select = document.getElementById("document-parse-default-connection-id");
-        const currentValue = select.value;
+    function renderDocumentParsePolicyConnectionOptions() {
+        const imageSelect = document.getElementById("document-parse-image-connection-id");
+        const scannedSelect = document.getElementById("document-parse-scanned-pdf-connection-id");
+        const currentImageValue = imageSelect.value;
+        const currentScannedValue = scannedSelect.value;
+        const selectedConnectionIds = new Set();
+        if (state.documentParsePolicy) {
+            if (state.documentParsePolicy.imageConnectionId) {
+                selectedConnectionIds.add(String(state.documentParsePolicy.imageConnectionId));
+            }
+            if (state.documentParsePolicy.scannedPdfConnectionId) {
+                selectedConnectionIds.add(String(state.documentParsePolicy.scannedPdfConnectionId));
+            }
+        }
+        if (currentImageValue) {
+            selectedConnectionIds.add(String(currentImageValue));
+        }
+        if (currentScannedValue) {
+            selectedConnectionIds.add(String(currentScannedValue));
+        }
         let options = "<option value=''>未设置默认连接</option>";
         if (state.documentParseConnections && state.documentParseConnections.length > 0) {
-            options += state.documentParseConnections.map(function (item) {
+            options += state.documentParseConnections.filter(function (item) {
+                return !!item.enabled || selectedConnectionIds.has(String(item.id));
+            }).map(function (item) {
+                const suffix = item.enabled ? "" : "（已停用）";
                 return "<option value='" + escapeHtml(String(item.id)) + "'>"
-                        + escapeHtml(item.connectionCode + " (" + getDocumentParseProviderLabel(item.providerType) + ")")
+                        + escapeHtml(item.connectionCode
+                                + " (" + getDocumentParseProviderLabel(item.providerType) + ")" + suffix)
                         + "</option>";
             }).join("");
         }
-        select.innerHTML = options;
-        if (currentValue) {
-            select.value = currentValue;
+        imageSelect.innerHTML = options;
+        scannedSelect.innerHTML = options;
+        if (currentImageValue) {
+            imageSelect.value = currentImageValue;
+        }
+        if (currentScannedValue) {
+            scannedSelect.value = currentScannedValue;
         }
     }
 
@@ -996,23 +1049,25 @@
                 + renderLlmBindingRoleFlow(scene, roles, currentRole.value);
     }
 
-    function renderDocumentParseSettingsForm() {
-        const settings = state.documentParseSettings || {
-            defaultConnectionId: null,
-            imageOcrEnabled: false,
-            scannedPdfOcrEnabled: false,
+    function renderDocumentParsePolicyForm() {
+        const policy = state.documentParsePolicy || {
+            imageConnectionId: null,
+            scannedPdfConnectionId: null,
             cleanupEnabled: false,
-            cleanupModelProfileId: null
+            cleanupModelProfileId: null,
+            fallbackPolicyJson: "{}"
         };
-        document.getElementById("document-parse-default-connection-id").value = String(
-                settings.defaultConnectionId || ""
+        document.getElementById("document-parse-image-connection-id").value = String(
+                policy.imageConnectionId || ""
         );
-        document.getElementById("document-parse-image-ocr-enabled").checked = !!settings.imageOcrEnabled;
-        document.getElementById("document-parse-scanned-pdf-ocr-enabled").checked = !!settings.scannedPdfOcrEnabled;
-        document.getElementById("document-parse-cleanup-enabled").checked = !!settings.cleanupEnabled;
+        document.getElementById("document-parse-scanned-pdf-connection-id").value = String(
+                policy.scannedPdfConnectionId || ""
+        );
+        document.getElementById("document-parse-cleanup-enabled").checked = !!policy.cleanupEnabled;
         document.getElementById("document-parse-cleanup-model-profile-id").value = String(
-                settings.cleanupModelProfileId || ""
+                policy.cleanupModelProfileId || ""
         );
+        document.getElementById("document-parse-fallback-policy-json").value = policy.fallbackPolicyJson || "{}";
     }
 
     function renderLlmBindingRoleFlow(scene, roles, selectedRole) {
@@ -1149,12 +1204,17 @@
                 + "<thead><tr><th>连接名称</th><th>供应商</th><th>Base URL</th><th>接口路径</th><th>凭证</th><th>状态</th><th>操作</th></tr></thead>"
                 + "<tbody>"
                 + items.map(function (item) {
+                    const config = parseJsonObjectString(item.configJson || "{}");
+                    const endpointPath = config.endpointPath || "-";
+                    const credentialStatus = item.credentialConfigured
+                            ? (item.credentialMask || "已配置")
+                            : "未设置";
                     return "<tr>"
                             + "<td>" + escapeHtml(item.connectionCode) + "</td>"
                             + "<td>" + escapeHtml(getDocumentParseProviderLabel(item.providerType)) + "</td>"
-                            + "<td>" + escapeHtml(item.baseUrl) + "</td>"
-                            + "<td>" + escapeHtml(item.endpointPath || "-") + "</td>"
-                            + "<td>" + escapeHtml(item.credentialMask || "未设置") + "</td>"
+                            + "<td>" + escapeHtml(item.baseUrl || "-") + "</td>"
+                            + "<td>" + escapeHtml(endpointPath) + "</td>"
+                            + "<td>" + escapeHtml(credentialStatus) + "</td>"
                             + "<td>" + renderBadge(item.enabled ? "ACTIVE" : "ARCHIVED") + "</td>"
                             + "<td class='card-actions'>"
                             + "<button class='ghost-btn' data-edit-document-parse-connection='" + escapeHtml(String(item.id)) + "' type='button'>编辑</button>"
@@ -1175,22 +1235,35 @@
         });
     }
 
-    function renderDocumentParseSettingsSummary(settings) {
+    function renderDocumentParsePolicySummary(policy) {
         const container = document.getElementById("document-parse-settings-summary");
-        const effectiveSettings = settings || {};
+        const effectivePolicy = policy || {};
+        const imageConnectionLabel = resolveDocumentParseConnectionLabel(effectivePolicy.imageConnectionId);
+        const scannedPdfConnectionLabel = resolveDocumentParseConnectionLabel(effectivePolicy.scannedPdfConnectionId);
+        const fallbackPolicyJson = effectivePolicy.fallbackPolicyJson || "{}";
+        const fallbackPolicy = parseJsonObjectString(fallbackPolicyJson);
+        const fallbackKeys = Object.keys(fallbackPolicy);
+        const fallbackSummary = fallbackKeys.length > 0
+                ? "已配置 " + fallbackKeys.length + " 个降级策略字段"
+                : "未配置额外降级策略";
         container.innerHTML = "<div class='job-card'>"
-                + "<p class='item-summary'>默认识别连接："
-                + escapeHtml(resolveDocumentParseConnectionLabel(effectiveSettings.defaultConnectionId))
+                + "<p class='item-summary'>图片 OCR 默认连接："
+                + escapeHtml(imageConnectionLabel)
                 + "</p>"
-                + "<p class='job-meta-line'>图片识别（OCR）："
-                + escapeHtml(effectiveSettings.imageOcrEnabled ? "启用" : "关闭")
-                + "｜扫描 PDF 识别（OCR）："
-                + escapeHtml(effectiveSettings.scannedPdfOcrEnabled ? "启用" : "关闭")
+                + "<p class='job-meta-line'>扫描 PDF OCR 默认连接："
+                + escapeHtml(scannedPdfConnectionLabel)
                 + "｜识别后整理："
-                + escapeHtml(effectiveSettings.cleanupEnabled ? "启用" : "关闭")
+                + escapeHtml(effectivePolicy.cleanupEnabled ? "启用" : "关闭")
                 + "</p>"
                 + "<p class='job-meta-line'>识别后整理模型："
-                + escapeHtml(resolveModelLabel(effectiveSettings.cleanupModelProfileId))
+                + escapeHtml(resolveModelLabel(effectivePolicy.cleanupModelProfileId))
+                + "｜降级策略："
+                + escapeHtml(fallbackSummary)
+                + "</p>"
+                + "<p class='job-meta-line'>策略范围："
+                + escapeHtml(effectivePolicy.policyScope || "default")
+                + "｜最近更新："
+                + escapeHtml(effectivePolicy.updatedBy || "admin")
                 + "</p>"
                 + "</div>";
     }
@@ -1474,7 +1547,7 @@
     }
 
     function deriveParseOverview() {
-        const settings = state.documentParseSettings || {};
+        const policy = state.documentParsePolicy || {};
         const enabledConnections = (state.documentParseConnections || []).filter(function (item) {
             return !!item.enabled;
         });
@@ -1492,13 +1565,27 @@
                 secondaryLabel: "回工作台"
             };
         }
-        if (!settings.defaultConnectionId) {
+        if (!policy.imageConnectionId && !policy.scannedPdfConnectionId) {
             return {
                 module: "OCR / 文档识别",
                 status: "待指定",
                 tone: "warning",
-                title: "识别连接已存在，但还没有默认连接",
-                description: "先指定默认识别连接，再决定是否启用图片 OCR、扫描 PDF OCR 和识别后整理。",
+                title: "识别连接已存在，但还没有默认路由策略",
+                description: "先分别指定图片 OCR 和扫描 PDF OCR 的默认连接，再决定是否启用识别后整理和降级策略。",
+                action: "open-settings-parse",
+                actionLabel: "去 OCR / 文档识别",
+                verifyHint: "工作台导入",
+                secondaryHref: "/admin",
+                secondaryLabel: "回工作台"
+            };
+        }
+        if (!policy.imageConnectionId || !policy.scannedPdfConnectionId) {
+            return {
+                module: "OCR / 文档识别",
+                status: "部分配置",
+                tone: "warning",
+                title: "识别路由已开始配置，但还有一个场景未绑定连接",
+                description: "建议把图片 OCR 和扫描 PDF OCR 都绑定到明确的默认连接，避免不同文件类型在导入时出现能力缺口。",
                 action: "open-settings-parse",
                 actionLabel: "去 OCR / 文档识别",
                 verifyHint: "工作台导入",
@@ -1510,8 +1597,8 @@
             module: "OCR / 文档识别",
             status: "已配置",
             tone: "success",
-            title: "当前已有可用的默认识别连接",
-            description: "如遇到扫描件、图片或复杂 PDF 识别异常，再进入这里继续排查；普通文本导入无需频繁调整。",
+            title: "当前已具备可用的识别连接与路由策略",
+            description: "图片 OCR 和扫描 PDF OCR 都已经有默认连接。后续如果识别效果异常，再进来调整 Provider、整理模型或降级策略。",
             action: "open-settings-parse",
             actionLabel: "去 OCR / 文档识别",
             verifyHint: "工作台导入",
@@ -1604,28 +1691,229 @@
     }
 
     function getDocumentParseProviderLabel(providerType) {
-        const normalized = String(providerType || "").trim().toLowerCase();
-        if (normalized === "aliyun_ocr") {
-            return "阿里云 OCR";
-        }
-        if (normalized === "google_document_ai") {
-            return "Google Document AI";
-        }
-        if (normalized === "tencent_ocr") {
-            return "腾讯云 OCR";
+        const descriptor = findDocumentParseProviderDescriptor(providerType);
+        if (descriptor) {
+            return descriptor.displayName || descriptor.providerType;
         }
         return providerType || "-";
     }
 
-    function getDocumentParseDefaultEndpoint(providerType) {
+    function findDocumentParseProviderDescriptor(providerType) {
         const normalized = String(providerType || "").trim().toLowerCase();
-        if (normalized === "aliyun_ocr") {
-            return "/ocr/v1/general";
+        return (state.documentParseProviders || []).find(function (item) {
+            return String(item.providerType || "").trim().toLowerCase() === normalized;
+        }) || null;
+    }
+
+    function getDefaultDocumentParseProviderType() {
+        const providers = state.documentParseProviders || [];
+        if (providers.length === 0) {
+            return "tencent_ocr";
         }
-        if (normalized === "google_document_ai") {
-            return "/v1/documents:process";
+        return providers[0].providerType || "tencent_ocr";
+    }
+
+    function parseJsonObjectString(value) {
+        if (!value) {
+            return {};
         }
-        return "/ocr/v1/general-basic";
+        try {
+            const parsed = JSON.parse(value);
+            return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+        }
+        catch (error) {
+            return {};
+        }
+    }
+
+    function renderDocumentParseProviderOptions(selectedProviderType) {
+        const select = document.getElementById("document-parse-provider-type");
+        const providers = state.documentParseProviders || [];
+        if (!select) {
+            return;
+        }
+        if (providers.length === 0) {
+            select.innerHTML = "<option value='tencent_ocr'>腾讯 OCR</option>";
+            return;
+        }
+        select.innerHTML = providers.map(function (item) {
+            return "<option value='" + escapeHtml(item.providerType) + "'>"
+                    + escapeHtml(getDocumentParseProviderLabel(item.providerType))
+                    + "</option>";
+        }).join("");
+        select.value = selectedProviderType || getDefaultDocumentParseProviderType();
+        renderDocumentParseProviderHints(select.value);
+        renderDocumentParseDynamicFields(select.value, {}, {}, false);
+    }
+
+    function renderDocumentParseProviderHints(providerType) {
+        const container = document.getElementById("document-parse-provider-hints");
+        const descriptor = findDocumentParseProviderDescriptor(providerType);
+        if (!container) {
+            return;
+        }
+        if (!descriptor) {
+            container.innerHTML = "<div class='job-card'><p class='item-summary'>当前 Provider 暂无元数据说明。</p></div>";
+            return;
+        }
+        const capabilities = (descriptor.supportedCapabilities || []).map(function (item) {
+            if (item === "IMAGE_OCR") {
+                return "图片 OCR";
+            }
+            if (item === "SCANNED_PDF_OCR") {
+                return "扫描 PDF OCR";
+            }
+            return item;
+        });
+        container.innerHTML = "<div class='job-card'>"
+                + "<p class='item-summary'>"
+                + escapeHtml(descriptor.displayName || descriptor.providerType)
+                + "｜探测模式："
+                + escapeHtml(descriptor.probeMode || "-")
+                + "</p>"
+                + "<p class='job-meta-line'>默认 Base URL："
+                + escapeHtml(descriptor.defaultBaseUrl || "未预置")
+                + "</p>"
+                + "<p class='job-meta-line'>支持能力："
+                + escapeHtml(capabilities.join(" / ") || "未说明")
+                + "</p>"
+                + "</div>";
+    }
+
+    function renderDocumentParseDynamicFields(providerType, credentialValues, configValues, preserveBaseUrl) {
+        const descriptor = findDocumentParseProviderDescriptor(providerType);
+        const credentialContainer = document.getElementById("document-parse-credential-fields");
+        const configContainer = document.getElementById("document-parse-config-fields");
+        const baseUrlInput = document.getElementById("document-parse-base-url");
+        if (!credentialContainer || !configContainer || !baseUrlInput) {
+            return;
+        }
+        if (!descriptor) {
+            credentialContainer.innerHTML = "";
+            configContainer.innerHTML = "";
+            return;
+        }
+        const previousProviderType = baseUrlInput.dataset.documentParseProviderType || "";
+        const previousDescriptor = findDocumentParseProviderDescriptor(previousProviderType);
+        const previousDefaultBaseUrl = previousDescriptor && previousDescriptor.defaultBaseUrl
+                ? previousDescriptor.defaultBaseUrl
+                : "";
+        const currentBaseUrl = baseUrlInput.value.trim();
+        if (!preserveBaseUrl
+                && descriptor.defaultBaseUrl
+                && (!currentBaseUrl || currentBaseUrl === previousDefaultBaseUrl)) {
+            baseUrlInput.value = descriptor.defaultBaseUrl;
+        }
+        baseUrlInput.dataset.documentParseProviderType = descriptor.providerType || "";
+        credentialContainer.innerHTML = renderDocumentParseFieldMarkup(
+                descriptor.credentialFields || [],
+                credentialValues || {},
+                "credential",
+                true
+        );
+        configContainer.innerHTML = renderDocumentParseFieldMarkup(
+                descriptor.configFields || [],
+                configValues || {},
+                "config",
+                false
+        );
+    }
+
+    function renderDocumentParseFieldMarkup(fields, values, scope, secretHints) {
+        if (!fields || fields.length === 0) {
+            return "<div class='job-card'><p class='item-summary'>当前 Provider 没有额外字段。</p></div>";
+        }
+        return fields.map(function (field) {
+            const currentValue = values[field.fieldKey];
+            const normalizedValue = currentValue !== undefined && currentValue !== null
+                    ? String(currentValue)
+                    : String(field.defaultValue || "");
+            const placeholder = secretHints
+                    ? ((field.placeholder || "") + (field.placeholder ? "；" : "") + "编辑已有连接时留空表示不修改")
+                    : (field.placeholder || "");
+            const elementId = "document-parse-" + scope + "-field-" + field.fieldKey;
+            const descriptionHtml = field.description
+                    ? "<small class='muted'>" + escapeHtml(field.description) + "</small>"
+                    : "";
+            if (field.inputType === "textarea") {
+                return "<label class='field-span-2'>"
+                        + "<span>" + escapeHtml(field.label || field.fieldKey) + (field.required ? " *" : "") + "</span>"
+                        + "<textarea id='" + escapeHtml(elementId) + "' data-document-parse-field='" + escapeHtml(field.fieldKey)
+                        + "' data-document-parse-scope='" + escapeHtml(scope) + "' data-required='"
+                        + escapeHtml(String(!!field.required)) + "' data-default-value='"
+                        + escapeHtml(String(field.defaultValue || "")) + "' placeholder='"
+                        + escapeHtml(placeholder) + "'>" + escapeHtml(normalizedValue) + "</textarea>"
+                        + descriptionHtml
+                        + "</label>";
+            }
+            return "<label>"
+                    + "<span>" + escapeHtml(field.label || field.fieldKey) + (field.required ? " *" : "") + "</span>"
+                    + "<input id='" + escapeHtml(elementId) + "' type='" + escapeHtml(field.inputType || "text")
+                    + "' data-document-parse-field='" + escapeHtml(field.fieldKey)
+                    + "' data-document-parse-scope='" + escapeHtml(scope) + "' data-required='"
+                    + escapeHtml(String(!!field.required)) + "' data-default-value='"
+                    + escapeHtml(String(field.defaultValue || "")) + "' placeholder='"
+                    + escapeHtml(placeholder) + "' value='" + escapeHtml(normalizedValue) + "'>"
+                    + descriptionHtml
+                    + "</label>";
+        }).join("");
+    }
+
+    function readDocumentParseDynamicFieldValues(scope) {
+        const values = {};
+        document.querySelectorAll("[data-document-parse-scope='" + scope + "']").forEach(function (element) {
+            values[element.dataset.documentParseField] = String(element.value || "").trim();
+        });
+        return values;
+    }
+
+    function buildDocumentParseCredentialJson(descriptor, isCreate) {
+        const values = readDocumentParseDynamicFieldValues("credential");
+        const fields = descriptor && descriptor.credentialFields ? descriptor.credentialFields : [];
+        const allBlank = fields.every(function (field) {
+            return !String(values[field.fieldKey] || "").trim();
+        });
+        if (allBlank && !isCreate) {
+            return "";
+        }
+        const payload = {};
+        for (let i = 0; i < fields.length; i += 1) {
+            const field = fields[i];
+            const value = String(values[field.fieldKey] || "").trim();
+            if (!value && field.required) {
+                setStatus("请填写凭证字段：" + (field.label || field.fieldKey), "warning");
+                return null;
+            }
+            if (value) {
+                payload[field.fieldKey] = value;
+            }
+        }
+        return JSON.stringify(payload);
+    }
+
+    function buildDocumentParseConfigJson(descriptor) {
+        const values = readDocumentParseDynamicFieldValues("config");
+        const fields = descriptor && descriptor.configFields ? descriptor.configFields : [];
+        const payload = {};
+        for (let i = 0; i < fields.length; i += 1) {
+            const field = fields[i];
+            const rawValue = String(values[field.fieldKey] || "").trim();
+            const value = rawValue || String(field.defaultValue || "").trim();
+            if (!value && field.required) {
+                setStatus("请填写配置字段：" + (field.label || field.fieldKey), "warning");
+                return null;
+            }
+            if (value) {
+                payload[field.fieldKey] = value;
+            }
+        }
+        return JSON.stringify(payload);
+    }
+
+    function handleDocumentParseProviderChange() {
+        const providerType = document.getElementById("document-parse-provider-type").value || getDefaultDocumentParseProviderType();
+        renderDocumentParseProviderHints(providerType);
+        renderDocumentParseDynamicFields(providerType, {}, {}, false);
     }
 
     function resolveVectorMaintenanceState() {
@@ -1891,14 +2179,6 @@
         return item.modelName + " / " + resolveConnectionLabel(item.connectionId);
     }
 
-    function syncDocumentParseEndpointSuggestion() {
-        const providerType = document.getElementById("document-parse-provider-type").value || "tencent_ocr";
-        const endpointInput = document.getElementById("document-parse-endpoint-path");
-        if (!endpointInput.value.trim()) {
-            endpointInput.value = getDocumentParseDefaultEndpoint(providerType);
-        }
-    }
-
     function renderBadge(value) {
         const normalized = (value || "").toUpperCase();
         let className = "badge";
@@ -2136,17 +2416,105 @@
     }
 
     function setStatus(message, tone) {
-        const target = document.getElementById("settings-page-notice")
-                || document.getElementById("ai-page-feedback");
+        syncLegacyStatusTargets(message, tone);
+        renderSettingsToast(message, tone);
+    }
+
+    function syncLegacyStatusTargets(message, tone) {
+        syncLegacyStatusTarget(document.getElementById("settings-page-notice"), message, tone, "page-notice");
+        syncLegacyStatusTarget(document.getElementById("ai-page-feedback"), message, tone, "panel-feedback");
+    }
+
+    function syncLegacyStatusTarget(target, message, tone, baseClass) {
         if (!target) {
             return;
         }
-        target.hidden = !message;
+        target.hidden = true;
         target.textContent = message || "";
-        const baseClass = target.id === "settings-page-notice"
-                ? "page-notice"
-                : "panel-feedback";
         target.className = baseClass + (tone ? " " + tone : "");
+    }
+
+    function renderSettingsToast(message, tone) {
+        clearSettingsToastTimers();
+        removeSettingsToast(true);
+        if (!message) {
+            return;
+        }
+        const stack = ensureSettingsToastStack();
+        const toast = document.createElement("div");
+        toast.className = "settings-toast" + (tone ? " " + tone : "");
+        toast.setAttribute("role", tone === "danger" || tone === "warning" ? "alert" : "status");
+        toast.setAttribute("aria-live", tone === "danger" || tone === "warning" ? "assertive" : "polite");
+        toast.textContent = message;
+        stack.appendChild(toast);
+        settingsToastState.toast = toast;
+        if (tone === "info") {
+            return;
+        }
+        settingsToastState.timeoutId = window.setTimeout(function () {
+            dismissSettingsToast();
+        }, resolveSettingsToastDuration(tone));
+    }
+
+    function ensureSettingsToastStack() {
+        let stack = document.getElementById("settings-toast-stack");
+        if (stack) {
+            return stack;
+        }
+        stack = document.createElement("div");
+        stack.id = "settings-toast-stack";
+        stack.className = "settings-toast-stack";
+        document.body.appendChild(stack);
+        return stack;
+    }
+
+    function resolveSettingsToastDuration(tone) {
+        if (tone === "danger") {
+            return SETTINGS_TOAST_AUTO_DISMISS_MS + 1800;
+        }
+        if (tone === "warning") {
+            return SETTINGS_TOAST_AUTO_DISMISS_MS + 900;
+        }
+        return SETTINGS_TOAST_AUTO_DISMISS_MS;
+    }
+
+    function clearSettingsToastTimers() {
+        if (settingsToastState.timeoutId) {
+            window.clearTimeout(settingsToastState.timeoutId);
+            settingsToastState.timeoutId = 0;
+        }
+        if (settingsToastState.removeTimerId) {
+            window.clearTimeout(settingsToastState.removeTimerId);
+            settingsToastState.removeTimerId = 0;
+        }
+    }
+
+    function dismissSettingsToast() {
+        removeSettingsToast(false);
+    }
+
+    function removeSettingsToast(immediate) {
+        const stack = document.getElementById("settings-toast-stack");
+        const toast = settingsToastState.toast;
+        settingsToastState.toast = null;
+        if (immediate) {
+            if (stack) {
+                stack.querySelectorAll(".settings-toast").forEach(function (item) {
+                    item.remove();
+                });
+            }
+            return;
+        }
+        if (!toast) {
+            return;
+        }
+        toast.classList.add("closing");
+        settingsToastState.removeTimerId = window.setTimeout(function () {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+            settingsToastState.removeTimerId = 0;
+        }, 180);
     }
 
     function showError(prefix, error) {

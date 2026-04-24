@@ -775,7 +775,8 @@ public class CompilePipelineService {
                 sourceFileJdbcRepository,
                 sourceFileChunkJdbcRepository,
                 compilationWalStore,
-                resolvedArticleVectorIndexService
+                resolvedArticleVectorIndexService,
+                null
         );
         ArticleCompileSupport articleCompileSupport = new ArticleCompileSupport(
                 compilerProperties,

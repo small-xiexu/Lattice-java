@@ -2,15 +2,22 @@ package com.xbk.lattice.llm.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.config.LlmProperties;
+import com.xbk.lattice.observability.StructuredEventLogger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * LlmInvocationExecutor 测试
@@ -114,7 +121,12 @@ class LlmInvocationExecutorTests {
         );
         LlmProperties llmProperties = new LlmProperties();
         llmProperties.setCacheKeyPrefix("llm:cache:");
-        LlmInvocationExecutor llmInvocationExecutor = new LlmInvocationExecutor(chatClientRegistry, llmProperties);
+        CapturingStructuredEventLogger structuredEventLogger = new CapturingStructuredEventLogger();
+        LlmInvocationExecutor llmInvocationExecutor = new LlmInvocationExecutor(
+                chatClientRegistry,
+                llmProperties,
+                structuredEventLogger
+        );
         LlmRouteResolution routeResolution = new LlmRouteResolution(
                 "query_request",
                 "query-retry-1",
@@ -154,6 +166,170 @@ class LlmInvocationExecutorTests {
         assertThat(envelope.getContent()).isEqualTo("executor-retry-ok");
         assertThat(openAiStubServer.getRequestCount()).isEqualTo(2);
         assertThat(openAiStubServer.getCapturedModels()).containsExactly("gpt-5.4");
+        RecordedEvent retryEvent = structuredEventLogger.findWarnEvent("llm_retry_attempt_failed");
+        assertThat(retryEvent).isNotNull();
+        assertThat(retryEvent.getFields()).containsEntry("queryId", "query-retry-1");
+        assertThat(retryEvent.getFields()).containsEntry("routeLabel", "query.answer.openai.retry");
+        assertThat(retryEvent.getFields()).containsEntry("providerType", "openai");
+        assertThat(retryEvent.getFields()).containsEntry("baseUrl", openAiStubServer.getBaseUrl());
+        assertThat(retryEvent.getFields()).containsEntry("modelName", "gpt-5.4");
+        assertThat(retryEvent.getFields()).containsEntry("attemptNo", Integer.valueOf(1));
+        assertThat(retryEvent.getFields()).containsEntry("maxAttempts", Integer.valueOf(5));
+        assertThat(retryEvent.getFields()).containsEntry("willRetry", Boolean.TRUE);
+        assertThat(retryEvent.getFields()).containsEntry("statusCode", Integer.valueOf(500));
+        assertThat(retryEvent.getFields()).containsEntry("errorCode", "LLM_UPSTREAM_5XX");
+        assertThat(String.valueOf(retryEvent.getFields().get("errorSummary"))).contains("temporary upstream failure");
+    }
+
+    /**
+     * 验证 raw 调用在重试耗尽后会抛出稳定异常，并输出最终 attempt 观测。
+     *
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldThrowRetryExhaustedExceptionWhenOpenAiFailuresPersist() throws IOException {
+        openAiStubServer = new StubOpenAiChatServer("executor-never-ok", 5);
+        openAiStubServer.start();
+        ChatClientRegistry chatClientRegistry = new ChatClientRegistry(
+                RestClient.builder(),
+                WebClient.builder(),
+                new ObjectMapper(),
+                new AdvisorChainFactory()
+        );
+        LlmProperties llmProperties = new LlmProperties();
+        llmProperties.setCacheKeyPrefix("llm:cache:");
+        CapturingStructuredEventLogger structuredEventLogger = new CapturingStructuredEventLogger();
+        LlmInvocationExecutor llmInvocationExecutor = new LlmInvocationExecutor(
+                chatClientRegistry,
+                llmProperties,
+                structuredEventLogger
+        );
+        LlmRouteResolution routeResolution = new LlmRouteResolution(
+                "query_request",
+                "query-retry-exhausted-1",
+                "query",
+                "answer",
+                Long.valueOf(91L),
+                Long.valueOf(92L),
+                Integer.valueOf(5),
+                "query.answer.openai.retry.exhausted",
+                "openai",
+                openAiStubServer.getBaseUrl(),
+                "test-key",
+                "gpt-5.4",
+                new BigDecimal("0.2"),
+                Integer.valueOf(96),
+                Integer.valueOf(30),
+                "{}",
+                new BigDecimal("0.001"),
+                new BigDecimal("0.002"),
+                true
+        );
+
+        assertThatThrownBy(() -> llmInvocationExecutor.execute(
+                routeResolution,
+                new LlmInvocationContext(
+                        "query",
+                        "query-answer-retry",
+                        "query-retry-exhausted-1",
+                        "answer",
+                        "query.answer.openai.retry.exhausted"
+                ),
+                "你是查询助手",
+                "请解释为什么会触发重试耗尽",
+                "llm:cache:retry:exhausted"
+        ))
+                .isInstanceOf(LlmRetryExhaustedException.class)
+                .hasMessageContaining("exhausted after 5 attempts");
+
+        assertThat(openAiStubServer.getRequestCount()).isEqualTo(5);
+        RecordedEvent retryEvent = structuredEventLogger.findWarnEvent(
+                "llm_retry_attempt_failed",
+                Integer.valueOf(5)
+        );
+        assertThat(retryEvent).isNotNull();
+        assertThat(retryEvent.getFields()).containsEntry("queryId", "query-retry-exhausted-1");
+        assertThat(retryEvent.getFields()).containsEntry("attemptNo", Integer.valueOf(5));
+        assertThat(retryEvent.getFields()).containsEntry("maxAttempts", Integer.valueOf(5));
+        assertThat(retryEvent.getFields()).containsEntry("willRetry", Boolean.FALSE);
+        assertThat(retryEvent.getFields()).containsEntry("statusCode", Integer.valueOf(500));
+        assertThat(retryEvent.getFields()).containsEntry("errorCode", "LLM_RETRY_EXHAUSTED");
+    }
+
+    /**
+     * 验证 compile 作用域重试事件会带出 sourceSyncRunId 与 clientRequestId。
+     *
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldIncludeCompileCorrelationFieldsInRetryEvent() throws IOException {
+        openAiStubServer = new StubOpenAiChatServer("executor-compile-retry-ok", 1);
+        openAiStubServer.start();
+        ChatClientRegistry chatClientRegistry = new ChatClientRegistry(
+                RestClient.builder(),
+                WebClient.builder(),
+                new ObjectMapper(),
+                new AdvisorChainFactory()
+        );
+        LlmProperties llmProperties = new LlmProperties();
+        llmProperties.setCacheKeyPrefix("llm:cache:");
+        CapturingStructuredEventLogger structuredEventLogger = new CapturingStructuredEventLogger();
+        LlmInvocationExecutor llmInvocationExecutor = new LlmInvocationExecutor(
+                chatClientRegistry,
+                llmProperties,
+                structuredEventLogger
+        );
+        LlmRouteResolution routeResolution = new LlmRouteResolution(
+                "compile_job",
+                "compile-job-1",
+                "compile",
+                "reviewer",
+                Long.valueOf(91L),
+                Long.valueOf(92L),
+                Integer.valueOf(5),
+                "compile.review.openai.retry",
+                "openai",
+                openAiStubServer.getBaseUrl(),
+                "test-key",
+                "gpt-5.4",
+                new BigDecimal("0.2"),
+                Integer.valueOf(96),
+                Integer.valueOf(30),
+                "{}",
+                new BigDecimal("0.001"),
+                new BigDecimal("0.002"),
+                true
+        );
+
+        try {
+            MDC.put("sourceSyncRunId", "8801");
+            MDC.put("clientRequestId", "compile-trace-8801");
+            LlmInvocationEnvelope envelope = llmInvocationExecutor.execute(
+                    routeResolution,
+                    new LlmInvocationContext(
+                            "compile",
+                            "compile-review",
+                            "compile-job-1",
+                            "reviewer",
+                            "compile.review.openai.retry"
+                    ),
+                    "你是编译审查助手",
+                    "请继续执行编译审查",
+                    "llm:cache:compile:retry:test"
+            );
+
+            assertThat(envelope.getContent()).isEqualTo("executor-compile-retry-ok");
+        }
+        finally {
+            MDC.clear();
+        }
+
+        RecordedEvent retryEvent = structuredEventLogger.findWarnEvent("llm_retry_attempt_failed");
+        assertThat(retryEvent).isNotNull();
+        assertThat(retryEvent.getFields()).containsEntry("compileJobId", "compile-job-1");
+        assertThat(retryEvent.getFields()).containsEntry("sourceSyncRunId", Long.valueOf(8801L));
+        assertThat(retryEvent.getFields()).containsEntry("clientRequestId", "compile-trace-8801");
+        assertThat(retryEvent.getFields()).containsEntry("errorCode", "LLM_UPSTREAM_5XX");
     }
 
     @Test
@@ -216,5 +392,71 @@ class LlmInvocationExecutorTests {
         assertThat(anthropicStubServer.getCapturedModels()).containsExactly("claude-sonnet-4-6");
         assertThat(anthropicStubServer.getCapturedTopPs()).containsExactly(0.8D);
         assertThat(anthropicStubServer.getCapturedTopKs()).containsExactly(12);
+    }
+
+    /**
+     * 结构化事件日志捕获器。
+     *
+     * 职责：记录测试期间的结构化 WARN 事件
+     *
+     * @author xiexu
+     */
+    private static class CapturingStructuredEventLogger extends StructuredEventLogger {
+
+        private final List<RecordedEvent> warnEvents = new ArrayList<RecordedEvent>();
+
+        @Override
+        public void warn(String eventName, Map<String, Object> fields, Throwable throwable) {
+            warnEvents.add(new RecordedEvent(eventName, new LinkedHashMap<String, Object>(fields), throwable));
+        }
+
+        private RecordedEvent findWarnEvent(String eventName) {
+            return findWarnEvent(eventName, null);
+        }
+
+        private RecordedEvent findWarnEvent(String eventName, Integer attemptNo) {
+            for (RecordedEvent warnEvent : warnEvents) {
+                if (eventName.equals(warnEvent.getEventName())) {
+                    if (attemptNo == null || attemptNo.equals(warnEvent.getFields().get("attemptNo"))) {
+                        return warnEvent;
+                    }
+                }
+            }
+            return null;
+        }
+    }
+
+    /**
+     * 已记录结构化事件。
+     *
+     * 职责：承载事件名、字段与异常，便于断言
+     *
+     * @author xiexu
+     */
+    private static class RecordedEvent {
+
+        private final String eventName;
+
+        private final Map<String, Object> fields;
+
+        private final Throwable throwable;
+
+        private RecordedEvent(String eventName, Map<String, Object> fields, Throwable throwable) {
+            this.eventName = eventName;
+            this.fields = fields;
+            this.throwable = throwable;
+        }
+
+        private String getEventName() {
+            return eventName;
+        }
+
+        private Map<String, Object> getFields() {
+            return fields;
+        }
+
+        private Throwable getThrowable() {
+            return throwable;
+        }
     }
 }

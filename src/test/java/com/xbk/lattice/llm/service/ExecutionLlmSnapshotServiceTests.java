@@ -173,6 +173,136 @@ class ExecutionLlmSnapshotServiceTests {
         assertThat(route.orElseThrow().getApiKey()).isEqualTo(plainApiKey);
     }
 
+    /**
+     * 验证冻结 compile writer 快照时，会为缺省超时补显式默认值。
+     */
+    @Test
+    void shouldApplyCompileWriterTimeoutDefaultWhenModelProfileTimeoutIsMissing() {
+        LlmProperties llmProperties = createProperties();
+        StubBindingRepository bindingRepository = new StubBindingRepository();
+        StubModelRepository modelRepository = new StubModelRepository();
+        StubConnectionRepository connectionRepository = new StubConnectionRepository();
+        StubSnapshotRepository snapshotRepository = new StubSnapshotRepository();
+        LlmSecretCryptoService cryptoService = new LlmSecretCryptoService(llmProperties);
+        ExecutionLlmSnapshotService snapshotService = new ExecutionLlmSnapshotService(
+                llmProperties,
+                bindingRepository,
+                modelRepository,
+                connectionRepository,
+                snapshotRepository,
+                cryptoService
+        );
+        bindingRepository.items = List.of(new AgentModelBinding(
+                Long.valueOf(1L),
+                "compile",
+                "writer",
+                Long.valueOf(11L),
+                null,
+                "compile.writer.gpt54",
+                true,
+                null,
+                "admin",
+                "admin",
+                null,
+                null
+        ));
+        modelRepository.modelProfile = new LlmModelProfile(
+                Long.valueOf(11L),
+                "gpt54-compile",
+                Long.valueOf(21L),
+                "gpt-5.4",
+                LlmModelProfile.MODEL_KIND_CHAT,
+                null,
+                false,
+                new BigDecimal("0.2"),
+                Integer.valueOf(4096),
+                null,
+                new BigDecimal("0.002500"),
+                new BigDecimal("0.010000"),
+                "{}",
+                true,
+                null,
+                "admin",
+                "admin",
+                null,
+                null
+        );
+        connectionRepository.connection = new LlmProviderConnection(
+                Long.valueOf(21L),
+                "openai-main",
+                "openai",
+                "http://localhost:8888",
+                cryptoService.encrypt("sk-writer-123456"),
+                "sk-wr****3456",
+                true,
+                null,
+                "admin",
+                "admin",
+                null,
+                null
+        );
+
+        List<ExecutionLlmSnapshot> snapshots = snapshotService.freezeSnapshots("compile_job", "job-1", "compile");
+
+        assertThat(snapshots).hasSize(1);
+        assertThat(snapshots.get(0).getTimeoutSeconds()).isEqualTo(Integer.valueOf(90));
+        assertThat(snapshotRepository.savedSnapshots.get(0).getTimeoutSeconds()).isEqualTo(Integer.valueOf(90));
+    }
+
+    /**
+     * 验证 bootstrap compile reviewer 路由会带出显式默认超时。
+     */
+    @Test
+    void shouldApplyCompileReviewerTimeoutDefaultToBootstrapRoute() {
+        LlmProperties llmProperties = createProperties();
+        ExecutionLlmSnapshotService snapshotService = new ExecutionLlmSnapshotService(
+                llmProperties,
+                new StubBindingRepository(),
+                new StubModelRepository(),
+                new StubConnectionRepository(),
+                new StubSnapshotRepository(),
+                new LlmSecretCryptoService(llmProperties)
+        );
+
+        LlmRouteResolution routeResolution = snapshotService.bootstrapRoute(
+                ExecutionLlmSnapshotService.COMPILE_SCENE,
+                ExecutionLlmSnapshotService.ROLE_REVIEWER,
+                "http://writer-base",
+                "writer-key",
+                "http://reviewer-base",
+                "reviewer-key"
+        );
+
+        assertThat(routeResolution.getTimeoutSeconds()).isEqualTo(Integer.valueOf(60));
+    }
+
+    /**
+     * 验证 bootstrap compile fixer 路由会带出显式默认超时。
+     */
+    @Test
+    void shouldApplyCompileFixerTimeoutDefaultToBootstrapRoute() {
+        LlmProperties llmProperties = createProperties();
+        ExecutionLlmSnapshotService snapshotService = new ExecutionLlmSnapshotService(
+                llmProperties,
+                new StubBindingRepository(),
+                new StubModelRepository(),
+                new StubConnectionRepository(),
+                new StubSnapshotRepository(),
+                new LlmSecretCryptoService(llmProperties)
+        );
+
+        LlmRouteResolution routeResolution = snapshotService.bootstrapRoute(
+                ExecutionLlmSnapshotService.COMPILE_SCENE,
+                ExecutionLlmSnapshotService.ROLE_FIXER,
+                "http://writer-base",
+                "writer-key",
+                "http://reviewer-base",
+                "reviewer-key"
+        );
+
+        assertThat(routeResolution.getTimeoutSeconds()).isEqualTo(Integer.valueOf(60));
+    }
+
     private LlmProperties createProperties() {
         LlmProperties llmProperties = new LlmProperties();
         llmProperties.setCompileModel("openai");
