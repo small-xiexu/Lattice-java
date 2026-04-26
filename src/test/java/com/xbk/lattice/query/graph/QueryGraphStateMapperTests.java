@@ -24,10 +24,12 @@ class QueryGraphStateMapperTests {
     void shouldReadLegacyRequestIdAsQueryId() {
         QueryGraphState queryGraphState = queryGraphStateMapper.fromMap(Map.of(
                 QueryGraphStateKeys.LEGACY_REQUEST_ID, "legacy-request-id",
-                QueryGraphStateKeys.QUESTION, "payment timeout"
+                QueryGraphStateKeys.QUESTION, "payment timeout",
+                QueryGraphStateKeys.ANSWER_PROJECTION_BUNDLE_REF, "query-1:answer-projection-bundle"
         ));
 
         assertThat(queryGraphState.getQueryId()).isEqualTo("legacy-request-id");
+        assertThat(queryGraphState.getAnswerProjectionBundleRef()).isEqualTo("query-1:answer-projection-bundle");
     }
 
     /**
@@ -44,6 +46,7 @@ class QueryGraphStateMapperTests {
         queryGraphState.setAnswerRoute("query.answer.gpt54");
         queryGraphState.setReviewRoute("query.reviewer.claude");
         queryGraphState.setRewriteRoute("query.rewrite.gpt54");
+        queryGraphState.setAnswerProjectionBundleRef("query-id-001:answer-projection-bundle");
 
         Map<String, Object> stateMap = queryGraphStateMapper.toMap(queryGraphState);
 
@@ -54,6 +57,10 @@ class QueryGraphStateMapperTests {
         assertThat(stateMap).containsEntry(QueryGraphStateKeys.ANSWER_ROUTE, "query.answer.gpt54");
         assertThat(stateMap).containsEntry(QueryGraphStateKeys.REVIEW_ROUTE, "query.reviewer.claude");
         assertThat(stateMap).containsEntry(QueryGraphStateKeys.REWRITE_ROUTE, "query.rewrite.gpt54");
+        assertThat(stateMap).containsEntry(
+                QueryGraphStateKeys.ANSWER_PROJECTION_BUNDLE_REF,
+                "query-id-001:answer-projection-bundle"
+        );
         assertThat(stateMap).doesNotContainKey(QueryGraphStateKeys.LEGACY_REQUEST_ID);
     }
 }

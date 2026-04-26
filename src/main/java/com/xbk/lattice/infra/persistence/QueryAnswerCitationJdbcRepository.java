@@ -36,9 +36,9 @@ public class QueryAnswerCitationJdbcRepository {
                 """
                         insert into query_answer_citations (
                             audit_id, claim_id, citation_ordinal, citation_literal, source_type, target_key,
-                            validation_status, overlap_score, matched_excerpt, reason
+                            validation_status, validated_by, overlap_score, matched_excerpt, reason
                         )
-                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 record.getAuditId(),
                 record.getClaimId(),
@@ -47,6 +47,7 @@ public class QueryAnswerCitationJdbcRepository {
                 record.getSourceType(),
                 record.getTargetKey(),
                 record.getStatus(),
+                record.getValidatedBy(),
                 Double.valueOf(record.getOverlapScore()),
                 record.getMatchedExcerpt(),
                 record.getReason()

@@ -59,8 +59,8 @@ class QueryFacadeServiceCacheTests {
         QueryResponse firstResponse = queryFacadeService.query("payment timeout retry=3");
         QueryResponse secondResponse = queryFacadeService.query("payment timeout retry=3");
 
-        assertThat(firstResponse.getAnswer()).isEqualTo("answer-1 [[payment-timeout]]");
-        assertThat(secondResponse.getAnswer()).isEqualTo("answer-1 [[payment-timeout]]");
+        assertThat(firstResponse.getAnswer()).isEqualTo("retry=3 [[payment-timeout]]");
+        assertThat(secondResponse.getAnswer()).isEqualTo("retry=3 [[payment-timeout]]");
         assertThat(ftsSearchService.getInvocationCount()).isEqualTo(1);
         assertThat(refKeySearchService.getInvocationCount()).isEqualTo(1);
         assertThat(answerGenerationService.getInvocationCount()).isEqualTo(1);
@@ -327,7 +327,7 @@ class QueryFacadeServiceCacheTests {
         ) {
             invocationCount++;
             return new QueryAnswerPayload(
-                    "answer-" + invocationCount + " [[payment-timeout]]",
+                    "retry=3 [[payment-timeout]]",
                     AnswerOutcome.SUCCESS,
                     GenerationMode.LLM,
                     ModelExecutionStatus.SUCCESS,

@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.metadata.Usage;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -40,6 +41,7 @@ public class LlmInvocationExecutor {
      * @param chatClientRegistry 动态 ChatClient 注册表
      * @param llmProperties LLM 配置
      */
+    @Autowired
     public LlmInvocationExecutor(
             ChatClientRegistry chatClientRegistry,
             LlmProperties llmProperties,

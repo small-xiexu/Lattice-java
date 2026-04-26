@@ -1,6 +1,7 @@
 package com.xbk.lattice.query.deepresearch.domain;
 
 import com.xbk.lattice.query.citation.CitationCheckReport;
+import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import lombok.Data;
 
 /**
@@ -13,9 +14,13 @@ import lombok.Data;
 @Data
 public class DeepResearchSynthesisResult {
 
+    private InternalAnswerDraft internalAnswerDraft;
+
     private String answerMarkdown;
 
     private CitationCheckReport citationCheckReport;
+
+    private AnswerProjectionBundle answerProjectionBundle;
 
     private boolean partialAnswer;
 

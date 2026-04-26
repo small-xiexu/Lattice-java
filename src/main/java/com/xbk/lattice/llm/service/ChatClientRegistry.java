@@ -16,6 +16,7 @@ import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.BufferingClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -25,6 +26,10 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.retry.support.RetryTemplate;
 
 import java.math.BigDecimal;
+import java.net.Proxy;
+import java.net.ProxySelector;
+import java.net.SocketAddress;
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -48,6 +53,18 @@ import java.util.concurrent.ConcurrentMap;
 @Service
 @Profile("jdbc")
 public class ChatClientRegistry {
+
+    private static final ProxySelector NO_PROXY_SELECTOR = new ProxySelector() {
+        @Override
+        public List<Proxy> select(URI uri) {
+            return List.of(Proxy.NO_PROXY);
+        }
+
+        @Override
+        public void connectFailed(URI uri, SocketAddress socketAddress, java.io.IOException exception) {
+            // 显式忽略连接失败回调，避免干扰上层重试日志。
+        }
+    };
 
     private final RestClient.Builder restClientBuilder;
 
@@ -194,12 +211,15 @@ public class ChatClientRegistry {
     private RestClient.Builder createRestClientBuilder(Integer timeoutSeconds) {
         int resolvedTimeoutSeconds = resolveTimeout(timeoutSeconds);
         HttpClient httpClient = HttpClient.newBuilder()
+                .proxy(NO_PROXY_SELECTOR)
                 .connectTimeout(Duration.ofSeconds(resolvedTimeoutSeconds))
                 .version(HttpClient.Version.HTTP_1_1)
                 .build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(Duration.ofSeconds(resolvedTimeoutSeconds));
-        return restClientBuilder.clone().requestFactory(new BufferingClientHttpRequestFactory(requestFactory));
+        return restClientBuilder.clone()
+                .requestFactory(new BufferingClientHttpRequestFactory(requestFactory))
+                .defaultHeader(HttpHeaders.CONNECTION, "close");
     }
 
     /**

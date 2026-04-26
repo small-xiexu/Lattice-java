@@ -5,6 +5,7 @@ import com.xbk.lattice.query.citation.CitationCheckReport;
 import com.xbk.lattice.query.citation.ClaimSegment;
 import com.xbk.lattice.query.citation.QueryAnswerAuditSnapshot;
 import com.xbk.lattice.query.domain.ReviewResult;
+import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import com.xbk.lattice.query.service.QueryArticleHit;
 
 import java.util.List;
@@ -154,6 +155,23 @@ public interface QueryWorkingSetStore {
      * @return 答案审计快照
      */
     QueryAnswerAuditSnapshot loadAnswerAudit(String ref);
+
+    /**
+     * 保存答案投影白名单。
+     *
+     * @param queryId 查询标识
+     * @param answerProjectionBundle 答案投影包
+     * @return 工作集引用
+     */
+    String saveAnswerProjectionBundle(String queryId, AnswerProjectionBundle answerProjectionBundle);
+
+    /**
+     * 读取答案投影白名单。
+     *
+     * @param ref 工作集引用
+     * @return 答案投影包
+     */
+    AnswerProjectionBundle loadAnswerProjectionBundle(String ref);
 
     /**
      * 保存查询响应。

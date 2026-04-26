@@ -24,6 +24,8 @@ public class QuerySourceResponse {
 
     private final List<String> sourcePaths;
 
+    private final String derivation;
+
     /**
      * 创建查询来源响应。
      *
@@ -32,7 +34,7 @@ public class QuerySourceResponse {
      * @param sourcePaths 来源路径
      */
     public QuerySourceResponse(String conceptId, String title, List<String> sourcePaths) {
-        this(null, null, conceptId, title, sourcePaths);
+        this(null, null, conceptId, title, sourcePaths, null);
     }
 
     /**
@@ -43,6 +45,7 @@ public class QuerySourceResponse {
      * @param conceptId 概念标识
      * @param title 标题
      * @param sourcePaths 来源路径
+     * @param derivation 来源推导方式
      */
     @JsonCreator
     public QuerySourceResponse(
@@ -50,13 +53,15 @@ public class QuerySourceResponse {
             @JsonProperty("articleKey") String articleKey,
             @JsonProperty("conceptId") String conceptId,
             @JsonProperty("title") String title,
-            @JsonProperty("sourcePaths") List<String> sourcePaths
+            @JsonProperty("sourcePaths") List<String> sourcePaths,
+            @JsonProperty("derivation") String derivation
     ) {
         this.sourceId = sourceId;
         this.articleKey = articleKey;
         this.conceptId = conceptId;
         this.title = title;
         this.sourcePaths = sourcePaths;
+        this.derivation = derivation;
     }
 
     /**
@@ -102,5 +107,14 @@ public class QuerySourceResponse {
      */
     public List<String> getSourcePaths() {
         return sourcePaths;
+    }
+
+    /**
+     * 获取来源推导方式。
+     *
+     * @return 来源推导方式
+     */
+    public String getDerivation() {
+        return derivation;
     }
 }

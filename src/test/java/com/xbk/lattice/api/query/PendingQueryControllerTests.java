@@ -112,7 +112,9 @@ class PendingQueryControllerTests {
                         .content("{\"question\":\"manual-review 在什么情况下触发\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.answer").value(org.hamcrest.Matchers.containsString("manual-review 仅在 retry=5 时触发")))
-                .andExpect(jsonPath("$.sources[*].sourcePaths[*]").value(org.hamcrest.Matchers.hasItem("[用户反馈]")));
+                .andExpect(jsonPath("$.sources[*].sourcePaths[*]").value(
+                        org.hamcrest.Matchers.hasItem(org.hamcrest.Matchers.containsString("用户反馈"))
+                ));
     }
 
     /**

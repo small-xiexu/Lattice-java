@@ -25,11 +25,14 @@ public class LlmReviewerGateway implements ReviewerGateway {
             输出要求：
             1. 只能输出 JSON
             2. JSON 结构必须是 {"approved":true|false,"rewriteRequired":true|false,"riskLevel":"LOW|MEDIUM|HIGH","issues":[...],"userFacingRewriteHints":[...],"cacheWritePolicy":"WRITE|SKIP_WRITE|EVICT_AFTER_READ"}
-            3. 如果答案缺少来源、与问题不匹配、包含无法证实的结论或明显遗漏，approved 必须为 false，rewriteRequired 必须为 true
-            4. issues 中每项必须包含 severity、category、description
-            5. 审查通过时，issues 与 userFacingRewriteHints 必须为空数组，cacheWritePolicy 返回 WRITE
-            6. 审查未通过时，cacheWritePolicy 默认返回 SKIP_WRITE
-            7. 不要输出 Markdown、解释性前后缀或代码块
+            3. 你会同时看到 answerOutcome 字段；如果 answerOutcome=SUCCESS 且答案已直接回答问题、关键结论可由引用支撑，不要仅因答案简短就判失败
+            4. 如果 answerOutcome=PARTIAL_ANSWER 或 INSUFFICIENT_EVIDENCE，只要答案明确说明了证据缺口且没有编造，不要仅因“未完全覆盖”就判失败；只有遗漏了现有来源已能直接支撑的关键结论时才判失败
+            4.1 如果答案先直接回答了用户真正问的核心问题，再补充“其他实现细节当前证据不足/暂未确认”，这类额外边界说明不算缺陷，不要因此判失败
+            5. 如果答案缺少来源、与问题不匹配、包含无法证实的结论或明显遗漏，approved 必须为 false，rewriteRequired 必须为 true
+            6. issues 中每项必须包含 severity、category、description
+            7. 审查通过时，issues 与 userFacingRewriteHints 必须为空数组，cacheWritePolicy 返回 WRITE
+            8. 审查未通过时，cacheWritePolicy 默认返回 SKIP_WRITE
+            9. 不要输出 Markdown、解释性前后缀或代码块
             """;
 
     private final LlmGateway llmGateway;

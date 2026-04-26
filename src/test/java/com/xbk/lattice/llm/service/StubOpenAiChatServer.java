@@ -38,6 +38,8 @@ class StubOpenAiChatServer {
 
     private final List<String> capturedContentLengths = new CopyOnWriteArrayList<String>();
 
+    private final List<String> capturedConnectionHeaders = new CopyOnWriteArrayList<String>();
+
     StubOpenAiChatServer(String answerText) throws IOException {
         this(answerText, 0);
     }
@@ -79,6 +81,10 @@ class StubOpenAiChatServer {
         return capturedContentLengths;
     }
 
+    List<String> getCapturedConnectionHeaders() {
+        return capturedConnectionHeaders;
+    }
+
     private final class ChatCompletionsHandler implements HttpHandler {
 
         @Override
@@ -94,6 +100,7 @@ class StubOpenAiChatServer {
             }
             capturedTransferEncodings.add(exchange.getRequestHeaders().getFirst("Transfer-encoding"));
             capturedContentLengths.add(exchange.getRequestHeaders().getFirst("Content-length"));
+            capturedConnectionHeaders.add(exchange.getRequestHeaders().getFirst("Connection"));
             String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             JsonNode rootNode = OBJECT_MAPPER.readTree(requestBody);
             capturedModels.add(rootNode.path("model").asText());

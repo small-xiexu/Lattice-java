@@ -17,11 +17,19 @@ public class ResearchTask {
 
     private String taskId;
 
+    private ResearchTaskType taskType = ResearchTaskType.FACT_LOOKUP;
+
     private String question;
 
     private String expectedOutput;
 
+    private List<String> expectedFactSchema = new ArrayList<String>();
+
+    private List<String> requiredEvidenceTypes = new ArrayList<String>();
+
     private List<String> preferredUpstreamTaskIds = new ArrayList<String>();
 
     private String retrievalFocus;
+
+    private boolean mustResolve;
 }

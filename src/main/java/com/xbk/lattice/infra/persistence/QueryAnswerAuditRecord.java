@@ -39,6 +39,8 @@ public class QueryAnswerAuditRecord {
 
     private final String modelSnapshotJson;
 
+    private final Long deepResearchRunId;
+
     /**
      * 创建查询答案审计记录。
      *
@@ -57,6 +59,7 @@ public class QueryAnswerAuditRecord {
      * @param cacheable 是否可缓存
      * @param routeType 路由类型
      * @param modelSnapshotJson 模型快照 JSON
+     * @param deepResearchRunId 所属 Deep Research run 主键
      */
     public QueryAnswerAuditRecord(
             String queryId,
@@ -73,7 +76,8 @@ public class QueryAnswerAuditRecord {
             int skippedCitationCount,
             boolean cacheable,
             String routeType,
-            String modelSnapshotJson
+            String modelSnapshotJson,
+            Long deepResearchRunId
     ) {
         this.queryId = queryId;
         this.answerVersion = answerVersion;
@@ -90,6 +94,7 @@ public class QueryAnswerAuditRecord {
         this.cacheable = cacheable;
         this.routeType = routeType;
         this.modelSnapshotJson = modelSnapshotJson;
+        this.deepResearchRunId = deepResearchRunId;
     }
 
     public String getQueryId() {
@@ -150,5 +155,9 @@ public class QueryAnswerAuditRecord {
 
     public String getModelSnapshotJson() {
         return modelSnapshotJson;
+    }
+
+    public Long getDeepResearchRunId() {
+        return deepResearchRunId;
     }
 }

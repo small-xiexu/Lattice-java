@@ -39,9 +39,9 @@ public class QueryAnswerAuditJdbcRepository {
                             query_id, answer_version, question, answer_markdown, answer_outcome,
                             generation_mode, review_status, citation_coverage, unsupported_claim_count,
                             verified_citation_count, demoted_citation_count, skipped_citation_count,
-                            cacheable, route_type, model_snapshot_json
+                            cacheable, route_type, model_snapshot_json, deep_research_run_id
                         )
-                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)
                         returning audit_id
                         """,
                 Long.class,
@@ -59,7 +59,8 @@ public class QueryAnswerAuditJdbcRepository {
                 Integer.valueOf(record.getSkippedCitationCount()),
                 Boolean.valueOf(record.isCacheable()),
                 record.getRouteType(),
-                record.getModelSnapshotJson()
+                record.getModelSnapshotJson(),
+                record.getDeepResearchRunId()
         );
     }
 }

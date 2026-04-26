@@ -31,6 +31,12 @@ public class CitationCheckReport {
 
     private final int unsupportedClaimCount;
 
+    private final int unmatchedLiteralCount;
+
+    private final int unusedProjectionCount;
+
+    private final int projectionMismatchCount;
+
     /**
      * 创建 Citation 检查报告。
      *
@@ -43,6 +49,9 @@ public class CitationCheckReport {
      * @param noCitation 是否无引用
      * @param coverageRate 引用覆盖率
      * @param unsupportedClaimCount 不受支持 claim 数
+     * @param unmatchedLiteralCount 白名单外字面量数量
+     * @param unusedProjectionCount 未被最终答案使用的 projection 数量
+     * @param projectionMismatchCount 投影不匹配数量
      */
     public CitationCheckReport(
             String checkedAnswer,
@@ -53,7 +62,10 @@ public class CitationCheckReport {
             int skippedCount,
             boolean noCitation,
             double coverageRate,
-            int unsupportedClaimCount
+            int unsupportedClaimCount,
+            int unmatchedLiteralCount,
+            int unusedProjectionCount,
+            int projectionMismatchCount
     ) {
         this.checkedAnswer = checkedAnswer;
         this.claimSegments = claimSegments;
@@ -64,6 +76,9 @@ public class CitationCheckReport {
         this.noCitation = noCitation;
         this.coverageRate = coverageRate;
         this.unsupportedClaimCount = unsupportedClaimCount;
+        this.unmatchedLiteralCount = unmatchedLiteralCount;
+        this.unusedProjectionCount = unusedProjectionCount;
+        this.projectionMismatchCount = projectionMismatchCount;
     }
 
     /**
@@ -145,6 +160,33 @@ public class CitationCheckReport {
      */
     public int getUnsupportedClaimCount() {
         return unsupportedClaimCount;
+    }
+
+    /**
+     * 返回白名单外字面量数量。
+     *
+     * @return 白名单外字面量数量
+     */
+    public int getUnmatchedLiteralCount() {
+        return unmatchedLiteralCount;
+    }
+
+    /**
+     * 返回未使用 projection 数量。
+     *
+     * @return 未使用 projection 数量
+     */
+    public int getUnusedProjectionCount() {
+        return unusedProjectionCount;
+    }
+
+    /**
+     * 返回投影不匹配数量。
+     *
+     * @return 投影不匹配数量
+     */
+    public int getProjectionMismatchCount() {
+        return projectionMismatchCount;
     }
 
     /**

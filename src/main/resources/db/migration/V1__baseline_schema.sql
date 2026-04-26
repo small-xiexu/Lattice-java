@@ -853,96 +853,6 @@ COMMENT ON COLUMN query_retrieval_settings.updated_at IS '更新时间';
 
 INSERT INTO query_retrieval_settings DEFAULT VALUES ON CONFLICT DO NOTHING;
 
-CREATE TABLE IF NOT EXISTS query_answer_audits (
-    audit_id BIGSERIAL PRIMARY KEY,
-    query_id VARCHAR(64) NOT NULL,
-    answer_version INTEGER NOT NULL,
-    question TEXT NOT NULL,
-    answer_markdown TEXT NOT NULL,
-    answer_outcome VARCHAR(32),
-    generation_mode VARCHAR(32),
-    review_status VARCHAR(32),
-    citation_coverage NUMERIC(5, 4) NOT NULL DEFAULT 0,
-    unsupported_claim_count INTEGER NOT NULL DEFAULT 0,
-    verified_citation_count INTEGER NOT NULL DEFAULT 0,
-    demoted_citation_count INTEGER NOT NULL DEFAULT 0,
-    skipped_citation_count INTEGER NOT NULL DEFAULT 0,
-    cacheable BOOLEAN NOT NULL DEFAULT FALSE,
-    route_type VARCHAR(32) NOT NULL,
-    model_snapshot_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-COMMENT ON TABLE query_answer_audits IS 'Query 最终答案审计主表';
-COMMENT ON COLUMN query_answer_audits.query_id IS '查询标识';
-COMMENT ON COLUMN query_answer_audits.answer_version IS '答案版本';
-COMMENT ON COLUMN query_answer_audits.question IS '用户问题';
-COMMENT ON COLUMN query_answer_audits.answer_markdown IS '最终答案 Markdown';
-COMMENT ON COLUMN query_answer_audits.answer_outcome IS '答案语义';
-COMMENT ON COLUMN query_answer_audits.generation_mode IS '生成模式';
-COMMENT ON COLUMN query_answer_audits.review_status IS '审查状态';
-COMMENT ON COLUMN query_answer_audits.citation_coverage IS '引用覆盖率';
-COMMENT ON COLUMN query_answer_audits.unsupported_claim_count IS '无法支撑 claim 数';
-COMMENT ON COLUMN query_answer_audits.verified_citation_count IS '已验证引用数';
-COMMENT ON COLUMN query_answer_audits.demoted_citation_count IS '被降级引用数';
-COMMENT ON COLUMN query_answer_audits.skipped_citation_count IS '跳过核验引用数';
-COMMENT ON COLUMN query_answer_audits.cacheable IS '是否允许写缓存';
-COMMENT ON COLUMN query_answer_audits.route_type IS '路由类型';
-COMMENT ON COLUMN query_answer_audits.model_snapshot_json IS '模型快照 JSON';
-
-CREATE INDEX IF NOT EXISTS idx_query_answer_audits_query_id
-    ON query_answer_audits (query_id, created_at DESC, audit_id DESC);
-
-CREATE TABLE IF NOT EXISTS query_answer_claims (
-    claim_id BIGSERIAL PRIMARY KEY,
-    audit_id BIGINT NOT NULL REFERENCES query_answer_audits (audit_id) ON DELETE CASCADE,
-    claim_index INTEGER NOT NULL,
-    claim_text TEXT NOT NULL,
-    claim_status VARCHAR(32) NOT NULL,
-    citation_count INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-COMMENT ON TABLE query_answer_claims IS 'Query claim 审计明细表';
-COMMENT ON COLUMN query_answer_claims.audit_id IS '答案审计主键';
-COMMENT ON COLUMN query_answer_claims.claim_index IS 'claim 顺序号';
-COMMENT ON COLUMN query_answer_claims.claim_text IS 'claim 文本';
-COMMENT ON COLUMN query_answer_claims.claim_status IS 'claim 核验状态';
-COMMENT ON COLUMN query_answer_claims.citation_count IS 'claim 对应引用数量';
-
-CREATE UNIQUE INDEX IF NOT EXISTS uk_query_answer_claims_audit_claim_index
-    ON query_answer_claims (audit_id, claim_index);
-
-CREATE TABLE IF NOT EXISTS query_answer_citations (
-    citation_id BIGSERIAL PRIMARY KEY,
-    audit_id BIGINT NOT NULL REFERENCES query_answer_audits (audit_id) ON DELETE CASCADE,
-    claim_id BIGINT REFERENCES query_answer_claims (claim_id) ON DELETE CASCADE,
-    citation_ordinal INTEGER NOT NULL,
-    citation_literal TEXT NOT NULL,
-    source_type VARCHAR(32) NOT NULL,
-    target_key VARCHAR(512) NOT NULL,
-    validation_status VARCHAR(32) NOT NULL,
-    overlap_score NUMERIC(5, 4) NOT NULL DEFAULT 0,
-    matched_excerpt TEXT NOT NULL DEFAULT '',
-    reason VARCHAR(255) NOT NULL DEFAULT '',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-COMMENT ON TABLE query_answer_citations IS 'Query citation 审计明细表';
-COMMENT ON COLUMN query_answer_citations.audit_id IS '答案审计主键';
-COMMENT ON COLUMN query_answer_citations.claim_id IS 'claim 主键';
-COMMENT ON COLUMN query_answer_citations.citation_ordinal IS '引用顺序号';
-COMMENT ON COLUMN query_answer_citations.citation_literal IS '原始引用字面量';
-COMMENT ON COLUMN query_answer_citations.source_type IS '引用来源类型';
-COMMENT ON COLUMN query_answer_citations.target_key IS '引用目标键';
-COMMENT ON COLUMN query_answer_citations.validation_status IS '核验状态';
-COMMENT ON COLUMN query_answer_citations.overlap_score IS '重叠分';
-COMMENT ON COLUMN query_answer_citations.matched_excerpt IS '命中摘录';
-COMMENT ON COLUMN query_answer_citations.reason IS '核验原因';
-
-CREATE UNIQUE INDEX IF NOT EXISTS uk_query_answer_citations_audit_ordinal
-    ON query_answer_citations (audit_id, citation_ordinal);
-
 CREATE TABLE IF NOT EXISTS deep_research_runs (
     run_id BIGSERIAL PRIMARY KEY,
     query_id VARCHAR(64) NOT NULL,
@@ -955,7 +865,7 @@ CREATE TABLE IF NOT EXISTS deep_research_runs (
     citation_coverage NUMERIC(5, 4) NOT NULL DEFAULT 0,
     partial_answer BOOLEAN NOT NULL DEFAULT FALSE,
     has_conflicts BOOLEAN NOT NULL DEFAULT FALSE,
-    final_answer_audit_id BIGINT REFERENCES query_answer_audits (audit_id) ON DELETE SET NULL,
+    final_answer_audit_id BIGINT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -975,31 +885,357 @@ COMMENT ON COLUMN deep_research_runs.final_answer_audit_id IS '最终答案审�
 CREATE INDEX IF NOT EXISTS idx_deep_research_runs_query_id
     ON deep_research_runs (query_id, created_at DESC, run_id DESC);
 
-CREATE TABLE IF NOT EXISTS deep_research_evidence_cards (
-    card_id BIGSERIAL PRIMARY KEY,
-    run_id BIGINT NOT NULL REFERENCES deep_research_runs (run_id) ON DELETE CASCADE,
-    evidence_id VARCHAR(32) NOT NULL,
-    layer_index INTEGER NOT NULL,
-    task_id VARCHAR(64) NOT NULL,
-    scope TEXT NOT NULL,
-    findings_json JSONB NOT NULL,
-    gaps_json JSONB NOT NULL DEFAULT '[]'::jsonb,
-    related_leads_json JSONB NOT NULL DEFAULT '[]'::jsonb,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE IF NOT EXISTS query_answer_audits (
+    audit_id BIGSERIAL PRIMARY KEY,
+    query_id VARCHAR(64) NOT NULL,
+    answer_version INTEGER NOT NULL,
+    question TEXT NOT NULL,
+    answer_markdown TEXT NOT NULL,
+    answer_outcome VARCHAR(32),
+    generation_mode VARCHAR(32),
+    review_status VARCHAR(32),
+    citation_coverage NUMERIC(5, 4) NOT NULL DEFAULT 0,
+    unsupported_claim_count INTEGER NOT NULL DEFAULT 0,
+    verified_citation_count INTEGER NOT NULL DEFAULT 0,
+    demoted_citation_count INTEGER NOT NULL DEFAULT 0,
+    skipped_citation_count INTEGER NOT NULL DEFAULT 0,
+    cacheable BOOLEAN NOT NULL DEFAULT FALSE,
+    route_type VARCHAR(32) NOT NULL,
+    model_snapshot_json JSONB NOT NULL DEFAULT '{}'::JSONB,
+    deep_research_run_id BIGINT REFERENCES deep_research_runs (run_id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_query_answer_audits_query_version UNIQUE (query_id, answer_version),
+    CONSTRAINT uk_query_answer_audits_run_audit UNIQUE (deep_research_run_id, audit_id)
 );
 
-COMMENT ON TABLE deep_research_evidence_cards IS 'Deep Research 证据卡审计表';
-COMMENT ON COLUMN deep_research_evidence_cards.run_id IS '运行主键';
-COMMENT ON COLUMN deep_research_evidence_cards.evidence_id IS '证据卡标识';
-COMMENT ON COLUMN deep_research_evidence_cards.layer_index IS '层序号';
-COMMENT ON COLUMN deep_research_evidence_cards.task_id IS '任务标识';
-COMMENT ON COLUMN deep_research_evidence_cards.scope IS '研究范围';
-COMMENT ON COLUMN deep_research_evidence_cards.findings_json IS '证据发现 JSON';
-COMMENT ON COLUMN deep_research_evidence_cards.gaps_json IS '证据缺口 JSON';
-COMMENT ON COLUMN deep_research_evidence_cards.related_leads_json IS '后续线索 JSON';
+COMMENT ON TABLE query_answer_audits IS 'Query 最终答案审计主表';
+COMMENT ON COLUMN query_answer_audits.query_id IS '查询标识';
+COMMENT ON COLUMN query_answer_audits.answer_version IS '答案版本';
+COMMENT ON COLUMN query_answer_audits.question IS '用户问题';
+COMMENT ON COLUMN query_answer_audits.answer_markdown IS '最终答案 Markdown';
+COMMENT ON COLUMN query_answer_audits.answer_outcome IS '答案语义';
+COMMENT ON COLUMN query_answer_audits.generation_mode IS '生成模式';
+COMMENT ON COLUMN query_answer_audits.review_status IS '审查状态';
+COMMENT ON COLUMN query_answer_audits.citation_coverage IS '引用覆盖率';
+COMMENT ON COLUMN query_answer_audits.unsupported_claim_count IS '无法支撑 claim 数';
+COMMENT ON COLUMN query_answer_audits.verified_citation_count IS '已验证引用数';
+COMMENT ON COLUMN query_answer_audits.demoted_citation_count IS '被降级引用数';
+COMMENT ON COLUMN query_answer_audits.skipped_citation_count IS '跳过核验引用数';
+COMMENT ON COLUMN query_answer_audits.cacheable IS '是否允许写缓存';
+COMMENT ON COLUMN query_answer_audits.route_type IS '路由类型';
+COMMENT ON COLUMN query_answer_audits.model_snapshot_json IS '模型快照 JSON';
+COMMENT ON COLUMN query_answer_audits.deep_research_run_id IS '所属 Deep Research 运行主键';
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_deep_research_evidence_cards_run_evidence
-    ON deep_research_evidence_cards (run_id, evidence_id);
+CREATE INDEX IF NOT EXISTS idx_query_answer_audits_query_id
+    ON query_answer_audits (query_id, created_at DESC, audit_id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_query_answer_audits_deep_research_run_id
+    ON query_answer_audits (deep_research_run_id, audit_id DESC);
+
+ALTER TABLE deep_research_runs
+    ADD CONSTRAINT fk_deep_research_runs_final_answer_audit
+    FOREIGN KEY (run_id, final_answer_audit_id)
+    REFERENCES query_answer_audits (deep_research_run_id, audit_id);
+
+CREATE TABLE IF NOT EXISTS query_answer_claims (
+    claim_id BIGSERIAL PRIMARY KEY,
+    audit_id BIGINT NOT NULL REFERENCES query_answer_audits (audit_id) ON DELETE CASCADE,
+    claim_index INTEGER NOT NULL,
+    claim_text TEXT NOT NULL,
+    claim_status VARCHAR(32) NOT NULL,
+    citation_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_query_answer_claims_audit_claim_index UNIQUE (audit_id, claim_index)
+);
+
+COMMENT ON TABLE query_answer_claims IS 'Query claim 审计明细表';
+COMMENT ON COLUMN query_answer_claims.audit_id IS '答案审计主键';
+COMMENT ON COLUMN query_answer_claims.claim_index IS 'claim 顺序号';
+COMMENT ON COLUMN query_answer_claims.claim_text IS 'claim 文本';
+COMMENT ON COLUMN query_answer_claims.claim_status IS 'claim 核验状态';
+COMMENT ON COLUMN query_answer_claims.citation_count IS 'claim 对应引用数量';
+
+CREATE TABLE IF NOT EXISTS query_answer_citations (
+    citation_id BIGSERIAL PRIMARY KEY,
+    audit_id BIGINT NOT NULL REFERENCES query_answer_audits (audit_id) ON DELETE CASCADE,
+    claim_id BIGINT REFERENCES query_answer_claims (claim_id) ON DELETE CASCADE,
+    citation_ordinal INTEGER NOT NULL,
+    citation_literal TEXT NOT NULL,
+    source_type VARCHAR(32) NOT NULL,
+    target_key VARCHAR(512) NOT NULL,
+    validation_status VARCHAR(32) NOT NULL,
+    validated_by VARCHAR(32) NOT NULL DEFAULT 'RULE',
+    overlap_score NUMERIC(5, 4) NOT NULL DEFAULT 0,
+    matched_excerpt TEXT NOT NULL DEFAULT '',
+    reason TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_query_answer_citations_audit_ordinal UNIQUE (audit_id, citation_ordinal),
+    CONSTRAINT chk_query_answer_citations_source_type
+            CHECK (source_type IN ('ARTICLE', 'SOURCE_FILE')),
+    CONSTRAINT chk_query_answer_citations_validated_by
+            CHECK (validated_by IN ('RULE', 'LLM_JUDGE'))
+);
+
+COMMENT ON TABLE query_answer_citations IS 'Query citation 审计明细表';
+COMMENT ON COLUMN query_answer_citations.audit_id IS '答案审计主键';
+COMMENT ON COLUMN query_answer_citations.claim_id IS 'claim 主键';
+COMMENT ON COLUMN query_answer_citations.citation_ordinal IS '引用顺序号';
+COMMENT ON COLUMN query_answer_citations.citation_literal IS '原始引用字面量';
+COMMENT ON COLUMN query_answer_citations.source_type IS '引用来源类型';
+COMMENT ON COLUMN query_answer_citations.target_key IS '引用目标键';
+COMMENT ON COLUMN query_answer_citations.validation_status IS '核验状态';
+COMMENT ON COLUMN query_answer_citations.validated_by IS 'claim-level 校验来源';
+COMMENT ON COLUMN query_answer_citations.overlap_score IS '重叠分';
+COMMENT ON COLUMN query_answer_citations.matched_excerpt IS '命中摘录';
+COMMENT ON COLUMN query_answer_citations.reason IS '核验原因';
+
+CREATE TABLE IF NOT EXISTS deep_research_tasks (
+    id BIGSERIAL PRIMARY KEY,
+    task_id VARCHAR(64) NOT NULL,
+    run_id BIGINT NOT NULL REFERENCES deep_research_runs (run_id) ON DELETE CASCADE,
+    layer_index INTEGER NOT NULL,
+    task_type VARCHAR(32) NOT NULL,
+    question TEXT NOT NULL,
+    expected_fact_schema_json JSONB NOT NULL DEFAULT '[]'::JSONB,
+    preferred_upstream_task_ids_json JSONB NOT NULL DEFAULT '[]'::JSONB,
+    status VARCHAR(32) NOT NULL,
+    llm_call_count INTEGER NOT NULL DEFAULT 0,
+    timed_out BOOLEAN NOT NULL DEFAULT FALSE,
+    error_reason TEXT,
+    started_at TIMESTAMPTZ,
+    finished_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_deep_research_tasks_run_task UNIQUE (run_id, task_id)
+);
+
+COMMENT ON TABLE deep_research_tasks IS 'Deep Research 任务表';
+COMMENT ON COLUMN deep_research_tasks.task_id IS '任务业务标识';
+COMMENT ON COLUMN deep_research_tasks.run_id IS '所属运行主键';
+COMMENT ON COLUMN deep_research_tasks.layer_index IS '层序号';
+COMMENT ON COLUMN deep_research_tasks.task_type IS '任务类型';
+COMMENT ON COLUMN deep_research_tasks.question IS '任务问题';
+COMMENT ON COLUMN deep_research_tasks.expected_fact_schema_json IS '期望事实槽位 JSON';
+COMMENT ON COLUMN deep_research_tasks.preferred_upstream_task_ids_json IS '偏好上游任务 JSON';
+COMMENT ON COLUMN deep_research_tasks.status IS '任务状态';
+COMMENT ON COLUMN deep_research_tasks.llm_call_count IS '任务调用次数';
+COMMENT ON COLUMN deep_research_tasks.timed_out IS '是否超时';
+COMMENT ON COLUMN deep_research_tasks.error_reason IS '失败原因';
+
+CREATE INDEX IF NOT EXISTS idx_deep_research_tasks_run_layer_status
+    ON deep_research_tasks (run_id, layer_index, status);
+
+CREATE TABLE IF NOT EXISTS deep_research_task_hits (
+    id BIGSERIAL PRIMARY KEY,
+    run_id BIGINT NOT NULL REFERENCES deep_research_runs (run_id) ON DELETE CASCADE,
+    task_id VARCHAR(64) NOT NULL,
+    hit_ordinal INTEGER NOT NULL,
+    channel VARCHAR(32) NOT NULL,
+    evidence_type VARCHAR(32),
+    source_id VARCHAR(512),
+    article_key VARCHAR(256),
+    concept_id VARCHAR(128),
+    title VARCHAR(255),
+    chunk_id VARCHAR(128),
+    path VARCHAR(512),
+    original_score DOUBLE PRECISION,
+    rrf_score DOUBLE PRECISION,
+    fused_score DOUBLE PRECISION,
+    content_excerpt TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_deep_research_task_hits_run_task_hit UNIQUE (run_id, task_id, hit_ordinal),
+    CONSTRAINT fk_deep_research_task_hits_task
+            FOREIGN KEY (run_id, task_id)
+            REFERENCES deep_research_tasks (run_id, task_id)
+            ON DELETE CASCADE
+);
+
+COMMENT ON TABLE deep_research_task_hits IS 'Deep Research 任务命中表';
+COMMENT ON COLUMN deep_research_task_hits.task_id IS '任务业务标识';
+COMMENT ON COLUMN deep_research_task_hits.hit_ordinal IS '命中顺序号';
+COMMENT ON COLUMN deep_research_task_hits.channel IS '召回通道';
+COMMENT ON COLUMN deep_research_task_hits.evidence_type IS '命中证据类型';
+COMMENT ON COLUMN deep_research_task_hits.content_excerpt IS '截断摘录';
+
+CREATE TABLE IF NOT EXISTS deep_research_findings (
+    id BIGSERIAL PRIMARY KEY,
+    finding_id VARCHAR(64) NOT NULL,
+    run_id BIGINT NOT NULL REFERENCES deep_research_runs (run_id) ON DELETE CASCADE,
+    task_id VARCHAR(64) NOT NULL,
+    fact_key VARCHAR(255) NOT NULL,
+    subject VARCHAR(255),
+    predicate VARCHAR(255),
+    value_text TEXT NOT NULL,
+    value_type VARCHAR(64),
+    unit VARCHAR(64),
+    qualifier TEXT,
+    claim_text TEXT NOT NULL,
+    support_level VARCHAR(32),
+    confidence DOUBLE PRECISION NOT NULL DEFAULT 0,
+    anchor_ids_json JSONB NOT NULL DEFAULT '[]'::JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_deep_research_findings_task
+            FOREIGN KEY (run_id, task_id)
+            REFERENCES deep_research_tasks (run_id, task_id)
+            ON DELETE CASCADE
+);
+
+COMMENT ON TABLE deep_research_findings IS 'Deep Research 结构化事实表';
+COMMENT ON COLUMN deep_research_findings.finding_id IS '结构化 finding 业务标识';
+COMMENT ON COLUMN deep_research_findings.fact_key IS '事实键';
+COMMENT ON COLUMN deep_research_findings.claim_text IS '标准化结论句';
+COMMENT ON COLUMN deep_research_findings.anchor_ids_json IS '关联锚点 ID 列表';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deep_research_findings_run_task_fact_value
+    ON deep_research_findings (run_id, task_id, fact_key, value_text, COALESCE(unit, ''));
+
+CREATE INDEX IF NOT EXISTS idx_deep_research_findings_run_fact_key
+    ON deep_research_findings (run_id, fact_key, task_id);
+
+CREATE TABLE IF NOT EXISTS deep_research_evidence_anchors (
+    id BIGSERIAL PRIMARY KEY,
+    anchor_id VARCHAR(32) NOT NULL,
+    run_id BIGINT NOT NULL REFERENCES deep_research_runs (run_id) ON DELETE CASCADE,
+    task_id VARCHAR(64) NOT NULL,
+    source_type VARCHAR(32) NOT NULL,
+    source_id VARCHAR(512) NOT NULL,
+    chunk_id VARCHAR(128),
+    path VARCHAR(512),
+    line_start INTEGER,
+    line_end INTEGER,
+    quote_text TEXT NOT NULL DEFAULT '',
+    retrieval_score DOUBLE PRECISION,
+    content_hash VARCHAR(64) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_deep_research_evidence_anchors_run_anchor UNIQUE (run_id, anchor_id),
+    CONSTRAINT uk_deep_research_evidence_anchors_run_content_hash UNIQUE (run_id, content_hash),
+    CONSTRAINT fk_deep_research_evidence_anchors_task
+            FOREIGN KEY (run_id, task_id)
+            REFERENCES deep_research_tasks (run_id, task_id)
+            ON DELETE CASCADE,
+    CONSTRAINT chk_deep_research_evidence_anchors_line_pair
+            CHECK (
+                    (line_start IS NULL AND line_end IS NULL)
+                    OR (line_start IS NOT NULL AND line_end IS NOT NULL AND line_start <= line_end)
+            ),
+    CONSTRAINT chk_deep_research_evidence_anchors_source_combo
+            CHECK (
+                    (source_type = 'ARTICLE'
+                            AND path IS NULL
+                            AND line_start IS NULL
+                            AND line_end IS NULL)
+                    OR (source_type = 'SOURCE_FILE'
+                            AND path IS NOT NULL
+                            AND path = source_id
+                            AND chunk_id IS NULL)
+                    OR (source_type = 'GRAPH_FACT'
+                            AND path IS NULL
+                            AND line_start IS NULL
+                            AND line_end IS NULL
+                            AND chunk_id IS NULL)
+                    OR (source_type = 'CONTRIBUTION'
+                            AND path IS NULL
+                            AND line_start IS NULL
+                            AND line_end IS NULL
+                            AND chunk_id IS NULL)
+            )
+);
+
+COMMENT ON TABLE deep_research_evidence_anchors IS 'Deep Research 证据锚点主表';
+COMMENT ON COLUMN deep_research_evidence_anchors.anchor_id IS '锚点业务标识，固定为 ev#N';
+COMMENT ON COLUMN deep_research_evidence_anchors.source_type IS '证据来源类型';
+COMMENT ON COLUMN deep_research_evidence_anchors.source_id IS '引用目标';
+COMMENT ON COLUMN deep_research_evidence_anchors.path IS '相对路径';
+COMMENT ON COLUMN deep_research_evidence_anchors.line_start IS '起始行号';
+COMMENT ON COLUMN deep_research_evidence_anchors.line_end IS '结束行号';
+COMMENT ON COLUMN deep_research_evidence_anchors.quote_text IS '摘录文本';
+COMMENT ON COLUMN deep_research_evidence_anchors.retrieval_score IS '检索得分';
+COMMENT ON COLUMN deep_research_evidence_anchors.content_hash IS '按 source_type 分型生成的 identity hash';
+
+CREATE INDEX IF NOT EXISTS idx_deep_research_evidence_anchors_run_task
+    ON deep_research_evidence_anchors (run_id, task_id, anchor_id);
+
+CREATE TABLE IF NOT EXISTS deep_research_evidence_anchor_validations (
+    id BIGSERIAL PRIMARY KEY,
+    run_id BIGINT NOT NULL REFERENCES deep_research_runs (run_id) ON DELETE CASCADE,
+    anchor_id VARCHAR(32) NOT NULL,
+    validation_round INTEGER NOT NULL,
+    validation_status VARCHAR(32) NOT NULL,
+    validated_by VARCHAR(32) NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    matched_excerpt TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_deep_research_anchor_validations_round UNIQUE (run_id, anchor_id, validation_round, validated_by),
+    CONSTRAINT fk_deep_research_anchor_validations_anchor
+            FOREIGN KEY (run_id, anchor_id)
+            REFERENCES deep_research_evidence_anchors (run_id, anchor_id)
+            ON DELETE CASCADE,
+    CONSTRAINT chk_deep_research_anchor_validations_status
+            CHECK (validation_status IN ('RAW', 'VERIFIED', 'DEMOTED', 'SKIPPED')),
+    CONSTRAINT chk_deep_research_anchor_validations_actor
+            CHECK (validated_by IN ('STRUCTURE_RULE', 'SOURCE_RESOLUTION'))
+);
+
+COMMENT ON TABLE deep_research_evidence_anchor_validations IS 'Deep Research 锚点校验历史表';
+COMMENT ON COLUMN deep_research_evidence_anchor_validations.validation_round IS '校验轮次';
+COMMENT ON COLUMN deep_research_evidence_anchor_validations.validation_status IS '锚点校验状态';
+COMMENT ON COLUMN deep_research_evidence_anchor_validations.validated_by IS '校验器来源';
+
+CREATE INDEX IF NOT EXISTS idx_deep_research_anchor_validations_run_anchor
+    ON deep_research_evidence_anchor_validations (run_id, anchor_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS deep_research_answer_projections (
+    id BIGSERIAL PRIMARY KEY,
+    run_id BIGINT NOT NULL REFERENCES deep_research_runs (run_id) ON DELETE CASCADE,
+    answer_audit_id BIGINT NOT NULL,
+    projection_ordinal INTEGER NOT NULL,
+    anchor_id VARCHAR(32) NOT NULL,
+    citation_literal TEXT NOT NULL,
+    source_type VARCHAR(32) NOT NULL,
+    target_key VARCHAR(512) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    repair_round INTEGER NOT NULL DEFAULT 0,
+    repaired_from_projection_ordinal INTEGER,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_deep_research_answer_projections_run_audit_ordinal
+            UNIQUE (run_id, answer_audit_id, projection_ordinal),
+    CONSTRAINT uk_deep_research_answer_projections_run_anchor_literal_round
+            UNIQUE (run_id, answer_audit_id, anchor_id, citation_literal, repair_round),
+    CONSTRAINT fk_deep_research_answer_projections_anchor
+            FOREIGN KEY (run_id, anchor_id)
+            REFERENCES deep_research_evidence_anchors (run_id, anchor_id)
+            ON DELETE CASCADE,
+    CONSTRAINT fk_deep_research_answer_projections_audit
+            FOREIGN KEY (run_id, answer_audit_id)
+            REFERENCES query_answer_audits (deep_research_run_id, audit_id)
+            ON DELETE CASCADE,
+    CONSTRAINT fk_deep_research_answer_projections_repaired_from
+            FOREIGN KEY (run_id, answer_audit_id, repaired_from_projection_ordinal)
+            REFERENCES deep_research_answer_projections (run_id, answer_audit_id, projection_ordinal),
+    CONSTRAINT chk_deep_research_answer_projections_source_type
+            CHECK (source_type IN ('ARTICLE', 'SOURCE_FILE')),
+    CONSTRAINT chk_deep_research_answer_projections_status
+            CHECK (status IN ('ACTIVE', 'REPLACED', 'REMOVED'))
+);
+
+COMMENT ON TABLE deep_research_answer_projections IS 'Deep Research 最终出站投影表';
+COMMENT ON COLUMN deep_research_answer_projections.answer_audit_id IS '最终答案审计主键';
+COMMENT ON COLUMN deep_research_answer_projections.projection_ordinal IS '投影顺序号';
+COMMENT ON COLUMN deep_research_answer_projections.anchor_id IS '代表锚点 ID';
+COMMENT ON COLUMN deep_research_answer_projections.citation_literal IS '最终渲染字面量';
+COMMENT ON COLUMN deep_research_answer_projections.source_type IS '最终出站来源类型';
+COMMENT ON COLUMN deep_research_answer_projections.target_key IS '最终引用目标';
+COMMENT ON COLUMN deep_research_answer_projections.status IS '投影状态';
+COMMENT ON COLUMN deep_research_answer_projections.repair_round IS 'repair 轮次';
+COMMENT ON COLUMN deep_research_answer_projections.repaired_from_projection_ordinal IS '被替换的历史 projection 序号';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deep_research_answer_projections_active_literal
+    ON deep_research_answer_projections (run_id, answer_audit_id, citation_literal)
+    WHERE status = 'ACTIVE';
+
+CREATE INDEX IF NOT EXISTS idx_deep_research_answer_projections_run_audit
+    ON deep_research_answer_projections (run_id, answer_audit_id, projection_ordinal);
 
 CREATE TABLE IF NOT EXISTS agent_model_bindings (
     id BIGSERIAL PRIMARY KEY,

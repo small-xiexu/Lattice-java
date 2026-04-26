@@ -56,6 +56,7 @@ public class QueryGraphStateMapper {
         state.setFinalResponseRef(readString(stateMap, QueryGraphStateKeys.FINAL_RESPONSE_REF));
         state.setClaimSegmentsRef(readString(stateMap, QueryGraphStateKeys.CLAIM_SEGMENTS_REF));
         state.setCitationCheckReportRef(readString(stateMap, QueryGraphStateKeys.CITATION_CHECK_REPORT_REF));
+        state.setAnswerProjectionBundleRef(readString(stateMap, QueryGraphStateKeys.ANSWER_PROJECTION_BUNDLE_REF));
         state.setAnswerAuditRef(readString(stateMap, QueryGraphStateKeys.ANSWER_AUDIT_REF));
         state.setLlmBindingSnapshotRef(readString(stateMap, QueryGraphStateKeys.LLM_BINDING_SNAPSHOT_REF));
         state.setAnswerRoute(readString(stateMap, QueryGraphStateKeys.ANSWER_ROUTE));
@@ -107,6 +108,7 @@ public class QueryGraphStateMapper {
         values.put(QueryGraphStateKeys.FINAL_RESPONSE_REF, state.getFinalResponseRef());
         values.put(QueryGraphStateKeys.CLAIM_SEGMENTS_REF, state.getClaimSegmentsRef());
         values.put(QueryGraphStateKeys.CITATION_CHECK_REPORT_REF, state.getCitationCheckReportRef());
+        values.put(QueryGraphStateKeys.ANSWER_PROJECTION_BUNDLE_REF, state.getAnswerProjectionBundleRef());
         values.put(QueryGraphStateKeys.ANSWER_AUDIT_REF, state.getAnswerAuditRef());
         values.put(QueryGraphStateKeys.LLM_BINDING_SNAPSHOT_REF, state.getLlmBindingSnapshotRef());
         values.put(QueryGraphStateKeys.ANSWER_ROUTE, state.getAnswerRoute());

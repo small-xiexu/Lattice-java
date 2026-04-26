@@ -15,9 +15,11 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 运行时快照服务
@@ -39,6 +41,10 @@ public class ExecutionLlmSnapshotService {
 
     public static final String QUERY_SCENE = "query";
 
+    public static final String DEEP_RESEARCH_SCOPE_TYPE = "deep_research_run";
+
+    public static final String DEEP_RESEARCH_SCENE = "deep_research";
+
     public static final String ROLE_WRITER = "writer";
 
     public static final String ROLE_REVIEWER = "reviewer";
@@ -48,6 +54,19 @@ public class ExecutionLlmSnapshotService {
     public static final String ROLE_ANSWER = "answer";
 
     public static final String ROLE_REWRITE = "rewrite";
+
+    public static final String ROLE_PLANNER = "planner";
+
+    public static final String ROLE_RESEARCHER = "researcher";
+
+    public static final String ROLE_SYNTHESIZER = "synthesizer";
+
+    private static final Set<String> DEEP_RESEARCH_REQUIRED_ROLES = Set.of(
+            ROLE_PLANNER,
+            ROLE_RESEARCHER,
+            ROLE_SYNTHESIZER,
+            ROLE_REVIEWER
+    );
 
     private final LlmProperties llmProperties;
 
@@ -96,15 +115,29 @@ public class ExecutionLlmSnapshotService {
      * @return 冻结后的快照列表
      */
     public List<ExecutionLlmSnapshot> freezeSnapshots(String scopeType, String scopeId, String scene) {
-        List<ExecutionLlmSnapshot> existingSnapshots = executionLlmSnapshotJdbcRepository.findByScope(scopeType, scopeId, scene);
+        String normalizedScene = resolveScene(scene);
+        List<ExecutionLlmSnapshot> existingSnapshots = executionLlmSnapshotJdbcRepository.findByScope(
+                scopeType,
+                scopeId,
+                normalizedScene
+        );
         if (!existingSnapshots.isEmpty()) {
             return existingSnapshots;
+        }
+        if (requiresStrictBindings(normalizedScene) && "properties".equalsIgnoreCase(normalizeConfigSource())) {
+            throw new IllegalStateException("deep_research scene 不支持 properties/bootstrap 回退，必须配置 JDBC bindings");
         }
         if ("properties".equalsIgnoreCase(normalizeConfigSource())) {
             return List.of();
         }
-        List<AgentModelBinding> bindings = agentModelBindingJdbcRepository.findEnabledByScene(scene);
+        List<AgentModelBinding> bindings = agentModelBindingJdbcRepository.findEnabledByScene(normalizedScene);
+        if (requiresStrictBindings(normalizedScene)) {
+            validateStrictSceneBindings(normalizedScene, bindings);
+        }
         if (bindings.isEmpty()) {
+            if (requiresStrictBindings(normalizedScene)) {
+                throw new IllegalStateException("deep_research scene 缺少启用中的 agent_model_bindings");
+            }
             return List.of();
         }
         List<ExecutionLlmSnapshot> snapshots = new ArrayList<ExecutionLlmSnapshot>();
@@ -113,6 +146,10 @@ public class ExecutionLlmSnapshotService {
                     binding.getPrimaryModelProfileId()
             );
             if (modelProfile.isEmpty()) {
+                if (requiresStrictBindings(normalizedScene)) {
+                    throw new IllegalStateException("deep_research role " + binding.getAgentRole()
+                            + " 缺少启用中的 model profile: " + binding.getPrimaryModelProfileId());
+                }
                 log.warn("Skip llm snapshot freeze because model profile {} is missing or disabled", binding.getPrimaryModelProfileId());
                 continue;
             }
@@ -120,17 +157,64 @@ public class ExecutionLlmSnapshotService {
                     modelProfile.orElseThrow().getConnectionId()
             );
             if (providerConnection.isEmpty()) {
+                if (requiresStrictBindings(normalizedScene)) {
+                    throw new IllegalStateException("deep_research role " + binding.getAgentRole()
+                            + " 缺少启用中的 provider connection: " + modelProfile.orElseThrow().getConnectionId());
+                }
                 log.warn("Skip llm snapshot freeze because provider connection {} is missing or disabled",
                         modelProfile.orElseThrow().getConnectionId());
                 continue;
             }
-            snapshots.add(toSnapshot(scopeType, scopeId, scene, binding, modelProfile.orElseThrow(), providerConnection.orElseThrow()));
+            snapshots.add(toSnapshot(
+                    scopeType,
+                    scopeId,
+                    normalizedScene,
+                    binding,
+                    modelProfile.orElseThrow(),
+                    providerConnection.orElseThrow()
+            ));
         }
         if (snapshots.isEmpty()) {
+            if (requiresStrictBindings(normalizedScene)) {
+                throw new IllegalStateException("deep_research scene 未能冻结任何有效 LLM 快照");
+            }
             return List.of();
         }
         executionLlmSnapshotJdbcRepository.saveAll(snapshots);
-        return executionLlmSnapshotJdbcRepository.findByScope(scopeType, scopeId, scene);
+        return executionLlmSnapshotJdbcRepository.findByScope(scopeType, scopeId, normalizedScene);
+    }
+
+    /**
+     * 校验某个场景的绑定是否完整可用。
+     *
+     * @param scene 场景
+     */
+    public void validateSceneBindings(String scene) {
+        String normalizedScene = resolveScene(scene);
+        if (!requiresStrictBindings(normalizedScene)) {
+            return;
+        }
+        if ("properties".equalsIgnoreCase(normalizeConfigSource())) {
+            throw new IllegalStateException("deep_research scene 不支持 properties/bootstrap 回退，必须配置 JDBC bindings");
+        }
+        List<AgentModelBinding> bindings = agentModelBindingJdbcRepository.findEnabledByScene(normalizedScene);
+        validateStrictSceneBindings(normalizedScene, bindings);
+        for (AgentModelBinding binding : bindings) {
+            Optional<LlmModelProfile> modelProfile = llmModelProfileJdbcRepository.findEnabledById(
+                    binding.getPrimaryModelProfileId()
+            );
+            if (modelProfile.isEmpty()) {
+                throw new IllegalStateException("deep_research role " + binding.getAgentRole()
+                        + " 缺少启用中的 model profile: " + binding.getPrimaryModelProfileId());
+            }
+            Optional<LlmProviderConnection> providerConnection = llmProviderConnectionJdbcRepository.findEnabledById(
+                    modelProfile.orElseThrow().getConnectionId()
+            );
+            if (providerConnection.isEmpty()) {
+                throw new IllegalStateException("deep_research role " + binding.getAgentRole()
+                        + " 缺少启用中的 provider connection: " + modelProfile.orElseThrow().getConnectionId());
+            }
+        }
     }
 
     /**
@@ -148,19 +232,28 @@ public class ExecutionLlmSnapshotService {
             String scene,
             String agentRole
     ) {
+        String normalizedScene = resolveScene(scene);
         Optional<ExecutionLlmSnapshot> snapshot = executionLlmSnapshotJdbcRepository.findByScopeAndRole(
                 scopeType,
                 scopeId,
-                scene,
+                normalizedScene,
                 agentRole
         );
         if (snapshot.isEmpty()) {
+            if (requiresStrictBindings(normalizedScene)) {
+                throw new IllegalStateException("No llm route configured for " + normalizedScene + "/" + agentRole
+                        + " scopeId=" + scopeId);
+            }
             return Optional.empty();
         }
         Optional<LlmProviderConnection> providerConnection = llmProviderConnectionJdbcRepository.findById(
                 snapshot.orElseThrow().getConnectionId()
         );
         if (providerConnection.isEmpty()) {
+            if (requiresStrictBindings(normalizedScene)) {
+                throw new IllegalStateException("LLM snapshot exists but provider connection "
+                        + snapshot.orElseThrow().getConnectionId() + " is missing");
+            }
             log.warn("LLM snapshot exists but provider connection {} is missing", snapshot.orElseThrow().getConnectionId());
             return Optional.empty();
         }
@@ -207,11 +300,15 @@ public class ExecutionLlmSnapshotService {
             String reviewerBaseUrl,
             String reviewerApiKey
     ) {
+        String normalizedScene = resolveScene(scene);
+        if (requiresStrictBindings(normalizedScene)) {
+            throw new IllegalStateException("deep_research scene 不允许 bootstrap fallback");
+        }
         if (ROLE_REVIEWER.equals(agentRole)) {
             return new LlmRouteResolution(
-                    resolveScopeType(scene),
+                    resolveScopeType(normalizedScene),
                     null,
-                    scene,
+                    normalizedScene,
                     agentRole,
                     null,
                     null,
@@ -231,9 +328,9 @@ public class ExecutionLlmSnapshotService {
             );
         }
         return new LlmRouteResolution(
-                resolveScopeType(scene),
+                resolveScopeType(normalizedScene),
                 null,
-                scene,
+                normalizedScene,
                 agentRole,
                 null,
                 null,
@@ -260,6 +357,16 @@ public class ExecutionLlmSnapshotService {
      */
     public boolean isBootstrapEnabled() {
         return llmProperties.isBootstrapEnabled();
+    }
+
+    /**
+     * 返回某个场景是否允许 bootstrap fallback。
+     *
+     * @param scene 场景
+     * @return 是否允许 fallback
+     */
+    public boolean isBootstrapAllowed(String scene) {
+        return llmProperties.isBootstrapEnabled() && !requiresStrictBindings(resolveScene(scene));
     }
 
     private ExecutionLlmSnapshot toSnapshot(
@@ -355,6 +462,30 @@ public class ExecutionLlmSnapshotService {
         if (QUERY_SCENE.equals(scene)) {
             return QUERY_SCOPE_TYPE;
         }
+        if (DEEP_RESEARCH_SCENE.equals(scene)) {
+            return DEEP_RESEARCH_SCOPE_TYPE;
+        }
         return scene == null ? "unknown_scope" : scene + "_scope";
+    }
+
+    private boolean requiresStrictBindings(String scene) {
+        return DEEP_RESEARCH_SCENE.equals(resolveScene(scene));
+    }
+
+    private void validateStrictSceneBindings(String scene, List<AgentModelBinding> bindings) {
+        if (!requiresStrictBindings(scene)) {
+            return;
+        }
+        if (bindings == null || bindings.isEmpty()) {
+            throw new IllegalStateException("deep_research scene 缺少启用中的 agent_model_bindings");
+        }
+        Set<String> configuredRoles = new LinkedHashSet<String>();
+        for (AgentModelBinding binding : bindings) {
+            configuredRoles.add(binding.getAgentRole());
+        }
+        if (!DEEP_RESEARCH_REQUIRED_ROLES.equals(configuredRoles)) {
+            throw new IllegalStateException("deep_research scene 必须完整配置角色 "
+                    + DEEP_RESEARCH_REQUIRED_ROLES + "，当前为 " + configuredRoles);
+        }
     }
 }

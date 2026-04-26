@@ -5,19 +5,12 @@ import com.alibaba.cloud.ai.graph.action.AsyncEdgeAction;
 import com.alibaba.cloud.ai.graph.action.AsyncMultiCommandAction;
 import com.alibaba.cloud.ai.graph.action.AsyncNodeAction;
 import com.alibaba.cloud.ai.graph.action.MultiCommand;
-import com.xbk.lattice.api.query.QueryArticleResponse;
 import com.xbk.lattice.api.query.QueryResponse;
-import com.xbk.lattice.api.query.QuerySourceResponse;
-import com.xbk.lattice.query.citation.CitationCheckOptions;
 import com.xbk.lattice.query.citation.CitationCheckReport;
 import com.xbk.lattice.query.citation.CitationCheckService;
-import com.xbk.lattice.query.citation.ClaimSegment;
 import com.xbk.lattice.query.citation.QueryAnswerAuditPersistenceService;
-import com.xbk.lattice.query.citation.QueryAnswerAuditSnapshot;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import com.xbk.lattice.query.domain.AnswerOutcome;
-import com.xbk.lattice.query.domain.GenerationMode;
-import com.xbk.lattice.query.domain.ModelExecutionStatus;
 import com.xbk.lattice.query.domain.QueryAnswerPayload;
 import com.xbk.lattice.query.domain.ReviewIssue;
 import com.xbk.lattice.query.domain.ReviewResult;
@@ -28,7 +21,6 @@ import com.xbk.lattice.query.service.FtsSearchService;
 import com.xbk.lattice.query.service.GraphSearchService;
 import com.xbk.lattice.query.service.QueryArticleHit;
 import com.xbk.lattice.query.service.QueryCacheStore;
-import com.xbk.lattice.query.service.QueryEvidenceType;
 import com.xbk.lattice.query.service.QueryRetrievalSettingsService;
 import com.xbk.lattice.query.service.QueryRetrievalSettingsState;
 import com.xbk.lattice.query.service.RefKeySearchService;
@@ -75,8 +67,6 @@ public class QueryGraphDefinitionFactory {
 
     private static final String CHANNEL_CHUNK_VECTOR = "chunk_vector";
 
-    private static final CitationCheckOptions CITATION_CHECK_OPTIONS = CitationCheckOptions.defaults();
-
     private final FtsSearchService ftsSearchService;
 
     private final RefKeySearchService refKeySearchService;
@@ -103,13 +93,11 @@ public class QueryGraphDefinitionFactory {
 
     private final QueryWorkingSetStore queryWorkingSetStore;
 
-    private final CitationCheckService citationCheckService;
-
-    private final QueryAnswerAuditPersistenceService queryAnswerAuditPersistenceService;
-
     private final QueryGraphStateMapper queryGraphStateMapper;
 
     private final QueryGraphConditions queryGraphConditions;
+
+    private final QueryFinalizationGraphFragment queryFinalizationGraphFragment;
 
     /**
      * 创建问答图定义工厂。
@@ -131,7 +119,8 @@ public class QueryGraphDefinitionFactory {
             CitationCheckService citationCheckService,
             QueryAnswerAuditPersistenceService queryAnswerAuditPersistenceService,
             QueryGraphStateMapper queryGraphStateMapper,
-            QueryGraphConditions queryGraphConditions
+            QueryGraphConditions queryGraphConditions,
+            QueryAnswerProjectionBuilder queryAnswerProjectionBuilder
     ) {
         this.ftsSearchService = ftsSearchService;
         this.refKeySearchService = refKeySearchService;
@@ -146,10 +135,17 @@ public class QueryGraphDefinitionFactory {
         this.queryCacheStore = queryCacheStore;
         this.reviewerAgent = reviewerAgent;
         this.queryWorkingSetStore = queryWorkingSetStore;
-        this.citationCheckService = citationCheckService;
-        this.queryAnswerAuditPersistenceService = queryAnswerAuditPersistenceService;
         this.queryGraphStateMapper = queryGraphStateMapper;
         this.queryGraphConditions = queryGraphConditions;
+        this.queryFinalizationGraphFragment = new QueryFinalizationGraphFragment(
+                queryWorkingSetStore,
+                citationCheckService,
+                queryAnswerAuditPersistenceService,
+                queryCacheStore,
+                queryGraphStateMapper,
+                queryAnswerProjectionBuilder,
+                answerGenerationService
+        );
     }
 
     /**
@@ -188,11 +184,11 @@ public class QueryGraphDefinitionFactory {
         stateGraph.addNode("answer_question", AsyncNodeAction.node_async(this::answerQuestion));
         stateGraph.addNode("review_answer", AsyncNodeAction.node_async(this::reviewAnswer));
         stateGraph.addNode("rewrite_answer", AsyncNodeAction.node_async(this::rewriteAnswer));
-        stateGraph.addNode("claim_segment", AsyncNodeAction.node_async(this::claimSegment));
-        stateGraph.addNode("citation_check", AsyncNodeAction.node_async(this::citationCheck));
-        stateGraph.addNode("citation_repair", AsyncNodeAction.node_async(this::citationRepair));
-        stateGraph.addNode("persist_response", AsyncNodeAction.node_async(this::persistResponse));
-        stateGraph.addNode("finalize_response", AsyncNodeAction.node_async(this::finalizeResponse));
+        stateGraph.addNode("claim_segment", AsyncNodeAction.node_async(queryFinalizationGraphFragment::claimSegment));
+        stateGraph.addNode("citation_check", AsyncNodeAction.node_async(queryFinalizationGraphFragment::citationCheck));
+        stateGraph.addNode("citation_repair", AsyncNodeAction.node_async(queryFinalizationGraphFragment::citationRepair));
+        stateGraph.addNode("persist_response", AsyncNodeAction.node_async(queryFinalizationGraphFragment::persistResponse));
+        stateGraph.addNode("finalize_response", AsyncNodeAction.node_async(queryFinalizationGraphFragment::finalizeResponse));
 
         stateGraph.addEdge(StateGraph.START, "normalize_question");
         stateGraph.addEdge("normalize_question", "check_cache");
@@ -443,6 +439,7 @@ public class QueryGraphDefinitionFactory {
                 ExecutionLlmSnapshotService.ROLE_REVIEWER,
                 state.getQuestion(),
                 answer,
+                readAnswerOutcome(state.getAnswerOutcome()),
                 collectSourcePaths(fusedHits)
         );
         state.setReviewResultRef(queryWorkingSetStore.saveReviewResult(state.getQueryId(), reviewResult));
@@ -478,90 +475,6 @@ public class QueryGraphDefinitionFactory {
         return queryGraphStateMapper.toDeltaMap(state);
     }
 
-    private Map<String, Object> claimSegment(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
-        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
-        String answer = queryWorkingSetStore.loadAnswer(state.getDraftAnswerRef());
-        List<ClaimSegment> claimSegments = citationCheckService == null ? List.of() : citationCheckService.check(answer).getClaimSegments();
-        state.setClaimSegmentsRef(queryWorkingSetStore.saveClaimSegments(state.getQueryId(), claimSegments));
-        return queryGraphStateMapper.toDeltaMap(state);
-    }
-
-    private Map<String, Object> citationCheck(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
-        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
-        if (citationCheckService == null) {
-            state.setClaimSegmentsRef(queryWorkingSetStore.saveClaimSegments(state.getQueryId(), List.of()));
-            state.setCitationCheckReportRef(null);
-            return queryGraphStateMapper.toDeltaMap(state);
-        }
-        String answer = queryWorkingSetStore.loadAnswer(state.getDraftAnswerRef());
-        CitationCheckReport report = citationCheckService.check(answer);
-        state.setClaimSegmentsRef(queryWorkingSetStore.saveClaimSegments(state.getQueryId(), report.getClaimSegments()));
-        state.setCitationCheckReportRef(queryWorkingSetStore.saveCitationCheckReport(state.getQueryId(), report));
-        return queryGraphStateMapper.toDeltaMap(state);
-    }
-
-    private Map<String, Object> citationRepair(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
-        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
-        String answer = queryWorkingSetStore.loadAnswer(state.getDraftAnswerRef());
-        CitationCheckReport report = queryWorkingSetStore.loadCitationCheckReport(state.getCitationCheckReportRef());
-        if (citationCheckService != null && citationCheckService.shouldRepair(
-                report,
-                CITATION_CHECK_OPTIONS,
-                state.getCitationRepairAttemptCount()
-        )) {
-            String repairedAnswer = citationCheckService.repair(answer, report);
-            state.setDraftAnswerRef(queryWorkingSetStore.saveAnswer(state.getQueryId(), repairedAnswer));
-            state.setCitationRepairAttemptCount(state.getCitationRepairAttemptCount() + 1);
-        }
-        return queryGraphStateMapper.toDeltaMap(state);
-    }
-
-    private Map<String, Object> persistResponse(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
-        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
-        CitationCheckReport report = queryWorkingSetStore.loadCitationCheckReport(state.getCitationCheckReportRef());
-        QueryAnswerAuditSnapshot answerAuditSnapshot = persistAnswerAudit(state, report);
-        if (answerAuditSnapshot != null) {
-            state.setAnswerAuditRef(queryWorkingSetStore.saveAnswerAudit(state.getQueryId(), answerAuditSnapshot));
-        }
-        QueryResponse queryResponse = buildSuccessResponse(state);
-        String responseRef = queryWorkingSetStore.saveResponse(state.getQueryId(), queryResponse);
-        if (shouldCacheResponse(queryResponse, state.isAnswerCacheable(), report)) {
-            queryCacheStore.put(state.getNormalizedQuestion(), withoutQueryId(queryResponse));
-            state.setCachedResponseRef(responseRef);
-        }
-        state.setFinalResponseRef(responseRef);
-        return queryGraphStateMapper.toDeltaMap(state);
-    }
-
-    private Map<String, Object> finalizeResponse(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
-        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
-        if (state.getFinalResponseRef() != null) {
-            return queryGraphStateMapper.toDeltaMap(state);
-        }
-        if (state.isCacheHit()) {
-            state.setFinalResponseRef(state.getCachedResponseRef());
-            return queryGraphStateMapper.toDeltaMap(state);
-        }
-        QueryResponse queryResponse;
-        if (!state.isHasFusedHits()) {
-            queryResponse = new QueryResponse(
-                    "未找到相关知识",
-                    List.of(),
-                    List.of(),
-                    state.getQueryId(),
-                    null,
-                    AnswerOutcome.NO_RELEVANT_KNOWLEDGE,
-                    GenerationMode.RULE_BASED,
-                    ModelExecutionStatus.SKIPPED
-            );
-        }
-        else {
-            queryResponse = buildSuccessResponse(state);
-        }
-        state.setFinalResponseRef(queryWorkingSetStore.saveResponse(state.getQueryId(), queryResponse));
-        return queryGraphStateMapper.toDeltaMap(state);
-    }
-
     private String routeAfterReview(QueryGraphState state) {
         ReviewResult reviewResult = queryWorkingSetStore.loadReviewResult(state.getReviewResultRef());
         return queryGraphConditions.routeAfterReview(state, reviewResult);
@@ -570,24 +483,6 @@ public class QueryGraphDefinitionFactory {
     private String routeAfterCitationCheck(QueryGraphState state) {
         CitationCheckReport report = queryWorkingSetStore.loadCitationCheckReport(state.getCitationCheckReportRef());
         return queryGraphConditions.routeAfterCitationCheck(state, report);
-    }
-
-    private QueryResponse buildSuccessResponse(QueryGraphState state) {
-        List<QueryArticleHit> fusedHits = queryWorkingSetStore.loadFusedHits(state.getFusedHitsRef());
-        String answer = queryWorkingSetStore.loadAnswer(state.getDraftAnswerRef());
-        CitationCheckReport report = queryWorkingSetStore.loadCitationCheckReport(state.getCitationCheckReportRef());
-        return new QueryResponse(
-                answer,
-                toSourceResponses(fusedHits),
-                toArticleResponses(fusedHits),
-                state.getQueryId(),
-                state.getReviewStatus(),
-                readAnswerOutcome(state.getAnswerOutcome()),
-                readGenerationMode(state.getGenerationMode()),
-                readModelExecutionStatus(state.getModelExecutionStatus()),
-                report == null ? null : report.toSummary(),
-                null
-        );
     }
 
     private QueryResponse withQueryId(QueryResponse queryResponse, String queryId) {
@@ -605,91 +500,8 @@ public class QueryGraphDefinitionFactory {
         );
     }
 
-    private QueryResponse withoutQueryId(QueryResponse queryResponse) {
-        return new QueryResponse(
-                queryResponse.getAnswer(),
-                queryResponse.getSources(),
-                queryResponse.getArticles(),
-                null,
-                queryResponse.getReviewStatus(),
-                queryResponse.getAnswerOutcome(),
-                queryResponse.getGenerationMode(),
-                queryResponse.getModelExecutionStatus(),
-                queryResponse.getCitationCheck(),
-                queryResponse.getDeepResearch()
-        );
-    }
-
-    /**
-     * 判断当前响应是否适合写入 query cache。
-     *
-     * @param queryResponse 查询响应
-     * @return 是否允许写缓存
-     */
-    private boolean shouldCacheResponse(
-            QueryResponse queryResponse,
-            boolean answerCacheable,
-            CitationCheckReport report
-    ) {
-        if (queryResponse == null) {
-            return false;
-        }
-        if (!answerCacheable) {
-            return false;
-        }
-        String answer = queryResponse.getAnswer();
-        if (answer == null || answer.isBlank()) {
-            return false;
-        }
-        if (queryResponse.getSources().isEmpty() && queryResponse.getArticles().isEmpty()) {
-            return false;
-        }
-        if (!"PASSED".equals(queryResponse.getReviewStatus())) {
-            return false;
-        }
-        if (report == null) {
-            return isCacheableOutcome(queryResponse.getAnswerOutcome());
-        }
-        if (report.isNoCitation()) {
-            return false;
-        }
-        if (report.getDemotedCount() > 0) {
-            return false;
-        }
-        if (report.getCoverageRate() < CITATION_CHECK_OPTIONS.getMinCitationCoverage()) {
-            return false;
-        }
-        return isCacheableOutcome(queryResponse.getAnswerOutcome());
-    }
-
-    private QueryAnswerAuditSnapshot persistAnswerAudit(QueryGraphState state, CitationCheckReport report) {
-        if (queryAnswerAuditPersistenceService == null) {
-            return null;
-        }
-        String answer = queryWorkingSetStore.loadAnswer(state.getDraftAnswerRef());
-        return queryAnswerAuditPersistenceService.persist(
-                state.getQueryId(),
-                state.getCitationRepairAttemptCount() + 1,
-                state.getQuestion(),
-                answer,
-                readAnswerOutcome(state.getAnswerOutcome()),
-                readGenerationMode(state.getGenerationMode()),
-                state.getReviewStatus(),
-                state.isAnswerCacheable(),
-                "query",
-                report
-        );
-    }
-
     private boolean isCacheableOutcome(AnswerOutcome answerOutcome) {
         return answerOutcome == AnswerOutcome.SUCCESS;
-    }
-
-    private String enumName(Enum<?> enumValue) {
-        if (enumValue == null) {
-            return null;
-        }
-        return enumValue.name();
     }
 
     private AnswerOutcome readAnswerOutcome(String answerOutcome) {
@@ -699,18 +511,11 @@ public class QueryGraphDefinitionFactory {
         return AnswerOutcome.valueOf(answerOutcome);
     }
 
-    private GenerationMode readGenerationMode(String generationMode) {
-        if (generationMode == null || generationMode.isBlank()) {
+    private String enumName(Enum<?> enumValue) {
+        if (enumValue == null) {
             return null;
         }
-        return GenerationMode.valueOf(generationMode);
-    }
-
-    private ModelExecutionStatus readModelExecutionStatus(String modelExecutionStatus) {
-        if (modelExecutionStatus == null || modelExecutionStatus.isBlank()) {
-            return null;
-        }
-        return ModelExecutionStatus.valueOf(modelExecutionStatus);
+        return enumValue.name();
     }
 
     private String buildRewriteGuidance(ReviewResult reviewResult) {
@@ -722,60 +527,6 @@ public class QueryGraphDefinitionFactory {
             issueDescriptions.add(reviewIssue.getCategory() + ":" + reviewIssue.getDescription());
         }
         return String.join("; ", issueDescriptions);
-    }
-
-    private List<QuerySourceResponse> toSourceResponses(List<QueryArticleHit> fusedHits) {
-        List<QuerySourceResponse> sourceResponses = new ArrayList<QuerySourceResponse>();
-        Set<String> responseKeys = new LinkedHashSet<String>();
-        appendSourceResponses(sourceResponses, responseKeys, fusedHits, QueryEvidenceType.ARTICLE);
-        appendSourceResponses(sourceResponses, responseKeys, fusedHits, QueryEvidenceType.GRAPH);
-        appendSourceResponses(sourceResponses, responseKeys, fusedHits, QueryEvidenceType.SOURCE);
-        appendSourceResponses(sourceResponses, responseKeys, fusedHits, QueryEvidenceType.CONTRIBUTION);
-        return sourceResponses;
-    }
-
-    private void appendSourceResponses(
-            List<QuerySourceResponse> sourceResponses,
-            Set<String> responseKeys,
-            List<QueryArticleHit> fusedHits,
-            QueryEvidenceType queryEvidenceType
-    ) {
-        for (QueryArticleHit fusedHit : fusedHits) {
-            if (fusedHit.getEvidenceType() != queryEvidenceType) {
-                continue;
-            }
-            String responseIdentity = fusedHit.getArticleKey();
-            if (responseIdentity == null || responseIdentity.isBlank()) {
-                responseIdentity = fusedHit.getConceptId();
-            }
-            String responseKey = fusedHit.getEvidenceType().name() + ":" + responseIdentity;
-            if (!responseKeys.add(responseKey)) {
-                continue;
-            }
-            sourceResponses.add(new QuerySourceResponse(
-                    fusedHit.getSourceId(),
-                    fusedHit.getArticleKey(),
-                    fusedHit.getConceptId(),
-                    fusedHit.getTitle(),
-                    fusedHit.getSourcePaths()
-            ));
-        }
-    }
-
-    private List<QueryArticleResponse> toArticleResponses(List<QueryArticleHit> fusedHits) {
-        List<QueryArticleResponse> articleResponses = new ArrayList<QueryArticleResponse>();
-        for (QueryArticleHit fusedHit : fusedHits) {
-            if (fusedHit.getEvidenceType() != QueryEvidenceType.ARTICLE) {
-                continue;
-            }
-            articleResponses.add(new QueryArticleResponse(
-                    fusedHit.getSourceId(),
-                    fusedHit.getArticleKey(),
-                    fusedHit.getConceptId(),
-                    fusedHit.getTitle()
-            ));
-        }
-        return articleResponses;
     }
 
     private List<String> collectSourcePaths(List<QueryArticleHit> fusedHits) {

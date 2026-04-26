@@ -56,4 +56,22 @@ public class DeepResearchRunJdbcRepository {
                 record.getFinalAnswerAuditId()
         );
     }
+
+    /**
+     * 绑定最终答案审计主键。
+     *
+     * @param runId run 主键
+     * @param finalAnswerAuditId 最终答案审计主键
+     */
+    public void bindFinalAnswerAudit(Long runId, Long finalAnswerAuditId) {
+        jdbcTemplate.update(
+                """
+                        update deep_research_runs
+                        set final_answer_audit_id = ?
+                        where run_id = ?
+                        """,
+                finalAnswerAuditId,
+                runId
+        );
+    }
 }

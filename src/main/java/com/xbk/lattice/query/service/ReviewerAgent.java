@@ -1,6 +1,7 @@
 package com.xbk.lattice.query.service;
 
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
+import com.xbk.lattice.query.domain.AnswerOutcome;
 import com.xbk.lattice.query.domain.ReviewResult;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -42,12 +43,31 @@ public class ReviewerAgent {
      * @return 审查结果
      */
     public ReviewResult review(String question, String answer, List<String> sourcePaths) {
+        return review(question, answer, null, sourcePaths);
+    }
+
+    /**
+     * 对答案执行单轮审查。
+     *
+     * @param question 问题
+     * @param answer 答案
+     * @param answerOutcome 答案语义
+     * @param sourcePaths 来源路径
+     * @return 审查结果
+     */
+    public ReviewResult review(
+            String question,
+            String answer,
+            AnswerOutcome answerOutcome,
+            List<String> sourcePaths
+    ) {
         return review(
                 null,
                 ExecutionLlmSnapshotService.QUERY_SCENE,
                 ExecutionLlmSnapshotService.ROLE_REVIEWER,
                 question,
                 answer,
+                answerOutcome,
                 sourcePaths
         );
     }
@@ -71,7 +91,31 @@ public class ReviewerAgent {
             String answer,
             List<String> sourcePaths
     ) {
-        String reviewPrompt = buildPrompt(question, answer, sourcePaths);
+        return review(scopeId, scene, agentRole, question, answer, null, sourcePaths);
+    }
+
+    /**
+     * 在指定作用域下对答案执行单轮审查。
+     *
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @param question 问题
+     * @param answer 答案
+     * @param answerOutcome 答案语义
+     * @param sourcePaths 来源路径
+     * @return 审查结果
+     */
+    public ReviewResult review(
+            String scopeId,
+            String scene,
+            String agentRole,
+            String question,
+            String answer,
+            AnswerOutcome answerOutcome,
+            List<String> sourcePaths
+    ) {
+        String reviewPrompt = buildPrompt(question, answer, answerOutcome, sourcePaths);
         try {
             String rawResult = reviewerGateway.review(scopeId, scene, agentRole, reviewPrompt);
             return reviewResultParser.parse(rawResult);
@@ -98,12 +142,14 @@ public class ReviewerAgent {
      *
      * @param question 问题
      * @param answer 答案
+     * @param answerOutcome 答案语义
      * @param sourcePaths 来源路径
      * @return 审查提示词
      */
-    private String buildPrompt(String question, String answer, List<String> sourcePaths) {
+    private String buildPrompt(String question, String answer, AnswerOutcome answerOutcome, List<String> sourcePaths) {
         return "question=" + question + "\n"
                 + "answer=" + answer + "\n"
+                + "answerOutcome=" + (answerOutcome == null ? "" : answerOutcome.name()) + "\n"
                 + "sources=" + String.join(", ", sourcePaths);
     }
 }

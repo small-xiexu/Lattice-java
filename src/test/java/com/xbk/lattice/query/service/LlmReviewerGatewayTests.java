@@ -124,6 +124,31 @@ class LlmReviewerGatewayTests {
         assertThat(llmClient.getCallCount()).isEqualTo(2);
     }
 
+    @Test
+    void shouldDescribeAnswerOutcomeRulesInSystemPrompt() throws Exception {
+        StaticLlmClient llmClient = new StaticLlmClient("""
+                {"approved":true,"rewriteRequired":false,"riskLevel":"LOW","issues":[],"userFacingRewriteHints":[],"cacheWritePolicy":"WRITE"}
+                """);
+        LlmReviewerGateway reviewerGateway = new LlmReviewerGateway(
+                createGateway(llmClient, true),
+                new LocalReviewerGateway(),
+                new ReviewResultParser()
+        );
+
+        reviewerGateway.review(
+                "query-1",
+                "query",
+                "reviewer",
+                "question=payment timeout retry=3\nanswer=retry=3\nanswerOutcome=SUCCESS\nsources=payment/context.md"
+        );
+
+        assertThat(llmClient.getLastSystemPrompt()).contains("answerOutcome=SUCCESS");
+        assertThat(llmClient.getLastSystemPrompt()).contains("不要仅因答案简短就判失败");
+        assertThat(llmClient.getLastSystemPrompt()).contains("answerOutcome=PARTIAL_ANSWER");
+        assertThat(llmClient.getLastSystemPrompt()).contains("额外边界说明不算缺陷");
+        assertThat(llmClient.getLastUserPrompt()).contains("answerOutcome=SUCCESS");
+    }
+
     private LlmGateway createGateway(LlmClient llmClient, boolean reviewEnabled) throws Exception {
         Constructor<LlmGateway> constructor = LlmGateway.class.getDeclaredConstructor(
                 LlmClient.class,
@@ -153,6 +178,10 @@ class LlmReviewerGatewayTests {
 
         private int callCount;
 
+        private String lastSystemPrompt;
+
+        private String lastUserPrompt;
+
         private StaticLlmClient(String content) {
             this.content = content;
             this.callCount = 0;
@@ -161,6 +190,8 @@ class LlmReviewerGatewayTests {
         @Override
         public LlmCallResult call(String systemPrompt, String userPrompt) {
             callCount++;
+            lastSystemPrompt = systemPrompt;
+            lastUserPrompt = userPrompt;
             return new LlmCallResult(content, 128, 32);
         }
 
@@ -171,6 +202,14 @@ class LlmReviewerGatewayTests {
          */
         private int getCallCount() {
             return callCount;
+        }
+
+        private String getLastSystemPrompt() {
+            return lastSystemPrompt;
+        }
+
+        private String getLastUserPrompt() {
+            return lastUserPrompt;
         }
     }
 

@@ -66,6 +66,8 @@ public class QueryGraphState {
 
     private String citationCheckReportRef;
 
+    private String answerProjectionBundleRef;
+
     private String answerAuditRef;
 
     private String llmBindingSnapshotRef;

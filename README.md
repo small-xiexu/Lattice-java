@@ -1,21 +1,15 @@
 # 邪修智库（Lattice-java）
 
-> 一个把资料编译成知识资产，再统一提供问答与治理能力的 Java 后端。<br>
-> 它不是“上传文档 -> 检索碎片 -> 临时生成答案”的轻量 demo，<br>
-> 而是面向长期演进场景的 `知识编译 + Agent 编排 + 模型中心 + 反馈闭环` 系统。
+> 一个把资料编译成知识资产，再统一提供问答、反馈、治理和开发接入能力的 Java 后端。  
+> 它的重点不是“上传文档 -> 检索 chunk -> 生成一句答案”，而是  
+> `资料源 -> 知识编译 -> 证据化问答 -> 反馈沉淀 -> 快照治理 -> 多入口复用`。
 
-如果你想快速判断它值不值得看，先抓 3 件事：
+如果你只想先判断这个项目值不值得继续看，先抓住 4 句话：
 
-- 它把 `Markdown / YAML / 代码 / PDF / Excel / Git Repo` 编译成可追踪的知识资产，而不是直接把原始 chunk 扔给模型。
-- 它同时提供 `Web / HTTP API / CLI / MCP` 四类入口，复用同一套后端能力。
-- 它把模型连接、角色绑定、执行快照、反馈回写、历史回滚都做成了正式能力。
-
-如果继续往下看，可以重点留意这些核心对象：
-
-- `articles` / `article_chunks`：系统消费的是编译后的知识资产，不是裸 chunk。
-- `pending_queries` / `contributions`：回答不是终点，还能被确认、纠偏、丢弃，再沉淀回系统。
-- `execution_llm_snapshots`：每次 compile / query 都会留下运行时快照，知道当时到底命中了什么连接、模型和绑定。
-- `article_snapshots` / `repo_snapshots`：知识资产自带历史、回档、导出，不是回答完就烟消云散。
+- 它消费的是编译后的知识资产，不是把原始 chunk 直接塞给模型。
+- 它把 `compile graph` 和 `query graph` 做成了两条正式主链，而不是一条临时 prompt 流。
+- 它把连接、模型、角色绑定和运行时快照做成了模型中心，而不是散落在页面和代码里的配置。
+- 它把 Web、HTTP API、CLI、MCP 四类入口统一落到同一套知识后端，而不是各做各的。
 
 `Spring Boot 3.5` · `Spring AI Alibaba Graph` · `PostgreSQL` · `Redis` · `OpenAI 兼容 / Anthropic / Ollama` · `Web / HTTP API / CLI / MCP`
 
@@ -24,316 +18,270 @@
 ## 30 秒看懂
 
 - 它是什么：一个面向知识编译、问答、反馈和治理的 Java 后端，不只是一个聊天页面。
-- 它解决什么问题：把分散在文档、代码、配置、PDF、Excel、Git Repo 里的资料，整理成可追踪、可回写、可回滚的知识资产。
-- 怎么试：如果你想先跑起来，直接跳到后面的 [快速开始](#快速开始)。
+- 它解决什么问题：把散落在文档、代码、配置、PDF、Excel、Git Repo 里的资料，整理成可追踪、可回写、可回滚的知识资产。
+- 它和普通 RAG 的分水岭：先编译知识，再问答；先冻结模型选路，再执行；先保留证据和状态，再决定是否沉淀为长期知识。
+- 你应该怎么读它：先看本文的核心对象和主链路，再去看启动清单、验收手册和数据库结构文档。
 
----
+## 项目精髓
 
-## 和传统 RAG 的区别
+这个项目真正的一等公民，不是“一次回答”，而是下面这些会留下痕迹、会继续演化、会反过来塑造系统的对象和链路：
 
-如果你第一眼把它当成“又一个知识库问答项目”，大概率会看错重点。这个仓库真正的一等公民，不只是检索和回答，而是那些会留下痕迹、会继续演化、会反过来塑造系统本身的对象和链路：
+- 资料源是正式对象，不只是一个目录路径。
+- 知识资产是编译后的 `articles / article_chunks / article_source_refs`，不是裸 chunk。
+- 问答结果不是终点，还会进入 `pending -> confirm/correct/discard -> contribution` 的反馈闭环。
+- 模型配置不是临时参数，而是 `connection -> model -> binding -> execution snapshot` 的可追踪链路。
+- 知识系统不只“能答”，还要能做 snapshot、history、rollback、lint、coverage、quality、vault export。
 
-| 传统 RAG 常见终点 | 邪修智库真正落地的一等公民 |
-| --- | --- |
-| 原始 chunk + 一次性 answer | `articles`、`article_chunks`、`metadata` 这类编译后的知识资产 |
-| `retrieve -> answer` 单链路 | `compile graph` 和 `query graph` 两条显式主链 |
-| 模型名只是一个字符串参数 | `connections`、`models`、`bindings`、`execution_llm_snapshots` |
-| 回答停留在聊天记录里 | `pending_queries -> confirm/correct/discard -> contributions` |
-| 配置改了就污染后续所有结果 | 运行时快照冻结，能追踪这次执行到底用了什么 |
-| 只有页面能玩一下 | Web、HTTP API、CLI、MCP 共用同一后端能力 |
+换句话说，邪修智库更像一个长期运行的知识后端，而不是一个临时问答 demo。
 
-真正重要的差异点，不是“支持 PDF / Excel / Git Repo”这种所有 README 都会写的能力，而是下面这些更硬的东西：
+## 一等公民
 
-- 先编译知识，再问答，不是拿原始碎片临场拼 prompt。
-- compile 和 query 都是图编排，并且都有固定职责 Agent 链。
-- 问答结果不是一次性输出，而是可以进入 pending、被修正、被确认、继续沉淀回系统。
-- 每次运行会冻结模型绑定与配置快照，不会因为后台改了配置就说不清历史结果。
-- 知识资产本身可做 snapshot、history、rollback、vault export，不是回答完就结束。
-
-如果你只想先建立整体理解，可以先看后面的 [系统架构图](#系统架构图)；如果你只想尽快启动，可以直接跳到后面的 [快速开始](#快速开始)。
-
----
-
-## 核心能力
-
-### 1. 先编译知识，再问答
-
-在邪修智库里，源资料不会直接等同于最终知识。系统会走一条显式编译链：
-
-`source materials -> analyze -> writer -> reviewer -> fixer -> persist`
-
-也就是说，问答消费的是编译后的知识资产，而不是只靠原始 chunk 临场拼装。
-
-### 2. Agent 角色链进入系统骨架
-
-这里的 Agent 不是宣传话术，而是前后台、模型绑定和运行时快照里都能看到的真实角色：
-
-- 编译侧：`writer / reviewer / fixer`
-- 问答侧：`answer / reviewer / rewrite`
-
-换句话说，Graph 负责流程，Agent 负责高认知动作，这个边界在系统里是明确存在的。
-
-### 3. 问答结果能回写、能沉淀
-
-传统 RAG 常常在回答结束后就没有后文了。邪修智库把后续链路也做成了正式能力：
-
-`pending query -> confirm/correct/discard -> contribution -> snapshot/rollback/export`
-
-这意味着它更像一个会持续演进的知识系统，而不是一次性问答页。
-
-### 4. 运行时配置可冻结、可追踪
-
-很多项目的模型配置只是个页面表单。邪修智库会把连接、模型、绑定和执行时快照接起来，所以系统能回答：
-
-- 这次 compile / query 用的是哪条 binding
-- 当时冻结下来的模型快照是什么
-- 后续配置变更会影响哪些新任务，不会污染哪些历史结果
-
-支持的 LLM 客户端：OpenAI 兼容接口（通义、DeepSeek、智谱等）、Anthropic 原生 API、Ollama 本地模型，统一在连接配置页接入，不需要改代码。
-
-### 5. 可插拔文档解析，OCR 路由可配置
-
-文档解析层与编译层解耦。PDF、图片（png）、Office 文档（Word / Excel / PowerPoint）等非纯文本格式，会先经过一个独立的可插拔解析模块：
-
-- 纯文本与 Office 类文件走**本地提取器**（PDFBox、Apache POI），不依赖外部服务。
-- 扫描件、图片等需要 OCR 的场景，可配置接入 **Aliyun OCR**、**Google Document AI**、**Tencent OCR** 或 **TextInXParse**，通过 Policy 规则按文件类型自动路由。
-- 所有解析连接（Provider Connection）与路由策略（Route Policy）均可在 `/admin/settings` 页面配置，Provider 可插拔，切换不需要重启或改代码。
-
----
-
-## 对比传统 RAG
-
-| 维度 | 传统 RAG | 邪修智库 |
+| 维度 | 系统里的一等公民 | 为什么重要 |
 | --- | --- | --- |
-| 核心思路 | 先检索碎片，再现场生成答案 | 先把知识编译成资产，再基于资产问答 |
-| 主链路 | 常见是 `retrieve -> answer` | 显式区分 `compile graph` 和 `query graph` |
-| Agent 用法 | 常见是 prompt 内自检或单模型一步出结果 | 固定角色链：`writer / reviewer / fixer`、`answer / reviewer / rewrite` |
-| 模型管理 | 配置常散落在页面参数或业务代码里 | 统一 connections、models、bindings、execution snapshots |
-| 反馈沉淀 | 常停留在聊天记录里 | `pending -> confirm/correct/discard -> contribution` |
-| 治理能力 | 很少追踪版本、回滚和导出 | 内建 snapshot、history、rollback、vault export；lint、link-enhance、inspect、propagate、omission、dependency-graph |
-| 对外交付 | 页面、API、CLI、MCP 常各自为政 | 多入口复用同一套知识后端 |
+| 资料源 | `knowledge_sources`、`source_sync_runs`、`source_files` | 资料进入系统时就有身份、运行记录和来源边界，不是匿名文件堆 |
+| 知识资产 | `articles`、`article_chunks`、`article_source_refs`、`article_snapshots` | 问答消费的是编译后的资产，同时保留证据和历史 |
+| 编译任务 | `compile_jobs`、`compile_job_steps`、`synthesis_artifacts` | 编译不是黑盒，步骤、进度和产物都可观测 |
+| 问答反馈 | `pending_queries`、`contributions` | 回答可以被确认、纠偏、丢弃，再沉淀回系统 |
+| 模型中心 | `llm_provider_connections`、`llm_model_profiles`、`agent_model_bindings`、`execution_llm_snapshots` | 运行时到底走了哪个连接、模型和绑定，都能回溯 |
+| 治理与版本 | `quality_metrics_history`、`repo_snapshots`、`repo_snapshot_items` | 知识库不是只会增长，还要能治理、导出、回滚和做质量分析 |
 
-一句话说，传统 RAG 更偏向“先检索，再临时生成”，邪修智库更偏向“先把知识编译成稳定资产，再基于这套资产回答、治理和演进”。
+## 和传统 RAG 的分水岭
 
----
-
-## 支持的能力
-
-- 多源 ingest：支持 `md`、`yaml`、`json`、`java`、`pdf`、`xlsx`、`doc`、`docx`、`ppt`、`pptx`、`drawio`、`png` 等类型；PDF、图片与 Office 文档支持接入可插拔 OCR 提供方（Aliyun、Google Document AI、Tencent、TextInXParse）。
-- 知识编译：不是直接切块入库，而是走 `analyze -> writer -> reviewer -> fixer -> persist` 的编译链。
-- 知识问答：不只是 `search -> answer`，而是 `retrieve -> answer -> reviewer -> rewrite -> finalize` 的问答链。
-- 反馈闭环：支持 `confirm`、`correct`、`discard`，确认后的结果可以沉淀为 contribution。
-- 治理能力：支持 quality、coverage、lifecycle、snapshot、history、rollback、vault export；内建 lint（规则检查 + LLM 自动修复）、link-enhance（破损链接修复与 depends_on 同步）、inspect（巡检问题确认与答案导入）、propagate（下游传播重写）、omission（覆盖遗漏检测）、dependency-graph（依赖图分析）。
-- 多入口交付：Web、HTTP API、CLI（14 个子命令）、MCP（30+ 工具）共用统一知识服务层。
+| 维度 | 常见 RAG | 邪修智库 |
+| --- | --- | --- |
+| 入口材料 | 原始 chunk 或临时切块 | 编译后的知识资产 |
+| 主链路 | `retrieve -> answer` | 显式区分 `source sync`、`compile graph`、`query graph`、`feedback` |
+| Agent 用法 | 一次 prompt 内自检 | 固定角色链：`writer / reviewer / fixer`、`answer / reviewer / rewrite` |
+| 模型管理 | 页面参数或代码常量 | 连接、模型、绑定、快照四层拆开 |
+| 证据处理 | 来源常停留在 prompt 上下文 | 引用、覆盖率、状态、demotion 进入正式返回结果 |
+| 后续动作 | 回答结束即结束 | confirm/correct/discard、snapshot、rollback、vault export、治理工具链 |
+| 对外能力 | 单页面或单接口 | Web、HTTP API、CLI、MCP 共用统一后端 |
 
 ---
 
-## 系统架构图
+## 系统真正的主链路
 
-如果只看一张图，先看这张。它现在只做一件事：把这个系统按层压平，让人一眼看清“入口在哪里、核心处理在哪一层、资产和存储落在哪里”。Compile / Query 的细链路不再塞进总览图里，而是交给下面两张时序图。
+```mermaid
+flowchart LR
+    A["文档 / YAML / 代码 / PDF / Excel / Git Repo"] --> B["资料同步与文档解析"]
+    B --> C["source_files / source_file_chunks"]
+    C --> D["compile graph"]
+    D --> E["articles / article_chunks / article_source_refs"]
+    E --> F["query graph"]
+    F --> G["答案 + 引用 + 状态"]
+    G --> H["pending_queries / contributions"]
+    H --> I["snapshot / rollback / quality / coverage / export"]
+
+    J["模型中心 / connections / models / bindings"] --> D
+    J --> F
+    K["文档解析路由 / local extractor / OCR provider"] --> B
+```
+
+这张图只表达 3 件事：
+
+- 资料先进入资料同步和解析层，再进入编译层，不会直接跳到问答层。
+- 编译后的知识资产才是问答主链的输入，问答结果还会继续进入反馈和治理链路。
+- 模型中心与文档解析路由都是横切能力，会同时影响编译和问答，但不会污染知识资产层的职责边界。
+
+## 系统分层图
 
 ![邪修智库系统分层总览架构图](docs/images/readme/system-architecture-overview-optimized-20260423.png)
 
-读这张图，只抓 3 件事就够了：
+读这张图时，可以按下面的顺序理解：
 
-- 最上面是入口：无论从工作台、问答页、HTTP API、CLI 还是 MCP 进来，都会落到同一套后端能力。
-- 中间三层是核心：应用服务层负责接入，编排与模型层负责真正的 Compile / Query 执行，资产层负责沉淀知识、反馈和快照。
-- 最下面是落点：知识资产最终落到 PostgreSQL / Redis / 文件来源与 Spring Boot 运行时，不在页面层临时停留。
+- 入口层：`/admin`、`/admin/ask`、HTTP API、CLI、MCP 都是同一后端能力的不同入口。
+- 应用服务层：负责把页面动作或外部调用整理成正式用例，而不是在 Controller 里硬堆逻辑。
+- 编排与模型层：Compile / Query Graph、Agent 角色链、模型中心和执行快照都在这一层发生。
+- 资产与治理层：知识文章、来源引用、Pending Query、Contribution、Snapshot、Quality、Coverage 都在这一层沉淀。
+- 基础设施层：PostgreSQL、Redis、文档解析、Provider 连接、文件来源和 Spring Boot 运行时是最终落点。
 
-## 亮点功能时序图
+---
 
-上面的架构图看分层，下面两张时序图看两条最核心的真实链路：资料编译入库，以及问答后的证据与反馈闭环。
+## 关键时序图
 
-### 1. 资料编译入库时序
+### 1. 资料同步与文档解析
 
 ```mermaid
 sequenceDiagram
-    participant U as 管理员 / 工作台
-    participant API as Upload / Source API
+    participant U as 管理员 / CLI / API
+    participant SRC as SourceAppService
+    participant DB as Source Store
+    participant POLICY as Parse Route Policy
+    participant PARSE as DocumentParseService
+    participant EXT as Local Extractor / OCR Provider
+
+    U->>SRC: 上传文件 / Git 同步 / 触发 source sync
+    SRC->>DB: 创建 knowledge_source / source_sync_run
+    loop 每个文件
+        SRC->>POLICY: 计算解析策略
+        alt 纯文本 / Office / 可本地提取
+            POLICY->>EXT: 走本地提取器
+        else 图片 / 扫描 PDF / 需要 OCR
+            POLICY->>EXT: 路由到 OCR Provider
+        end
+        EXT-->>PARSE: 返回文本、页码、元数据
+        PARSE-->>SRC: 标准化解析结果
+        SRC->>DB: 写入 source_files / source_file_chunks
+    end
+    SRC-->>U: 返回同步结果与运行状态
+```
+
+这一步的关键不是“能读文件”，而是：
+
+- 文档解析层与编译层解耦，可以独立切换 Provider。
+- 路由策略是显式配置，不需要改代码才能从本地提取器切到 OCR。
+- 资料进入系统后先变成 `source_files / source_file_chunks`，再进入后续编译。
+
+### 2. 编译入库与证据落盘
+
+```mermaid
+sequenceDiagram
+    participant U as 管理员 / API
     participant APP as CompileAppService
     participant G as Compile Graph
     participant MC as 模型中心
     participant DB as Knowledge Store
 
-    U->>API: 上传文件 / 发起 Git 同步
-    API->>APP: 创建 source run
-    APP->>DB: 记录 source、files、run
-    APP->>G: 启动编译任务
-    G->>DB: 读取源资料与元数据
+    U->>APP: 发起 compile
+    APP->>DB: 创建 compile_job
+    APP->>G: 启动编译链路
+    G->>DB: 读取 source_files / metadata
     G->>MC: 解析 writer / reviewer / fixer 绑定
     MC-->>G: 返回连接、模型与 execution snapshot
     G->>G: Analyze -> Writer -> Reviewer
     alt 需要修复
         G->>G: Fixer -> Reviewer
     end
-    G->>DB: 持久化 articles / article_chunks
-    APP->>DB: 刷新 run 状态与向量结果
-    APP-->>U: 最近同步运行可见结果
+    G->>DB: 写入 articles / article_chunks
+    G->>DB: 写入 article_source_refs / synthesis_artifacts
+    APP->>DB: 刷新 compile_job_steps / 状态 / 向量结果
+    APP-->>U: 返回编译完成结果
 ```
 
-### 2. 问答、证据与反馈回写时序
+这条链路强调的是：
+
+- 问答前先完成知识编译，系统消费的是文章资产而不是源文件碎片。
+- 编译过程不仅产出文章，还会沉淀来源引用和步骤日志。
+- 模型选路在运行时冻结成快照，后续配置变更不会改写历史执行事实。
+
+### 3. 问答、证据校验与反馈沉淀
 
 ```mermaid
 sequenceDiagram
-    participant C as Web / CLI / MCP / HTTP API 调用方
+    participant C as Web / CLI / MCP / HTTP API
     participant API as Query API
     participant APP as QueryAppService
     participant G as Query Graph
+    participant DB as Knowledge Store
     participant MC as 模型中心
-    participant DB as 知识资产层
     participant FB as Feedback / Contribution
 
     C->>API: 提交问题
-    API->>APP: 创建 query run
+    API->>APP: 创建 query run / pending record
     APP->>G: 启动问答链路
-    G->>DB: 检索 articles / chunks / metadata
+    G->>DB: 检索 articles / chunks / contributions / settings
     G->>MC: 解析 answer / reviewer / rewrite 绑定
     MC-->>G: 冻结 execution snapshot
-    G->>G: Answer -> Reviewer
-    alt 需要改写
-        G->>G: Rewrite -> Reviewer
+    G->>G: Retrieve -> Answer -> Reviewer
+    alt 需要改写或降级
+        G->>G: Rewrite / Fallback -> Reviewer
     end
-    G->>DB: 保存最终答案、来源引用、执行痕迹
-    APP-->>C: 返回最终答案 + 证据来源
+    G->>DB: 保存答案、引用、覆盖率、状态与执行痕迹
+    APP-->>C: 返回 answerOutcome + citations + evidenceStatus
     C->>FB: confirm / correct / discard
-    FB->>DB: 沉淀 contribution / snapshot / rollback 依据
+    FB->>DB: 写入 contributions / rollback 依据 / 治理输入
 ```
 
----
+这里最重要的不是“答出来”，而是：
 
-## 界面总览
+- 返回结果里不只有正文，还有引用、覆盖率、状态和执行痕迹。
+- 问答失败、降级、部分回答和无知识命中都是正式状态，不是页面上的临时文案。
+- 用户反馈会反哺系统，而不是停留在一条聊天记录里。
 
-下面这些图用于展示项目当前的主要界面与核心链路。截图重新整理于 **2026-04-23**，对应的是同一套演示数据：
+### 4. 模型中心与执行快照冻结
 
-- 导入 `SCHEMA.md`、`payments/*`、`ops/incident-runbook.md` 共 `5` 个文件
-- 编译后形成 `3` 篇知识文章，并完成 `1024` 维向量刷新
-- 在 `/admin/ask` 提问 `payment timeout retry 是什么配置`
-- 最终返回 `部分答案`、`8` 条直接来源，并保留复核与反馈入口
+```mermaid
+sequenceDiagram
+    participant A as 管理员
+    participant S as Settings UI / Admin API
+    participant DB as Model Store
+    participant RUN as Compile / Query Runtime
 
-### 1. 问答闭环不是一句答案，而是一整套证据链
+    A->>S: 配置 Provider Connection
+    S->>DB: 保存 llm_provider_connections
+    A->>S: 配置 Model Profile
+    S->>DB: 保存 llm_model_profiles
+    A->>S: 配置 scene + agent_role 绑定
+    S->>DB: 保存 agent_model_bindings
+    RUN->>DB: 按 scene + role 解析绑定
+    DB-->>RUN: 返回 connection + model + binding
+    RUN->>DB: 写入 execution_llm_snapshots
+    RUN-->>A: 本次运行开始，后续结果都以快照为准
+```
 
-<table>
-  <tr>
-    <td width="50%">
-      <strong>提问入口</strong><br/>
-      问题入口和当前知识库状态摆在同一屏，先判断“能不能问”，再决定是否回工作台或配置页。<br/><br/>
-      <img src="docs/images/readme/ask-entry-panel-20260423.png" alt="邪修智库问答入口与状态面板" />
-    </td>
-    <td width="50%">
-      <strong>最终答案</strong><br/>
-      回答正文不是一句短回复，而是带结构化参数解释、来源引用和补充说明的可复核答案。<br/><br/>
-      <img src="docs/images/readme/ask-answer-panel-20260423.png" alt="邪修智库最终答案面板" />
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2">
-      <strong>证据与引用来源</strong><br/>
-      下面这一块单独裁出来，是为了强调项目真正的差异点不是“能答”，而是“答完还带证据状态、覆盖情况和直接来源卡片”。<br/><br/>
-      <img src="docs/images/readme/ask-evidence-panel-20260423.png" alt="邪修智库证据状态与引用来源面板" />
-    </td>
-  </tr>
-</table>
+这一层是很多项目容易忽略、但这个项目很核心的部分：
 
-这三块连起来，才是这个项目真正想表达的问答闭环：
-
-- 先判断当前知识状态是否适合直接提问
-- 再返回带结构化解释、来源引用和复核状态的回答结果
-- 最后把证据状态、检索覆盖和直接来源显式摆出来，而不是藏在日志里
-
-### 2. 模型中心、角色绑定和向量维护是可见、可配、可追踪的
-
-<table>
-  <tr>
-    <td width="50%">
-      <strong>模型中心</strong><br/>
-      配置总览、连接表单和模型表单放在同一段主流程里，先看当前状态，再决定下一步补哪一块。<br/><br/>
-      <img src="docs/images/readme/settings-model-center-20260423.png" alt="邪修智库模型中心与角色绑定编辑区" />
-    </td>
-    <td width="50%">
-      <strong>向量维护</strong><br/>
-      向量不是一个隐藏开关，而是有状态卡、兼容性判断、保存配置和按需重建四段显式流程。<br/><br/>
-      <img src="docs/images/readme/settings-vector-center-20260423.png" alt="邪修智库向量配置与重建判断面板" />
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <strong>连接与模型清单</strong><br/>
-      直接截连接表和模型表本体，不再带整块容器，让人一眼看清当前启用的连接和模型到底是什么。<br/><br/>
-      <img src="docs/images/readme/bindings-connections-models-20260423.png" alt="邪修智库连接与模型列表" />
-    </td>
-    <td width="50%">
-      <strong>角色链路清单</strong><br/>
-      这里只保留角色绑定表本体，编译侧 `writer / reviewer / fixer` 与问答侧 `answer / reviewer / rewrite` 都能直接看到。<br/><br/>
-      <img src="docs/images/readme/bindings-role-chain-20260423.png" alt="邪修智库角色绑定列表" />
-    </td>
-  </tr>
-</table>
-
-这组截图主要想说明 3 件事：
-
-- 连接、模型和角色绑定都统一归口到模型中心管理
-- 向量维度、兼容性判断和重建状态都有显式页面，不是隐藏开关
-- 编译侧与问答侧共用同一套模型中心与角色绑定体系
-
-### 3. 工作台和开发接入页也按功能切片看，不再塞整页长图
-
-<table>
-  <tr>
-    <td width="50%">
-      <strong>工作台总览</strong><br/>
-      首屏先给状态摘要、当前建议动作和服务健康，不让用户一进来就先埋在大表单里。<br/><br/>
-      <img src="docs/images/readme/console-overview-panel-20260423.png" alt="邪修智库工作台总览面板" />
-    </td>
-    <td width="50%">
-      <strong>资料导入</strong><br/>
-      本地上传和 Git 导入拆成两块并列入口，导入动作、资料格式和后续处理进度都在这一屏闭环。<br/><br/>
-      <img src="docs/images/readme/console-import-panel-20260423.png" alt="邪修智库资料导入面板" />
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <strong>接入地址与状态</strong><br/>
-      开发接入页先把当前服务地址、MCP 地址和服务状态摆出来，方便先连通再选模板。<br/><br/>
-      <img src="docs/images/readme/developer-endpoints-panel-20260423.png" alt="邪修智库开发接入地址与状态面板" />
-    </td>
-    <td width="50%">
-      <strong>入口模板</strong><br/>
-      MCP、CLI、HTTP API 三种入口拆成各自独立卡片，先判断场景，再复制最小可运行模板。<br/><br/>
-      <img src="docs/images/readme/developer-templates-panel-20260423.png" alt="邪修智库开发接入模板面板" />
-    </td>
-  </tr>
-</table>
-
-从这些界面可以直接看出来，这个项目已经不是“只有一个后台表单”的 demo，而是已经具备完整的使用与接入入口：
-
-- 知识库工作台
-- 问答页
-- 系统配置与向量维护页
-- Agent 编排与模型绑定页
-- 开发者接入页
+- 连接、模型和绑定各自独立，避免“一个表单同时承载所有语义”。
+- 运行时一定会冻结快照，才能解释“这次结果到底用了什么配置”。
+- 编译侧和问答侧共用同一套模型中心，但可以绑定不同角色链。
 
 ---
+
+## 开发者应该怎么读这个仓库
+
+### 先看哪些包
+
+| 代码位置 | 主要职责 |
+| --- | --- |
+| `src/main/java/com/xbk/lattice/api/**` | HTTP 接口入口，分 admin、compiler、query 三类控制器 |
+| `src/main/java/com/xbk/lattice/source/**` | 资料源、同步运行、源文件落库 |
+| `src/main/java/com/xbk/lattice/documentparse/**` | 文档解析、Provider 连接、OCR 路由策略、本地提取器 |
+| `src/main/java/com/xbk/lattice/compiler/**` | 编译 Graph、节点、Agent、Prompt、编译服务 |
+| `src/main/java/com/xbk/lattice/query/**` | 检索、问答、证据、引用校验、deep research、Query Graph |
+| `src/main/java/com/xbk/lattice/llm/**` | Provider 连接、模型档案、角色绑定、运行时快照 |
+| `src/main/java/com/xbk/lattice/governance/**` | quality、coverage、lint、inspect、propagate、lifecycle、snapshot、rollback |
+| `src/main/java/com/xbk/lattice/vault/**` | Vault 导出与同步 |
+| `src/main/java/com/xbk/lattice/cli/**` | CLI 命令入口 |
+| `src/main/java/com/xbk/lattice/mcp/**` | MCP 工具注册与桥接 |
+
+### 推荐阅读顺序
+
+1. 先从 `api/query` 或 `api/compiler` 看入口长什么样。
+2. 再去 `query/**`、`compiler/**` 看两条主链怎么编排。
+3. 然后看 `llm/**` 和 `documentparse/**`，理解横切配置层。
+4. 最后再看 `governance/**`、`vault/**`，理解系统为什么不是“一问一答就结束”。
+
+## 统一交付入口
+
+这个项目不是只有一个后台页面。对开发者来说，真正需要记住的是下面这 4 个入口：
+
+- `/admin`：资料导入、最近同步运行、编译任务、服务状态总览。
+- `/admin/ask`：真实提问、查看答案正文、引用来源、证据状态、反馈入口。
+- `/admin/settings`：Provider Connection、Model Profile、Agent Binding、向量配置、文档解析路由。
+- `/admin/developer-access`：HTTP API、CLI、MCP 三种接入模板与服务地址。
+
+这 4 个入口对应的是同一后端系统的 4 个面向，不是 4 套各自独立的产品。
 
 ## 适合什么项目
 
-- 你要做的不是聊天玩具，而是一个可长期演进的知识系统后端。
-- 你的资料同时散落在文档、代码、配置、PDF、Excel、运维手册里。
-- 你需要给 Web 页面、内部工具、CLI 或 MCP 客户端提供统一知识服务。
-- 你关心回答质量、反馈沉淀、版本历史、回滚和导出，而不是只关心一次命中。
-- 你希望模型路由是可配置、可冻结、可追踪的，不想把模型选择散在代码和页面参数里。
+- 你要做的是一个可长期演进的知识系统后端，而不是聊天玩具。
+- 你的资料同时散落在文档、代码、配置、PDF、Excel、运维手册和 Git Repo 里。
+- 你需要让 Web 页面、内部工具、CLI、MCP 客户端复用同一套知识能力。
+- 你关心回答质量、证据链、反馈沉淀、版本历史、回滚和导出。
+- 你希望模型路由可配置、可冻结、可追踪，而不是散在页面参数和业务代码里。
 
 ## 不太适合什么项目
 
-- 你只想做一个最小向量检索 demo。
+- 你只想搭一个最小向量检索 demo。
 - 你只想验证“模型能不能答一句话”。
 - 你不关心知识治理、反馈闭环、版本历史和多入口复用。
-- 你只需要一个轻量聊天前台，不需要知识系统后端。
+- 你只需要一个轻量聊天前台，不需要一个长期运行的知识后端。
 
 ---
 
 ## 快速开始
 
-这里只保留一个对外阅读友好的最小启动口径，详细步骤请看独立文档。
+这里只保留稳定、长期有效的启动入口；按某一天、某一轮、某一套隔离环境得出的回归结果，请看独立验收手册。
 
 ### 环境
 
@@ -341,6 +289,8 @@ sequenceDiagram
 - PostgreSQL
 - Redis
 - Maven
+- 可选：`pgvector`
+- 可选：可用的 OpenAI 兼容 / Anthropic / Ollama / OCR Provider 密钥
 
 ### 最小启动命令
 
@@ -371,7 +321,7 @@ mvn -q spring-boot:run
 mvn -q -s .codex/maven-settings.xml spring-boot:run
 ```
 
-启动后，在 `/admin/settings` 配置你自己的对话模型、Embedding 模型和 Agent 绑定；密钥只保留在本地，不要写进仓库。
+启动后，到 `/admin/settings` 配置你自己的对话模型、Embedding 模型、Agent 绑定和文档解析连接；密钥只保留在本地，不要写进仓库。
 
 ### 如果遇到旧迁移污染，再重建 schema
 
@@ -382,18 +332,22 @@ docker exec vector_db psql -U postgres -d ai-rag-knowledge \
   -c "DROP SCHEMA IF EXISTS lattice CASCADE; CREATE SCHEMA lattice;"
 ```
 
-- 当前仓库的 Flyway 迁移已经收敛为单一基线 `V1__baseline_schema.sql`
-- 如果你本地的 `lattice` schema 跑过旧版本迁移链，旧的 `flyway_schema_history` 可能还在
-- 这时启动会报 `Migration checksum mismatch for migration version 1`
-- 这时最稳妥的处理方式，就是先重建 schema 再重新启动
+这是因为：
 
-### 启动后 3 分钟验证
+- 当前仓库的 Flyway 迁移已经收敛为单一基线 `V1__baseline_schema.sql`
+- 如果你本地 schema 跑过旧迁移链，旧的 `flyway_schema_history` 可能还在
+- 启动时会出现 `Migration checksum mismatch for migration version 1`
+- 这时最稳妥的处理方式就是重建 schema，再重新启动
+
+### 启动后 3 分钟首轮验证
+
+下面这组步骤默认按常规启动口径使用 `8080`；如果你在做隔离验收，也可以把同样的步骤换成自己的独立端口。
 
 1. 访问 `http://127.0.0.1:8080/actuator/health`
 2. 打开 `http://127.0.0.1:8080/admin/settings`，配置连接、模型和 Agent 绑定
 3. 打开 `http://127.0.0.1:8080/admin`，导入文件或 Git 仓库，触发编译
-4. 打开 `http://127.0.0.1:8080/admin/ask`，直接提问并确认回答与引用来源
-5. 打开 `http://127.0.0.1:8080/admin/developer-access`，查看 CLI、HTTP API、MCP 接入方式
+4. 打开 `http://127.0.0.1:8080/admin/ask`，提问并确认回答、引用和证据状态
+5. 打开 `http://127.0.0.1:8080/admin/developer-access`，确认 HTTP API、CLI、MCP 接入方式
 
 ---
 
@@ -403,20 +357,17 @@ docker exec vector_db psql -U postgres -d ai-rag-knowledge \
 
 ### 1. HTTP API
 
-先做健康检查，再直接走最小问答接口；如果你已经准备好了资料目录，也可以直接触发一次编译。
+先做健康检查，再走最小问答接口；如果你已经准备好了资料目录，也可以直接触发一次编译。
 
 ```bash
 export BASE_URL=http://127.0.0.1:8080
 
-# 健康检查
 curl "$BASE_URL/actuator/health"
 
-# 最小问答
 curl -X POST "$BASE_URL/api/v1/query" \
   -H "Content-Type: application/json" \
   -d '{"question":"邪修智库支持哪些开发者接入方式？"}'
 
-# 最小编译
 curl -X POST "$BASE_URL/api/v1/compile" \
   -H "Content-Type: application/json" \
   -d '{"sourceDir":"/path/to/your-source-dir","incremental":false}'
@@ -431,7 +382,7 @@ curl -X POST "$BASE_URL/api/v1/compile" \
 ./bin/lattice-cli query --server http://127.0.0.1:8080 "邪修智库支持哪些开发者接入方式？"
 ```
 
-如果你会反复调用 CLI，可以先写一次环境变量，后面就不用反复带 `--server`：
+如果你会反复调用 CLI，可以先写一次环境变量：
 
 ```bash
 export LATTICE_SERVER_URL=http://127.0.0.1:8080
@@ -490,7 +441,7 @@ export LATTICE_SERVER_URL=http://127.0.0.1:8080
 
 接通后，建议按这个顺序做第一次验证：
 
-1. 先执行 `tools/list`，确认能看到 30+ 个工具（`lattice_status`、`lattice_query`、`lattice_compile`、`lattice_lint`、`lattice_snapshot` 等）。
+1. 先执行 `tools/list`，确认能看到 30+ 个工具。
 2. 再调用 `lattice_status`，确认返回健康状态与知识库统计。
 3. 最后调用 `lattice_query`，确认返回 `answer`、`sourcePaths` 或 `pendingQueryId`。
 
@@ -512,34 +463,27 @@ MCP 工具覆盖的主要能力分组：
 
 ## 文档导航
 
-### 想知道怎么启动
+README 负责给出稳定总览；更细的启动、验收和表结构说明，分别在下面这些文档里：
+
+### 想知道怎么启动与配环境
 
 - [`docs/项目启动配置清单.md`](docs/%E9%A1%B9%E7%9B%AE%E5%90%AF%E5%8A%A8%E9%85%8D%E7%BD%AE%E6%B8%85%E5%8D%95.md)
 
-### 想看端到端验收与回归示例
+### 想看全链路验收、页面回归与复杂样本
 
-- 这份手册现在也覆盖 `/admin` 工作台上的“最近同步运行”怎么看：包含编译态、当前步骤、当前进度、最近推进时间、原因摘要，以及失败后的重新同步入口
 - [`docs/项目全流程真实验收手册.md`](docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md)
 
-### 想看数据库对象与实体关系
+### 想看数据库对象、表关系和运行语义
 
 - [`docs/数据库表结构详解.md`](docs/%E6%95%B0%E6%8D%AE%E5%BA%93%E8%A1%A8%E7%BB%93%E6%9E%84%E8%AF%A6%E8%A7%A3.md)
 
-### 想看资料同步与知识编译的当前使用入口
+### 想看 benchmark / 指标对照
 
-- 资料同步、知识编译、最近同步运行和失败收口，现在统一以启动清单与真实验收手册为准，不再保留已完成的专题方案/清单文档
-- [`docs/项目启动配置清单.md`](docs/%E9%A1%B9%E7%9B%AE%E5%90%AF%E5%8A%A8%E9%85%8D%E7%BD%AE%E6%B8%85%E5%8D%95.md)
-- [`docs/项目全流程真实验收手册.md`](docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md)
-
-### 想看文档解析当前使用入口
-
-- 文档解析模块可插拔重构已经并入当前主线文档，不再单独保留方案、实施清单和旧兼容专题文档
-- [`docs/项目启动配置清单.md`](docs/%E9%A1%B9%E7%9B%AE%E5%90%AF%E5%8A%A8%E9%85%8D%E7%BD%AE%E6%B8%85%E5%8D%95.md)
-- [`docs/项目全流程真实验收手册.md`](docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md)
-- [`docs/数据库表结构详解.md`](docs/%E6%95%B0%E6%8D%AE%E5%BA%93%E8%A1%A8%E7%BB%93%E6%9E%84%E8%AF%A6%E8%A7%A3.md)
+- [`docs/benchmark/ast-citation-deepresearch-gap-report.md`](docs/benchmark/ast-citation-deepresearch-gap-report.md)
+- [`docs/benchmark/ast-citation-deepresearch-metrics.md`](docs/benchmark/ast-citation-deepresearch-metrics.md)
 
 ---
 
 ## 一句话总结
 
-邪修智库不是“又一个带聊天页的 RAG demo”，而是一个把知识编译、Agent 编排、模型中心、反馈沉淀和治理能力真正落到工程里的 Java 知识后端。
+邪修智库不是“又一个带聊天页的 RAG demo”，而是一个把知识编译、模型中心、证据化问答、反馈沉淀、快照治理和多入口接入真正落到工程里的 Java 知识后端。

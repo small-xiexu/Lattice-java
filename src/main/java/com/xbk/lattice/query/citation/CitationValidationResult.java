@@ -23,6 +23,8 @@ public class CitationValidationResult {
 
     private final int ordinal;
 
+    private final CitationValidationSource validatedBy;
+
     /**
      * 创建 Citation 校验结果。
      *
@@ -43,6 +45,40 @@ public class CitationValidationResult {
             String matchedExcerpt,
             int ordinal
     ) {
+        this(
+                targetKey,
+                sourceType,
+                status,
+                overlapScore,
+                reason,
+                matchedExcerpt,
+                ordinal,
+                CitationValidationSource.RULE
+        );
+    }
+
+    /**
+     * 创建 Citation 校验结果。
+     *
+     * @param targetKey 目标键
+     * @param sourceType 来源类型
+     * @param status 校验状态
+     * @param overlapScore 文本重叠分
+     * @param reason 结果原因
+     * @param matchedExcerpt 命中摘录
+     * @param ordinal 引用序号
+     * @param validatedBy 校验来源
+     */
+    public CitationValidationResult(
+            String targetKey,
+            CitationSourceType sourceType,
+            CitationValidationStatus status,
+            double overlapScore,
+            String reason,
+            String matchedExcerpt,
+            int ordinal,
+            CitationValidationSource validatedBy
+    ) {
         this.targetKey = targetKey;
         this.sourceType = sourceType;
         this.status = status;
@@ -50,6 +86,7 @@ public class CitationValidationResult {
         this.reason = reason;
         this.matchedExcerpt = matchedExcerpt;
         this.ordinal = ordinal;
+        this.validatedBy = validatedBy == null ? CitationValidationSource.RULE : validatedBy;
     }
 
     /**
@@ -113,6 +150,15 @@ public class CitationValidationResult {
      */
     public int getOrdinal() {
         return ordinal;
+    }
+
+    /**
+     * 返回校验来源。
+     *
+     * @return 校验来源
+     */
+    public CitationValidationSource getValidatedBy() {
+        return validatedBy;
     }
 
     /**

@@ -198,6 +198,45 @@ class LlmGatewayTests {
     }
 
     /**
+     * 验证 deep_research 场景在缺少快照路由时会 fail-closed，而不是回退到 bootstrap。
+     */
+    @Test
+    void shouldFailClosedWhenDeepResearchRouteIsMissing() {
+        FakeLlmClient compileClient = new FakeLlmClient("compiled-article", 120, 30);
+        FakeLlmClient reviewClient = new FakeLlmClient("review-result", 60, 10);
+        StubExecutionLlmSnapshotService snapshotService = new StubExecutionLlmSnapshotService();
+        LlmProperties llmProperties = createProperties();
+        llmProperties.setBootstrapEnabled(true);
+        LlmGateway llmGateway = new LlmGateway(
+                compileClient,
+                reviewClient,
+                new FakeRedisKeyValueStore(),
+                llmProperties,
+                null,
+                snapshotService,
+                null,
+                "",
+                "",
+                "",
+                "",
+                null
+        );
+
+        assertThatThrownBy(() -> llmGateway.invokeRawWithScope(
+                "dr-1",
+                ExecutionLlmSnapshotService.DEEP_RESEARCH_SCENE,
+                ExecutionLlmSnapshotService.ROLE_RESEARCHER,
+                "deep-research-research",
+                "system-a",
+                "user-a"
+        ))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("No llm route configured for deep_research/researcher");
+        assertThat(compileClient.getCallCount()).isZero();
+        assertThat(reviewClient.getCallCount()).isZero();
+    }
+
+    /**
      * 验证 raw path 在写入 prompt cache 后，会直接命中 L1 缓存且不再计费。
      */
     @Test
@@ -1165,4 +1204,5 @@ class LlmGatewayTests {
             return throwable;
         }
     }
+
 }

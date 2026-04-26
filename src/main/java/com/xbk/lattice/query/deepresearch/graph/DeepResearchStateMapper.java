@@ -33,16 +33,20 @@ public class DeepResearchStateMapper {
         state.setLlmScopeId(readString(stateMap, DeepResearchStateKeys.LLM_SCOPE_ID));
         state.setRouteReason(readString(stateMap, DeepResearchStateKeys.ROUTE_REASON));
         state.setPlanRef(readString(stateMap, DeepResearchStateKeys.PLAN_REF));
+        state.setTaskResultRefs(readStringList(stateMap, DeepResearchStateKeys.TASK_RESULT_REFS));
+        state.setLedgerRef(readString(stateMap, DeepResearchStateKeys.LEDGER_REF));
         state.setCurrentLayerIndex(readInt(stateMap, DeepResearchStateKeys.CURRENT_LAYER_INDEX));
         state.setLayerSummaryRefs(readStringList(stateMap, DeepResearchStateKeys.LAYER_SUMMARY_REFS));
-        state.setDraftAnswerRef(readString(stateMap, DeepResearchStateKeys.DRAFT_ANSWER_REF));
+        state.setInternalAnswerDraftRef(readString(stateMap, DeepResearchStateKeys.INTERNAL_ANSWER_DRAFT_REF));
+        state.setProjectionRef(readString(stateMap, DeepResearchStateKeys.PROJECTION_REF));
         state.setCitationCheckReportRef(readString(stateMap, DeepResearchStateKeys.CITATION_CHECK_REPORT_REF));
-        state.setFinalResponseRef(readString(stateMap, DeepResearchStateKeys.FINAL_RESPONSE_REF));
+        state.setAnswerAuditRef(readString(stateMap, DeepResearchStateKeys.ANSWER_AUDIT_REF));
         state.setLlmCallBudgetRemaining(readInt(stateMap, DeepResearchStateKeys.LLM_CALL_BUDGET_REMAINING));
         state.setTimedOut(readBoolean(stateMap, DeepResearchStateKeys.TIMED_OUT));
         state.setPartialAnswer(readBoolean(stateMap, DeepResearchStateKeys.PARTIAL_ANSWER));
         state.setHasConflicts(readBoolean(stateMap, DeepResearchStateKeys.HAS_CONFLICTS));
         state.setEvidenceCardCount(readInt(stateMap, DeepResearchStateKeys.EVIDENCE_CARD_COUNT));
+        state.setProjectionRetryCount(readInt(stateMap, DeepResearchStateKeys.PROJECTION_RETRY_COUNT));
         return state;
     }
 
@@ -60,16 +64,20 @@ public class DeepResearchStateMapper {
         values.put(DeepResearchStateKeys.LLM_SCOPE_ID, state.getLlmScopeId());
         values.put(DeepResearchStateKeys.ROUTE_REASON, state.getRouteReason());
         values.put(DeepResearchStateKeys.PLAN_REF, state.getPlanRef());
+        values.put(DeepResearchStateKeys.TASK_RESULT_REFS, new ArrayList<String>(state.getTaskResultRefs()));
+        values.put(DeepResearchStateKeys.LEDGER_REF, state.getLedgerRef());
         values.put(DeepResearchStateKeys.CURRENT_LAYER_INDEX, Integer.valueOf(state.getCurrentLayerIndex()));
         values.put(DeepResearchStateKeys.LAYER_SUMMARY_REFS, new ArrayList<String>(state.getLayerSummaryRefs()));
-        values.put(DeepResearchStateKeys.DRAFT_ANSWER_REF, state.getDraftAnswerRef());
+        values.put(DeepResearchStateKeys.INTERNAL_ANSWER_DRAFT_REF, state.getInternalAnswerDraftRef());
+        values.put(DeepResearchStateKeys.PROJECTION_REF, state.getProjectionRef());
         values.put(DeepResearchStateKeys.CITATION_CHECK_REPORT_REF, state.getCitationCheckReportRef());
-        values.put(DeepResearchStateKeys.FINAL_RESPONSE_REF, state.getFinalResponseRef());
+        values.put(DeepResearchStateKeys.ANSWER_AUDIT_REF, state.getAnswerAuditRef());
         values.put(DeepResearchStateKeys.LLM_CALL_BUDGET_REMAINING, Integer.valueOf(state.getLlmCallBudgetRemaining()));
         values.put(DeepResearchStateKeys.TIMED_OUT, Boolean.valueOf(state.isTimedOut()));
         values.put(DeepResearchStateKeys.PARTIAL_ANSWER, Boolean.valueOf(state.isPartialAnswer()));
         values.put(DeepResearchStateKeys.HAS_CONFLICTS, Boolean.valueOf(state.isHasConflicts()));
         values.put(DeepResearchStateKeys.EVIDENCE_CARD_COUNT, Integer.valueOf(state.getEvidenceCardCount()));
+        values.put(DeepResearchStateKeys.PROJECTION_RETRY_COUNT, Integer.valueOf(state.getProjectionRetryCount()));
         return values;
     }
 

@@ -1000,18 +1000,45 @@ public class LlmGateway {
     }
 
     private LlmRouteResolution resolveScopedRoute(String scopeId, String scene, String agentRole) {
+        String normalizedScene = normalizeScene(scene);
+        if (ExecutionLlmSnapshotService.DEEP_RESEARCH_SCENE.equals(normalizedScene)) {
+            if (executionLlmSnapshotService == null) {
+                throw new IllegalStateException("deep_research scene 缺少 ExecutionLlmSnapshotService，无法解析运行时路由");
+            }
+            if (scopeId == null || scopeId.isBlank()) {
+                throw new IllegalStateException("deep_research scene 缺少 scopeId，无法解析运行时路由");
+            }
+            String scopeType = resolveScopeType(normalizedScene);
+            Optional<LlmRouteResolution> routeResolution = executionLlmSnapshotService.resolveRoute(
+                    scopeType,
+                    scopeId,
+                    normalizedScene,
+                    agentRole
+            );
+            if (routeResolution.isPresent()) {
+                return routeResolution.orElseThrow();
+            }
+            throw new IllegalStateException("No llm route configured for " + normalizedScene + "/" + agentRole
+                    + " scopeId=" + scopeId);
+        }
         if (executionLlmSnapshotService == null || scopeId == null || scopeId.isBlank() || scene == null || scene.isBlank()) {
             return resolveBootstrapRoute(scene, agentRole, scopeId);
         }
-        String scopeType = resolveScopeType(scene);
-        Optional<LlmRouteResolution> routeResolution = executionLlmSnapshotService.resolveRoute(scopeType, scopeId, scene, agentRole);
+        String scopeType = resolveScopeType(normalizedScene);
+        Optional<LlmRouteResolution> routeResolution = executionLlmSnapshotService.resolveRoute(
+                scopeType,
+                scopeId,
+                normalizedScene,
+                agentRole
+        );
         if (routeResolution.isPresent()) {
             return routeResolution.orElseThrow();
         }
-        if (executionLlmSnapshotService.isBootstrapEnabled()) {
+        if (executionLlmSnapshotService.isBootstrapAllowed(normalizedScene)) {
             return resolveBootstrapRoute(scene, agentRole, scopeId);
         }
-        throw new IllegalStateException("No llm route configured for " + scene + "/" + agentRole + " scopeId=" + scopeId);
+        throw new IllegalStateException("No llm route configured for " + normalizedScene + "/" + agentRole
+                + " scopeId=" + scopeId);
     }
 
     private LlmRouteResolution resolveBootstrapRoute(String scene, String agentRole) {
@@ -1219,6 +1246,9 @@ public class LlmGateway {
         }
         if (ExecutionLlmSnapshotService.QUERY_SCENE.equals(normalizedScene)) {
             return ExecutionLlmSnapshotService.QUERY_SCOPE_TYPE;
+        }
+        if (ExecutionLlmSnapshotService.DEEP_RESEARCH_SCENE.equals(normalizedScene)) {
+            return ExecutionLlmSnapshotService.DEEP_RESEARCH_SCOPE_TYPE;
         }
         return normalizedScene + "_scope";
     }

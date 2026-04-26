@@ -82,6 +82,10 @@ class QueryGraphOrchestratorTests {
         assertThat(queryCacheStore.getCachedResponse()).isPresent();
         assertThat(queryCacheStore.getCachedResponse().orElseThrow().getAnswer())
                 .isEqualTo("修复后的答案：retry=3 [[payment-timeout]]");
+        assertThat(queryResponse.getSources()).hasSize(1);
+        assertThat(queryResponse.getSources().get(0).getDerivation()).isEqualTo("PROJECTION");
+        assertThat(queryResponse.getArticles()).hasSize(1);
+        assertThat(queryResponse.getArticles().get(0).getDerivation()).isEqualTo("PROJECTION");
     }
 
     /**
@@ -126,8 +130,11 @@ class QueryGraphOrchestratorTests {
 
         QueryResponse queryResponse = queryGraphOrchestrator.execute("refund status");
 
-        assertThat(queryResponse.getAnswer()).isEqualTo("仍然需要确认");
+        assertThat(queryResponse.getAnswer()).startsWith("# 查询回答");
+        assertThat(queryResponse.getAnswer()).contains("[→ refund/status.md]");
         assertThat(queryResponse.getReviewStatus()).isEqualTo("ISSUES_FOUND");
+        assertThat(queryResponse.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(queryResponse.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
         assertThat(answerGenerationService.getGenerateCount()).isEqualTo(1);
         assertThat(answerGenerationService.getReviseCount()).isEqualTo(1);
         assertThat(queryCacheStore.getCachedResponse()).isEmpty();
@@ -229,9 +236,11 @@ class QueryGraphOrchestratorTests {
 
         QueryResponse queryResponse = queryGraphOrchestrator.execute("为什么订单服务要走消息队列");
 
-        assertThat(queryResponse.getAnswer()).contains("无法证明这是唯一必选方案");
+        assertThat(queryResponse.getAnswer()).startsWith("# 查询回答");
+        assertThat(queryResponse.getAnswer()).contains("[→ adr/order-inventory-mq.md]");
         assertThat(queryResponse.getReviewStatus()).isEqualTo("PASSED");
         assertThat(queryResponse.getAnswerOutcome()).isEqualTo(AnswerOutcome.INSUFFICIENT_EVIDENCE);
+        assertThat(queryResponse.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
         assertThat(queryCacheStore.getCachedResponse()).isEmpty();
     }
 
@@ -281,6 +290,118 @@ class QueryGraphOrchestratorTests {
         assertThat(cachedResponse.getQueryId()).isNull();
         assertThat(secondResponse.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
         assertThat(secondResponse.getGenerationMode()).isEqualTo(GenerationMode.LLM);
+    }
+
+    /**
+     * 验证 reviewer 能看到 answerOutcome，避免把简短但可核验的直接答案机械打回。
+     */
+    @Test
+    void shouldPassAnswerOutcomeToReviewerPrompt() {
+        QueryArticleHit articleHit = new QueryArticleHit(
+                "payment-timeout",
+                "Payment Timeout",
+                "retry=5",
+                "{\"description\":\"Handles payment timeout recovery\"}",
+                List.of("payment/analyze.json"),
+                10.0D
+        );
+        TrackingAnswerGenerationService answerGenerationService = new TrackingAnswerGenerationService(
+                new QueryAnswerPayload(
+                        "结论：`payment.timeout.retry` 默认值为 `5`。[[payment-timeout]]",
+                        AnswerOutcome.SUCCESS,
+                        GenerationMode.LLM,
+                        ModelExecutionStatus.SUCCESS,
+                        true
+                ),
+                new QueryAnswerPayload(
+                        "结论：`payment.timeout.retry` 默认值为 `5`。[[payment-timeout]]",
+                        AnswerOutcome.SUCCESS,
+                        GenerationMode.LLM,
+                        ModelExecutionStatus.SUCCESS,
+                        true
+                )
+        );
+        InMemoryQueryCacheStore queryCacheStore = new InMemoryQueryCacheStore();
+        QueryReviewProperties queryReviewProperties = new QueryReviewProperties();
+        queryReviewProperties.setRewriteEnabled(false);
+        PromptAwareReviewerGateway reviewerGateway = new PromptAwareReviewerGateway();
+        QueryGraphOrchestrator queryGraphOrchestrator = QueryGraphTestSupport.createQueryGraphOrchestrator(
+                new FixedFtsSearchService(List.of(articleHit)),
+                new FixedRefKeySearchService(List.of()),
+                new FixedSourceSearchService(List.of()),
+                new FixedContributionSearchService(List.of()),
+                new FixedVectorSearchService(List.of()),
+                answerGenerationService,
+                queryCacheStore,
+                new ReviewerAgent(reviewerGateway, new ReviewResultParser()),
+                queryReviewProperties,
+                List.of(articleHit)
+        );
+
+        QueryResponse queryResponse = queryGraphOrchestrator.execute("payment timeout retry=3 是什么配置");
+
+        assertThat(queryResponse.getReviewStatus()).isEqualTo("PASSED");
+        assertThat(reviewerGateway.lastReviewPrompt).contains("answerOutcome=SUCCESS");
+    }
+
+    /**
+     * 验证简单问答的 citation 必须命中本轮 TOP_K projection 白名单。
+     */
+    @Test
+    void shouldRepairCitationOutsideTopKProjectionWhitelist() {
+        QueryArticleHit topKHit = new QueryArticleHit(
+                "payment-timeout",
+                "Payment Timeout",
+                "retry=3",
+                "{\"description\":\"Handles payment timeout recovery\"}",
+                List.of("payment/analyze.json"),
+                10.0D
+        );
+        QueryArticleHit outsideHit = new QueryArticleHit(
+                "outside-article",
+                "Outside Article",
+                "retry=3",
+                "{\"description\":\"Outside evidence\"}",
+                List.of("outside.md"),
+                1.0D
+        );
+        TrackingAnswerGenerationService answerGenerationService = new TrackingAnswerGenerationService(
+                "结论：retry=3 [[outside-article]]",
+                "结论：retry=3 [[outside-article]]"
+        );
+        InMemoryQueryCacheStore queryCacheStore = new InMemoryQueryCacheStore();
+        QueryReviewProperties queryReviewProperties = new QueryReviewProperties();
+        queryReviewProperties.setRewriteEnabled(false);
+        QueryGraphOrchestrator queryGraphOrchestrator = QueryGraphTestSupport.createQueryGraphOrchestrator(
+                new FixedFtsSearchService(List.of(topKHit)),
+                new FixedRefKeySearchService(List.of()),
+                new FixedSourceSearchService(List.of()),
+                new FixedContributionSearchService(List.of()),
+                new FixedVectorSearchService(List.of()),
+                answerGenerationService,
+                queryCacheStore,
+                new ReviewerAgent(
+                        new SequencedReviewerGateway("{\"approved\":true,\"rewriteRequired\":false,\"riskLevel\":\"LOW\",\"issues\":[],\"userFacingRewriteHints\":[],\"cacheWritePolicy\":\"WRITE\"}"),
+                        new ReviewResultParser()
+                ),
+                queryReviewProperties,
+                List.of(topKHit, outsideHit)
+        );
+
+        QueryResponse queryResponse = queryGraphOrchestrator.execute("payment timeout retry");
+
+        assertThat(queryResponse.getAnswer()).startsWith("# 查询回答");
+        assertThat(queryResponse.getAnswer()).contains("[→ payment/analyze.json]");
+        assertThat(queryResponse.getReviewStatus()).isEqualTo("PASSED");
+        assertThat(queryResponse.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(queryResponse.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
+        assertThat(queryResponse.getCitationCheck()).isNotNull();
+        assertThat(queryResponse.getCitationCheck().isNoCitation()).isFalse();
+        assertThat(queryResponse.getSources()).hasSize(1);
+        assertThat(queryResponse.getSources().get(0).getDerivation()).isEqualTo("PROJECTION");
+        assertThat(queryResponse.getArticles()).hasSize(1);
+        assertThat(queryResponse.getArticles().get(0).getDerivation()).isEqualTo("PROJECTION");
+        assertThat(queryCacheStore.getCachedResponse()).isEmpty();
     }
 
     /**
@@ -472,6 +593,29 @@ class QueryGraphOrchestratorTests {
     }
 
     /**
+     * 根据 prompt 是否携带 answerOutcome 决定审查结果的网关替身。
+     *
+     * @author xiexu
+     */
+    private static class PromptAwareReviewerGateway implements ReviewerGateway {
+
+        private String lastReviewPrompt;
+
+        @Override
+        public String review(String reviewPrompt) {
+            lastReviewPrompt = reviewPrompt;
+            if (reviewPrompt != null && reviewPrompt.contains("answerOutcome=SUCCESS")) {
+                return """
+                        {"approved":true,"rewriteRequired":false,"riskLevel":"LOW","issues":[],"userFacingRewriteHints":[],"cacheWritePolicy":"WRITE"}
+                        """;
+            }
+            return """
+                    {"approved":false,"rewriteRequired":true,"riskLevel":"HIGH","issues":[{"severity":"HIGH","category":"MISSING_OUTCOME_CONTEXT","description":"缺少 answerOutcome 上下文"}],"userFacingRewriteHints":["请补充答案语义"],"cacheWritePolicy":"SKIP_WRITE"}
+                    """;
+        }
+    }
+
+    /**
      * 跟踪 scope / route 的审查代理替身。
      *
      * @author xiexu
@@ -520,6 +664,7 @@ class QueryGraphOrchestratorTests {
                 String agentRole,
                 String question,
                 String answer,
+                AnswerOutcome answerOutcome,
                 List<String> sourcePaths
         ) {
             reviewScopeId = scopeId;

@@ -26,7 +26,7 @@ import java.util.regex.Pattern;
 @Profile("jdbc")
 public class CitationValidator {
 
-    private static final Pattern NUMERIC_LITERAL_PATTERN = Pattern.compile("\\b(\\d{3,6})\\b");
+    private static final Pattern NUMERIC_LITERAL_PATTERN = Pattern.compile("\\b(\\d+(?:\\.\\d+)?)\\b");
 
     private static final Pattern SNAKE_CASE_PATTERN = Pattern.compile("\\b([a-z][a-z0-9]*(?:_[a-z0-9]+){1,})\\b");
 
@@ -36,6 +36,10 @@ public class CitationValidator {
 
     private static final Pattern JAVA_SYMBOL_PATTERN = Pattern.compile(
             "\\b([A-Z][A-Za-z0-9]*(?:Mapper|Service|ServiceImpl|Impl|Controller|Dao))\\b"
+    );
+
+    private static final Pattern LATIN_TERM_PATTERN = Pattern.compile(
+            "(?<![A-Za-z0-9_./-])([A-Za-z][A-Za-z0-9-]{2,})(?![A-Za-z0-9_./-])"
     );
 
     private final ArticleJdbcRepository articleJdbcRepository;
@@ -66,6 +70,28 @@ public class CitationValidator {
         if (citation == null) {
             return new CitationValidationResult(null, null, CitationValidationStatus.DEMOTED, 0.0D, "citation_missing", "", -1);
         }
+        if (citation.getSourceType() == null) {
+            return new CitationValidationResult(
+                    citation.getTargetKey(),
+                    null,
+                    CitationValidationStatus.DEMOTED,
+                    0.0D,
+                    "unsupported_source_type",
+                    "",
+                    citation.getOrdinal()
+            );
+        }
+        if (isBlank(citation.getTargetKey())) {
+            return new CitationValidationResult(
+                    citation.getTargetKey(),
+                    citation.getSourceType(),
+                    CitationValidationStatus.DEMOTED,
+                    0.0D,
+                    "target_key_missing",
+                    "",
+                    citation.getOrdinal()
+            );
+        }
         List<String> hardFactTokens = extractHardFactTokens(citation.getClaimText());
         if (hardFactTokens.isEmpty()) {
             return new CitationValidationResult(
@@ -79,14 +105,25 @@ public class CitationValidator {
             );
         }
         if (citation.getSourceType() == CitationSourceType.SOURCE_FILE) {
+            if (sourceFileJdbcRepository == null) {
+                return new CitationValidationResult(
+                        citation.getTargetKey(),
+                        citation.getSourceType(),
+                        CitationValidationStatus.DEMOTED,
+                        0.0D,
+                        "source_file_repository_unavailable",
+                        "",
+                        citation.getOrdinal()
+                );
+            }
             SourceFileRecord sourceFileRecord = sourceFileJdbcRepository.findByPath(citation.getTargetKey()).orElse(null);
             if (sourceFileRecord == null) {
                 return new CitationValidationResult(
                         citation.getTargetKey(),
                         citation.getSourceType(),
-                        CitationValidationStatus.SKIPPED,
+                        CitationValidationStatus.NOT_FOUND,
                         0.0D,
-                        "source_file_not_found_skip",
+                        "source_file_not_found",
                         "",
                         citation.getOrdinal()
                 );
@@ -110,6 +147,17 @@ public class CitationValidator {
                     overlapScore,
                     "source_insufficient_overlap",
                     extractMatchedExcerpt(sourceFileRecord.getContentText(), hardFactTokens),
+                    citation.getOrdinal()
+            );
+        }
+        if (articleJdbcRepository == null) {
+            return new CitationValidationResult(
+                    citation.getTargetKey(),
+                    citation.getSourceType(),
+                    CitationValidationStatus.DEMOTED,
+                    0.0D,
+                    "article_repository_unavailable",
+                    "",
                     citation.getOrdinal()
             );
         }
@@ -187,11 +235,13 @@ public class CitationValidator {
         if (claimText == null || claimText.isBlank()) {
             return hardFactTokens;
         }
-        appendMatches(hardFactTokens, NUMERIC_LITERAL_PATTERN.matcher(claimText));
-        appendMatches(hardFactTokens, SNAKE_CASE_PATTERN.matcher(claimText));
-        appendMatches(hardFactTokens, FQN_PATTERN.matcher(claimText));
-        appendMatches(hardFactTokens, HTTP_PATH_PATTERN.matcher(claimText));
-        appendMatches(hardFactTokens, JAVA_SYMBOL_PATTERN.matcher(claimText));
+        String normalizedClaimText = normalizeForHardFactExtraction(claimText);
+        appendMatches(hardFactTokens, NUMERIC_LITERAL_PATTERN.matcher(normalizedClaimText));
+        appendMatches(hardFactTokens, SNAKE_CASE_PATTERN.matcher(normalizedClaimText));
+        appendMatches(hardFactTokens, FQN_PATTERN.matcher(normalizedClaimText));
+        appendMatches(hardFactTokens, HTTP_PATH_PATTERN.matcher(normalizedClaimText));
+        appendMatches(hardFactTokens, JAVA_SYMBOL_PATTERN.matcher(normalizedClaimText));
+        appendMatches(hardFactTokens, LATIN_TERM_PATTERN.matcher(normalizedClaimText));
         return hardFactTokens;
     }
 
@@ -201,8 +251,9 @@ public class CitationValidator {
             if (literal == null || literal.isBlank()) {
                 continue;
             }
-            if (!hardFactTokens.contains(literal)) {
-                hardFactTokens.add(literal);
+            String normalizedLiteral = normalizeToken(literal);
+            if (!normalizedLiteral.isBlank() && !hardFactTokens.contains(normalizedLiteral)) {
+                hardFactTokens.add(normalizedLiteral);
             }
         }
     }
@@ -214,11 +265,42 @@ public class CitationValidator {
         }
         String[] parts = content.toLowerCase(Locale.ROOT).split("[^\\p{IsAlphabetic}\\p{IsDigit}_./-]+");
         for (String part : parts) {
-            if (part != null && !part.isBlank() && part.length() >= 2) {
+            if (part != null && !part.isBlank() && (part.length() >= 2 || isNumericToken(part))) {
                 tokens.add(part);
             }
         }
         return tokens;
+    }
+
+    private String normalizeToken(String literal) {
+        return literal == null ? "" : literal.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeForHardFactExtraction(String claimText) {
+        return claimText == null
+                ? ""
+                : claimText
+                .replace("**", "")
+                .replace("`", "")
+                .replaceAll("(?m)^#+\\s*", "")
+                .replaceAll("(?<=\\s|^)\\d+\\.\\s*", "")
+                .trim();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private boolean isNumericToken(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        for (int index = 0; index < value.length(); index++) {
+            if (!Character.isDigit(value.charAt(index))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private String extractMatchedExcerpt(String content, List<String> hardFactTokens) {

@@ -22,9 +22,13 @@ import com.xbk.lattice.query.citation.CitationExtractor;
 import com.xbk.lattice.query.citation.CitationValidationResult;
 import com.xbk.lattice.query.citation.CitationValidator;
 import com.xbk.lattice.query.deepresearch.domain.EvidenceCard;
-import com.xbk.lattice.query.deepresearch.domain.EvidenceFinding;
 import com.xbk.lattice.query.deepresearch.domain.EvidenceLedger;
 import com.xbk.lattice.query.deepresearch.domain.LayerSummary;
+import com.xbk.lattice.query.evidence.domain.EvidenceAnchor;
+import com.xbk.lattice.query.evidence.domain.EvidenceAnchorSourceType;
+import com.xbk.lattice.query.evidence.domain.FactFinding;
+import com.xbk.lattice.query.evidence.domain.FactValueType;
+import com.xbk.lattice.query.evidence.domain.FindingSupportLevel;
 import com.xbk.lattice.query.deepresearch.service.DeepResearchSynthesizer;
 import com.xbk.lattice.query.service.GraphSearchService;
 import com.xbk.lattice.query.service.QueryArticleHit;
@@ -42,6 +46,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -154,7 +159,7 @@ class AstCitationDeepResearchBenchmarkRunner {
         CitationCheckService citationCheckService = createCitationCheckService(scenario);
         CitationCheckReport report = citationCheckService.check(scenario.path("answer").asText(""));
         int totalClaims = report.getClaimSegments().size();
-        int coveredClaims = totalClaims == 0 ? 0 : (int) Math.round(report.getCoverageRate() * totalClaims);
+        int coveredClaims = coveredClaimCount(report);
         ObjectNode result = OBJECT_MAPPER.createObjectNode();
         result.put("id", scenario.path("id").asText(""));
         result.put("kind", "citation");
@@ -171,7 +176,7 @@ class AstCitationDeepResearchBenchmarkRunner {
                         ? null
                         : report.getVerifiedCount() * 1.0D / (report.getVerifiedCount() + report.getDemotedCount())
         );
-        result.put("citationCoverage", report.getCoverageRate());
+        result.put("citationCoverage", totalClaims == 0 ? 0.0D : coveredClaims * 1.0D / totalClaims);
         result.putNull("multiHopCompleteness");
         result.put("matchedExpectedClaims", 0);
         result.put("expectedClaims", 0);
@@ -207,7 +212,7 @@ class AstCitationDeepResearchBenchmarkRunner {
         );
         CitationCheckReport report = synthesisResult.getCitationCheckReport();
         int totalClaims = report == null ? 0 : report.getClaimSegments().size();
-        int coveredClaims = totalClaims == 0 ? 0 : (int) Math.round(report.getCoverageRate() * totalClaims);
+        int coveredClaims = coveredClaimCount(report);
         int expectedClaims = scenario.withArray("expectedClaims").size();
         int matchedExpectedClaims = countMatchedExpectedClaims(
                 synthesisResult.getAnswerMarkdown(),
@@ -230,7 +235,7 @@ class AstCitationDeepResearchBenchmarkRunner {
                         ? null
                         : report.getVerifiedCount() * 1.0D / (report.getVerifiedCount() + report.getDemotedCount())
         );
-        result.put("citationCoverage", report == null ? 0.0D : report.getCoverageRate());
+        result.put("citationCoverage", totalClaims == 0 ? 0.0D : coveredClaims * 1.0D / totalClaims);
         putNullableDouble(
                 result,
                 "multiHopCompleteness",
@@ -475,15 +480,18 @@ class AstCitationDeepResearchBenchmarkRunner {
         evidenceCard.setLayerIndex(cardNode.path("layerIndex").asInt(0));
         evidenceCard.setTaskId(cardNode.path("taskId").asText(""));
         evidenceCard.setScope(cardNode.path("scope").asText(""));
-        for (JsonNode findingNode : cardNode.withArray("findings")) {
-            EvidenceFinding evidenceFinding = new EvidenceFinding();
-            evidenceFinding.setClaim(findingNode.path("claim").asText(""));
-            evidenceFinding.setQuote(findingNode.path("quote").asText(""));
-            evidenceFinding.setSourceType(findingNode.path("sourceType").asText(""));
-            evidenceFinding.setSourceId(findingNode.path("sourceId").asText(""));
-            evidenceFinding.setChunkId(findingNode.path("chunkId").asText(null));
-            evidenceFinding.setConfidence(findingNode.path("confidence").asDouble(0.0D));
-            evidenceCard.getFindings().add(evidenceFinding);
+        for (JsonNode anchorNode : cardNode.withArray("evidenceAnchors")) {
+            evidenceCard.getEvidenceAnchors().add(toEvidenceAnchor(anchorNode));
+        }
+        for (JsonNode findingNode : cardNode.withArray("factFindings")) {
+            evidenceCard.getFactFindings().add(toFactFinding(findingNode));
+        }
+        int legacyFindingIndex = 0;
+        for (JsonNode legacyFindingNode : cardNode.withArray("findings")) {
+            legacyFindingIndex++;
+            String anchorId = resolveLegacyAnchorId(evidenceCard, legacyFindingIndex);
+            evidenceCard.getEvidenceAnchors().add(toLegacyEvidenceAnchor(legacyFindingNode, anchorId));
+            evidenceCard.getFactFindings().add(toLegacyFactFinding(cardNode, legacyFindingNode, anchorId));
         }
         for (JsonNode gapNode : cardNode.withArray("gaps")) {
             evidenceCard.getGaps().add(gapNode.asText(""));
@@ -495,6 +503,159 @@ class AstCitationDeepResearchBenchmarkRunner {
             evidenceCard.getSelectedArticleKeys().add(articleKeyNode.asText(""));
         }
         return evidenceCard;
+    }
+
+    private EvidenceAnchor toEvidenceAnchor(JsonNode anchorNode) {
+        EvidenceAnchor evidenceAnchor = new EvidenceAnchor();
+        evidenceAnchor.setAnchorId(anchorNode.path("anchorId").asText(""));
+        evidenceAnchor.setSourceType(parseEvidenceAnchorSourceType(anchorNode.path("sourceType").asText("")));
+        evidenceAnchor.setSourceId(anchorNode.path("sourceId").asText(""));
+        evidenceAnchor.setPath(anchorNode.path("path").asText(null));
+        evidenceAnchor.setLineStart(nullableInt(anchorNode.path("lineStart")));
+        evidenceAnchor.setLineEnd(nullableInt(anchorNode.path("lineEnd")));
+        evidenceAnchor.setChunkId(anchorNode.path("chunkId").asText(null));
+        evidenceAnchor.setQuoteText(anchorNode.path("quoteText").asText(""));
+        evidenceAnchor.setRetrievalScore(anchorNode.path("retrievalScore").asDouble(0.0D));
+        return evidenceAnchor;
+    }
+
+    private FactFinding toFactFinding(JsonNode findingNode) {
+        FactFinding factFinding = new FactFinding();
+        factFinding.setFindingId(findingNode.path("findingId").asText(""));
+        factFinding.setSubject(findingNode.path("subject").asText(""));
+        factFinding.setPredicate(findingNode.path("predicate").asText(""));
+        factFinding.setQualifier(findingNode.path("qualifier").asText(""));
+        factFinding.setFactKey(findingNode.path("factKey").asText(factFinding.expectedFactKey()));
+        factFinding.setValueText(findingNode.path("valueText").asText(""));
+        factFinding.setValueType(parseFactValueType(findingNode.path("valueType").asText("STRING")));
+        factFinding.setUnit(findingNode.path("unit").asText(null));
+        factFinding.setClaimText(findingNode.path("claimText").asText(""));
+        factFinding.setConfidence(findingNode.path("confidence").asDouble(0.0D));
+        factFinding.setSupportLevel(parseFindingSupportLevel(findingNode.path("supportLevel").asText("DIRECT")));
+        for (JsonNode anchorIdNode : findingNode.withArray("anchorIds")) {
+            factFinding.getAnchorIds().add(anchorIdNode.asText(""));
+        }
+        return factFinding;
+    }
+
+    private EvidenceAnchorSourceType parseEvidenceAnchorSourceType(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        if ("SOURCE".equalsIgnoreCase(value.trim())) {
+            return EvidenceAnchorSourceType.SOURCE_FILE;
+        }
+        return EvidenceAnchorSourceType.valueOf(value.trim());
+    }
+
+    private FactValueType parseFactValueType(String value) {
+        if (value == null || value.isBlank()) {
+            return FactValueType.STRING;
+        }
+        return FactValueType.valueOf(value.trim());
+    }
+
+    private FindingSupportLevel parseFindingSupportLevel(String value) {
+        if (value == null || value.isBlank()) {
+            return FindingSupportLevel.DIRECT;
+        }
+        return FindingSupportLevel.valueOf(value.trim());
+    }
+
+    private Integer nullableInt(JsonNode jsonNode) {
+        if (jsonNode == null || jsonNode.isMissingNode() || jsonNode.isNull()) {
+            return null;
+        }
+        return Integer.valueOf(jsonNode.asInt());
+    }
+
+    private int coveredClaimCount(CitationCheckReport report) {
+        if (report == null || report.getClaimSegments() == null) {
+            return 0;
+        }
+        return Math.max(0, report.getClaimSegments().size() - report.getUnsupportedClaimCount());
+    }
+
+    private String resolveLegacyAnchorId(EvidenceCard evidenceCard, int legacyFindingIndex) {
+        String evidenceId = evidenceCard.getEvidenceId();
+        if (legacyFindingIndex == 1 && evidenceId != null && evidenceId.matches("ev#\\d+")) {
+            return evidenceId;
+        }
+        int stableHash = Math.abs(Objects.hash(
+                evidenceId,
+                evidenceCard.getTaskId(),
+                evidenceCard.getScope(),
+                Integer.valueOf(legacyFindingIndex)
+        ));
+        return "ev#" + stableHash;
+    }
+
+    private EvidenceAnchor toLegacyEvidenceAnchor(JsonNode findingNode, String anchorId) {
+        EvidenceAnchor evidenceAnchor = new EvidenceAnchor();
+        EvidenceAnchorSourceType sourceType = parseEvidenceAnchorSourceType(findingNode.path("sourceType").asText("ARTICLE"));
+        evidenceAnchor.setAnchorId(anchorId);
+        evidenceAnchor.setSourceType(sourceType);
+        evidenceAnchor.setSourceId(findingNode.path("sourceId").asText(""));
+        if (sourceType == EvidenceAnchorSourceType.SOURCE_FILE) {
+            evidenceAnchor.setPath(evidenceAnchor.getSourceId());
+        }
+        else {
+            evidenceAnchor.setChunkId(findingNode.path("chunkId").asText(null));
+        }
+        evidenceAnchor.setQuoteText(findingNode.path("quote").asText(""));
+        evidenceAnchor.setRetrievalScore(Math.max(0.8D, findingNode.path("confidence").asDouble(0.0D)));
+        return evidenceAnchor;
+    }
+
+    private FactFinding toLegacyFactFinding(JsonNode cardNode, JsonNode findingNode, String anchorId) {
+        LegacyClaimParts legacyClaimParts = deriveLegacyClaimParts(
+                findingNode.path("claim").asText(""),
+                cardNode.path("scope").asText(""),
+                cardNode.path("taskId").asText("")
+        );
+        FactFinding factFinding = new FactFinding();
+        factFinding.setFindingId(cardNode.path("evidenceId").asText("") + "-legacy-" + anchorId);
+        factFinding.setSubject(legacyClaimParts.getSubject());
+        factFinding.setPredicate(legacyClaimParts.getPredicate());
+        factFinding.setQualifier(legacyClaimParts.getQualifier());
+        factFinding.setFactKey(factFinding.expectedFactKey());
+        factFinding.setValueText(legacyClaimParts.getValueText());
+        factFinding.setValueType(FactValueType.STRING);
+        factFinding.setClaimText(findingNode.path("claim").asText(""));
+        factFinding.setConfidence(Math.max(0.8D, findingNode.path("confidence").asDouble(0.0D)));
+        factFinding.setSupportLevel(FindingSupportLevel.DIRECT);
+        factFinding.getAnchorIds().add(anchorId);
+        return factFinding;
+    }
+
+    private LegacyClaimParts deriveLegacyClaimParts(String claim, String scope, String taskId) {
+        String normalizedClaim = claim == null ? "" : claim.trim();
+        if (normalizedClaim.isEmpty()) {
+            String subject = fallbackSubject(scope, taskId);
+            return new LegacyClaimParts(subject, "states", "legacy_benchmark", subject);
+        }
+        for (LegacySeparator separator : LegacySeparator.values()) {
+            int index = normalizedClaim.indexOf(separator.literal());
+            if (index > 0) {
+                String subject = normalizedClaim.substring(0, index).trim();
+                String valueText = normalizedClaim.substring(index + separator.literal().length()).trim();
+                if (!subject.isEmpty() && !valueText.isEmpty()) {
+                    return new LegacyClaimParts(subject, separator.predicate(), "legacy_benchmark", valueText);
+                }
+            }
+        }
+        String subject = fallbackSubject(scope, taskId);
+        return new LegacyClaimParts(subject, "states", "legacy_benchmark", normalizedClaim);
+    }
+
+    private String fallbackSubject(String scope, String taskId) {
+        if (scope != null && !scope.isBlank()) {
+            return scope.trim();
+        }
+        if (taskId != null && !taskId.isBlank()) {
+            return taskId.trim();
+        }
+        return "benchmark";
     }
 
     private int countMatchedExpectedClaims(String answerMarkdown, ArrayNode expectedClaims) {
@@ -639,6 +800,69 @@ class AstCitationDeepResearchBenchmarkRunner {
         @Override
         public Optional<ArticleRecord> findByConceptId(String conceptId) {
             return findByArticleKey(conceptId);
+        }
+    }
+
+    private enum LegacySeparator {
+        ADOPTS("采用", "adopts"),
+        USES("使用", "uses"),
+        THROUGH("通过", "through"),
+        EXPOSES("暴露", "exposes"),
+        CALLS("调用", "calls"),
+        ENTERS("进入", "enters"),
+        DEPENDS_ON("依赖", "depends_on"),
+        IS("是", "is"),
+        AS("为", "as");
+
+        private final String literal;
+
+        private final String predicate;
+
+        LegacySeparator(String literal, String predicate) {
+            this.literal = literal;
+            this.predicate = predicate;
+        }
+
+        public String literal() {
+            return literal;
+        }
+
+        public String predicate() {
+            return predicate;
+        }
+    }
+
+    private static final class LegacyClaimParts {
+
+        private final String subject;
+
+        private final String predicate;
+
+        private final String qualifier;
+
+        private final String valueText;
+
+        private LegacyClaimParts(String subject, String predicate, String qualifier, String valueText) {
+            this.subject = subject;
+            this.predicate = predicate;
+            this.qualifier = qualifier;
+            this.valueText = valueText;
+        }
+
+        private String getSubject() {
+            return subject;
+        }
+
+        private String getPredicate() {
+            return predicate;
+        }
+
+        private String getQualifier() {
+            return qualifier;
+        }
+
+        private String getValueText() {
+            return valueText;
         }
     }
 

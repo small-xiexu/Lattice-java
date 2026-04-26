@@ -8,6 +8,7 @@ import com.xbk.lattice.query.citation.CitationCheckService;
 import com.xbk.lattice.query.citation.CitationExtractor;
 import com.xbk.lattice.query.citation.CitationValidator;
 import com.xbk.lattice.query.graph.InMemoryQueryWorkingSetStore;
+import com.xbk.lattice.query.graph.QueryAnswerProjectionBuilder;
 import com.xbk.lattice.query.graph.QueryGraphConditions;
 import com.xbk.lattice.query.graph.QueryGraphDefinitionFactory;
 import com.xbk.lattice.query.graph.QueryGraphLifecycleListener;
@@ -61,8 +62,9 @@ final class QueryGraphTestSupport {
     ) {
         QueryWorkingSetStore queryWorkingSetStore = new InMemoryQueryWorkingSetStore();
         QueryGraphStateMapper queryGraphStateMapper = new QueryGraphStateMapper();
+        CitationExtractor citationExtractor = new CitationExtractor();
         CitationCheckService citationCheckService = new CitationCheckService(
-                new CitationExtractor(),
+                citationExtractor,
                 new CitationValidator(
                         new CatalogArticleJdbcRepository(evidenceCatalog),
                         new CatalogSourceFileJdbcRepository(evidenceCatalog)
@@ -85,7 +87,8 @@ final class QueryGraphTestSupport {
                 citationCheckService,
                 null,
                 queryGraphStateMapper,
-                new QueryGraphConditions(queryReviewProperties)
+                new QueryGraphConditions(queryReviewProperties),
+                new QueryAnswerProjectionBuilder(citationExtractor)
         );
         return new QueryGraphOrchestrator(
                 queryGraphDefinitionFactory,

@@ -4,6 +4,8 @@ import com.xbk.lattice.query.deepresearch.domain.EvidenceCard;
 import com.xbk.lattice.query.deepresearch.domain.EvidenceLedger;
 import com.xbk.lattice.query.deepresearch.domain.LayerSummary;
 import com.xbk.lattice.query.deepresearch.domain.LayeredResearchPlan;
+import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
+import com.xbk.lattice.query.evidence.domain.ProjectionCandidate;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -85,29 +87,29 @@ public class InMemoryDeepResearchWorkingSetStore implements DeepResearchWorkingS
     }
 
     /**
-     * 保存证据卡列表。
+     * 保存任务研究结果列表。
      *
      * @param queryId 查询标识
      * @param slotKey 槽位键
-     * @param evidenceCards 证据卡列表
+     * @param evidenceCards 任务研究结果列表
      * @return 工作集引用
      */
     @Override
-    public String saveEvidenceCards(String queryId, String slotKey, List<EvidenceCard> evidenceCards) {
-        String ref = buildRef(queryId, "evidence-cards-" + slotKey);
+    public String saveTaskResults(String queryId, String slotKey, List<EvidenceCard> evidenceCards) {
+        String ref = buildRef(queryId, "task-results-" + slotKey);
         store.put(ref, new ArrayList<EvidenceCard>(evidenceCards));
         return ref;
     }
 
     /**
-     * 读取证据卡列表。
+     * 读取任务研究结果列表。
      *
      * @param ref 工作集引用
-     * @return 证据卡列表
+     * @return 任务研究结果列表
      */
     @Override
     @SuppressWarnings("unchecked")
-    public List<EvidenceCard> loadEvidenceCards(String ref) {
+    public List<EvidenceCard> loadTaskResults(String ref) {
         Object value = store.get(ref);
         if (!(value instanceof List<?>)) {
             return List.of();
@@ -140,6 +142,65 @@ public class InMemoryDeepResearchWorkingSetStore implements DeepResearchWorkingS
         Object value = store.get(ref);
         if (value instanceof EvidenceLedger) {
             return (EvidenceLedger) value;
+        }
+        return null;
+    }
+
+    /**
+     * 保存投影候选列表。
+     *
+     * @param queryId 查询标识
+     * @param projectionCandidates 投影候选
+     * @return 工作集引用
+     */
+    @Override
+    public String saveProjectionCandidates(String queryId, List<ProjectionCandidate> projectionCandidates) {
+        String ref = buildRef(queryId, "projection-candidates");
+        store.put(ref, new ArrayList<ProjectionCandidate>(projectionCandidates));
+        return ref;
+    }
+
+    /**
+     * 读取投影候选列表。
+     *
+     * @param ref 工作集引用
+     * @return 投影候选
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<ProjectionCandidate> loadProjectionCandidates(String ref) {
+        Object value = store.get(ref);
+        if (!(value instanceof List<?>)) {
+            return List.of();
+        }
+        return new ArrayList<ProjectionCandidate>((List<ProjectionCandidate>) value);
+    }
+
+    /**
+     * 保存答案投影包。
+     *
+     * @param queryId 查询标识
+     * @param answerProjectionBundle 答案投影包
+     * @return 工作集引用
+     */
+    @Override
+    public String saveAnswerProjectionBundle(String queryId, AnswerProjectionBundle answerProjectionBundle) {
+        String ref = buildRef(queryId, "answer-projection-bundle");
+        store.put(ref, answerProjectionBundle);
+        return ref;
+    }
+
+    /**
+     * 读取答案投影包。
+     *
+     * @param ref 工作集引用
+     * @return 答案投影包
+     */
+    @Override
+    public AnswerProjectionBundle loadAnswerProjectionBundle(String ref) {
+        Object value = store.get(ref);
+        if (value instanceof AnswerProjectionBundle) {
+            return (AnswerProjectionBundle) value;
         }
         return null;
     }

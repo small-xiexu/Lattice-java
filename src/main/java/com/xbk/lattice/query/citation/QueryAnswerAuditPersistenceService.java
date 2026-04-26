@@ -78,8 +78,52 @@ public class QueryAnswerAuditPersistenceService {
             String routeType,
             CitationCheckReport report
     ) {
+        return persist(
+                queryId,
+                answerVersion,
+                question,
+                answerMarkdown,
+                answerOutcome,
+                generationMode,
+                reviewStatus,
+                cacheable,
+                routeType,
+                report,
+                null
+        );
+    }
+
+    /**
+     * 写入最终答案审计。
+     *
+     * @param queryId 查询标识
+     * @param answerVersion 答案版本号
+     * @param question 问题
+     * @param answerMarkdown 答案 Markdown
+     * @param answerOutcome 答案语义
+     * @param generationMode 生成模式
+     * @param reviewStatus 审查状态
+     * @param cacheable 是否可缓存
+     * @param routeType 路由类型
+     * @param report Citation 检查报告
+     * @param deepResearchRunId 所属 Deep Research run 主键
+     * @return 审计快照
+     */
+    public QueryAnswerAuditSnapshot persist(
+            String queryId,
+            int answerVersion,
+            String question,
+            String answerMarkdown,
+            AnswerOutcome answerOutcome,
+            GenerationMode generationMode,
+            String reviewStatus,
+            boolean cacheable,
+            String routeType,
+            CitationCheckReport report,
+            Long deepResearchRunId
+    ) {
         CitationCheckReport effectiveReport = report == null
-                ? new CitationCheckReport(answerMarkdown, List.of(), List.of(), 0, 0, 0, true, 0.0D, 0)
+                ? new CitationCheckReport(answerMarkdown, List.of(), List.of(), 0, 0, 0, true, 0.0D, 0, 0, 0, 0)
                 : report;
         Long auditId = queryAnswerAuditJdbcRepository.insert(new QueryAnswerAuditRecord(
                 queryId,
@@ -96,7 +140,8 @@ public class QueryAnswerAuditPersistenceService {
                 effectiveReport.getSkippedCount(),
                 cacheable,
                 routeType,
-                "{}"
+                "{}",
+                deepResearchRunId
         ));
         Map<Integer, Long> claimIdsByIndex = new LinkedHashMap<Integer, Long>();
         for (ClaimSegment claimSegment : effectiveReport.getClaimSegments()) {
@@ -122,6 +167,7 @@ public class QueryAnswerAuditPersistenceService {
                         citation.getSourceType().name(),
                         citation.getTargetKey(),
                         validationResult == null ? CitationValidationStatus.DEMOTED.name() : validationResult.getStatus().name(),
+                        validationResult == null ? CitationValidationSource.RULE.name() : validationResult.getValidatedBy().name(),
                         validationResult == null ? 0.0D : validationResult.getOverlapScore(),
                         validationResult == null ? "" : validationResult.getMatchedExcerpt(),
                         validationResult == null ? "missing_validation_result" : validationResult.getReason()

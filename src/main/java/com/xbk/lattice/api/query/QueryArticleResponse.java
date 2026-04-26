@@ -20,6 +20,8 @@ public class QueryArticleResponse {
 
     private final String title;
 
+    private final String derivation;
+
     /**
      * 创建查询文章响应。
      *
@@ -27,7 +29,7 @@ public class QueryArticleResponse {
      * @param title 标题
      */
     public QueryArticleResponse(String conceptId, String title) {
-        this(null, null, conceptId, title);
+        this(null, null, conceptId, title, null);
     }
 
     /**
@@ -37,18 +39,21 @@ public class QueryArticleResponse {
      * @param articleKey 文章唯一键
      * @param conceptId 概念标识
      * @param title 标题
+     * @param derivation 来源推导方式
      */
     @JsonCreator
     public QueryArticleResponse(
             @JsonProperty("sourceId") Long sourceId,
             @JsonProperty("articleKey") String articleKey,
             @JsonProperty("conceptId") String conceptId,
-            @JsonProperty("title") String title
+            @JsonProperty("title") String title,
+            @JsonProperty("derivation") String derivation
     ) {
         this.sourceId = sourceId;
         this.articleKey = articleKey;
         this.conceptId = conceptId;
         this.title = title;
+        this.derivation = derivation;
     }
 
     /**
@@ -85,5 +90,14 @@ public class QueryArticleResponse {
      */
     public String getTitle() {
         return title;
+    }
+
+    /**
+     * 获取来源推导方式。
+     *
+     * @return 来源推导方式
+     */
+    public String getDerivation() {
+        return derivation;
     }
 }

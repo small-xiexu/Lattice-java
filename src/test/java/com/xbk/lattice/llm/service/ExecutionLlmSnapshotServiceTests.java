@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * ExecutionLlmSnapshotService 测试
@@ -301,6 +302,72 @@ class ExecutionLlmSnapshotServiceTests {
         );
 
         assertThat(routeResolution.getTimeoutSeconds()).isEqualTo(Integer.valueOf(60));
+    }
+
+    /**
+     * 验证 deep_research 场景缺少完整 role 绑定时会显式失败。
+     */
+    @Test
+    void shouldRejectDeepResearchSceneWhenRequiredRolesAreMissing() {
+        LlmProperties llmProperties = createProperties();
+        StubBindingRepository bindingRepository = new StubBindingRepository();
+        StubModelRepository modelRepository = new StubModelRepository();
+        StubConnectionRepository connectionRepository = new StubConnectionRepository();
+        StubSnapshotRepository snapshotRepository = new StubSnapshotRepository();
+        LlmSecretCryptoService cryptoService = new LlmSecretCryptoService(llmProperties);
+        ExecutionLlmSnapshotService snapshotService = new ExecutionLlmSnapshotService(
+                llmProperties,
+                bindingRepository,
+                modelRepository,
+                connectionRepository,
+                snapshotRepository,
+                cryptoService
+        );
+        bindingRepository.items = List.of(new AgentModelBinding(
+                Long.valueOf(1L),
+                ExecutionLlmSnapshotService.DEEP_RESEARCH_SCENE,
+                ExecutionLlmSnapshotService.ROLE_RESEARCHER,
+                Long.valueOf(11L),
+                null,
+                "deep.research.researcher",
+                true,
+                null,
+                "admin",
+                "admin",
+                null,
+                null
+        ));
+
+        assertThatThrownBy(() -> snapshotService.validateSceneBindings(ExecutionLlmSnapshotService.DEEP_RESEARCH_SCENE))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("deep_research scene 必须完整配置角色");
+    }
+
+    /**
+     * 验证 deep_research 场景不允许 bootstrap fallback。
+     */
+    @Test
+    void shouldRejectBootstrapRouteForDeepResearchScene() {
+        LlmProperties llmProperties = createProperties();
+        ExecutionLlmSnapshotService snapshotService = new ExecutionLlmSnapshotService(
+                llmProperties,
+                new StubBindingRepository(),
+                new StubModelRepository(),
+                new StubConnectionRepository(),
+                new StubSnapshotRepository(),
+                new LlmSecretCryptoService(llmProperties)
+        );
+
+        assertThatThrownBy(() -> snapshotService.bootstrapRoute(
+                ExecutionLlmSnapshotService.DEEP_RESEARCH_SCENE,
+                ExecutionLlmSnapshotService.ROLE_RESEARCHER,
+                "http://writer-base",
+                "writer-key",
+                "http://reviewer-base",
+                "reviewer-key"
+        ))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("deep_research scene 不允许 bootstrap fallback");
     }
 
     private LlmProperties createProperties() {

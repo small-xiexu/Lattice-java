@@ -14,6 +14,8 @@ import com.xbk.lattice.query.deepresearch.service.DeepResearchExecutionContext;
 import com.xbk.lattice.query.deepresearch.service.DeepResearchExecutionRegistry;
 import com.xbk.lattice.query.deepresearch.service.DeepResearchResearcherService;
 import com.xbk.lattice.query.deepresearch.service.DeepResearchSynthesizer;
+import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
+import com.xbk.lattice.query.evidence.domain.FactFinding;
 import com.xbk.lattice.query.deepresearch.store.DeepResearchWorkingSetStore;
 import com.xbk.lattice.query.graph.QueryWorkingSetStore;
 import org.springframework.context.annotation.Profile;
@@ -132,7 +134,7 @@ public class DeepResearchGraphDefinitionFactory {
                 preferredCards,
                 executionContext
         );
-        deepResearchWorkingSetStore.saveEvidenceCards(
+        deepResearchWorkingSetStore.saveTaskResults(
                 state.getQueryId(),
                 taskSlotKey(researchLayer.getLayerIndex(), researchTask.getTaskId()),
                 List.of(evidenceCard)
@@ -152,11 +154,16 @@ public class DeepResearchGraphDefinitionFactory {
         }
         evidenceLedger.addCards(layerCards);
         String ledgerRef = deepResearchWorkingSetStore.saveEvidenceLedger(state.getQueryId(), evidenceLedger);
+        state.setLedgerRef(ledgerRef);
         LayerSummary layerSummary = new LayerSummary();
         layerSummary.setLayerIndex(researchLayer.getLayerIndex());
         layerSummary.setSummaryMarkdown(buildLayerSummaryMarkdown(layerCards));
         for (ResearchTask researchTask : researchLayer.getTasks()) {
             layerSummary.getTaskIds().add(researchTask.getTaskId());
+            String taskResultRef = taskResultRef(state.getQueryId(), researchLayer.getLayerIndex(), researchTask.getTaskId());
+            if (!state.getTaskResultRefs().contains(taskResultRef)) {
+                state.getTaskResultRefs().add(taskResultRef);
+            }
         }
         for (EvidenceCard evidenceCard : layerCards) {
             layerSummary.getEvidenceIds().add(evidenceCard.getEvidenceId());
@@ -177,7 +184,6 @@ public class DeepResearchGraphDefinitionFactory {
             state.setTimedOut(executionContext.isTimedOut());
             state.setPartialAnswer(executionContext.isTimedOut());
         }
-        state.setFinalResponseRef(ledgerRef);
         return deepResearchStateMapper.toDeltaMap(state);
     }
 
@@ -190,20 +196,92 @@ public class DeepResearchGraphDefinitionFactory {
                 layerSummaries,
                 evidenceLedger
         );
-        state.setDraftAnswerRef(queryWorkingSetStore.saveAnswer(state.getQueryId(), synthesisResult.getAnswerMarkdown()));
-        CitationCheckReport citationCheckReport = synthesisResult.getCitationCheckReport();
-        state.setCitationCheckReportRef(
-                queryWorkingSetStore.saveCitationCheckReport(state.getQueryId(), citationCheckReport)
-        );
-        state.setPartialAnswer(synthesisResult.isPartialAnswer() || state.isTimedOut());
-        state.setHasConflicts(synthesisResult.isHasConflicts());
-        state.setEvidenceCardCount(synthesisResult.getEvidenceCardCount());
+        String internalDraftMarkdown = "";
+        if (synthesisResult != null && synthesisResult.getInternalAnswerDraft() != null) {
+            internalDraftMarkdown = synthesisResult.getInternalAnswerDraft().getDraftMarkdown();
+        }
+        else if (synthesisResult != null) {
+            internalDraftMarkdown = synthesisResult.getAnswerMarkdown();
+        }
+        if (internalDraftMarkdown == null) {
+            internalDraftMarkdown = "";
+        }
+        AnswerProjectionBundle answerProjectionBundle = resolveAnswerProjectionBundle(synthesisResult);
+        state.setInternalAnswerDraftRef(queryWorkingSetStore.saveAnswer(state.getQueryId(), internalDraftMarkdown));
+        state.setProjectionRef(deepResearchWorkingSetStore.saveAnswerProjectionBundle(
+                state.getQueryId(),
+                answerProjectionBundle
+        ));
+        CitationCheckReport citationCheckReport = synthesisResult == null ? null : synthesisResult.getCitationCheckReport();
+        if (citationCheckReport != null) {
+            state.setCitationCheckReportRef(
+                    queryWorkingSetStore.saveCitationCheckReport(state.getQueryId(), citationCheckReport)
+            );
+        }
+        state.setPartialAnswer(synthesisResult == null
+                || synthesisResult.isPartialAnswer()
+                || hasNoProjection(answerProjectionBundle)
+                || state.isTimedOut());
+        state.setHasConflicts(synthesisResult != null && synthesisResult.isHasConflicts());
+        state.setEvidenceCardCount(synthesisResult == null ? 0 : synthesisResult.getEvidenceCardCount());
         DeepResearchExecutionContext executionContext = deepResearchExecutionRegistry.get(state.getQueryId());
         if (executionContext != null) {
             state.setLlmCallBudgetRemaining(executionContext.remainingLlmCalls());
             state.setTimedOut(executionContext.isTimedOut());
         }
         return deepResearchStateMapper.toDeltaMap(state);
+    }
+
+    /**
+     * 解析安全出站 projection bundle，禁止内部 ev#N 泄漏到最终答案。
+     *
+     * @param synthesisResult 综合结果
+     * @return 可出站的投影包
+     */
+    private AnswerProjectionBundle resolveAnswerProjectionBundle(DeepResearchSynthesisResult synthesisResult) {
+        if (synthesisResult == null || synthesisResult.getAnswerProjectionBundle() == null) {
+            return insufficientProjectionBundle();
+        }
+        AnswerProjectionBundle answerProjectionBundle = synthesisResult.getAnswerProjectionBundle();
+        String answerMarkdown = answerProjectionBundle.getAnswerMarkdown();
+        if (answerMarkdown == null || answerMarkdown.isBlank() || containsInternalEvidenceId(answerMarkdown)) {
+            return insufficientProjectionBundle();
+        }
+        return answerProjectionBundle;
+    }
+
+    /**
+     * 判断投影包是否没有任何可见 projection。
+     *
+     * @param answerProjectionBundle 投影包
+     * @return 没有 projection 时返回 true
+     */
+    private boolean hasNoProjection(AnswerProjectionBundle answerProjectionBundle) {
+        return answerProjectionBundle == null
+                || answerProjectionBundle.getProjections() == null
+                || answerProjectionBundle.getProjections().isEmpty();
+    }
+
+    /**
+     * 判断答案中是否仍包含内部证据号。
+     *
+     * @param answerMarkdown 答案 Markdown
+     * @return 包含内部 ev#N 时返回 true
+     */
+    private boolean containsInternalEvidenceId(String answerMarkdown) {
+        return answerMarkdown != null && answerMarkdown.matches("(?s).*\\bev#\\d+\\b.*");
+    }
+
+    /**
+     * 构造 projection 失败时的安全出站答案。
+     *
+     * @return 安全投影包
+     */
+    private AnswerProjectionBundle insufficientProjectionBundle() {
+        return new AnswerProjectionBundle(
+                "当前证据不足，无法生成可核验引用版答案",
+                List.of()
+        );
     }
 
     private LayerSummary loadPreviousLayerSummary(DeepResearchState state, int layerIndex) {
@@ -236,12 +314,11 @@ public class DeepResearchGraphDefinitionFactory {
     }
 
     private List<EvidenceCard> loadTaskCards(String queryId, int layerIndex, String taskId) {
-        String ref = queryId + ":evidence-cards:" + taskSlotKey(layerIndex, taskId);
-        List<EvidenceCard> cards = deepResearchWorkingSetStore.loadEvidenceCards(ref);
-        if (!cards.isEmpty()) {
-            return cards;
-        }
-        return deepResearchWorkingSetStore.loadEvidenceCards(queryId + ":evidence-cards-" + taskSlotKey(layerIndex, taskId));
+        return deepResearchWorkingSetStore.loadTaskResults(taskResultRef(queryId, layerIndex, taskId));
+    }
+
+    private String taskResultRef(String queryId, int layerIndex, String taskId) {
+        return queryId + ":task-results-" + taskSlotKey(layerIndex, taskId);
     }
 
     private EvidenceLedger loadEvidenceLedger(String queryId) {
@@ -270,10 +347,10 @@ public class DeepResearchGraphDefinitionFactory {
         }
         StringBuilder summaryBuilder = new StringBuilder();
         for (EvidenceCard layerCard : layerCards) {
-            if (!layerCard.getFindings().isEmpty()) {
+            if (layerCard.getFactFindings() != null && !layerCard.getFactFindings().isEmpty()) {
                 summaryBuilder.append(layerCard.getTaskId())
                         .append("：")
-                        .append(layerCard.getFindings().get(0).getClaim())
+                        .append(resolveFindingClaim(layerCard.getFactFindings().get(0)))
                         .append("；");
             }
             else if (!layerCard.getGaps().isEmpty()) {
@@ -283,6 +360,16 @@ public class DeepResearchGraphDefinitionFactory {
                         .append("；");
             }
         }
+        if (summaryBuilder.length() == 0) {
+            return "当前层复用上一层证据做综合，不新增独立 finding";
+        }
         return summaryBuilder.toString();
+    }
+
+    private String resolveFindingClaim(FactFinding factFinding) {
+        if (factFinding == null || factFinding.getClaimText() == null || factFinding.getClaimText().isBlank()) {
+            return "";
+        }
+        return factFinding.getClaimText().trim();
     }
 }

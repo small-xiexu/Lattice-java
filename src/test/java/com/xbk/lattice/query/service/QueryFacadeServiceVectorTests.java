@@ -51,7 +51,9 @@ class QueryFacadeServiceVectorTests {
 
         QueryResponse queryResponse = queryFacadeService.query("退款状态是什么");
 
-        assertThat(queryResponse.getAnswer()).isEqualTo("来自向量召回的答案");
+        assertThat(queryResponse.getAnswer()).startsWith("# 查询回答");
+        assertThat(queryResponse.getAnswer()).contains("退款状态流转说明");
+        assertThat(queryResponse.getAnswer()).contains("[[refund-status]]");
         assertThat(queryResponse.getArticles()).extracting("conceptId").containsExactly("refund-status");
         assertThat(queryResponse.getSources()).extracting("title").contains("Refund Status");
     }

@@ -65,6 +65,8 @@ public final class QueryGraphStateKeys {
 
     public static final String CITATION_CHECK_REPORT_REF = "citationCheckReportRef";
 
+    public static final String ANSWER_PROJECTION_BUNDLE_REF = "answerProjectionBundleRef";
+
     public static final String ANSWER_AUDIT_REF = "answerAuditRef";
 
     public static final String LLM_BINDING_SNAPSHOT_REF = "llmBindingSnapshotRef";

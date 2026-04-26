@@ -27,15 +27,21 @@ public class DeepResearchState {
 
     private String planRef;
 
+    private List<String> taskResultRefs = new ArrayList<String>();
+
+    private String ledgerRef;
+
     private int currentLayerIndex;
 
     private List<String> layerSummaryRefs = new ArrayList<String>();
 
-    private String draftAnswerRef;
+    private String internalAnswerDraftRef;
+
+    private String projectionRef;
 
     private String citationCheckReportRef;
 
-    private String finalResponseRef;
+    private String answerAuditRef;
 
     private int llmCallBudgetRemaining;
 
@@ -46,4 +52,6 @@ public class DeepResearchState {
     private boolean hasConflicts;
 
     private int evidenceCardCount;
+
+    private int projectionRetryCount;
 }

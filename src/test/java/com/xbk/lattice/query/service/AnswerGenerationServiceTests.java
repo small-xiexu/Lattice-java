@@ -36,7 +36,7 @@ class AnswerGenerationServiceTests {
     void shouldGenerateStructuredAnswerPayloadFromMultiRouteEvidence() throws Exception {
         RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
                 {
-                  "answerMarkdown":"# Payment Answer\\n\\n- settle_window=45m\\n- refund-manual-review 需要人工复核",
+                  "answerMarkdown":"# Payment Answer\\n\\n- settle_window=45m [→ payment/context.md]\\n- refund-manual-review 需要人工复核 [→ [用户反馈]]",
                   "answerOutcome":"SUCCESS",
                   "answerCacheable":true
                 }
@@ -105,12 +105,12 @@ class AnswerGenerationServiceTests {
     }
 
     /**
-     * 验证结构化输出失败时，会 fail-open 到旧文本路径并收敛为 fallback 语义。
+     * 验证无 citation 的旧式自由文本不会直接透传，而是回落到带引用的确定性 fallback。
      *
      * @throws Exception 反射构造异常
      */
     @Test
-    void shouldFailOpenToLegacyTextWhenStructuredPayloadParsingFails() throws Exception {
+    void shouldFallbackToDeterministicMarkdownWhenLegacyTextOmitsCitations() throws Exception {
         RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
                 # Legacy Answer
 
@@ -144,11 +144,109 @@ class AnswerGenerationServiceTests {
                 )
         );
 
-        assertThat(answerPayload.getAnswerMarkdown()).startsWith("# Legacy Answer");
-        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.PARTIAL_ANSWER);
+        assertThat(answerPayload.getAnswerMarkdown()).startsWith("# 查询回答");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("[→ payment/context.md]");
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
         assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
         assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.FAILED);
         assertThat(answerPayload.isAnswerCacheable()).isFalse();
+    }
+
+    /**
+     * 验证结构化 JSON 若缺少 citation，会被判为无效并回落到带引用的 deterministic fallback。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldFallbackWhenStructuredAnswerOmitsCitations() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                {
+                  "answerMarkdown":"当前文档存在冲突，更倾向于乐观锁，但暂不能排除 Redis 锁。",
+                  "answerOutcome":"PARTIAL_ANSWER",
+                  "answerCacheable":false
+                }
+                """);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "库存并发到底是乐观锁还是 Redis 锁",
+                buildConflictEvidence()
+        );
+
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.PARTIAL_ANSWER);
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.FAILED);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("## 结论");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("## 参考说明");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("[→ conflict-lock.md]");
+    }
+
+    /**
+     * 验证冲突题 deterministic fallback 会先给结论，再说明证据冲突与倾向。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldGenerateComparisonConclusionForConflictFallback() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                {
+                  "answerMarkdown":"当前文档存在冲突，更倾向于乐观锁，但暂不能排除 Redis 锁。",
+                  "answerOutcome":"PARTIAL_ANSWER",
+                  "answerCacheable":false
+                }
+                """);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "库存并发到底是乐观锁还是 Redis 锁",
+                buildConflictEvidence()
+        );
+
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("支持“乐观锁”的材料提到：");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("支持“Redis 锁”的材料提到：");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("更偏向“乐观锁”");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("inventory_lock_version");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("Redis 分布式锁");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("口径还没有完全收敛");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("本条目汇总");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("主要记录了");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("显式提示冲突");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("。；");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("。。");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("[[readme]]");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("[[conflict-lock]]");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("## 参考说明");
+    }
+
+    /**
+     * 验证单 article 规则路径在能直接命中配置结论时，也会返回 SUCCESS 而不是固定 partial。
+     */
+    @Test
+    void shouldMarkSingleArticleDirectAnswerAsSuccess() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "payment timeout retry 是什么配置",
+                List.of(new QueryArticleHit(
+                        QueryEvidenceType.ARTICLE,
+                        "payment-timeout",
+                        "Payment Timeout",
+                        "payment.timeout.retry=5\nretry.queue=payment_retry_queue",
+                        "{\"description\":\"支付超时重试配置\"}",
+                        List.of("payments/gateway-config.yaml"),
+                        3.0D
+                ))
+        );
+
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.RULE_BASED);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SKIPPED);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("payment.timeout.retry=5");
     }
 
     /**
@@ -160,7 +258,7 @@ class AnswerGenerationServiceTests {
     void shouldWritePromptCacheForStableStructuredAnswerAndReuseCachedRawPayload() throws Exception {
         RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
                 {
-                  "answerMarkdown":"# Stable Answer\\n\\n- settle_window=45m",
+                  "answerMarkdown":"# Stable Answer\\n\\n- settle_window=45m [→ payment/context.md]",
                   "answerOutcome":"SUCCESS",
                   "answerCacheable":true
                 }
@@ -222,7 +320,7 @@ class AnswerGenerationServiceTests {
     void shouldWritePromptCacheForStructuredRewriteFromReview() throws Exception {
         RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
                 {
-                  "answerMarkdown":"# Rewritten Answer\\n\\n- timeout=30s",
+                  "answerMarkdown":"# Rewritten Answer\\n\\n- timeout=30s [→ payment/context.md]",
                   "answerOutcome":"SUCCESS",
                   "answerCacheable":true
                 }
@@ -253,6 +351,41 @@ class AnswerGenerationServiceTests {
         assertThat(secondPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
         assertThat(recordingLlmClient.getCallCount()).isEqualTo(1);
         assertThat(gatewayFixture.getRedisKeyValueStore().values).hasSize(1);
+    }
+
+    /**
+     * 验证 review rewrite 若返回无 citation 的普通 Markdown，也会回落到带引用的确定性 fallback。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldFallbackRewriteWhenLegacyMarkdownOmitsCitations() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                # Rewritten Answer
+
+                - timeout=30s
+                """);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.rewriteFromReviewPayload(
+                "query-1",
+                "query",
+                "rewrite",
+                "timeout 配置是多少",
+                "旧答案",
+                "请补齐 timeout 的明确值",
+                buildMultiRouteEvidence()
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).startsWith("# 查询回答");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("当前未找到与该问题直接相关的知识。");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("[→");
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.PARTIAL_ANSWER);
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.FAILED);
+        assertThat(answerPayload.isAnswerCacheable()).isFalse();
     }
 
     /**
@@ -309,6 +442,73 @@ class AnswerGenerationServiceTests {
         assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.RULE_BASED);
         assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SKIPPED);
         assertThat(answerPayload.isAnswerCacheable()).isFalse();
+    }
+
+    /**
+     * 验证 fallback 会优先保留直接命中的 RoutePlanner 资料，而不是把仅在正文顺带提及的笔记也混进来。
+     */
+    @Test
+    void shouldPreferDirectRoutePlannerEvidenceInFallback() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "RoutePlanner 暴露了什么路径",
+                buildRoutePlannerEvidence()
+        );
+
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.RULE_BASED);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SKIPPED);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("RoutePlanner 负责暴露 `/payments` 路径");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("[[routeplanner]]");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("Research Notes");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("[[research-notes]]");
+    }
+
+    /**
+     * 验证模型失败后，deterministic fallback 仍会按证据充分度返回 SUCCESS，而不是固定 partial。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldReturnSuccessWhenModelFailsButFallbackEvidenceIsDirect() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                RoutePlanner 暴露了 `/payments` 路径
+                """);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "RoutePlanner 暴露了什么路径",
+                buildRoutePlannerEvidence()
+        );
+
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.FAILED);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("RoutePlanner 负责暴露 `/payments` 路径");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("[[routeplanner]]");
+    }
+
+    /**
+     * 验证 no-knowledge fallback 在没有直接相关命中时，不会再夹带无关引用或参考区块。
+     */
+    @Test
+    void shouldBuildCleanNoKnowledgeFallbackWhenHitsAreIrrelevant() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "这个项目支持 SAML 单点登录吗",
+                buildIrrelevantFallbackEvidence(),
+                AnswerOutcome.NO_RELEVANT_KNOWLEDGE
+        );
+
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.NO_RELEVANT_KNOWLEDGE);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("当前未找到与该问题直接相关的知识。");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("## 参考说明");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("[[");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("[→");
     }
 
     /**
@@ -378,6 +578,159 @@ class AnswerGenerationServiceTests {
                         "{\"question\":\"refund-manual-review 是什么\"}",
                         List.of("[用户反馈]"),
                         1.0
+                )
+        );
+    }
+
+    /**
+     * 构造库存并发冲突证据样例。
+     *
+     * @return 冲突证据样例
+     */
+    private List<QueryArticleHit> buildConflictEvidence() {
+        return List.of(
+                new QueryArticleHit(
+                        1L,
+                        "readme",
+                        "readme",
+                        "Readme",
+                        """
+                        ---
+                        title: "Readme"
+                        summary: "本条目汇总 README 中关于支付超时重试、库存扣减并发控制以及补偿失败后的异步重试机制。它同时指出了一个文档规则：如果库存并发策略相关文档之间存在冲突，回答时需要显式提示冲突。"
+                        sources: ["README.md"]
+                        depends_on: []
+                        ---
+
+                        # Readme
+
+                        ## 概要
+
+                        README 记录了支付域中的几项关键实现约定：支付超时重试通过配置项 `payment.timeout.retry` 控制，默认值为 `5`。[→ README.md, section: Payment Knowledge]
+                        在库存扣减场景中，系统采用基于版本号校验的乐观锁（optimistic locking，乐观锁）策略，使用字段 `inventory_lock_version`。[→ README.md, section: Payment Knowledge]
+                        """,
+                        "{\"description\":\"\"}",
+                        List.of("README.md"),
+                        3.0D
+                ),
+                new QueryArticleHit(
+                        2L,
+                        "conflict-lock",
+                        "conflict-lock",
+                        "Conflict Lock",
+                        """
+                        ---
+                        title: "Conflict Lock"
+                        summary: "Conflict Lock 指库存并发控制中的一种冲突规避机制：通过 Redis 分布式锁将相关操作串行化处理，以避免并发扣减产生冲突。它本质上是一种面向库存修改场景的并发控制手段，用于保证同一资源在高并发下的更新一致性。"
+                        sources: ["conflict-lock.md"]
+                        depends_on: []
+                        ---
+
+                        # Conflict Lock
+
+                        ## 概述
+
+                        Conflict Lock（冲突锁）在该上下文中指库存场景下的并发冲突控制机制，其实现方式是使用 Redis distributed lock（Redis 分布式锁）对操作进行串行化处理。[→ conflict-lock.md, Inventory Lock Conflict]
+                        """,
+                        "{\"description\":\"\"}",
+                        List.of("conflict-lock.md"),
+                        2.0D
+                ),
+                new QueryArticleHit(
+                        3L,
+                        "research-notes",
+                        "research-notes",
+                        "Research Notes",
+                        """
+                        ---
+                        title: "Research Notes"
+                        summary: "Research Notes 记录了若干与库存扣减、补偿重试及文档冲突处理相关的关键规则。其中包括库存乐观锁字段、失败补偿后的异步重试机制，以及在锁策略文档不一致时的回答要求。"
+                        sources: ["research-notes.md"]
+                        depends_on: []
+                        ---
+
+                        # Research Notes
+
+                        ## 概述
+
+                        这份 Research Notes 主要记录了三个关键点：库存扣减使用基于版本号校验的乐观锁、补偿失败后进入指定队列进行异步重试、以及当库存锁策略文档彼此不一致时，回答必须明确指出存在冲突。[→ research-notes.md, Research Notes]
+
+                        ## 库存扣减中的乐观锁
+
+                        库存扣减采用基于版本号校验的乐观锁（optimistic locking）机制，使用的字段是 `inventory_lock_version`。[→ research-notes.md, Inventory Locking]
+                        """,
+                        "{\"description\":\"\"}",
+                        List.of("research-notes.md"),
+                        1.5D
+                )
+        );
+    }
+
+    /**
+     * 构造 RoutePlanner fallback 证据样例。
+     *
+     * @return RoutePlanner 证据样例
+     */
+    private List<QueryArticleHit> buildRoutePlannerEvidence() {
+        return List.of(
+                new QueryArticleHit(
+                        1L,
+                        "routeplanner",
+                        "routeplanner",
+                        "RoutePlanner",
+                        """
+                        ---
+                        title: "RoutePlanner"
+                        summary: "RoutePlanner 是支付入口控制器，负责对外暴露 `/payments` 路径。"
+                        ---
+
+                        RoutePlanner 负责暴露 `/payments` 路径，并把请求委托给 PaymentService。
+                        """,
+                        "{\"description\":\"RoutePlanner 是支付入口控制器\"}",
+                        List.of("src/main/java/payment/RoutePlanner.java"),
+                        3.0D
+                ),
+                new QueryArticleHit(
+                        2L,
+                        "research-notes",
+                        "research-notes",
+                        "Research Notes",
+                        """
+                        研究笔记顺带提到：RoutePlanner 会把支付请求转给 PaymentService，再由后者决定后续流程。
+                        """,
+                        "{\"description\":\"与支付实现相关的补充笔记\"}",
+                        List.of("research-notes.md"),
+                        1.0D
+                )
+        );
+    }
+
+    /**
+     * 构造与 SAML 无关的 fallback 证据样例。
+     *
+     * @return 无关证据样例
+     */
+    private List<QueryArticleHit> buildIrrelevantFallbackEvidence() {
+        return List.of(
+                new QueryArticleHit(
+                        1L,
+                        "readme",
+                        "readme",
+                        "Readme",
+                        "项目支持库存并发控制、支付超时重试与补偿任务重放。",
+                        "{\"description\":\"项目能力概览\"}",
+                        List.of("README.md"),
+                        2.0D
+                ),
+                new QueryArticleHit(
+                        2L,
+                        "routeplanner",
+                        "routeplanner",
+                        "RoutePlanner",
+                        "RoutePlanner 暴露 `/payments` 路径。",
+                        "{\"description\":\"支付入口控制器\"}",
+                        List.of("src/main/java/payment/RoutePlanner.java"),
+                        1.0D
                 )
         );
     }

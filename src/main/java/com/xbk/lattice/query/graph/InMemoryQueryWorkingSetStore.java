@@ -5,6 +5,7 @@ import com.xbk.lattice.query.citation.CitationCheckReport;
 import com.xbk.lattice.query.citation.ClaimSegment;
 import com.xbk.lattice.query.citation.QueryAnswerAuditSnapshot;
 import com.xbk.lattice.query.domain.ReviewResult;
+import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import com.xbk.lattice.query.service.QueryArticleHit;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -295,6 +296,38 @@ public class InMemoryQueryWorkingSetStore implements QueryWorkingSetStore {
         Object value = store.get(ref);
         if (value instanceof QueryAnswerAuditSnapshot) {
             return (QueryAnswerAuditSnapshot) value;
+        }
+        return null;
+    }
+
+    /**
+     * 保存答案投影白名单。
+     *
+     * @param queryId 查询标识
+     * @param answerProjectionBundle 答案投影包
+     * @return 工作集引用
+     */
+    @Override
+    public String saveAnswerProjectionBundle(String queryId, AnswerProjectionBundle answerProjectionBundle) {
+        String ref = buildRef(queryId, "answer-projection-bundle");
+        store.put(ref, answerProjectionBundle);
+        return ref;
+    }
+
+    /**
+     * 读取答案投影白名单。
+     *
+     * @param ref 工作集引用
+     * @return 答案投影包
+     */
+    @Override
+    public AnswerProjectionBundle loadAnswerProjectionBundle(String ref) {
+        if (!hasRef(ref)) {
+            return null;
+        }
+        Object value = store.get(ref);
+        if (value instanceof AnswerProjectionBundle) {
+            return (AnswerProjectionBundle) value;
         }
         return null;
     }

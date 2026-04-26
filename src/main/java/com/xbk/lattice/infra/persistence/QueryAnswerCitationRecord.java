@@ -23,6 +23,8 @@ public class QueryAnswerCitationRecord {
 
     private final String status;
 
+    private final String validatedBy;
+
     private final double overlapScore;
 
     private final String matchedExcerpt;
@@ -39,6 +41,7 @@ public class QueryAnswerCitationRecord {
      * @param sourceType 来源类型
      * @param targetKey 目标键
      * @param status 校验状态
+     * @param validatedBy 校验来源
      * @param overlapScore 重叠分
      * @param matchedExcerpt 命中摘录
      * @param reason 原因
@@ -51,6 +54,7 @@ public class QueryAnswerCitationRecord {
             String sourceType,
             String targetKey,
             String status,
+            String validatedBy,
             double overlapScore,
             String matchedExcerpt,
             String reason
@@ -62,6 +66,7 @@ public class QueryAnswerCitationRecord {
         this.sourceType = sourceType;
         this.targetKey = targetKey;
         this.status = status;
+        this.validatedBy = validatedBy;
         this.overlapScore = overlapScore;
         this.matchedExcerpt = matchedExcerpt;
         this.reason = reason;
@@ -93,6 +98,10 @@ public class QueryAnswerCitationRecord {
 
     public String getStatus() {
         return status;
+    }
+
+    public String getValidatedBy() {
+        return validatedBy;
     }
 
     public double getOverlapScore() {

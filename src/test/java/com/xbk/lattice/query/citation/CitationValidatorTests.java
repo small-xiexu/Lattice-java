@@ -16,8 +16,57 @@ import static org.assertj.core.api.Assertions.assertThat;
  * CitationValidator 测试
  *
  * 职责：验证基于硬事实字面量的文章/源码核验行为
+ *
+ * @author xiexu
  */
 class CitationValidatorTests {
+
+    /**
+     * 验证 ARTICLE claim 校验基于 targetKey 对应 article 全文，而不是答案上下文摘录。
+     */
+    @Test
+    void shouldVerifyArticleCitationAgainstTargetArticleContent() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository()
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[[payment-routing]]",
+                CitationSourceType.ARTICLE,
+                "payment-routing",
+                "PaymentService 会使用 payment_gateway 路由",
+                "短摘录 [[payment-routing]]"
+        ));
+
+        assertThat(result.isVerified()).isTrue();
+        assertThat(result.getReason()).isEqualTo("rule_overlap_verified");
+        assertThat(result.getMatchedExcerpt()).contains("payment_gateway");
+    }
+
+    /**
+     * 验证 source-level 内容无法支撑硬事实时会降级。
+     */
+    @Test
+    void shouldDemoteArticleCitationWhenTargetContentDoesNotSupportClaim() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository()
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[[payment-routing]]",
+                CitationSourceType.ARTICLE,
+                "payment-routing",
+                "PaymentService 会写入 refund_queue",
+                "PaymentService 会写入 refund_queue [[payment-routing]]"
+        ));
+
+        assertThat(result.isDemoted()).isTrue();
+        assertThat(result.getReason()).isEqualTo("insufficient_overlap");
+    }
 
     @Test
     void shouldVerifySourceCitationAgainstSourceContent() {
@@ -59,6 +108,69 @@ class CitationValidatorTests {
         assertThat(result.getReason()).isEqualTo("no_hard_fact_literals");
     }
 
+    @Test
+    void shouldVerifyLatinTermClaimInsideChineseSentence() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository()
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[[conflict-lock]]",
+                CitationSourceType.ARTICLE,
+                "conflict-lock",
+                "作用机制 1. 系统采用 Redis distributed lock 串行化处理",
+                "作用机制 1. 系统采用 Redis distributed lock 串行化处理 [[conflict-lock]]"
+        ));
+
+        assertThat(result.isVerified()).isTrue();
+        assertThat(result.getReason()).isEqualTo("rule_overlap_verified");
+    }
+
+    @Test
+    void shouldFailSourceCitationWhenSourceFileIsMissing() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository()
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[→ src/main/java/payment/MissingPlanner.java]",
+                CitationSourceType.SOURCE_FILE,
+                "src/main/java/payment/MissingPlanner.java",
+                "MissingPlanner 暴露了 /payments 路径",
+                "MissingPlanner 暴露了 /payments 路径 [→ src/main/java/payment/MissingPlanner.java]"
+        ));
+
+        assertThat(result.getStatus()).isEqualTo(CitationValidationStatus.NOT_FOUND);
+        assertThat(result.getReason()).isEqualTo("source_file_not_found");
+    }
+
+    /**
+     * 验证缺失 targetKey 时直接失败，不进入仓储查找。
+     */
+    @Test
+    void shouldRejectCitationWithoutTargetKey() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository()
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[[]]",
+                CitationSourceType.ARTICLE,
+                "",
+                "PaymentService 会使用 payment_gateway 路由",
+                "PaymentService 会使用 payment_gateway 路由 [[]]"
+        ));
+
+        assertThat(result.isDemoted()).isTrue();
+        assertThat(result.getReason()).isEqualTo("target_key_missing");
+    }
+
     private static class FixedArticleJdbcRepository extends ArticleJdbcRepository {
 
         private FixedArticleJdbcRepository() {
@@ -67,6 +179,25 @@ class CitationValidatorTests {
 
         @Override
         public Optional<ArticleRecord> findByArticleKey(String articleKey) {
+            if ("conflict-lock".equals(articleKey)) {
+                return Optional.of(new ArticleRecord(
+                        1L,
+                        "conflict-lock",
+                        "conflict-lock",
+                        "Conflict Lock",
+                        "库存并发控制采用 Redis distributed lock 串行化处理，以避免并发扣减冲突。",
+                        "published",
+                        OffsetDateTime.now(),
+                        List.of("conflict-lock.md"),
+                        "{}",
+                        "",
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        "high",
+                        "approved"
+                ));
+            }
             if (!"payment-routing".equals(articleKey)) {
                 return Optional.empty();
             }
@@ -75,7 +206,7 @@ class CitationValidatorTests {
                     "payment-routing",
                     "payment-routing",
                     "Payment Routing",
-                    "RoutePlanner 暴露了 /payments 路径，payment_gateway 路由会进入补偿队列。",
+                    "PaymentService 通过 RoutePlanner 暴露了 /payments 路径，payment_gateway 路由会进入补偿队列。",
                     "published",
                     OffsetDateTime.now(),
                     List.of("src/main/java/payment/RoutePlanner.java"),

@@ -504,6 +504,7 @@ public class AdminLlmConfigController {
         Map<String, List<String>> options = new LinkedHashMap<String, List<String>>();
         options.put("compile", List.of("writer", "reviewer", "fixer"));
         options.put("query", List.of("answer", "reviewer", "rewrite"));
+        options.put("deep_research", List.of("planner", "researcher", "synthesizer", "reviewer"));
         return options;
     }
 

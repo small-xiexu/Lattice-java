@@ -2,7 +2,6 @@ package com.xbk.lattice.query.deepresearch;
 
 import com.xbk.lattice.api.query.QueryRequest;
 import com.xbk.lattice.api.query.QueryResponse;
-import com.xbk.lattice.infra.persistence.DeepResearchEvidenceCardJdbcRepository;
 import com.xbk.lattice.infra.persistence.DeepResearchRunJdbcRepository;
 import com.xbk.lattice.query.citation.Citation;
 import com.xbk.lattice.query.citation.CitationCheckReport;
@@ -10,12 +9,9 @@ import com.xbk.lattice.query.citation.CitationSourceType;
 import com.xbk.lattice.query.citation.CitationValidationResult;
 import com.xbk.lattice.query.citation.CitationValidationStatus;
 import com.xbk.lattice.query.citation.ClaimSegment;
-import com.xbk.lattice.query.citation.QueryAnswerAuditPersistenceService;
-import com.xbk.lattice.query.citation.QueryAnswerAuditSnapshot;
 import com.xbk.lattice.query.deepresearch.domain.DeepResearchAuditSnapshot;
 import com.xbk.lattice.query.deepresearch.domain.DeepResearchSynthesisResult;
 import com.xbk.lattice.query.deepresearch.domain.EvidenceCard;
-import com.xbk.lattice.query.deepresearch.domain.EvidenceFinding;
 import com.xbk.lattice.query.deepresearch.domain.EvidenceLedger;
 import com.xbk.lattice.query.deepresearch.domain.LayerSummary;
 import com.xbk.lattice.query.deepresearch.domain.LayeredResearchPlan;
@@ -32,6 +28,15 @@ import com.xbk.lattice.query.deepresearch.service.DeepResearchRouter;
 import com.xbk.lattice.query.deepresearch.service.DeepResearchSynthesizer;
 import com.xbk.lattice.query.deepresearch.store.DeepResearchWorkingSetStore;
 import com.xbk.lattice.query.deepresearch.store.InMemoryDeepResearchWorkingSetStore;
+import com.xbk.lattice.query.evidence.domain.AnswerProjection;
+import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
+import com.xbk.lattice.query.evidence.domain.EvidenceAnchor;
+import com.xbk.lattice.query.evidence.domain.EvidenceAnchorSourceType;
+import com.xbk.lattice.query.evidence.domain.FactFinding;
+import com.xbk.lattice.query.evidence.domain.FactValueType;
+import com.xbk.lattice.query.evidence.domain.FindingSupportLevel;
+import com.xbk.lattice.query.evidence.domain.ProjectionCitationFormat;
+import com.xbk.lattice.query.evidence.domain.ProjectionStatus;
 import com.xbk.lattice.query.graph.InMemoryQueryWorkingSetStore;
 import com.xbk.lattice.query.graph.QueryWorkingSetStore;
 import com.xbk.lattice.query.service.DeepResearchOrchestrator;
@@ -57,34 +62,17 @@ class DeepResearchOrchestratorTests {
      */
     @Test
     void shouldExecuteDeepResearchGraphAndPersistAudits() {
-        DeepResearchRouter deepResearchRouter = new DeepResearchRouter();
-        DeepResearchPlanner deepResearchPlanner = new DeepResearchPlanner();
         DeepResearchWorkingSetStore deepResearchWorkingSetStore = new InMemoryDeepResearchWorkingSetStore();
         QueryWorkingSetStore queryWorkingSetStore = new InMemoryQueryWorkingSetStore();
         DeepResearchExecutionRegistry deepResearchExecutionRegistry = new DeepResearchExecutionRegistry();
-        DeepResearchGraphDefinitionFactory graphDefinitionFactory = new DeepResearchGraphDefinitionFactory(
-                new DeepResearchStateMapper(),
-                deepResearchWorkingSetStore,
-                queryWorkingSetStore,
-                deepResearchExecutionRegistry,
-                new FixedResearcherService(),
-                new FixedSynthesizer()
-        );
-        RecordingQueryAnswerAuditPersistenceService queryAnswerAuditPersistenceService =
-                new RecordingQueryAnswerAuditPersistenceService();
         RecordingDeepResearchAuditPersistenceService deepResearchAuditPersistenceService =
                 new RecordingDeepResearchAuditPersistenceService();
-        DeepResearchOrchestrator deepResearchOrchestrator = new DeepResearchOrchestrator(
-                deepResearchRouter,
-                deepResearchPlanner,
-                graphDefinitionFactory,
-                new DeepResearchStateMapper(),
+        DeepResearchOrchestrator deepResearchOrchestrator = buildOrchestrator(
+                new FixedSynthesizer(),
                 deepResearchWorkingSetStore,
-                deepResearchExecutionRegistry,
                 queryWorkingSetStore,
-                queryAnswerAuditPersistenceService,
-                deepResearchAuditPersistenceService,
-                new FixedKnowledgeSearchService()
+                deepResearchExecutionRegistry,
+                deepResearchAuditPersistenceService
         );
         QueryRequest queryRequest = new QueryRequest();
         queryRequest.setQuestion("RoutePlanner 和 PaymentService 有什么区别");
@@ -101,10 +89,85 @@ class DeepResearchOrchestratorTests {
         assertThat(queryResponse.getDeepResearch().getTaskCount()).isEqualTo(3);
         assertThat(queryResponse.getDeepResearch().getEvidenceCardCount()).isEqualTo(3);
         assertThat(queryResponse.getCitationCheck()).isNotNull();
-        assertThat(queryAnswerAuditPersistenceService.called).isTrue();
         assertThat(deepResearchAuditPersistenceService.called).isTrue();
         assertThat(deepResearchAuditPersistenceService.lastEvidenceCardCount).isEqualTo(3);
         assertThat(queryResponse.getSources()).isNotEmpty();
+        assertThat(queryResponse.getSources().get(0).getDerivation()).isEqualTo("PROJECTION");
+        assertThat(queryResponse.getArticles()).isNotEmpty();
+        assertThat(queryResponse.getArticles().get(0).getDerivation()).isEqualTo("PROJECTION");
+    }
+
+    /**
+     * 验证 projection 缺失时不会把内部 ev#N 暴露给用户。
+     */
+    @Test
+    void shouldHideInternalEvidenceIdsWhenProjectionBundleIsMissing() {
+        DeepResearchWorkingSetStore deepResearchWorkingSetStore = new InMemoryDeepResearchWorkingSetStore();
+        QueryWorkingSetStore queryWorkingSetStore = new InMemoryQueryWorkingSetStore();
+        DeepResearchExecutionRegistry deepResearchExecutionRegistry = new DeepResearchExecutionRegistry();
+        RecordingDeepResearchAuditPersistenceService deepResearchAuditPersistenceService =
+                new RecordingDeepResearchAuditPersistenceService();
+        DeepResearchOrchestrator deepResearchOrchestrator = buildOrchestrator(
+                new NoProjectionSynthesizer(),
+                deepResearchWorkingSetStore,
+                queryWorkingSetStore,
+                deepResearchExecutionRegistry,
+                deepResearchAuditPersistenceService
+        );
+        QueryRequest queryRequest = new QueryRequest();
+        queryRequest.setQuestion("RoutePlanner 和 PaymentService 有什么区别");
+        queryRequest.setForceDeep(true);
+        queryRequest.setMaxLlmCalls(4);
+        queryRequest.setOverallTimeoutMs(10_000);
+
+        QueryResponse queryResponse = deepResearchOrchestrator.execute(queryRequest, "dr-query-002");
+
+        assertThat(queryResponse.getAnswer()).contains("无法生成可核验引用版答案");
+        assertThat(queryResponse.getAnswer()).doesNotContain("ev#1");
+        assertThat(queryResponse.getDeepResearch().isPartialAnswer()).isTrue();
+        assertThat(queryResponse.getSources()).isEmpty();
+        assertThat(queryResponse.getArticles()).isEmpty();
+        assertThat(deepResearchAuditPersistenceService.called).isTrue();
+    }
+
+    /**
+     * 构造使用指定综合器的 Deep Research 编排器。
+     *
+     * @param deepResearchSynthesizer 综合器
+     * @param deepResearchWorkingSetStore Deep Research 工作集
+     * @param queryWorkingSetStore Query 工作集
+     * @param deepResearchExecutionRegistry 执行上下文注册表
+     * @param deepResearchAuditPersistenceService 审计持久化服务
+     * @return 编排器
+     */
+    private DeepResearchOrchestrator buildOrchestrator(
+            DeepResearchSynthesizer deepResearchSynthesizer,
+            DeepResearchWorkingSetStore deepResearchWorkingSetStore,
+            QueryWorkingSetStore queryWorkingSetStore,
+            DeepResearchExecutionRegistry deepResearchExecutionRegistry,
+            DeepResearchAuditPersistenceService deepResearchAuditPersistenceService
+    ) {
+        DeepResearchStateMapper deepResearchStateMapper = new DeepResearchStateMapper();
+        DeepResearchGraphDefinitionFactory graphDefinitionFactory = new DeepResearchGraphDefinitionFactory(
+                deepResearchStateMapper,
+                deepResearchWorkingSetStore,
+                queryWorkingSetStore,
+                deepResearchExecutionRegistry,
+                new FixedResearcherService(),
+                deepResearchSynthesizer
+        );
+        return new DeepResearchOrchestrator(
+                new DeepResearchRouter(),
+                new DeepResearchPlanner(),
+                graphDefinitionFactory,
+                deepResearchStateMapper,
+                deepResearchWorkingSetStore,
+                deepResearchExecutionRegistry,
+                queryWorkingSetStore,
+                deepResearchAuditPersistenceService,
+                new FixedKnowledgeSearchService(),
+                null
+        );
     }
 
     private static class FixedResearcherService extends DeepResearchResearcherService {
@@ -123,24 +186,45 @@ class DeepResearchOrchestratorTests {
                 DeepResearchExecutionContext executionContext
         ) {
             executionContext.tryAcquireLlmCall();
-            EvidenceFinding evidenceFinding = new EvidenceFinding();
-            evidenceFinding.setClaim(task.getQuestion() + " 的结论");
-            evidenceFinding.setQuote("RoutePlanner -> PaymentService.plan");
-            evidenceFinding.setSourceType("ARTICLE");
-            evidenceFinding.setSourceId("payment-routing");
-            evidenceFinding.setConfidence(0.9D);
-
+            String anchorId = executionContext.nextEvidenceId();
             EvidenceCard evidenceCard = new EvidenceCard();
-            evidenceCard.setEvidenceId(executionContext.nextEvidenceId());
+            evidenceCard.setEvidenceId(anchorId);
             evidenceCard.setLayerIndex(layerIndex);
             evidenceCard.setTaskId(task.getTaskId());
             evidenceCard.setScope(task.getQuestion());
-            evidenceCard.getFindings().add(evidenceFinding);
+            evidenceCard.getEvidenceAnchors().add(articleAnchor(anchorId));
+            evidenceCard.getFactFindings().add(factFinding(task, anchorId));
             evidenceCard.getSelectedArticleKeys().add("payment-routing");
             for (EvidenceCard preferredCard : preferredCards) {
                 evidenceCard.getRelatedLeads().add(preferredCard.getEvidenceId());
             }
             return evidenceCard;
+        }
+
+        private EvidenceAnchor articleAnchor(String anchorId) {
+            EvidenceAnchor evidenceAnchor = new EvidenceAnchor();
+            evidenceAnchor.setAnchorId(anchorId);
+            evidenceAnchor.setSourceType(EvidenceAnchorSourceType.ARTICLE);
+            evidenceAnchor.setSourceId("payment-routing");
+            evidenceAnchor.setQuoteText("RoutePlanner -> PaymentService.plan");
+            evidenceAnchor.setRetrievalScore(0.9D);
+            return evidenceAnchor;
+        }
+
+        private FactFinding factFinding(ResearchTask task, String anchorId) {
+            FactFinding factFinding = new FactFinding();
+            factFinding.setFindingId(anchorId + "-finding");
+            factFinding.setSubject(task.getTaskId());
+            factFinding.setPredicate("claim");
+            factFinding.setQualifier("deep_research");
+            factFinding.setFactKey(factFinding.expectedFactKey());
+            factFinding.setValueText(task.getQuestion() + " 的结论");
+            factFinding.setValueType(FactValueType.STRING);
+            factFinding.setClaimText(task.getQuestion() + " 的结论");
+            factFinding.setConfidence(0.9D);
+            factFinding.setSupportLevel(FindingSupportLevel.DIRECT);
+            factFinding.setAnchorIds(List.of(anchorId));
+            return factFinding;
         }
     }
 
@@ -181,6 +265,21 @@ class DeepResearchOrchestratorTests {
             );
             DeepResearchSynthesisResult result = new DeepResearchSynthesisResult();
             result.setAnswerMarkdown("# 深度研究结论\n\n- 综合结论 [[payment-routing]]");
+            AnswerProjection answerProjection = new AnswerProjection(
+                    1,
+                    "ev#1",
+                    ProjectionCitationFormat.ARTICLE,
+                    "[[payment-routing]]",
+                    "payment-routing",
+                    ProjectionStatus.ACTIVE,
+                    0,
+                    null
+            );
+            AnswerProjectionBundle answerProjectionBundle = new AnswerProjectionBundle(
+                    result.getAnswerMarkdown(),
+                    List.of(answerProjection)
+            );
+            result.setAnswerProjectionBundle(answerProjectionBundle);
             result.setCitationCheckReport(new CitationCheckReport(
                     result.getAnswerMarkdown(),
                     List.of(claimSegment),
@@ -190,6 +289,9 @@ class DeepResearchOrchestratorTests {
                     0,
                     false,
                     1.0D,
+                    0,
+                    0,
+                    0,
                     0
             ));
             result.setPartialAnswer(false);
@@ -199,29 +301,24 @@ class DeepResearchOrchestratorTests {
         }
     }
 
-    private static class RecordingQueryAnswerAuditPersistenceService extends QueryAnswerAuditPersistenceService {
+    private static class NoProjectionSynthesizer extends DeepResearchSynthesizer {
 
-        private boolean called;
-
-        private RecordingQueryAnswerAuditPersistenceService() {
-            super(null, null, null);
+        private NoProjectionSynthesizer() {
+            super(null);
         }
 
         @Override
-        public QueryAnswerAuditSnapshot persist(
-                String queryId,
-                int answerVersion,
+        public DeepResearchSynthesisResult synthesize(
                 String question,
-                String answerMarkdown,
-                com.xbk.lattice.query.domain.AnswerOutcome answerOutcome,
-                com.xbk.lattice.query.domain.GenerationMode generationMode,
-                String reviewStatus,
-                boolean cacheable,
-                String routeType,
-                CitationCheckReport report
+                List<LayerSummary> layerSummaries,
+                EvidenceLedger evidenceLedger
         ) {
-            called = true;
-            return new QueryAnswerAuditSnapshot(88L, answerVersion, report);
+            DeepResearchSynthesisResult result = new DeepResearchSynthesisResult();
+            result.setAnswerMarkdown("# 深度研究结论\n\n- 内部草稿仍引用 ev#1");
+            result.setPartialAnswer(false);
+            result.setHasConflicts(false);
+            result.setEvidenceCardCount(evidenceLedger.cardCount());
+            return result;
         }
     }
 
@@ -232,7 +329,7 @@ class DeepResearchOrchestratorTests {
         private int lastEvidenceCardCount;
 
         private RecordingDeepResearchAuditPersistenceService() {
-            super((DeepResearchRunJdbcRepository) null, (DeepResearchEvidenceCardJdbcRepository) null);
+            super((DeepResearchRunJdbcRepository) null, null, null, null, null, null, null, null);
         }
 
         @Override
@@ -242,11 +339,12 @@ class DeepResearchOrchestratorTests {
                 String routeReason,
                 LayeredResearchPlan plan,
                 EvidenceLedger evidenceLedger,
+                String answerMarkdown,
+                CitationCheckReport citationCheckReport,
+                AnswerProjectionBundle answerProjectionBundle,
                 int llmCallCount,
-                double citationCoverage,
                 boolean partialAnswer,
-                boolean hasConflicts,
-                Long finalAnswerAuditId
+                boolean hasConflicts
         ) {
             called = true;
             lastEvidenceCardCount = evidenceLedger == null ? 0 : evidenceLedger.cardCount();
