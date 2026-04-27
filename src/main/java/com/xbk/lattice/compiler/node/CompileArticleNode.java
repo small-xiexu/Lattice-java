@@ -2,6 +2,7 @@ package com.xbk.lattice.compiler.node;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xbk.lattice.article.service.ArticleMarkdownSupport;
 import com.xbk.lattice.compiler.domain.ConceptSection;
 import com.xbk.lattice.compiler.domain.MergedConcept;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
@@ -272,12 +273,17 @@ public class CompileArticleNode {
             String reviewStatus,
             String markdownContent
     ) {
-        return new ArticleRecord(
+        String normalizedContent = replaceReviewStatus(markdownContent, reviewStatus);
+        normalizedContent = ArticleMarkdownSupport.normalizeSourcePaths(
+                normalizedContent,
+                articleRecord.getSourcePaths()
+        );
+        ArticleRecord updatedRecord = new ArticleRecord(
                 articleRecord.getSourceId(),
                 articleRecord.getArticleKey(),
                 articleRecord.getConceptId(),
                 articleRecord.getTitle(),
-                replaceReviewStatus(markdownContent, reviewStatus),
+                normalizedContent,
                 articleRecord.getLifecycle(),
                 OffsetDateTime.now(),
                 articleRecord.getSourcePaths(),
@@ -289,6 +295,7 @@ public class CompileArticleNode {
                 articleRecord.getConfidence(),
                 reviewStatus
         );
+        return ArticleMarkdownSupport.synchronizeArticleRecord(updatedRecord, normalizedContent, reviewStatus);
     }
 
     /**
@@ -310,9 +317,7 @@ public class CompileArticleNode {
             return null;
         }
         try {
-            String systemPrompt = schemaAwarePrompts == null
-                    ? LatticePrompts.SYSTEM_COMPILE_ARTICLE
-                    : schemaAwarePrompts.getCompileArticlePrompt(sourceDir);
+            String systemPrompt = resolveCompileSystemPrompt(mergedConcept, sourceDir);
             String userPrompt = buildCompilePrompt(mergedConcept, summary, sourceId);
             return scopeId == null || scopeId.isBlank()
                     ? llmGateway.generateText(COMPILE_SCENE, WRITER_ROLE, "compile-article", systemPrompt, userPrompt)
@@ -328,6 +333,22 @@ public class CompileArticleNode {
         catch (RuntimeException ex) {
             return null;
         }
+    }
+
+    /**
+     * 根据概念来源类型选择更合适的编译系统提示词。
+     *
+     * @param mergedConcept 合并概念
+     * @param sourceDir 源目录
+     * @return 系统提示词
+     */
+    private String resolveCompileSystemPrompt(MergedConcept mergedConcept, Path sourceDir) {
+        if (isImageDominantConcept(mergedConcept)) {
+            return LatticePrompts.SYSTEM_COMPILE_IMAGE_ARTICLE;
+        }
+        return schemaAwarePrompts == null
+                ? LatticePrompts.SYSTEM_COMPILE_ARTICLE
+                : schemaAwarePrompts.getCompileArticlePrompt(sourceDir);
     }
 
     /**
@@ -373,6 +394,48 @@ public class CompileArticleNode {
      */
     private String buildSourceContents(MergedConcept mergedConcept) {
         return buildSourceContents(mergedConcept.getSourcePaths());
+    }
+
+    /**
+     * 判断概念是否主要来自图片 / OCR 资产。
+     *
+     * @param mergedConcept 合并概念
+     * @return 图片主导返回 true
+     */
+    private boolean isImageDominantConcept(MergedConcept mergedConcept) {
+        if (mergedConcept == null
+                || mergedConcept.getSourcePaths() == null
+                || mergedConcept.getSourcePaths().isEmpty()) {
+            return false;
+        }
+        int imageSourceCount = 0;
+        for (String sourcePath : mergedConcept.getSourcePaths()) {
+            if (isImageLikePath(sourcePath)) {
+                imageSourceCount++;
+            }
+        }
+        return imageSourceCount == mergedConcept.getSourcePaths().size();
+    }
+
+    /**
+     * 判断来源路径是否为图片 / 视觉资产。
+     *
+     * @param sourcePath 来源路径
+     * @return 图片类资源返回 true
+     */
+    private boolean isImageLikePath(String sourcePath) {
+        if (sourcePath == null || sourcePath.isBlank()) {
+            return false;
+        }
+        String normalizedPath = sourcePath.trim().toLowerCase(Locale.ROOT);
+        return normalizedPath.endsWith(".png")
+                || normalizedPath.endsWith(".jpg")
+                || normalizedPath.endsWith(".jpeg")
+                || normalizedPath.endsWith(".gif")
+                || normalizedPath.endsWith(".bmp")
+                || normalizedPath.endsWith(".webp")
+                || normalizedPath.endsWith(".svg")
+                || normalizedPath.endsWith(".drawio");
     }
 
     private String buildArticleKey(String sourceCode, String conceptId) {

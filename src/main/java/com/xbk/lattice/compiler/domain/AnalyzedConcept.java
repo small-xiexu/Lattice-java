@@ -1,5 +1,8 @@
 package com.xbk.lattice.compiler.domain;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.Collections;
 import java.util.List;
 
@@ -34,13 +37,14 @@ public class AnalyzedConcept {
      * @param snippets 片段摘要
      * @param sections 章节列表
      */
+    @JsonCreator
     public AnalyzedConcept(
-            String conceptId,
-            String title,
-            String description,
-            List<String> sourcePaths,
-            List<String> snippets,
-            List<ConceptSection> sections
+            @JsonProperty("conceptId") String conceptId,
+            @JsonProperty("title") String title,
+            @JsonProperty("description") String description,
+            @JsonProperty("sourcePaths") List<String> sourcePaths,
+            @JsonProperty("snippets") List<String> snippets,
+            @JsonProperty("sections") List<ConceptSection> sections
     ) {
         this.conceptId = conceptId;
         this.title = title;

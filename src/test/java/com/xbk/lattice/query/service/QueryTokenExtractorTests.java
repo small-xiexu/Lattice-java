@@ -24,4 +24,22 @@ class QueryTokenExtractorTests {
 
         assertThat(tokens).contains("重试", "间隔");
     }
+
+    /**
+     * 验证路径、类名与配置键会被作为高信号 token 保留下来。
+     */
+    @Test
+    void shouldExtractPathClassAndConfigKeyTokens() {
+        List<String> tokens = QueryTokenExtractor.extract(
+                "RoutePlanner 在 src/main/java/payment/RoutePlanner.java 里怎么读取 payment.retry.maxAttempts"
+        );
+
+        assertThat(tokens).contains(
+                "routeplanner",
+                "route",
+                "planner",
+                "src/main/java/payment/routeplanner.java",
+                "payment.retry.maxattempts"
+        );
+    }
 }

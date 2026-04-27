@@ -292,7 +292,7 @@
         }
         let tone = "info";
         let title = "正在检查知识库是否已经准备就绪";
-        let description = "页面会根据知识库状态、最近同步运行和本次问答结果，告诉你现在应该直接提问、等待处理完成，还是先回工作台。";
+        let description = "页面会根据知识库状态、当前处理任务和本次问答结果，告诉你现在应该直接提问、等待处理完成，还是先回工作台。";
         let actions = [
             {label: "查看知识库状态", action: "refresh-readiness", className: "secondary-btn"}
         ];
@@ -318,9 +318,9 @@
         else if (state.knowledgeWaitingConfirm) {
             tone = "warning";
             title = "最新资料还在等待人工确认";
-            description = "现在可以继续提问，但最新那批资料可能还没有进入知识库。先看最近同步运行，确认是否还有待人工判断的任务。";
+            description = "现在可以继续提问，但最新那批资料可能还没有进入知识库。先看当前处理任务，确认是否还有待人工判断的任务。";
             actions = [
-                {label: "查看最近同步运行", action: "go-runs", className: "primary-btn"},
+                {label: "查看当前处理任务", action: "go-runs", className: "primary-btn"},
                 {label: "继续提问", action: "retry-question", className: "ghost-btn"}
             ];
         }
@@ -330,7 +330,7 @@
             description = "现在可以先试着提问；如果答案不完整，等处理完成后再试一次。不要把处理中直接误判成问答系统故障。";
             actions = [
                 {label: "查看知识库状态", action: "refresh-readiness", className: "primary-btn"},
-                {label: "查看最近同步运行", action: "go-runs", className: "ghost-btn"}
+                {label: "查看当前处理任务", action: "go-runs", className: "ghost-btn"}
             ];
         }
         else if (state.knowledgeReady) {

@@ -8,9 +8,7 @@ import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * 关键引用词检索服务
@@ -42,80 +40,61 @@ public class RefKeySearchService {
      * @return 命中文章
      */
     public List<QueryArticleHit> search(String question, int limit) {
+        if (jdbcTemplate == null) {
+            return List.of();
+        }
         List<String> queryTokens = QueryTokenExtractor.extract(question);
         if (queryTokens.isEmpty()) {
             return List.of();
         }
 
-        String sql = """
-                select source_id, article_key, concept_id, title, content, metadata_json::text as metadata_json, source_paths
-                from articles
-                """;
-        List<QueryArticleHit> articleHits = jdbcTemplate.query(sql, this::mapArticleWithoutScore);
-        List<QueryArticleHit> matchedHits = new ArrayList<QueryArticleHit>();
-        for (QueryArticleHit articleHit : articleHits) {
-            double score = scoreArticleHit(articleHit, queryTokens);
-            if (score > 0) {
-                matchedHits.add(new QueryArticleHit(
-                        articleHit.getSourceId(),
-                        articleHit.getArticleKey(),
-                        articleHit.getConceptId(),
-                        articleHit.getTitle(),
-                        articleHit.getContent(),
-                        articleHit.getMetadataJson(),
-                        articleHit.getSourcePaths(),
-                        score
-                ));
-            }
-        }
-        matchedHits.sort(Comparator.comparing(QueryArticleHit::getScore).reversed()
-                .thenComparing(QueryArticleHit::getConceptId));
-        if (matchedHits.size() <= limit) {
-            return matchedHits;
-        }
-        return matchedHits.subList(0, limit);
+        List<Object> parameters = new ArrayList<Object>();
+        StringBuilder sqlBuilder = new StringBuilder();
+        sqlBuilder.append("""
+                select a.source_id,
+                       a.article_key,
+                       a.concept_id,
+                       a.title,
+                       a.content,
+                       a.metadata_json::text as metadata_json,
+                       a.source_paths,
+                       0
+                """);
+        appendTokenScore(
+                sqlBuilder,
+                parameters,
+                queryTokens,
+                List.of("lower(a.refkey_text)", "lower(a.concept_id)", "lower(a.title)", "lower(a.metadata_json::text)"),
+                List.of(Double.valueOf(5.0D), Double.valueOf(4.0D), Double.valueOf(2.0D), Double.valueOf(1.0D))
+        );
+        sqlBuilder.append("""
+                       as score
+                from articles a
+                where false
+                """);
+        appendTokenWhere(
+                sqlBuilder,
+                parameters,
+                queryTokens,
+                List.of("lower(a.refkey_text)", "lower(a.concept_id)", "lower(a.title)", "lower(a.metadata_json::text)")
+        );
+        sqlBuilder.append("""
+                order by score desc, a.compiled_at desc, a.article_key asc
+                limit ?
+                """);
+        parameters.add(Integer.valueOf(limit <= 0 ? 5 : limit));
+        return jdbcTemplate.query(sqlBuilder.toString(), this::mapArticleWithScore, parameters.toArray());
     }
 
     /**
-     * 计算文章命中分数。
-     *
-     * @param articleHit 文章命中
-     * @param queryTokens 查询 token
-     * @return 分数
-     */
-    private double scoreArticleHit(QueryArticleHit articleHit, List<String> queryTokens) {
-        String conceptId = articleHit.getConceptId().toLowerCase(Locale.ROOT);
-        String title = articleHit.getTitle().toLowerCase(Locale.ROOT);
-        String content = articleHit.getContent().toLowerCase(Locale.ROOT);
-        String metadata = articleHit.getMetadataJson().toLowerCase(Locale.ROOT);
-
-        double score = 0;
-        for (String queryToken : queryTokens) {
-            if (conceptId.contains(queryToken)) {
-                score += 3.0;
-            }
-            if (title.contains(queryToken)) {
-                score += 2.0;
-            }
-            if (metadata.contains(queryToken)) {
-                score += 1.5;
-            }
-            if (content.contains(queryToken)) {
-                score += 1.0;
-            }
-        }
-        return score;
-    }
-
-    /**
-     * 映射无分数字段的文章命中。
+     * 映射带分数字段的文章命中。
      *
      * @param resultSet 结果集
      * @param rowNum 行号
      * @return 文章命中
      * @throws SQLException SQL 异常
      */
-    private QueryArticleHit mapArticleWithoutScore(ResultSet resultSet, int rowNum) throws SQLException {
+    private QueryArticleHit mapArticleWithScore(ResultSet resultSet, int rowNum) throws SQLException {
         return new QueryArticleHit(
                 readLong(resultSet, "source_id"),
                 resultSet.getString("article_key"),
@@ -124,8 +103,70 @@ public class RefKeySearchService {
                 resultSet.getString("content"),
                 resultSet.getString("metadata_json"),
                 readSourcePaths(resultSet),
-                0
+                resultSet.getDouble("score")
         );
+    }
+
+    /**
+     * 拼接 token 评分表达式。
+     *
+     * @param sqlBuilder SQL 构造器
+     * @param parameters SQL 参数
+     * @param queryTokens 查询 token
+     * @param columns 参与匹配的列
+     * @param weights 列对应权重
+     */
+    private void appendTokenScore(
+            StringBuilder sqlBuilder,
+            List<Object> parameters,
+            List<String> queryTokens,
+            List<String> columns,
+            List<Double> weights
+    ) {
+        for (String queryToken : queryTokens) {
+            String pattern = likePattern(queryToken);
+            for (int index = 0; index < columns.size(); index++) {
+                sqlBuilder.append(" + case when ")
+                        .append(columns.get(index))
+                        .append(" like ? then ")
+                        .append(weights.get(index).doubleValue())
+                        .append(" else 0 end\n");
+                parameters.add(pattern);
+            }
+        }
+    }
+
+    /**
+     * 拼接 token 过滤条件。
+     *
+     * @param sqlBuilder SQL 构造器
+     * @param parameters SQL 参数
+     * @param queryTokens 查询 token
+     * @param columns 参与匹配的列
+     */
+    private void appendTokenWhere(
+            StringBuilder sqlBuilder,
+            List<Object> parameters,
+            List<String> queryTokens,
+            List<String> columns
+    ) {
+        for (String queryToken : queryTokens) {
+            String pattern = likePattern(queryToken);
+            for (String column : columns) {
+                sqlBuilder.append("                  or ").append(column).append(" like ?\n");
+                parameters.add(pattern);
+            }
+        }
+    }
+
+    /**
+     * 构造 LIKE 匹配模式。
+     *
+     * @param queryToken 查询 token
+     * @return LIKE 模式
+     */
+    private String likePattern(String queryToken) {
+        return "%" + queryToken + "%";
     }
 
     /**

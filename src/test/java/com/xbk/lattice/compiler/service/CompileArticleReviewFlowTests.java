@@ -87,6 +87,60 @@ class CompileArticleReviewFlowTests {
     }
 
     /**
+     * 验证修复稿误改 sources 时，会强制保留原始来源路径。
+     */
+    @Test
+    void shouldPreserveOriginalSourcePathsWhenFixerRewritesSourcesAsTitle() {
+        CompileArticleNode compileArticleNode = new CompileArticleNode(
+                createLlmGateway("", "{}"),
+                new FakeSourceFileJdbcRepository(),
+                new DocumentSectionSelector(),
+                new StubArticleReviewerGateway(
+                        ReviewResult.issuesFound(List.of(new ReviewIssue("HIGH", "EMPTY_SOURCES", "源文件正文为空"))),
+                        true
+                ),
+                new StubReviewFixService("""
+                        ---
+                        title: "项目全流程真实验收手册"
+                        summary: "真实验收结果汇总"
+                        referential_keywords: ["compile"]
+                        sources: ["项目端到端验收手册"]
+                        depends_on: []
+                        related: []
+                        confidence: high
+                        review_status: pending
+                        ---
+
+                        # 项目全流程真实验收手册
+                        """)
+        );
+
+        ArticleRecord fixedArticle = compileArticleNode.replaceReviewStatus(
+                createChineseArticleRecord(),
+                "pending",
+                """
+                        ---
+                        title: "项目全流程真实验收手册"
+                        summary: "真实验收结果汇总"
+                        referential_keywords: ["compile"]
+                        sources: ["项目端到端验收手册"]
+                        depends_on: []
+                        related: []
+                        confidence: high
+                        review_status: pending
+                        ---
+
+                        # 项目全流程真实验收手册
+                        """
+        );
+
+        assertThat(fixedArticle.getSourcePaths()).containsExactly("项目全流程真实验收手册.md");
+        assertThat(fixedArticle.getContent()).contains("sources:");
+        assertThat(fixedArticle.getContent()).contains("\"项目全流程真实验收手册.md\"");
+        assertThat(fixedArticle.getContent()).doesNotContain("\"项目端到端验收手册\"");
+    }
+
+    /**
      * 验证审查发现问题且修复失败时，文章状态会收敛为 needs_human_review。
      */
     @Test
@@ -125,6 +179,42 @@ class CompileArticleReviewFlowTests {
                         Arrays.asList("retry=3", "interval=30s"),
                         Arrays.asList("payment/analyze.json#timeout-rules")
                 ))
+        );
+    }
+
+    /**
+     * 创建中文测试文章。
+     *
+     * @return 测试文章
+     */
+    private ArticleRecord createChineseArticleRecord() {
+        return new ArticleRecord(
+                "项目全流程真实验收手册",
+                "项目全流程真实验收手册",
+                """
+                        ---
+                        title: "项目全流程真实验收手册"
+                        summary: "真实验收结果汇总"
+                        referential_keywords: ["compile"]
+                        sources: ["项目全流程真实验收手册.md"]
+                        depends_on: []
+                        related: []
+                        confidence: high
+                        review_status: pending
+                        ---
+
+                        # 项目全流程真实验收手册
+                        """,
+                "ACTIVE",
+                java.time.OffsetDateTime.now(),
+                List.of("项目全流程真实验收手册.md"),
+                "{}",
+                "真实验收结果汇总",
+                List.of("compile"),
+                List.of(),
+                List.of(),
+                "high",
+                "pending"
         );
     }
 

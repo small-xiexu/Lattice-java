@@ -32,6 +32,11 @@ public class QueryGraphStateMapper {
         state.setQueryId(queryId);
         state.setQuestion(readString(stateMap, QueryGraphStateKeys.QUESTION));
         state.setNormalizedQuestion(readString(stateMap, QueryGraphStateKeys.NORMALIZED_QUESTION));
+        state.setRewrittenQuestion(readString(stateMap, QueryGraphStateKeys.REWRITTEN_QUESTION));
+        state.setQueryIntent(readString(stateMap, QueryGraphStateKeys.QUERY_INTENT));
+        state.setRewriteAuditRef(readString(stateMap, QueryGraphStateKeys.REWRITE_AUDIT_REF));
+        state.setRetrievalStrategyRef(readString(stateMap, QueryGraphStateKeys.RETRIEVAL_STRATEGY_REF));
+        state.setRetrievalAuditRef(readString(stateMap, QueryGraphStateKeys.RETRIEVAL_AUDIT_REF));
         state.setLlmScopeType(readString(stateMap, QueryGraphStateKeys.LLM_SCOPE_TYPE));
         state.setLlmScopeId(readString(stateMap, QueryGraphStateKeys.LLM_SCOPE_ID));
         state.setTraceId(readString(stateMap, QueryGraphStateKeys.TRACE_ID));
@@ -41,8 +46,10 @@ public class QueryGraphStateMapper {
         state.setHasFusedHits(readBoolean(stateMap, QueryGraphStateKeys.HAS_FUSED_HITS));
         state.setRetrievedHitGroupsRef(readString(stateMap, QueryGraphStateKeys.RETRIEVED_HIT_GROUPS_REF));
         state.setFtsHitsRef(readString(stateMap, QueryGraphStateKeys.FTS_HITS_REF));
+        state.setArticleChunkHitsRef(readString(stateMap, QueryGraphStateKeys.ARTICLE_CHUNK_HITS_REF));
         state.setRefkeyHitsRef(readString(stateMap, QueryGraphStateKeys.REFKEY_HITS_REF));
         state.setSourceHitsRef(readString(stateMap, QueryGraphStateKeys.SOURCE_HITS_REF));
+        state.setSourceChunkHitsRef(readString(stateMap, QueryGraphStateKeys.SOURCE_CHUNK_HITS_REF));
         state.setContributionHitsRef(readString(stateMap, QueryGraphStateKeys.CONTRIBUTION_HITS_REF));
         state.setGraphHitsRef(readString(stateMap, QueryGraphStateKeys.GRAPH_HITS_REF));
         state.setArticleVectorHitsRef(readString(stateMap, QueryGraphStateKeys.ARTICLE_VECTOR_HITS_REF));
@@ -84,6 +91,11 @@ public class QueryGraphStateMapper {
         values.put(QueryGraphStateKeys.QUERY_ID, state.getQueryId());
         values.put(QueryGraphStateKeys.QUESTION, state.getQuestion());
         values.put(QueryGraphStateKeys.NORMALIZED_QUESTION, state.getNormalizedQuestion());
+        values.put(QueryGraphStateKeys.REWRITTEN_QUESTION, state.getRewrittenQuestion());
+        values.put(QueryGraphStateKeys.QUERY_INTENT, state.getQueryIntent());
+        values.put(QueryGraphStateKeys.REWRITE_AUDIT_REF, state.getRewriteAuditRef());
+        values.put(QueryGraphStateKeys.RETRIEVAL_STRATEGY_REF, state.getRetrievalStrategyRef());
+        values.put(QueryGraphStateKeys.RETRIEVAL_AUDIT_REF, state.getRetrievalAuditRef());
         values.put(QueryGraphStateKeys.LLM_SCOPE_TYPE, state.getLlmScopeType());
         values.put(QueryGraphStateKeys.LLM_SCOPE_ID, state.getLlmScopeId());
         values.put(QueryGraphStateKeys.TRACE_ID, state.getTraceId());
@@ -93,8 +105,10 @@ public class QueryGraphStateMapper {
         values.put(QueryGraphStateKeys.HAS_FUSED_HITS, state.isHasFusedHits());
         values.put(QueryGraphStateKeys.RETRIEVED_HIT_GROUPS_REF, state.getRetrievedHitGroupsRef());
         values.put(QueryGraphStateKeys.FTS_HITS_REF, state.getFtsHitsRef());
+        values.put(QueryGraphStateKeys.ARTICLE_CHUNK_HITS_REF, state.getArticleChunkHitsRef());
         values.put(QueryGraphStateKeys.REFKEY_HITS_REF, state.getRefkeyHitsRef());
         values.put(QueryGraphStateKeys.SOURCE_HITS_REF, state.getSourceHitsRef());
+        values.put(QueryGraphStateKeys.SOURCE_CHUNK_HITS_REF, state.getSourceChunkHitsRef());
         values.put(QueryGraphStateKeys.CONTRIBUTION_HITS_REF, state.getContributionHitsRef());
         values.put(QueryGraphStateKeys.GRAPH_HITS_REF, state.getGraphHitsRef());
         values.put(QueryGraphStateKeys.ARTICLE_VECTOR_HITS_REF, state.getArticleVectorHitsRef());

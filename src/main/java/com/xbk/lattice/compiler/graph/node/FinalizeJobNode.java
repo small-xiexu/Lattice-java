@@ -12,7 +12,7 @@ import java.util.Map;
 /**
  * 结束作业节点
  *
- * 职责：清理编译作业工作集并返回最终状态
+ * 职责：保留编译作业工作集用于恢复，并返回最终状态
  *
  * @author xiexu
  */
@@ -34,14 +34,13 @@ public class FinalizeJobNode extends AbstractCompileGraphNode {
     }
 
     /**
-     * 清理工作集并结束作业。
+     * 保留工作集并结束作业。
      *
      * @param overAllState 图状态
      * @return 更新后的状态增量
      */
     public Map<String, Object> execute(OverAllState overAllState) {
         CompileGraphState state = state(overAllState);
-        workingSetStore().deleteByJobId(state.getJobId());
         return delta(state);
     }
 }

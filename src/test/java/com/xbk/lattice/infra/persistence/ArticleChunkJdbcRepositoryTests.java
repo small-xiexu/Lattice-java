@@ -106,4 +106,36 @@ class ArticleChunkJdbcRepositoryTests {
         assertThat(chunks.get(0)).contains("## Timeout Rules");
         assertThat(chunks.get(0)).doesNotContain("legacy-chunk");
     }
+
+    /**
+     * 验证 article chunk 可通过数据库侧 lexical 查询召回。
+     */
+    @Test
+    void shouldSearchArticleChunksByLexicalIndex() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_chunk_test.articles CASCADE");
+        articleJdbcRepository.upsert(new ArticleRecord(
+                "payment",
+                "Payment",
+                "# Payment",
+                "ACTIVE",
+                OffsetDateTime.now(),
+                List.of("payment/a.md"),
+                "{\"description\":\"payment summary\"}"
+        ));
+        articleChunkJdbcRepository.replaceChunks(
+                "payment",
+                List.of("retry interval is 30s", "unrelated shipping content")
+        );
+
+        List<LexicalSearchRecord> hits = articleChunkJdbcRepository.searchLexical(
+                "retry interval",
+                List.of("retry", "interval"),
+                5,
+                "simple"
+        );
+
+        assertThat(hits).isNotEmpty();
+        assertThat(hits.get(0).getContent()).contains("retry interval");
+        assertThat(hits.get(0).getConceptId()).isEqualTo("payment");
+    }
 }

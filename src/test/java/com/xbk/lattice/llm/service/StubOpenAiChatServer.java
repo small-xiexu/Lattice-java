@@ -30,6 +30,10 @@ class StubOpenAiChatServer {
 
     private final int transientFailureCount;
 
+    private final boolean eventStreamUnlessJsonAccept;
+
+    private final String forcedResponseContentType;
+
     private final AtomicInteger requestCount = new AtomicInteger();
 
     private final List<String> capturedModels = new CopyOnWriteArrayList<String>();
@@ -40,13 +44,31 @@ class StubOpenAiChatServer {
 
     private final List<String> capturedConnectionHeaders = new CopyOnWriteArrayList<String>();
 
+    private final List<String> capturedAcceptHeaders = new CopyOnWriteArrayList<String>();
+
     StubOpenAiChatServer(String answerText) throws IOException {
-        this(answerText, 0);
+        this(answerText, 0, false, null);
     }
 
     StubOpenAiChatServer(String answerText, int transientFailureCount) throws IOException {
+        this(answerText, transientFailureCount, false, null);
+    }
+
+    StubOpenAiChatServer(String answerText, int transientFailureCount, boolean eventStreamUnlessJsonAccept)
+            throws IOException {
+        this(answerText, transientFailureCount, eventStreamUnlessJsonAccept, null);
+    }
+
+    StubOpenAiChatServer(
+            String answerText,
+            int transientFailureCount,
+            boolean eventStreamUnlessJsonAccept,
+            String forcedResponseContentType
+    ) throws IOException {
         this.answerText = answerText;
         this.transientFailureCount = transientFailureCount;
+        this.eventStreamUnlessJsonAccept = eventStreamUnlessJsonAccept;
+        this.forcedResponseContentType = forcedResponseContentType;
         this.httpServer = HttpServer.create(new InetSocketAddress(0), 0);
         HttpHandler handler = new ChatCompletionsHandler();
         httpServer.createContext("/v1/chat/completions", handler);
@@ -85,6 +107,10 @@ class StubOpenAiChatServer {
         return capturedConnectionHeaders;
     }
 
+    List<String> getCapturedAcceptHeaders() {
+        return capturedAcceptHeaders;
+    }
+
     private final class ChatCompletionsHandler implements HttpHandler {
 
         @Override
@@ -101,6 +127,8 @@ class StubOpenAiChatServer {
             capturedTransferEncodings.add(exchange.getRequestHeaders().getFirst("Transfer-encoding"));
             capturedContentLengths.add(exchange.getRequestHeaders().getFirst("Content-length"));
             capturedConnectionHeaders.add(exchange.getRequestHeaders().getFirst("Connection"));
+            String acceptHeader = exchange.getRequestHeaders().getFirst("Accept");
+            capturedAcceptHeaders.add(acceptHeader);
             String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             JsonNode rootNode = OBJECT_MAPPER.readTree(requestBody);
             capturedModels.add(rootNode.path("model").asText());
@@ -123,10 +151,20 @@ class StubOpenAiChatServer {
                     }
                     """.formatted(answerText);
             byte[] responseBytes = responseBody.getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            String contentType = forcedResponseContentType != null
+                    ? forcedResponseContentType
+                    : shouldReturnEventStream(acceptHeader)
+                    ? "text/event-stream"
+                    : "application/json";
+            exchange.getResponseHeaders().add("Content-Type", contentType);
             exchange.sendResponseHeaders(200, responseBytes.length);
             exchange.getResponseBody().write(responseBytes);
             exchange.close();
+        }
+
+        private boolean shouldReturnEventStream(String acceptHeader) {
+            return eventStreamUnlessJsonAccept
+                    && (acceptHeader == null || !acceptHeader.toLowerCase().contains("application/json"));
         }
     }
 }

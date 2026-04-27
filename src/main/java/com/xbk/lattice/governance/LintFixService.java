@@ -1,6 +1,7 @@
 package com.xbk.lattice.governance;
 
 import com.xbk.lattice.article.service.ArticleIdentityResolver;
+import com.xbk.lattice.article.service.ArticleMarkdownSupport;
 import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
@@ -165,6 +166,11 @@ public class LintFixService {
                         articleRecord.getDependsOn(),
                         articleRecord.getRelated(),
                         articleRecord.getConfidence(),
+                        "needs_review"
+                );
+                updatedRecord = ArticleMarkdownSupport.synchronizeArticleRecord(
+                        updatedRecord,
+                        fixedContent,
                         "needs_review"
                 );
                 articleJdbcRepository.upsert(updatedRecord);

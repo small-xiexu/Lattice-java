@@ -6,6 +6,7 @@ import com.xbk.lattice.compiler.domain.MergedConcept;
 import com.xbk.lattice.compiler.domain.RawSource;
 import com.xbk.lattice.compiler.domain.SourceBatch;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -25,6 +26,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @Component
 @Profile("jdbc")
+@ConditionalOnProperty(
+        prefix = "lattice.compiler.working-set",
+        name = "store",
+        havingValue = "in-memory",
+        matchIfMissing = true
+)
 public class InMemoryCompileWorkingSetStore implements CompileWorkingSetStore {
 
     private final Map<String, Object> payloadStore = new ConcurrentHashMap<String, Object>();

@@ -1,5 +1,8 @@
 package com.xbk.lattice.query.citation;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * Citation 引用对象
  *
@@ -31,13 +34,14 @@ public class Citation {
      * @param claimText 所属 claim 文本
      * @param contextWindow 所属上下文
      */
+    @JsonCreator
     public Citation(
-            int ordinal,
-            String literal,
-            CitationSourceType sourceType,
-            String targetKey,
-            String claimText,
-            String contextWindow
+            @JsonProperty("ordinal") int ordinal,
+            @JsonProperty("literal") String literal,
+            @JsonProperty("sourceType") CitationSourceType sourceType,
+            @JsonProperty("targetKey") String targetKey,
+            @JsonProperty("claimText") String claimText,
+            @JsonProperty("contextWindow") String contextWindow
     ) {
         this.ordinal = ordinal;
         this.literal = literal;

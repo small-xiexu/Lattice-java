@@ -1,5 +1,8 @@
 package com.xbk.lattice.query.citation;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
 
 /**
@@ -27,7 +30,13 @@ public class ClaimSegment {
      * @param paragraphText 原始段落文本
      * @param citations 段落内引用
      */
-    public ClaimSegment(int claimIndex, String claimText, String paragraphText, List<Citation> citations) {
+    @JsonCreator
+    public ClaimSegment(
+            @JsonProperty("claimIndex") int claimIndex,
+            @JsonProperty("claimText") String claimText,
+            @JsonProperty("paragraphText") String paragraphText,
+            @JsonProperty("citations") List<Citation> citations
+    ) {
         this.claimIndex = claimIndex;
         this.claimText = claimText;
         this.paragraphText = paragraphText;

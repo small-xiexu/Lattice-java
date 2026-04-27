@@ -6,6 +6,7 @@ import com.xbk.lattice.query.deepresearch.domain.LayerSummary;
 import com.xbk.lattice.query.deepresearch.domain.LayeredResearchPlan;
 import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import com.xbk.lattice.query.evidence.domain.ProjectionCandidate;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -23,6 +24,12 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Component
 @Profile("jdbc")
+@ConditionalOnProperty(
+        prefix = "lattice.deep-research.working-set",
+        name = "store",
+        havingValue = "in-memory",
+        matchIfMissing = true
+)
 public class InMemoryDeepResearchWorkingSetStore implements DeepResearchWorkingSetStore {
 
     private final Map<String, Object> store = new ConcurrentHashMap<String, Object>();

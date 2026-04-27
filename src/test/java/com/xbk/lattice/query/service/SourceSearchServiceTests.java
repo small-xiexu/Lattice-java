@@ -1,7 +1,7 @@
 package com.xbk.lattice.query.service;
 
+import com.xbk.lattice.infra.persistence.LexicalSearchRecord;
 import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
-import com.xbk.lattice.infra.persistence.SourceFileChunkRecord;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -23,18 +23,24 @@ class SourceSearchServiceTests {
      */
     @Test
     void shouldMatchSourceChunkForChineseSemanticQuestion() {
-        SourceSearchService sourceSearchService = new SourceSearchService(
+        SourceChunkFtsSearchService sourceChunkFtsSearchService = new SourceChunkFtsSearchService(
                 new FakeSourceFileChunkJdbcRepository(List.of(
-                        new SourceFileChunkRecord(
+                        new LexicalSearchRecord(
+                                null,
+                                "payment/context.md#0",
                                 "payment/context.md",
-                                0,
+                                "payment/context.md",
                                 "支付超时后，重试间隔固定为30s。",
-                                true
+                                "{\"filePath\":\"payment/context.md\",\"chunkIndex\":0,\"verbatim\":true}",
+                                List.of("payment/context.md"),
+                                Integer.valueOf(0),
+                                Boolean.TRUE,
+                                6.0D
                         )
                 ))
         );
 
-        List<QueryArticleHit> hits = sourceSearchService.search("重试间隔是多少", 5);
+        List<QueryArticleHit> hits = sourceChunkFtsSearchService.search("重试间隔是多少", 5);
 
         assertThat(hits).hasSize(1);
         assertThat(hits.get(0).getEvidenceType()).isEqualTo(QueryEvidenceType.SOURCE);
@@ -48,14 +54,14 @@ class SourceSearchServiceTests {
      */
     private static class FakeSourceFileChunkJdbcRepository extends SourceFileChunkJdbcRepository {
 
-        private final List<SourceFileChunkRecord> records;
+        private final List<LexicalSearchRecord> records;
 
         /**
          * 创建源文件分块仓储替身。
          *
          * @param records 预置分块
          */
-        private FakeSourceFileChunkJdbcRepository(List<SourceFileChunkRecord> records) {
+        private FakeSourceFileChunkJdbcRepository(List<LexicalSearchRecord> records) {
             super(new JdbcTemplate());
             this.records = records;
         }
@@ -63,10 +69,19 @@ class SourceSearchServiceTests {
         /**
          * 返回预置分块记录。
          *
+         * @param question 查询问题
+         * @param queryTokens 查询 token
+         * @param limit 返回数量
+         * @param tsConfig FTS 配置
          * @return 分块记录列表
          */
         @Override
-        public List<SourceFileChunkRecord> findAll() {
+        public List<LexicalSearchRecord> searchLexical(
+                String question,
+                List<String> queryTokens,
+                int limit,
+                String tsConfig
+        ) {
             return records;
         }
     }

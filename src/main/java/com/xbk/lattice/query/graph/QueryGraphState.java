@@ -18,6 +18,16 @@ public class QueryGraphState {
 
     private String normalizedQuestion;
 
+    private String rewrittenQuestion;
+
+    private String queryIntent;
+
+    private String rewriteAuditRef;
+
+    private String retrievalStrategyRef;
+
+    private String retrievalAuditRef;
+
     private String llmScopeType;
 
     private String llmScopeId;
@@ -36,9 +46,13 @@ public class QueryGraphState {
 
     private String ftsHitsRef;
 
+    private String articleChunkHitsRef;
+
     private String refkeyHitsRef;
 
     private String sourceHitsRef;
+
+    private String sourceChunkHitsRef;
 
     private String contributionHitsRef;
 

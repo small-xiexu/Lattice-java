@@ -1,5 +1,8 @@
 package com.xbk.lattice.query.service;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
 
 /**
@@ -111,16 +114,17 @@ public class QueryArticleHit {
      * @param sourcePaths 来源路径
      * @param score 评分
      */
+    @JsonCreator
     public QueryArticleHit(
-            QueryEvidenceType evidenceType,
-            Long sourceId,
-            String articleKey,
-            String conceptId,
-            String title,
-            String content,
-            String metadataJson,
-            List<String> sourcePaths,
-            double score
+            @JsonProperty("evidenceType") QueryEvidenceType evidenceType,
+            @JsonProperty("sourceId") Long sourceId,
+            @JsonProperty("articleKey") String articleKey,
+            @JsonProperty("conceptId") String conceptId,
+            @JsonProperty("title") String title,
+            @JsonProperty("content") String content,
+            @JsonProperty("metadataJson") String metadataJson,
+            @JsonProperty("sourcePaths") List<String> sourcePaths,
+            @JsonProperty("score") double score
     ) {
         this.evidenceType = evidenceType;
         this.sourceId = sourceId;

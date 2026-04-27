@@ -58,40 +58,32 @@ public class FtsSearchService {
         if (jdbcTemplate == null) {
             return List.of();
         }
+        if (question == null || question.isBlank()) {
+            return List.of();
+        }
 
         String tsConfig = ftsConfigResolver.resolveArticleTsConfig();
         String sql = """
-                select source_id,
-                       article_key,
-                       concept_id,
-                       title,
-                       content,
-                       metadata_json::text as metadata_json,
-                       source_paths,
-                       ts_rank_cd(
-                           to_tsvector(cast(? as regconfig),
-                               coalesce(title, '') || ' ' ||
-                               coalesce(content, '') || ' ' ||
-                               coalesce(metadata_json->>'description', '')
-                           ),
-                           plainto_tsquery(cast(? as regconfig), ?)
-                       ) as score
-                from articles
-                where to_tsvector(cast(? as regconfig),
-                          coalesce(title, '') || ' ' ||
-                          coalesce(content, '') || ' ' ||
-                          coalesce(metadata_json->>'description', '')
-                      ) @@ plainto_tsquery(cast(? as regconfig), ?)
+                with query as (
+                    select plainto_tsquery(cast(? as regconfig), ?) as tsq
+                )
+                select a.source_id,
+                       a.article_key,
+                       a.concept_id,
+                       a.title,
+                       a.content,
+                       a.metadata_json::text as metadata_json,
+                       a.source_paths,
+                       ts_rank_cd(a.search_tsv, query.tsq) as score
+                from articles a
+                cross join query
+                where a.search_tsv @@ query.tsq
                 order by score desc, compiled_at desc
                 limit ?
                 """;
         return jdbcTemplate.query(
                 sql,
                 this::mapQueryArticleHit,
-                tsConfig,
-                tsConfig,
-                question,
-                tsConfig,
                 tsConfig,
                 question,
                 limit

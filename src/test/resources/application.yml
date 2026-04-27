@@ -1,0 +1,13 @@
+lattice:
+  query:
+    search:
+      vector:
+        enabled: false
+    working-set:
+      store: in-memory
+  deep-research:
+    working-set:
+      store: in-memory
+  compiler:
+    working-set:
+      store: in-memory

@@ -1,5 +1,8 @@
 package com.xbk.lattice.infra.persistence;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.Collections;
 import java.util.List;
 import java.time.OffsetDateTime;
@@ -152,22 +155,23 @@ public class ArticleRecord {
      * @param confidence 置信度
      * @param reviewStatus 审查状态
      */
+    @JsonCreator
     public ArticleRecord(
-            Long sourceId,
-            String articleKey,
-            String conceptId,
-            String title,
-            String content,
-            String lifecycle,
-            OffsetDateTime compiledAt,
-            List<String> sourcePaths,
-            String metadataJson,
-            String summary,
-            List<String> referentialKeywords,
-            List<String> dependsOn,
-            List<String> related,
-            String confidence,
-            String reviewStatus
+            @JsonProperty("sourceId") Long sourceId,
+            @JsonProperty("articleKey") String articleKey,
+            @JsonProperty("conceptId") String conceptId,
+            @JsonProperty("title") String title,
+            @JsonProperty("content") String content,
+            @JsonProperty("lifecycle") String lifecycle,
+            @JsonProperty("compiledAt") OffsetDateTime compiledAt,
+            @JsonProperty("sourcePaths") List<String> sourcePaths,
+            @JsonProperty("metadataJson") String metadataJson,
+            @JsonProperty("summary") String summary,
+            @JsonProperty("referentialKeywords") List<String> referentialKeywords,
+            @JsonProperty("dependsOn") List<String> dependsOn,
+            @JsonProperty("related") List<String> related,
+            @JsonProperty("confidence") String confidence,
+            @JsonProperty("reviewStatus") String reviewStatus
     ) {
         this.sourceId = sourceId;
         this.articleKey = articleKey;

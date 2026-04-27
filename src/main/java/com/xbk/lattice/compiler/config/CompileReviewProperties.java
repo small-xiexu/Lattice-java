@@ -18,6 +18,8 @@ public class CompileReviewProperties {
 
     private boolean allowPersistNeedsHumanReview = true;
 
+    private String humanReviewSeverityThreshold = "HIGH";
+
     /**
      * 是否启用自动修复。
      *
@@ -70,5 +72,23 @@ public class CompileReviewProperties {
      */
     public void setAllowPersistNeedsHumanReview(boolean allowPersistNeedsHumanReview) {
         this.allowPersistNeedsHumanReview = allowPersistNeedsHumanReview;
+    }
+
+    /**
+     * 返回触发人工复核的最低严重度阈值。
+     *
+     * @return 严重度阈值
+     */
+    public String getHumanReviewSeverityThreshold() {
+        return humanReviewSeverityThreshold;
+    }
+
+    /**
+     * 设置触发人工复核的最低严重度阈值。
+     *
+     * @param humanReviewSeverityThreshold 严重度阈值
+     */
+    public void setHumanReviewSeverityThreshold(String humanReviewSeverityThreshold) {
+        this.humanReviewSeverityThreshold = humanReviewSeverityThreshold;
     }
 }

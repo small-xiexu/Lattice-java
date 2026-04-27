@@ -40,6 +40,11 @@ class QueryGraphStateMapperTests {
         QueryGraphState queryGraphState = new QueryGraphState();
         queryGraphState.setQueryId("query-id-001");
         queryGraphState.setQuestion("payment timeout");
+        queryGraphState.setRewrittenQuestion("payment timeout retry policy");
+        queryGraphState.setQueryIntent("TROUBLESHOOTING");
+        queryGraphState.setRewriteAuditRef("query_rewrite_audits:1");
+        queryGraphState.setRetrievalStrategyRef("query-id-001:retrieval-strategy");
+        queryGraphState.setRetrievalAuditRef("query_retrieval_runs:1");
         queryGraphState.setLlmScopeType("query_request");
         queryGraphState.setLlmScopeId("query-id-001");
         queryGraphState.setLlmBindingSnapshotRef("query_request:query-id-001:query");
@@ -51,6 +56,11 @@ class QueryGraphStateMapperTests {
         Map<String, Object> stateMap = queryGraphStateMapper.toMap(queryGraphState);
 
         assertThat(stateMap).containsEntry(QueryGraphStateKeys.QUERY_ID, "query-id-001");
+        assertThat(stateMap).containsEntry(QueryGraphStateKeys.REWRITTEN_QUESTION, "payment timeout retry policy");
+        assertThat(stateMap).containsEntry(QueryGraphStateKeys.QUERY_INTENT, "TROUBLESHOOTING");
+        assertThat(stateMap).containsEntry(QueryGraphStateKeys.REWRITE_AUDIT_REF, "query_rewrite_audits:1");
+        assertThat(stateMap).containsEntry(QueryGraphStateKeys.RETRIEVAL_STRATEGY_REF, "query-id-001:retrieval-strategy");
+        assertThat(stateMap).containsEntry(QueryGraphStateKeys.RETRIEVAL_AUDIT_REF, "query_retrieval_runs:1");
         assertThat(stateMap).containsEntry(QueryGraphStateKeys.LLM_SCOPE_TYPE, "query_request");
         assertThat(stateMap).containsEntry(QueryGraphStateKeys.LLM_SCOPE_ID, "query-id-001");
         assertThat(stateMap).containsEntry(QueryGraphStateKeys.LLM_BINDING_SNAPSHOT_REF, "query_request:query-id-001:query");

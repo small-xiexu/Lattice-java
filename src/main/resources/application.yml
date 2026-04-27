@@ -74,6 +74,10 @@ lattice:
   compiler:
     orchestration:
       default-mode: ${LATTICE_COMPILER_ORCHESTRATION_DEFAULT_MODE:state_graph}
+    working-set:
+      store: ${LATTICE_COMPILER_WORKING_SET_STORE:redis}
+      key-prefix: ${LATTICE_COMPILER_WORKING_SET_KEY_PREFIX:lattice:compile:ws:}
+      ttl-seconds: ${LATTICE_COMPILER_WORKING_SET_TTL_SECONDS:86400}
     file-ranking:
       rules:
         - pattern: ${LATTICE_COMPILER_FILE_RANKING_RULE1_PATTERN:overview.*}
@@ -91,6 +95,10 @@ lattice:
     cache:
       key-prefix: ${LATTICE_QUERY_CACHE_KEY_PREFIX:llm:query:cache:}
       ttl-seconds: ${LATTICE_QUERY_CACHE_TTL_SECONDS:3600}
+    working-set:
+      store: ${LATTICE_QUERY_WORKING_SET_STORE:redis}
+      key-prefix: ${LATTICE_QUERY_WORKING_SET_KEY_PREFIX:lattice:query:ws:}
+      ttl-seconds: ${LATTICE_QUERY_WORKING_SET_TTL_SECONDS:86400}
     review:
       rewrite-enabled: ${LATTICE_QUERY_REVIEW_REWRITE_ENABLED:true}
       max-rewrite-rounds: ${LATTICE_QUERY_REVIEW_MAX_REWRITE_ROUNDS:1}
@@ -100,7 +108,7 @@ lattice:
         preferred-ts-config: ${LATTICE_QUERY_SEARCH_FTS_CONFIG:jiebacfg}
         fallback-ts-config: ${LATTICE_QUERY_SEARCH_FTS_FALLBACK:simple}
       vector:
-        enabled: ${LATTICE_QUERY_SEARCH_VECTOR_ENABLED:false}
+        enabled: ${LATTICE_QUERY_SEARCH_VECTOR_ENABLED:true}
         embedding-model: ${LATTICE_QUERY_SEARCH_VECTOR_MODEL:text-embedding-3-small}
         expected-dimensions: ${LATTICE_QUERY_SEARCH_VECTOR_DIMENSIONS:1536}
   source:
@@ -108,3 +116,8 @@ lattice:
       staging-root-dir: ${LATTICE_SOURCE_ADMIN_STAGING_ROOT_DIR:${java.io.tmpdir}/lattice-source-sync}
       allowed-server-dirs:
         - ${LATTICE_SOURCE_ADMIN_ALLOWED_SERVER_DIR_1:${java.io.tmpdir}}
+  deep-research:
+    working-set:
+      store: ${LATTICE_DEEP_RESEARCH_WORKING_SET_STORE:redis}
+      key-prefix: ${LATTICE_DEEP_RESEARCH_WORKING_SET_KEY_PREFIX:lattice:deep-research:ws:}
+      ttl-seconds: ${LATTICE_DEEP_RESEARCH_WORKING_SET_TTL_SECONDS:86400}

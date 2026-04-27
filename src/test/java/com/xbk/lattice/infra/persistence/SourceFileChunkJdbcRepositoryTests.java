@@ -75,4 +75,30 @@ class SourceFileChunkJdbcRepositoryTests {
         assertThat(chunkRecords.get(0).getChunkText()).contains("## Timeout Rules");
         assertThat(chunkRecords.get(0).getChunkText()).doesNotContain("legacy-source-chunk");
     }
+
+    /**
+     * 验证 source chunk 可通过数据库侧 lexical 查询召回。
+     */
+    @Test
+    void shouldSearchSourceChunksByLexicalIndex() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_source_chunk_test.source_file_chunks");
+        sourceFileChunkJdbcRepository.replaceChunks(
+                "payment/order.md",
+                List.of(
+                        new SourceFileChunkRecord("payment/order.md", 0, "retry interval is 30s", false),
+                        new SourceFileChunkRecord("payment/order.md", 1, "unrelated shipping content", false)
+                )
+        );
+
+        List<LexicalSearchRecord> hits = sourceFileChunkJdbcRepository.searchLexical(
+                "retry interval",
+                List.of("retry", "interval"),
+                5,
+                "simple"
+        );
+
+        assertThat(hits).isNotEmpty();
+        assertThat(hits.get(0).getContent()).contains("retry interval");
+        assertThat(hits.get(0).getConceptId()).isEqualTo("payment/order.md");
+    }
 }

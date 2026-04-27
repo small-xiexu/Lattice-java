@@ -1,11 +1,10 @@
 package com.xbk.lattice.query.service;
 
 import com.xbk.lattice.infra.persistence.ContributionJdbcRepository;
-import com.xbk.lattice.infra.persistence.ContributionRecord;
+import com.xbk.lattice.infra.persistence.LexicalSearchRecord;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,13 +26,17 @@ class ContributionSearchServiceTests {
     void shouldMatchContributionForChineseSemanticQuestion() {
         ContributionSearchService contributionSearchService = new ContributionSearchService(
                 new FakeContributionJdbcRepository(List.of(
-                        new ContributionRecord(
-                                UUID.randomUUID(),
-                                "retry=3 是什么配置",
+                        new LexicalSearchRecord(
+                                null,
+                                "contribution:" + UUID.randomUUID(),
+                                "contribution:retry",
+                                "用户反馈：retry=3 是什么配置",
                                 "这是用户确认的运维口径，重试间隔固定为30s。",
-                                "[]",
-                                "system",
-                                OffsetDateTime.now()
+                                "{\"question\":\"retry=3 是什么配置\",\"confirmedBy\":\"system\"}",
+                                List.of("[用户反馈]"),
+                                null,
+                                null,
+                                8.0D
                         )
                 ))
         );
@@ -52,14 +55,14 @@ class ContributionSearchServiceTests {
      */
     private static class FakeContributionJdbcRepository extends ContributionJdbcRepository {
 
-        private final List<ContributionRecord> records;
+        private final List<LexicalSearchRecord> records;
 
         /**
          * 创建 contribution 仓储替身。
          *
          * @param records 预置记录
          */
-        private FakeContributionJdbcRepository(List<ContributionRecord> records) {
+        private FakeContributionJdbcRepository(List<LexicalSearchRecord> records) {
             super(new JdbcTemplate());
             this.records = records;
         }
@@ -67,10 +70,19 @@ class ContributionSearchServiceTests {
         /**
          * 返回预置 contribution 记录。
          *
-         * @return contribution 记录列表
+         * @param question 查询问题
+         * @param queryTokens 查询 token
+         * @param limit 返回数量
+         * @param tsConfig FTS 配置
+         * @return contribution 命中
          */
         @Override
-        public List<ContributionRecord> findAll() {
+        public List<LexicalSearchRecord> searchLexical(
+                String question,
+                List<String> queryTokens,
+                int limit,
+                String tsConfig
+        ) {
             return records;
         }
     }

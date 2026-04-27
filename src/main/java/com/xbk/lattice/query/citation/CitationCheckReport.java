@@ -1,5 +1,7 @@
 package com.xbk.lattice.query.citation;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.xbk.lattice.api.query.CitationCheckSummary;
 
 import java.util.List;
@@ -53,19 +55,20 @@ public class CitationCheckReport {
      * @param unusedProjectionCount 未被最终答案使用的 projection 数量
      * @param projectionMismatchCount 投影不匹配数量
      */
+    @JsonCreator
     public CitationCheckReport(
-            String checkedAnswer,
-            List<ClaimSegment> claimSegments,
-            List<CitationValidationResult> results,
-            int verifiedCount,
-            int demotedCount,
-            int skippedCount,
-            boolean noCitation,
-            double coverageRate,
-            int unsupportedClaimCount,
-            int unmatchedLiteralCount,
-            int unusedProjectionCount,
-            int projectionMismatchCount
+            @JsonProperty("checkedAnswer") String checkedAnswer,
+            @JsonProperty("claimSegments") List<ClaimSegment> claimSegments,
+            @JsonProperty("results") List<CitationValidationResult> results,
+            @JsonProperty("verifiedCount") int verifiedCount,
+            @JsonProperty("demotedCount") int demotedCount,
+            @JsonProperty("skippedCount") int skippedCount,
+            @JsonProperty("noCitation") boolean noCitation,
+            @JsonProperty("coverageRate") double coverageRate,
+            @JsonProperty("unsupportedClaimCount") int unsupportedClaimCount,
+            @JsonProperty("unmatchedLiteralCount") int unmatchedLiteralCount,
+            @JsonProperty("unusedProjectionCount") int unusedProjectionCount,
+            @JsonProperty("projectionMismatchCount") int projectionMismatchCount
     ) {
         this.checkedAnswer = checkedAnswer;
         this.claimSegments = claimSegments;

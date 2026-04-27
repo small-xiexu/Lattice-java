@@ -225,6 +225,25 @@ sequenceDiagram
 - 运行时一定会冻结快照，才能解释“这次结果到底用了什么配置”。
 - 编译侧和问答侧共用同一套模型中心，但可以绑定不同角色链。
 
+## 模型中心里的 3 个 Scene
+
+`/admin/settings` 里的角色绑定，不是随便配几行模型名，而是在给 3 条正式运行链路分配角色槽位：
+
+| Scene | 角色 | 用在什么地方 | 什么时候会触发 |
+| --- | --- | --- | --- |
+| `compile` | `writer`、`reviewer`、`fixer` | 知识入库时的草稿生成、复核、修正 | 导入资料、Git 同步、触发 compile |
+| `query` | `answer`、`reviewer`、`rewrite` | 常规问答时的直答、审查、改写 | 普通提问默认走这条链 |
+| `deep_research` | `planner`、`researcher`、`synthesizer`、`reviewer` | 复杂问题的分层研究、证据抽取、综合收口 | `forceDeep=true`，或问题命中“对比 / 为什么 / 排查 / 调用链 / 影响 / 步骤”等复杂度规则 |
+
+其中 `deep_research` 这一组最容易被忽略，但它其实是复杂问题链路的核心：
+
+- `planner`：先把复杂问题拆成多层研究任务，不直接开答。
+- `researcher`：对每个子任务做检索、抽事实、做证据卡，是最重的一步。
+- `synthesizer`：把各层结果综合成最终答案，并做最后的引用收口。
+- `reviewer`：作为深度研究场景的审查角色槽位一并冻结快照和校验完整性，保证这条链路不是“少配几个角色也照样糊弄跑”。
+
+也就是说，页面里那组 `deep_research / planner / researcher / synthesizer / reviewer`，不是可有可无的展示项，而是系统在复杂问题场景下真正会用到的模型路由配置。
+
 ---
 
 ## 开发者应该怎么读这个仓库
@@ -255,7 +274,7 @@ sequenceDiagram
 
 这个项目不是只有一个后台页面。对开发者来说，真正需要记住的是下面这 4 个入口：
 
-- `/admin`：资料导入、最近同步运行、编译任务、服务状态总览。
+- `/admin`：资料导入、当前处理任务、编译任务、服务状态总览。
 - `/admin/ask`：真实提问、查看答案正文、引用来源、证据状态、反馈入口。
 - `/admin/settings`：Provider Connection、Model Profile、Agent Binding、向量配置、文档解析路由。
 - `/admin/developer-access`：HTTP API、CLI、MCP 三种接入模板与服务地址。
@@ -322,6 +341,11 @@ mvn -q -s .codex/maven-settings.xml spring-boot:run
 ```
 
 启动后，到 `/admin/settings` 配置你自己的对话模型、Embedding 模型、Agent 绑定和文档解析连接；密钥只保留在本地，不要写进仓库。
+
+至少要配好的角色链有两组：
+
+- 基础可用：`compile` 和 `query`
+- 复杂问题可用：再补齐 `deep_research` 的 `planner / researcher / synthesizer / reviewer`
 
 ### 如果遇到旧迁移污染，再重建 schema
 

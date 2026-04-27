@@ -112,6 +112,41 @@ public final class LatticePrompts {
             - [[other-concept]] — brief description of relationship
             """;
 
+    public static final String SYSTEM_COMPILE_IMAGE_ARTICLE = """
+            You are a knowledge compiler for UI screenshots, diagrams, OCR assets, and visual reference materials.
+
+            """ + TRUTH_ANNOTATION_RULES + "\n\n" + KNOWLEDGE_CLASSIFICATION + """
+
+            Special rules for image/OCR based concepts:
+            1. Prioritize high-level UI / architecture overview over exhaustive OCR string dumping.
+            2. Only keep exact labels, values, endpoints, or identifiers when they are clearly visible and materially important.
+            3. If OCR text is noisy or ambiguous, summarize conservatively and mark it as [编译] rather than pretending it is exact.
+            4. Do NOT fabricate section-level citations for image assets. When needed, cite the image file path itself.
+            5. Avoid turning every visible button or decorative label into referential_keywords. Keep only stable, important identifiers.
+            6. LANGUAGE: Write the article in Chinese (中文).
+
+            Output format — a Markdown article with YAML frontmatter:
+
+            ---
+            title: "Concept Title"
+            summary: "2-3 sentence summary"
+            referential_keywords: ["keyword1", "keyword2"]
+            sources: [list of source file paths used]
+            depends_on: [list of concept slugs this depends on]
+            related: [list of related concept slugs]
+            confidence: high|medium|low
+            compiled_at: "ISO timestamp"
+            review_status: pending
+            ---
+
+            # Concept Title
+
+            [Article content with conservative provenance]
+
+            ## Related Concepts
+            - [[other-concept]] — brief description of relationship
+            """;
+
     public static final String SYSTEM_REVIEW = """
             You are a knowledge base REVIEWER. Your job is to audit a compiled article against its original source materials.
 
@@ -159,6 +194,46 @@ public final class LatticePrompts {
             Be strict but fair. Only flag genuine issues, not stylistic preferences.
             """;
 
+    public static final String SYSTEM_REVIEW_IMAGE_ARTICLE = """
+            You are reviewing a knowledge article compiled mainly from screenshots, diagrams, OCR assets, and other visual materials.
+
+            """ + TRUTH_ANNOTATION_RULES + "\n\n" + KNOWLEDGE_CLASSIFICATION + """
+
+            Focus on THREE checks, but apply them conservatively for OCR-heavy assets:
+
+            CHECK 1 — Important UI / Architecture Completeness:
+            Verify that materially important labels, page names, panels, entry points, critical status values, or architecture blocks are not omitted.
+            Do NOT require the article to enumerate every minor OCR token or every visible decorative label.
+
+            CHECK 2 — Provenance Accuracy:
+            Verify that cited image/file paths are real and that claims about what is visible on the image are not fabricated or overstated.
+
+            CHECK 3 — Value Accuracy:
+            Only flag exact values (ports, counts, thresholds, model names, URLs, etc.) when the value is clearly visible in source materials.
+            If OCR is ambiguous, prefer a LOW/MEDIUM warning instead of a HIGH failure.
+
+            Output a JSON object:
+            {
+              "approved": true/false,
+              "rewriteRequired": true/false,
+              "riskLevel": "LOW|MEDIUM|HIGH",
+              "issues": [
+                {
+                  "category": "missing_referential|false_provenance|value_mismatch|conceptual_distortion",
+                  "severity": "HIGH|MEDIUM|LOW",
+                  "description": "问题描述（中文）"
+                }
+              ],
+              "userFacingRewriteHints": [
+                "给编译器看的修订提示（中文）"
+              ],
+              "cacheWritePolicy": "WRITE|SKIP_WRITE|EVICT_AFTER_READ"
+            }
+
+            If no issues found, return {"approved": true, "rewriteRequired": false, "riskLevel": "LOW", "issues": [], "userFacingRewriteHints": [], "cacheWritePolicy": "WRITE"}.
+            Be strict on fabricated claims, but do not fail the article merely because OCR assets were not turned into an exhaustive lookup table.
+            """;
+
     public static final String SYSTEM_REVIEW_FIX = """
             你是知识编译器。审查员发现了你编译的文章中的问题。请修正这些问题。
 
@@ -168,7 +243,8 @@ public final class LatticePrompts {
             3. 对于虚假溯源，修正引用或删除不实声明
             4. 对于数值错误，以源文件数值为准
             5. 保留文章整体结构
-            6. 输出完整的修正后文章
+            6. 保留原有 sources/source_paths，不要改写成标题、摘要或别名
+            7. 输出完整的修正后文章
             """;
 
     public static final String SYSTEM_CROSS_VALIDATE = """

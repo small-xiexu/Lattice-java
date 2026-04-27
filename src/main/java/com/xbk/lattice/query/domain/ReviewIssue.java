@@ -1,5 +1,8 @@
 package com.xbk.lattice.query.domain;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * 审查问题
  *
@@ -22,7 +25,12 @@ public class ReviewIssue {
      * @param category 类别
      * @param description 描述
      */
-    public ReviewIssue(String severity, String category, String description) {
+    @JsonCreator
+    public ReviewIssue(
+            @JsonProperty("severity") String severity,
+            @JsonProperty("category") String category,
+            @JsonProperty("description") String description
+    ) {
         this.severity = severity;
         this.category = category;
         this.description = description;

@@ -41,15 +41,22 @@ public class QueryRetrievalSettingsJdbcRepository {
         }
         List<QueryRetrievalSettingsState> states = jdbcTemplate.query(
                 """
-                        select parallel_enabled, fts_weight, source_weight, contribution_weight,
-                               graph_weight, article_vector_weight, chunk_vector_weight, rrf_k
+                        select parallel_enabled, rewrite_enabled, intent_aware_vector_enabled,
+                               fts_weight, refkey_weight, article_chunk_weight,
+                               source_weight, source_chunk_weight, contribution_weight, graph_weight,
+                               article_vector_weight, chunk_vector_weight, rrf_k
                         from query_retrieval_settings
                         where id = 1
                         """,
                 (resultSet, rowNum) -> new QueryRetrievalSettingsState(
                         resultSet.getBoolean("parallel_enabled"),
+                        resultSet.getBoolean("rewrite_enabled"),
+                        resultSet.getBoolean("intent_aware_vector_enabled"),
                         resultSet.getDouble("fts_weight"),
+                        resultSet.getDouble("refkey_weight"),
+                        resultSet.getDouble("article_chunk_weight"),
                         resultSet.getDouble("source_weight"),
+                        resultSet.getDouble("source_chunk_weight"),
                         resultSet.getDouble("contribution_weight"),
                         resultSet.getDouble("graph_weight"),
                         resultSet.getDouble("article_vector_weight"),
@@ -73,13 +80,20 @@ public class QueryRetrievalSettingsJdbcRepository {
         jdbcTemplate.update(
                 """
                         insert into query_retrieval_settings (
-                            id, parallel_enabled, fts_weight, source_weight, contribution_weight,
-                            graph_weight, article_vector_weight, chunk_vector_weight, rrf_k, updated_at
-                        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, current_timestamp)
+                            id, parallel_enabled, rewrite_enabled, intent_aware_vector_enabled,
+                            fts_weight, refkey_weight, article_chunk_weight,
+                            source_weight, source_chunk_weight, contribution_weight, graph_weight,
+                            article_vector_weight, chunk_vector_weight, rrf_k, updated_at
+                        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, current_timestamp)
                         on conflict (id) do update set
                             parallel_enabled = excluded.parallel_enabled,
+                            rewrite_enabled = excluded.rewrite_enabled,
+                            intent_aware_vector_enabled = excluded.intent_aware_vector_enabled,
                             fts_weight = excluded.fts_weight,
+                            refkey_weight = excluded.refkey_weight,
+                            article_chunk_weight = excluded.article_chunk_weight,
                             source_weight = excluded.source_weight,
+                            source_chunk_weight = excluded.source_chunk_weight,
                             contribution_weight = excluded.contribution_weight,
                             graph_weight = excluded.graph_weight,
                             article_vector_weight = excluded.article_vector_weight,
@@ -89,8 +103,13 @@ public class QueryRetrievalSettingsJdbcRepository {
                         """,
                 Integer.valueOf(1),
                 Boolean.valueOf(state.isParallelEnabled()),
+                Boolean.valueOf(state.isRewriteEnabled()),
+                Boolean.valueOf(state.isIntentAwareVectorEnabled()),
                 Double.valueOf(state.getFtsWeight()),
+                Double.valueOf(state.getRefkeyWeight()),
+                Double.valueOf(state.getArticleChunkWeight()),
                 Double.valueOf(state.getSourceWeight()),
+                Double.valueOf(state.getSourceChunkWeight()),
                 Double.valueOf(state.getContributionWeight()),
                 Double.valueOf(state.getGraphWeight()),
                 Double.valueOf(state.getArticleVectorWeight()),

@@ -15,6 +15,7 @@ import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.BufferingClientHttpRequestFactory;
@@ -23,6 +24,8 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.retry.support.RetryTemplate;
 
 import java.math.BigDecimal;
@@ -219,7 +222,48 @@ public class ChatClientRegistry {
         requestFactory.setReadTimeout(Duration.ofSeconds(resolvedTimeoutSeconds));
         return restClientBuilder.clone()
                 .requestFactory(new BufferingClientHttpRequestFactory(requestFactory))
+                .messageConverters(this::tuneMessageConverters)
                 .defaultHeader(HttpHeaders.CONNECTION, "close");
+    }
+
+    /**
+     * 放宽 JSON 转换器的响应类型兼容范围，兼容错误标记为 SSE / octet-stream 的兼容网关。
+     *
+     * @param messageConverters RestClient 消息转换器列表
+     */
+    private void tuneMessageConverters(List<HttpMessageConverter<?>> messageConverters) {
+        if (messageConverters == null) {
+            return;
+        }
+        for (HttpMessageConverter<?> messageConverter : messageConverters) {
+            if (!(messageConverter instanceof MappingJackson2HttpMessageConverter jacksonMessageConverter)) {
+                continue;
+            }
+            List<MediaType> supportedMediaTypes = new ArrayList<MediaType>(
+                    jacksonMessageConverter.getSupportedMediaTypes()
+            );
+            addIfMissing(supportedMediaTypes, MediaType.TEXT_EVENT_STREAM);
+            addIfMissing(supportedMediaTypes, MediaType.APPLICATION_OCTET_STREAM);
+            jacksonMessageConverter.setSupportedMediaTypes(supportedMediaTypes);
+        }
+    }
+
+    /**
+     * 仅在缺失时追加媒体类型。
+     *
+     * @param supportedMediaTypes 媒体类型列表
+     * @param mediaType 目标媒体类型
+     */
+    private void addIfMissing(List<MediaType> supportedMediaTypes, MediaType mediaType) {
+        if (supportedMediaTypes == null || mediaType == null) {
+            return;
+        }
+        for (MediaType supportedMediaType : supportedMediaTypes) {
+            if (supportedMediaType != null && supportedMediaType.includes(mediaType)) {
+                return;
+            }
+        }
+        supportedMediaTypes.add(mediaType);
     }
 
     /**
@@ -235,7 +279,9 @@ public class ChatClientRegistry {
 
     private OpenAiChatOptions buildDefaultOptions(LlmRouteResolution routeResolution) {
         OpenAiChatOptions.Builder builder = OpenAiChatOptions.builder()
-                .model(routeResolution.getModelName());
+                .model(routeResolution.getModelName())
+                .streamUsage(false)
+                .httpHeaders(Map.of(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE));
         BigDecimal temperature = routeResolution.getTemperature();
         if (temperature != null) {
             builder.temperature(temperature.doubleValue());

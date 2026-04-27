@@ -19,6 +19,14 @@ public final class QueryTokenExtractor {
 
     private static final Pattern ASCII_TOKEN_PATTERN = Pattern.compile("[A-Za-z0-9=_-]{2,}");
 
+    private static final Pattern PATH_TOKEN_PATTERN = Pattern.compile("[A-Za-z0-9_./-]+\\.[A-Za-z0-9_./-]+");
+
+    private static final Pattern CONFIG_KEY_PATTERN = Pattern.compile("[A-Za-z][A-Za-z0-9_-]*(?:\\.[A-Za-z0-9_-]+)+");
+
+    private static final Pattern CAMEL_TOKEN_PATTERN = Pattern.compile("[A-Z][A-Za-z0-9]+(?:[A-Z][A-Za-z0-9]+)+");
+
+    private static final Pattern CAMEL_PART_PATTERN = Pattern.compile("[A-Z]?[a-z0-9]+|[A-Z]+(?=[A-Z]|$)");
+
     private static final Pattern HAN_TEXT_PATTERN = Pattern.compile("[\\p{IsHan}]{2,}");
 
     private static final String CJK_STOP_CHARS = "的是了和及或在将把与就还都也着";
@@ -34,6 +42,11 @@ public final class QueryTokenExtractor {
      */
     public static List<String> extract(String question) {
         Set<String> tokens = new LinkedHashSet<String>();
+        if (question == null || question.isBlank()) {
+            return new ArrayList<String>(tokens);
+        }
+        appendPathAndConfigTokens(tokens, question);
+        appendCamelCaseTokens(tokens, question);
         String normalizedQuestion = question.toLowerCase(Locale.ROOT);
         Matcher asciiMatcher = ASCII_TOKEN_PATTERN.matcher(normalizedQuestion);
         while (asciiMatcher.find()) {
@@ -44,6 +57,44 @@ public final class QueryTokenExtractor {
             appendChineseTokens(tokens, hanMatcher.group());
         }
         return new ArrayList<String>(tokens);
+    }
+
+    /**
+     * 提取路径与配置键 token。
+     *
+     * @param tokens token 集合
+     * @param question 查询问题
+     */
+    private static void appendPathAndConfigTokens(Set<String> tokens, String question) {
+        Matcher pathMatcher = PATH_TOKEN_PATTERN.matcher(question);
+        while (pathMatcher.find()) {
+            tokens.add(pathMatcher.group().toLowerCase(Locale.ROOT));
+        }
+        Matcher configMatcher = CONFIG_KEY_PATTERN.matcher(question);
+        while (configMatcher.find()) {
+            tokens.add(configMatcher.group().toLowerCase(Locale.ROOT));
+        }
+    }
+
+    /**
+     * 提取类名、方法名等 camelCase/PascalCase token。
+     *
+     * @param tokens token 集合
+     * @param question 查询问题
+     */
+    private static void appendCamelCaseTokens(Set<String> tokens, String question) {
+        Matcher camelMatcher = CAMEL_TOKEN_PATTERN.matcher(question);
+        while (camelMatcher.find()) {
+            String camelToken = camelMatcher.group();
+            tokens.add(camelToken.toLowerCase(Locale.ROOT));
+            Matcher partMatcher = CAMEL_PART_PATTERN.matcher(camelToken);
+            while (partMatcher.find()) {
+                String part = partMatcher.group().toLowerCase(Locale.ROOT);
+                if (part.length() >= 2) {
+                    tokens.add(part);
+                }
+            }
+        }
     }
 
     /**

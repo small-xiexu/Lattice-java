@@ -1,5 +1,7 @@
 package com.xbk.lattice.infra.persistence;
 
+import com.xbk.lattice.article.service.ArticleMarkdownSupport;
+
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -343,23 +345,28 @@ public class ArticleSnapshotRecord {
             String snapshotReason,
             OffsetDateTime capturedAt
     ) {
+        ArticleRecord normalizedArticleRecord = ArticleMarkdownSupport.synchronizeArticleRecord(
+                articleRecord,
+                articleRecord.getContent(),
+                articleRecord.getReviewStatus()
+        );
         return new ArticleSnapshotRecord(
                 -1L,
-                articleRecord.getSourceId(),
-                articleRecord.getArticleKey(),
-                articleRecord.getConceptId(),
-                articleRecord.getTitle(),
-                articleRecord.getContent(),
-                articleRecord.getLifecycle(),
-                articleRecord.getCompiledAt(),
-                articleRecord.getSourcePaths(),
-                articleRecord.getMetadataJson(),
-                articleRecord.getSummary(),
-                articleRecord.getReferentialKeywords(),
-                articleRecord.getDependsOn(),
-                articleRecord.getRelated(),
-                articleRecord.getConfidence(),
-                articleRecord.getReviewStatus(),
+                normalizedArticleRecord.getSourceId(),
+                normalizedArticleRecord.getArticleKey(),
+                normalizedArticleRecord.getConceptId(),
+                normalizedArticleRecord.getTitle(),
+                normalizedArticleRecord.getContent(),
+                normalizedArticleRecord.getLifecycle(),
+                normalizedArticleRecord.getCompiledAt(),
+                normalizedArticleRecord.getSourcePaths(),
+                normalizedArticleRecord.getMetadataJson(),
+                normalizedArticleRecord.getSummary(),
+                normalizedArticleRecord.getReferentialKeywords(),
+                normalizedArticleRecord.getDependsOn(),
+                normalizedArticleRecord.getRelated(),
+                normalizedArticleRecord.getConfidence(),
+                normalizedArticleRecord.getReviewStatus(),
                 snapshotReason,
                 capturedAt
         );

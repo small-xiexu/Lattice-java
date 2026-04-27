@@ -75,6 +75,9 @@ class IngestNodeTests {
         Files.writeString(tempDir.resolve("target").resolve("ignored.java"), "ignored", StandardCharsets.UTF_8);
         Files.writeString(tempDir.resolve("src").resolve("App.java"), "class App {}", StandardCharsets.UTF_8);
         Files.writeString(tempDir.resolve("archive.jar"), "jar-binary", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve(".DS_Store"), "desktop-service-store", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("src").resolve("._App.java"), "apple-double", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("Thumbs.db"), "thumb-cache", StandardCharsets.UTF_8);
 
         CompilerProperties properties = new CompilerProperties();
         IngestNode ingestNode = new IngestNode(properties);

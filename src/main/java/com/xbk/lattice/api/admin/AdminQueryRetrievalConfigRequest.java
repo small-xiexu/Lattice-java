@@ -18,9 +18,19 @@ public class AdminQueryRetrievalConfigRequest {
 
     private Boolean parallelEnabled;
 
+    private Boolean rewriteEnabled;
+
+    private Boolean intentAwareVectorEnabled;
+
     private Double ftsWeight;
 
+    private Double refkeyWeight;
+
+    private Double articleChunkWeight;
+
     private Double sourceWeight;
+
+    private Double sourceChunkWeight;
 
     private Double contributionWeight;
 

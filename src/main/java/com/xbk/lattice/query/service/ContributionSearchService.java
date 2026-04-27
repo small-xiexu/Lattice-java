@@ -1,14 +1,13 @@
 package com.xbk.lattice.query.service;
 
+import com.xbk.lattice.infra.persistence.LexicalSearchRecord;
 import com.xbk.lattice.infra.persistence.ContributionJdbcRepository;
-import com.xbk.lattice.infra.persistence.ContributionRecord;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Contribution 检索服务
@@ -23,13 +22,30 @@ public class ContributionSearchService {
 
     private final ContributionJdbcRepository contributionJdbcRepository;
 
+    private final FtsConfigResolver ftsConfigResolver;
+
     /**
      * 创建 Contribution 检索服务。
      *
      * @param contributionJdbcRepository Contribution 仓储
      */
     public ContributionSearchService(ContributionJdbcRepository contributionJdbcRepository) {
+        this(contributionJdbcRepository, new FtsConfigResolver());
+    }
+
+    /**
+     * 创建 Contribution 检索服务。
+     *
+     * @param contributionJdbcRepository Contribution 仓储
+     * @param ftsConfigResolver FTS 配置解析器
+     */
+    @Autowired
+    public ContributionSearchService(
+            ContributionJdbcRepository contributionJdbcRepository,
+            FtsConfigResolver ftsConfigResolver
+    ) {
         this.contributionJdbcRepository = contributionJdbcRepository;
+        this.ftsConfigResolver = ftsConfigResolver;
     }
 
     /**
@@ -49,67 +65,32 @@ public class ContributionSearchService {
             return List.of();
         }
 
+        String tsConfig = ftsConfigResolver.resolveArticleTsConfig();
+        List<LexicalSearchRecord> records = contributionJdbcRepository.searchLexical(question, queryTokens, limit, tsConfig);
         List<QueryArticleHit> matchedHits = new ArrayList<QueryArticleHit>();
-        for (ContributionRecord contributionRecord : contributionJdbcRepository.findAll()) {
-            double score = scoreContribution(contributionRecord, queryTokens);
-            if (score <= 0) {
-                continue;
-            }
-            matchedHits.add(new QueryArticleHit(
-                    QueryEvidenceType.CONTRIBUTION,
-                    "contribution:" + contributionRecord.getId(),
-                    "用户反馈：" + contributionRecord.getQuestion(),
-                    contributionRecord.getAnswer(),
-                    buildMetadataJson(contributionRecord),
-                    List.of("[用户反馈]"),
-                    score
-            ));
+        for (LexicalSearchRecord record : records) {
+            matchedHits.add(toQueryArticleHit(record));
         }
-        matchedHits.sort(Comparator.comparing(QueryArticleHit::getScore).reversed()
-                .thenComparing(QueryArticleHit::getConceptId));
-        if (matchedHits.size() <= limit) {
-            return matchedHits;
-        }
-        return matchedHits.subList(0, limit);
+        return matchedHits;
     }
 
     /**
-     * 计算 Contribution 命中分数。
+     * 转换为查询命中。
      *
-     * @param contributionRecord Contribution 记录
-     * @param queryTokens 查询 token
-     * @return 命中分数
+     * @param record lexical 命中记录
+     * @return 查询命中
      */
-    private double scoreContribution(ContributionRecord contributionRecord, List<String> queryTokens) {
-        String normalizedQuestion = contributionRecord.getQuestion().toLowerCase(Locale.ROOT);
-        String normalizedAnswer = contributionRecord.getAnswer().toLowerCase(Locale.ROOT);
-        String normalizedCorrections = contributionRecord.getCorrectionsJson().toLowerCase(Locale.ROOT);
-        double score = 0.0D;
-        for (String queryToken : queryTokens) {
-            if (normalizedQuestion.contains(queryToken)) {
-                score += 3.0D;
-            }
-            if (normalizedAnswer.contains(queryToken)) {
-                score += 4.0D;
-            }
-            if (normalizedCorrections.contains(queryToken)) {
-                score += 1.5D;
-            }
-        }
-        return score;
-    }
-
-    /**
-     * 构建 Contribution 元数据 JSON。
-     *
-     * @param contributionRecord Contribution 记录
-     * @return 元数据 JSON
-     */
-    private String buildMetadataJson(ContributionRecord contributionRecord) {
-        return "{\"question\":\""
-                + contributionRecord.getQuestion().replace("\"", "\\\"")
-                + "\",\"confirmedBy\":\""
-                + contributionRecord.getConfirmedBy()
-                + "\"}";
+    private QueryArticleHit toQueryArticleHit(LexicalSearchRecord record) {
+        return new QueryArticleHit(
+                QueryEvidenceType.CONTRIBUTION,
+                record.getSourceId(),
+                record.getItemKey(),
+                record.getConceptId(),
+                record.getTitle(),
+                record.getContent(),
+                record.getMetadataJson(),
+                record.getSourcePaths(),
+                record.getScore()
+        );
     }
 }

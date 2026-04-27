@@ -21,8 +21,13 @@ import com.xbk.lattice.query.evidence.domain.FindingSupportLevel;
 import com.xbk.lattice.query.evidence.domain.ProjectionCandidate;
 import com.xbk.lattice.query.evidence.domain.ProjectionCitationFormat;
 import com.xbk.lattice.query.evidence.domain.ProjectionStatus;
+import com.xbk.lattice.query.service.QueryIntent;
+import com.xbk.lattice.query.service.RetrievalStrategy;
+import com.xbk.lattice.query.service.RetrievalStrategyResolver;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -98,10 +103,22 @@ class WorkingSetStoreRoundTripTests {
         String reportRef = queryWorkingSetStore.saveCitationCheckReport("query-1", citationCheckReport);
         String auditRef = queryWorkingSetStore.saveAnswerAudit("query-1", answerAuditSnapshot);
         String bundleRef = queryWorkingSetStore.saveAnswerProjectionBundle("query-1", answerProjectionBundle);
+        String strategyRef = queryWorkingSetStore.saveRetrievalStrategy(
+                "query-1",
+                new RetrievalStrategy(
+                        "payment retry policy",
+                        QueryIntent.TROUBLESHOOTING,
+                        true,
+                        60,
+                        new LinkedHashMap<String, Double>(java.util.Map.of(RetrievalStrategyResolver.CHANNEL_FTS, 1.0D)),
+                        new LinkedHashSet<String>(List.of(RetrievalStrategyResolver.CHANNEL_FTS))
+                )
+        );
 
         CitationCheckReport loadedReport = queryWorkingSetStore.loadCitationCheckReport(reportRef);
         QueryAnswerAuditSnapshot loadedAudit = queryWorkingSetStore.loadAnswerAudit(auditRef);
         AnswerProjectionBundle loadedBundle = queryWorkingSetStore.loadAnswerProjectionBundle(bundleRef);
+        RetrievalStrategy loadedStrategy = queryWorkingSetStore.loadRetrievalStrategy(strategyRef);
 
         assertThat(loadedReport).isNotNull();
         assertThat(loadedReport.getCoverageRate()).isEqualTo(1.0D);
@@ -115,6 +132,9 @@ class WorkingSetStoreRoundTripTests {
         assertThat(loadedBundle.getAnswerMarkdown()).isEqualTo("结论 [[payment-routing]]");
         assertThat(loadedBundle.getProjections()).hasSize(1);
         assertThat(loadedBundle.getProjections().get(0).getCitationLiteral()).isEqualTo("[[payment-routing]]");
+        assertThat(loadedStrategy).isNotNull();
+        assertThat(loadedStrategy.getRetrievalQuestion()).isEqualTo("payment retry policy");
+        assertThat(loadedStrategy.getQueryIntent()).isEqualTo(QueryIntent.TROUBLESHOOTING);
     }
 
     /**

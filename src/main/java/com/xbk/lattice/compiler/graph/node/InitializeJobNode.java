@@ -73,6 +73,7 @@ public class InitializeJobNode extends AbstractCompileGraphNode {
         state.setOrchestrationMode(compileGraphConditions.defaultMode());
         state.setAutoFixEnabled(compileReviewProperties.isAutoFixEnabled());
         state.setAllowPersistNeedsHumanReview(compileReviewProperties.isAllowPersistNeedsHumanReview());
+        state.setHumanReviewSeverityThreshold(compileReviewProperties.getHumanReviewSeverityThreshold());
         state.setMaxFixRounds(compileReviewProperties.getMaxFixRounds());
         freezeSnapshotsFailOpen(state);
         state.setCompileRoute(articleCompileSupport.currentCompileRoute(

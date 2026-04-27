@@ -1,5 +1,8 @@
 package com.xbk.lattice.query.deepresearch.domain;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * Deep Research 审计快照
  *
@@ -19,7 +22,11 @@ public class DeepResearchAuditSnapshot {
      * @param runId 运行主键
      * @param evidenceCardCount 证据卡数量
      */
-    public DeepResearchAuditSnapshot(Long runId, int evidenceCardCount) {
+    @JsonCreator
+    public DeepResearchAuditSnapshot(
+            @JsonProperty("runId") Long runId,
+            @JsonProperty("evidenceCardCount") int evidenceCardCount
+    ) {
         this.runId = runId;
         this.evidenceCardCount = evidenceCardCount;
     }

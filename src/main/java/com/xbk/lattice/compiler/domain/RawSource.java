@@ -1,5 +1,9 @@
 package com.xbk.lattice.compiler.domain;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -109,18 +113,19 @@ public class RawSource {
      * @param parseProvider 解析供应商
      * @param contentHash 内容哈希
      */
+    @JsonCreator
     public RawSource(
-            Long sourceId,
-            String relativePath,
-            String content,
-            String format,
-            long fileSize,
-            String metadataJson,
-            boolean verbatim,
-            String rawPath,
-            String parseMode,
-            String parseProvider,
-            String contentHash
+            @JsonProperty("sourceId") Long sourceId,
+            @JsonProperty("relativePath") String relativePath,
+            @JsonProperty("extractedText") String content,
+            @JsonProperty("format") String format,
+            @JsonProperty("fileSize") long fileSize,
+            @JsonProperty("metadataJson") String metadataJson,
+            @JsonProperty("verbatim") boolean verbatim,
+            @JsonProperty("rawPath") String rawPath,
+            @JsonProperty("parseMode") String parseMode,
+            @JsonProperty("parseProvider") String parseProvider,
+            @JsonProperty("contentHash") String contentHash
     ) {
         this.sourceId = sourceId;
         this.relativePath = relativePath;
@@ -237,6 +242,7 @@ public class RawSource {
      *
      * @return 文件内容
      */
+    @JsonIgnore
     public String getContent() {
         return extractedText;
     }

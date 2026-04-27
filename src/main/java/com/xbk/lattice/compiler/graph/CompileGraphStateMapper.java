@@ -61,6 +61,10 @@ public class CompileGraphStateMapper {
         state.setNothingToDo(readBoolean(stateMap, CompileGraphStateKeys.NOTHING_TO_DO));
         state.setAutoFixEnabled(readBoolean(stateMap, CompileGraphStateKeys.AUTO_FIX_ENABLED));
         state.setAllowPersistNeedsHumanReview(readBoolean(stateMap, CompileGraphStateKeys.ALLOW_PERSIST_NEEDS_HUMAN_REVIEW));
+        state.setHumanReviewSeverityThreshold(readString(
+                stateMap,
+                CompileGraphStateKeys.HUMAN_REVIEW_SEVERITY_THRESHOLD
+        ));
         state.setCompileRoute(readString(stateMap, CompileGraphStateKeys.COMPILE_ROUTE));
         state.setReviewRoute(readString(stateMap, CompileGraphStateKeys.REVIEW_ROUTE));
         state.setFixRoute(readString(stateMap, CompileGraphStateKeys.FIX_ROUTE));
@@ -121,6 +125,7 @@ public class CompileGraphStateMapper {
         values.put(CompileGraphStateKeys.NOTHING_TO_DO, state.isNothingToDo());
         values.put(CompileGraphStateKeys.AUTO_FIX_ENABLED, state.isAutoFixEnabled());
         values.put(CompileGraphStateKeys.ALLOW_PERSIST_NEEDS_HUMAN_REVIEW, state.isAllowPersistNeedsHumanReview());
+        values.put(CompileGraphStateKeys.HUMAN_REVIEW_SEVERITY_THRESHOLD, state.getHumanReviewSeverityThreshold());
         values.put(CompileGraphStateKeys.COMPILE_ROUTE, state.getCompileRoute());
         values.put(CompileGraphStateKeys.REVIEW_ROUTE, state.getReviewRoute());
         values.put(CompileGraphStateKeys.FIX_ROUTE, state.getFixRoute());

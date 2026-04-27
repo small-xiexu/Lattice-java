@@ -22,8 +22,10 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -155,6 +157,7 @@ public class DeepResearchResearcherService {
         List<QueryArticleHit> relevantHits = new ArrayList<QueryArticleHit>(
                 QueryEvidenceRelevanceSupport.filterRelevantHits(task.getQuestion(), hits)
         );
+        relevantHits = preferStructuredEntityHits(task.getQuestion(), relevantHits);
         if (hits != null) {
             for (QueryArticleHit hit : hits) {
                 if (hit == null || hit.getEvidenceType() != QueryEvidenceType.GRAPH || relevantHits.contains(hit)) {
@@ -167,6 +170,125 @@ public class DeepResearchResearcherService {
             return relevantHits;
         }
         return List.of();
+    }
+
+    /**
+     * 在任务级优先保留结构化字段命中的实体证据，避免正文顺带提及的笔记污染 task hits。
+     *
+     * @param question 任务问题
+     * @param relevantHits 已通过通用相关性过滤的命中
+     * @return 收敛后的命中列表
+     */
+    private List<QueryArticleHit> preferStructuredEntityHits(String question, List<QueryArticleHit> relevantHits) {
+        if (question == null || question.isBlank() || relevantHits == null || relevantHits.size() <= 1) {
+            return relevantHits == null ? List.of() : relevantHits;
+        }
+        List<String> structuredEntityTokens = extractStructuredEntityTokens(question);
+        if (structuredEntityTokens.isEmpty()) {
+            return relevantHits;
+        }
+        List<QueryArticleHit> structuredHits = new ArrayList<QueryArticleHit>();
+        for (QueryArticleHit relevantHit : relevantHits) {
+            if (hasStructuredEntityMatch(relevantHit, structuredEntityTokens)) {
+                structuredHits.add(relevantHit);
+            }
+        }
+        if (!structuredHits.isEmpty()) {
+            return structuredHits;
+        }
+        return relevantHits;
+    }
+
+    /**
+     * 提取更适合作为任务级结构化过滤依据的实体 token。
+     *
+     * @param question 任务问题
+     * @return 实体 token 列表
+     */
+    private List<String> extractStructuredEntityTokens(String question) {
+        Set<String> structuredEntityTokens = new LinkedHashSet<String>();
+        for (String highSignalToken : QueryEvidenceRelevanceSupport.extractHighSignalTokens(question)) {
+            if (isStructuredEntityToken(highSignalToken)) {
+                structuredEntityTokens.add(normalizeFactToken(highSignalToken));
+            }
+        }
+        return new ArrayList<String>(structuredEntityTokens);
+    }
+
+    /**
+     * 判断 token 是否更适合做结构化字段匹配。
+     *
+     * @param token 候选 token
+     * @return 适合返回 true
+     */
+    private boolean isStructuredEntityToken(String token) {
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+        return token.contains("_") || token.contains("-") || token.contains("/") || isAsciiToken(token);
+    }
+
+    /**
+     * 判断命中是否在 articleKey/conceptId/title/path 这类结构化字段中匹配到实体 token。
+     *
+     * @param hit 检索命中
+     * @param structuredEntityTokens 实体 token 列表
+     * @return 匹配返回 true
+     */
+    private boolean hasStructuredEntityMatch(QueryArticleHit hit, List<String> structuredEntityTokens) {
+        if (hit == null || structuredEntityTokens == null || structuredEntityTokens.isEmpty()) {
+            return false;
+        }
+        for (String structuredEntityToken : structuredEntityTokens) {
+            if (containsStructuredToken(hit.getArticleKey(), structuredEntityToken)
+                    || containsStructuredToken(hit.getConceptId(), structuredEntityToken)
+                    || containsStructuredToken(hit.getTitle(), structuredEntityToken)) {
+                return true;
+            }
+            if (hit.getSourcePaths() == null) {
+                continue;
+            }
+            for (String sourcePath : hit.getSourcePaths()) {
+                if (containsStructuredToken(sourcePath, structuredEntityToken)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断结构化字段是否包含目标 token。
+     *
+     * @param value 字段值
+     * @param token 目标 token
+     * @return 包含返回 true
+     */
+    private boolean containsStructuredToken(String value, String token) {
+        if (value == null || token == null || token.isBlank()) {
+            return false;
+        }
+        return normalizeFactToken(value).contains(normalizeFactToken(token));
+    }
+
+    /**
+     * 判断 token 是否为 ASCII 实体标识。
+     *
+     * @param token 候选 token
+     * @return ASCII token 返回 true
+     */
+    private boolean isAsciiToken(String token) {
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+        for (int index = 0; index < token.length(); index++) {
+            char value = token.charAt(index);
+            if ((value >= 'a' && value <= 'z') || (value >= '0' && value <= '9')) {
+                continue;
+            }
+            return false;
+        }
+        return true;
     }
 
     private void appendSynthesisPlaceholder(EvidenceCard evidenceCard, List<EvidenceCard> preferredCards) {

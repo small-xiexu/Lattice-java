@@ -84,6 +84,26 @@ class AdminVectorConfigControllerTests {
     }
 
     /**
+     * 验证未绑定 profile 时，管理侧仍能展示 properties 提供的 legacy 向量信息。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldExposeLegacyPropertyVectorSummaryWithoutProfileOverride() throws Exception {
+        resetTables();
+        querySearchProperties.getVector().setEnabled(true);
+        querySearchProperties.getVector().setEmbeddingModelProfileId(null);
+
+        mockMvc.perform(get("/api/v1/admin/vector/config"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.vectorEnabled").value(true))
+                .andExpect(jsonPath("$.providerType").value("legacy"))
+                .andExpect(jsonPath("$.modelName").value("bootstrap-embedding-model"))
+                .andExpect(jsonPath("$.profileDimensions").value(1536))
+                .andExpect(jsonPath("$.configSource").value("properties"));
+    }
+
+    /**
      * 验证保存后的向量配置会落库并立即作用于运行时状态。
      *
      * @throws Exception 测试异常

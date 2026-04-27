@@ -77,6 +77,8 @@ public final class CompileGraphStateKeys {
 
     public static final String ALLOW_PERSIST_NEEDS_HUMAN_REVIEW = "allowPersistNeedsHumanReview";
 
+    public static final String HUMAN_REVIEW_SEVERITY_THRESHOLD = "humanReviewSeverityThreshold";
+
     public static final String COMPILE_ROUTE = "compileRoute";
 
     public static final String REVIEW_ROUTE = "reviewRoute";

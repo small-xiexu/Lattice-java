@@ -59,12 +59,17 @@ class AdminQueryRetrievalConfigControllerTests {
         mockMvc.perform(get("/api/v1/admin/query/retrieval/config"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.parallelEnabled").value(true))
+                .andExpect(jsonPath("$.rewriteEnabled").value(true))
+                .andExpect(jsonPath("$.intentAwareVectorEnabled").value(true))
                 .andExpect(jsonPath("$.ftsWeight").value(1.0D))
+                .andExpect(jsonPath("$.refkeyWeight").value(1.45D))
+                .andExpect(jsonPath("$.articleChunkWeight").value(1.25D))
                 .andExpect(jsonPath("$.sourceWeight").value(1.0D))
+                .andExpect(jsonPath("$.sourceChunkWeight").value(1.3D))
                 .andExpect(jsonPath("$.contributionWeight").value(1.0D))
-                .andExpect(jsonPath("$.graphWeight").value(0.9D))
-                .andExpect(jsonPath("$.articleVectorWeight").value(0.6D))
-                .andExpect(jsonPath("$.chunkVectorWeight").value(1.2D))
+                .andExpect(jsonPath("$.graphWeight").value(1.2D))
+                .andExpect(jsonPath("$.articleVectorWeight").value(1.0D))
+                .andExpect(jsonPath("$.chunkVectorWeight").value(1.35D))
                 .andExpect(jsonPath("$.rrfK").value(60));
     }
 
@@ -81,8 +86,13 @@ class AdminQueryRetrievalConfigControllerTests {
                         .contentType(APPLICATION_JSON)
                         .content("{"
                                 + "\"parallelEnabled\":false,"
+                                + "\"rewriteEnabled\":false,"
+                                + "\"intentAwareVectorEnabled\":false,"
                                 + "\"ftsWeight\":1.5,"
+                                + "\"refkeyWeight\":1.9,"
+                                + "\"articleChunkWeight\":1.7,"
                                 + "\"sourceWeight\":0.8,"
+                                + "\"sourceChunkWeight\":1.4,"
                                 + "\"contributionWeight\":1.1,"
                                 + "\"graphWeight\":1.3,"
                                 + "\"articleVectorWeight\":0.7,"
@@ -91,8 +101,13 @@ class AdminQueryRetrievalConfigControllerTests {
                                 + "}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.parallelEnabled").value(false))
+                .andExpect(jsonPath("$.rewriteEnabled").value(false))
+                .andExpect(jsonPath("$.intentAwareVectorEnabled").value(false))
                 .andExpect(jsonPath("$.ftsWeight").value(1.5D))
+                .andExpect(jsonPath("$.refkeyWeight").value(1.9D))
+                .andExpect(jsonPath("$.articleChunkWeight").value(1.7D))
                 .andExpect(jsonPath("$.sourceWeight").value(0.8D))
+                .andExpect(jsonPath("$.sourceChunkWeight").value(1.4D))
                 .andExpect(jsonPath("$.contributionWeight").value(1.1D))
                 .andExpect(jsonPath("$.graphWeight").value(1.3D))
                 .andExpect(jsonPath("$.articleVectorWeight").value(0.7D))
@@ -101,8 +116,13 @@ class AdminQueryRetrievalConfigControllerTests {
 
         QueryRetrievalSettingsState state = queryRetrievalSettingsService.getCurrentState();
         assertThat(state.isParallelEnabled()).isFalse();
+        assertThat(state.isRewriteEnabled()).isFalse();
+        assertThat(state.isIntentAwareVectorEnabled()).isFalse();
         assertThat(state.getFtsWeight()).isEqualTo(1.5D);
+        assertThat(state.getRefkeyWeight()).isEqualTo(1.9D);
+        assertThat(state.getArticleChunkWeight()).isEqualTo(1.7D);
         assertThat(state.getSourceWeight()).isEqualTo(0.8D);
+        assertThat(state.getSourceChunkWeight()).isEqualTo(1.4D);
         assertThat(state.getContributionWeight()).isEqualTo(1.1D);
         assertThat(state.getGraphWeight()).isEqualTo(1.3D);
         assertThat(state.getArticleVectorWeight()).isEqualTo(0.7D);
@@ -121,9 +141,14 @@ class AdminQueryRetrievalConfigControllerTests {
                 "select parallel_enabled from lattice_b8_retrieval_config_test.query_retrieval_settings where id = 1",
                 Boolean.class
         );
+        Boolean rewriteEnabled = jdbcTemplate.queryForObject(
+                "select rewrite_enabled from lattice_b8_retrieval_config_test.query_retrieval_settings where id = 1",
+                Boolean.class
+        );
         assertThat(ftsWeight).isEqualTo(Double.valueOf(1.5D));
         assertThat(rrfK).isEqualTo(Integer.valueOf(48));
         assertThat(parallelEnabled).isFalse();
+        assertThat(rewriteEnabled).isFalse();
     }
 
     /**

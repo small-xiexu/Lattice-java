@@ -53,8 +53,13 @@ public class AdminQueryRetrievalConfigController {
         validateRequest(request);
         QueryRetrievalSettingsState saved = queryRetrievalSettingsService.save(
                 request.getParallelEnabled().booleanValue(),
+                request.getRewriteEnabled().booleanValue(),
+                request.getIntentAwareVectorEnabled().booleanValue(),
                 request.getFtsWeight().doubleValue(),
+                request.getRefkeyWeight().doubleValue(),
+                request.getArticleChunkWeight().doubleValue(),
                 request.getSourceWeight().doubleValue(),
+                request.getSourceChunkWeight().doubleValue(),
                 request.getContributionWeight().doubleValue(),
                 request.getGraphWeight().doubleValue(),
                 request.getArticleVectorWeight().doubleValue(),
@@ -73,8 +78,13 @@ public class AdminQueryRetrievalConfigController {
     private AdminQueryRetrievalConfigResponse toResponse(QueryRetrievalSettingsState state) {
         return new AdminQueryRetrievalConfigResponse(
                 state.isParallelEnabled(),
+                state.isRewriteEnabled(),
+                state.isIntentAwareVectorEnabled(),
                 state.getFtsWeight(),
+                state.getRefkeyWeight(),
+                state.getArticleChunkWeight(),
                 state.getSourceWeight(),
+                state.getSourceChunkWeight(),
                 state.getContributionWeight(),
                 state.getGraphWeight(),
                 state.getArticleVectorWeight(),
@@ -95,8 +105,17 @@ public class AdminQueryRetrievalConfigController {
         if (request.getParallelEnabled() == null) {
             throw new IllegalArgumentException("parallelEnabled不能为空");
         }
+        if (request.getRewriteEnabled() == null) {
+            throw new IllegalArgumentException("rewriteEnabled不能为空");
+        }
+        if (request.getIntentAwareVectorEnabled() == null) {
+            throw new IllegalArgumentException("intentAwareVectorEnabled不能为空");
+        }
         validateWeight(request.getFtsWeight(), "ftsWeight");
+        validateWeight(request.getRefkeyWeight(), "refkeyWeight");
+        validateWeight(request.getArticleChunkWeight(), "articleChunkWeight");
         validateWeight(request.getSourceWeight(), "sourceWeight");
+        validateWeight(request.getSourceChunkWeight(), "sourceChunkWeight");
         validateWeight(request.getContributionWeight(), "contributionWeight");
         validateWeight(request.getGraphWeight(), "graphWeight");
         validateWeight(request.getArticleVectorWeight(), "articleVectorWeight");

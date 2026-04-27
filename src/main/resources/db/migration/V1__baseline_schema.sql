@@ -16,7 +16,10 @@ CREATE TABLE IF NOT EXISTS articles (
     depends_on TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     related TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     confidence VARCHAR(16) NOT NULL DEFAULT 'medium',
-    review_status VARCHAR(32) NOT NULL DEFAULT 'pending'
+    review_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    search_text TEXT NOT NULL DEFAULT '',
+    search_tsv TSVECTOR NOT NULL DEFAULT ''::tsvector,
+    refkey_text TEXT NOT NULL DEFAULT ''
 );
 
 COMMENT ON TABLE articles IS '知识文章主表';
@@ -38,6 +41,9 @@ COMMENT ON COLUMN articles.depends_on IS '文章依赖的上游概念 ID 数组'
 COMMENT ON COLUMN articles.related IS '文章关联概念 ID 数组';
 COMMENT ON COLUMN articles.confidence IS '内容置信度等级';
 COMMENT ON COLUMN articles.review_status IS '审查状态';
+COMMENT ON COLUMN articles.search_text IS '文章全文检索归一化文本';
+COMMENT ON COLUMN articles.search_tsv IS '文章全文检索 tsvector';
+COMMENT ON COLUMN articles.refkey_text IS '明确性关键词归一化检索文本';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_articles_article_key
     ON articles (article_key);
@@ -47,6 +53,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_articles_source_concept
 
 CREATE INDEX IF NOT EXISTS idx_articles_concept_id
     ON articles (concept_id);
+
+CREATE INDEX IF NOT EXISTS idx_articles_search_tsv
+    ON articles USING GIN (search_tsv);
+
+CREATE INDEX IF NOT EXISTS idx_articles_referential_keywords
+    ON articles USING GIN (referential_keywords);
+
+CREATE INDEX IF NOT EXISTS idx_articles_refkey_text
+    ON articles (refkey_text);
 
 CREATE TABLE IF NOT EXISTS source_files (
     id BIGSERIAL PRIMARY KEY,
@@ -61,7 +76,9 @@ CREATE TABLE IF NOT EXISTS source_files (
     content_text TEXT NOT NULL DEFAULT '',
     metadata_json JSONB NOT NULL DEFAULT '{}'::JSONB,
     is_verbatim BOOLEAN NOT NULL DEFAULT FALSE,
-    raw_path VARCHAR(512) NOT NULL DEFAULT ''
+    raw_path VARCHAR(512) NOT NULL DEFAULT '',
+    file_path_norm TEXT NOT NULL DEFAULT '',
+    search_tsv TSVECTOR NOT NULL DEFAULT ''::tsvector
 );
 
 COMMENT ON TABLE source_files IS '源文件主表';
@@ -78,6 +95,8 @@ COMMENT ON COLUMN source_files.content_text IS '源文件全文文本';
 COMMENT ON COLUMN source_files.metadata_json IS '源文件扩展元数据 JSON';
 COMMENT ON COLUMN source_files.is_verbatim IS '是否为逐字提取内容';
 COMMENT ON COLUMN source_files.raw_path IS '源文件原始路径';
+COMMENT ON COLUMN source_files.file_path_norm IS '源文件路径归一化检索文本';
+COMMENT ON COLUMN source_files.search_tsv IS '源文件全文检索 tsvector';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_source_files_source_relative_path
     ON source_files (source_id, relative_path);
@@ -88,12 +107,19 @@ CREATE INDEX IF NOT EXISTS idx_source_files_file_path
 CREATE INDEX IF NOT EXISTS idx_source_files_relative_path
     ON source_files (relative_path);
 
+CREATE INDEX IF NOT EXISTS idx_source_files_file_path_norm
+    ON source_files (file_path_norm);
+
+CREATE INDEX IF NOT EXISTS idx_source_files_search_tsv
+    ON source_files USING GIN (search_tsv);
+
 CREATE TABLE IF NOT EXISTS article_chunks (
     id BIGSERIAL PRIMARY KEY,
     article_id BIGINT NOT NULL REFERENCES articles (id) ON DELETE CASCADE,
     chunk_text TEXT NOT NULL,
     chunk_index INTEGER NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    search_tsv TSVECTOR NOT NULL DEFAULT ''::tsvector
 );
 
 COMMENT ON TABLE article_chunks IS '文章分块表';
@@ -102,6 +128,10 @@ COMMENT ON COLUMN article_chunks.article_id IS '关联文章主键 ID';
 COMMENT ON COLUMN article_chunks.chunk_text IS '文章分块文本';
 COMMENT ON COLUMN article_chunks.chunk_index IS '分块顺序号';
 COMMENT ON COLUMN article_chunks.created_at IS '分块创建时间';
+COMMENT ON COLUMN article_chunks.search_tsv IS '文章分块全文检索 tsvector';
+
+CREATE INDEX IF NOT EXISTS idx_article_chunks_search_tsv
+    ON article_chunks USING GIN (search_tsv);
 
 CREATE TABLE IF NOT EXISTS pending_queries (
     query_id VARCHAR(64) PRIMARY KEY,
@@ -134,7 +164,10 @@ CREATE TABLE IF NOT EXISTS contributions (
     answer TEXT NOT NULL,
     corrections JSONB NOT NULL DEFAULT '[]'::JSONB,
     confirmed_by VARCHAR(100),
-    confirmed_at TIMESTAMPTZ NOT NULL
+    confirmed_at TIMESTAMPTZ NOT NULL,
+    question_tsv TSVECTOR NOT NULL DEFAULT ''::tsvector,
+    answer_tsv TSVECTOR NOT NULL DEFAULT ''::tsvector,
+    corrections_tsv TSVECTOR NOT NULL DEFAULT ''::tsvector
 );
 
 COMMENT ON TABLE contributions IS '用户贡献表';
@@ -144,6 +177,18 @@ COMMENT ON COLUMN contributions.answer IS '已确认的最终答案';
 COMMENT ON COLUMN contributions.corrections IS '人工修正记录 JSON 数组';
 COMMENT ON COLUMN contributions.confirmed_by IS '确认人';
 COMMENT ON COLUMN contributions.confirmed_at IS '确认时间';
+COMMENT ON COLUMN contributions.question_tsv IS '贡献问题全文检索 tsvector';
+COMMENT ON COLUMN contributions.answer_tsv IS '贡献答案全文检索 tsvector';
+COMMENT ON COLUMN contributions.corrections_tsv IS '贡献修正全文检索 tsvector';
+
+CREATE INDEX IF NOT EXISTS idx_contributions_question_tsv
+    ON contributions USING GIN (question_tsv);
+
+CREATE INDEX IF NOT EXISTS idx_contributions_answer_tsv
+    ON contributions USING GIN (answer_tsv);
+
+CREATE INDEX IF NOT EXISTS idx_contributions_corrections_tsv
+    ON contributions USING GIN (corrections_tsv);
 
 CREATE TABLE IF NOT EXISTS synthesis_artifacts (
     id BIGSERIAL PRIMARY KEY,
@@ -167,7 +212,9 @@ CREATE TABLE IF NOT EXISTS source_file_chunks (
     chunk_index INTEGER NOT NULL,
     chunk_text TEXT NOT NULL,
     is_verbatim BOOLEAN NOT NULL DEFAULT FALSE,
-    indexed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    indexed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    file_path_norm TEXT NOT NULL DEFAULT '',
+    search_tsv TSVECTOR NOT NULL DEFAULT ''::tsvector
 );
 
 COMMENT ON TABLE source_file_chunks IS '源文件分块表';
@@ -178,6 +225,8 @@ COMMENT ON COLUMN source_file_chunks.chunk_index IS '分块顺序号';
 COMMENT ON COLUMN source_file_chunks.chunk_text IS '源文件分块文本';
 COMMENT ON COLUMN source_file_chunks.is_verbatim IS '是否为逐字分块';
 COMMENT ON COLUMN source_file_chunks.indexed_at IS '分块索引时间';
+COMMENT ON COLUMN source_file_chunks.file_path_norm IS '源文件分块路径归一化检索文本';
+COMMENT ON COLUMN source_file_chunks.search_tsv IS '源文件分块全文检索 tsvector';
 
 CREATE INDEX IF NOT EXISTS idx_source_file_chunks_file_path
     ON source_file_chunks (file_path);
@@ -187,6 +236,12 @@ CREATE INDEX IF NOT EXISTS idx_source_file_chunks_source_file_id
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_source_file_chunks_source_file_chunk
     ON source_file_chunks (source_file_id, chunk_index);
+
+CREATE INDEX IF NOT EXISTS idx_source_file_chunks_file_path_norm
+    ON source_file_chunks (file_path_norm);
+
+CREATE INDEX IF NOT EXISTS idx_source_file_chunks_search_tsv
+    ON source_file_chunks USING GIN (search_tsv);
 
 CREATE TABLE IF NOT EXISTS article_snapshots (
     snapshot_id BIGSERIAL PRIMARY KEY,
@@ -810,7 +865,7 @@ ALTER TABLE knowledge_sources
 
 CREATE TABLE IF NOT EXISTS query_vector_settings (
     config_scope VARCHAR(32) PRIMARY KEY,
-    vector_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    vector_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     embedding_model_profile_id BIGINT NOT NULL REFERENCES llm_model_profiles (id),
     created_by VARCHAR(64) NOT NULL DEFAULT 'system',
     updated_by VARCHAR(64) NOT NULL DEFAULT 'system',
@@ -830,20 +885,30 @@ COMMENT ON COLUMN query_vector_settings.updated_at IS '更新时间';
 CREATE TABLE IF NOT EXISTS query_retrieval_settings (
     id BIGINT PRIMARY KEY DEFAULT 1,
     parallel_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    rewrite_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    intent_aware_vector_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     fts_weight NUMERIC NOT NULL DEFAULT 1.0,
+    refkey_weight NUMERIC NOT NULL DEFAULT 1.45,
+    article_chunk_weight NUMERIC NOT NULL DEFAULT 1.25,
     source_weight NUMERIC NOT NULL DEFAULT 1.0,
+    source_chunk_weight NUMERIC NOT NULL DEFAULT 1.30,
     contribution_weight NUMERIC NOT NULL DEFAULT 1.0,
-    graph_weight NUMERIC NOT NULL DEFAULT 0.9,
-    article_vector_weight NUMERIC NOT NULL DEFAULT 0.6,
-    chunk_vector_weight NUMERIC NOT NULL DEFAULT 1.2,
+    graph_weight NUMERIC NOT NULL DEFAULT 1.20,
+    article_vector_weight NUMERIC NOT NULL DEFAULT 1.0,
+    chunk_vector_weight NUMERIC NOT NULL DEFAULT 1.35,
     rrf_k INTEGER NOT NULL DEFAULT 60,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 COMMENT ON TABLE query_retrieval_settings IS 'Query 检索融合配置表';
 COMMENT ON COLUMN query_retrieval_settings.parallel_enabled IS '是否启用并行召回';
+COMMENT ON COLUMN query_retrieval_settings.rewrite_enabled IS '是否启用 Query Rewrite';
+COMMENT ON COLUMN query_retrieval_settings.intent_aware_vector_enabled IS '是否启用意图感知向量召回';
 COMMENT ON COLUMN query_retrieval_settings.fts_weight IS 'FTS 召回权重';
+COMMENT ON COLUMN query_retrieval_settings.refkey_weight IS 'RefKey 明确性召回权重';
+COMMENT ON COLUMN query_retrieval_settings.article_chunk_weight IS 'Article Chunk lexical 召回权重';
 COMMENT ON COLUMN query_retrieval_settings.source_weight IS 'Source 召回权重';
+COMMENT ON COLUMN query_retrieval_settings.source_chunk_weight IS 'Source Chunk lexical 召回权重';
 COMMENT ON COLUMN query_retrieval_settings.contribution_weight IS 'Contribution 召回权重';
 COMMENT ON COLUMN query_retrieval_settings.graph_weight IS 'Graph 召回权重';
 COMMENT ON COLUMN query_retrieval_settings.article_vector_weight IS '文章级向量召回权重';
@@ -852,6 +917,150 @@ COMMENT ON COLUMN query_retrieval_settings.rrf_k IS 'RRF 融合 K 值';
 COMMENT ON COLUMN query_retrieval_settings.updated_at IS '更新时间';
 
 INSERT INTO query_retrieval_settings DEFAULT VALUES ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS compile_review_settings (
+    config_scope VARCHAR(32) PRIMARY KEY,
+    auto_fix_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    max_fix_rounds INTEGER NOT NULL DEFAULT 1,
+    allow_persist_needs_human_review BOOLEAN NOT NULL DEFAULT TRUE,
+    human_review_severity_threshold VARCHAR(16) NOT NULL DEFAULT 'HIGH',
+    created_by VARCHAR(64) NOT NULL DEFAULT 'system',
+    updated_by VARCHAR(64) NOT NULL DEFAULT 'system',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE compile_review_settings IS 'Compile 审查与自动修复运行时配置表';
+COMMENT ON COLUMN compile_review_settings.config_scope IS '配置作用域，当前固定为 default';
+COMMENT ON COLUMN compile_review_settings.auto_fix_enabled IS '是否启用自动修复';
+COMMENT ON COLUMN compile_review_settings.max_fix_rounds IS '自动修复最大轮次';
+COMMENT ON COLUMN compile_review_settings.allow_persist_needs_human_review IS '是否允许 needs_human_review 文章继续落库';
+COMMENT ON COLUMN compile_review_settings.human_review_severity_threshold IS '触发人工复核的最低严重度阈值';
+COMMENT ON COLUMN compile_review_settings.created_by IS '创建人';
+COMMENT ON COLUMN compile_review_settings.updated_by IS '更新人';
+COMMENT ON COLUMN compile_review_settings.created_at IS '创建时间';
+COMMENT ON COLUMN compile_review_settings.updated_at IS '更新时间';
+
+CREATE TABLE IF NOT EXISTS query_retrieval_runs (
+    run_id BIGSERIAL PRIMARY KEY,
+    query_id VARCHAR(64) NOT NULL,
+    question TEXT NOT NULL,
+    normalized_question TEXT NOT NULL DEFAULT '',
+    retrieval_question TEXT NOT NULL DEFAULT '',
+    version_tag VARCHAR(64) NOT NULL DEFAULT '',
+    strategy_tag VARCHAR(255) NOT NULL DEFAULT '',
+    question_type_tag VARCHAR(64) NOT NULL DEFAULT 'GENERAL',
+    retrieval_mode VARCHAR(32) NOT NULL DEFAULT 'parallel',
+    rewrite_applied BOOLEAN NOT NULL DEFAULT FALSE,
+    rewrite_audit_ref VARCHAR(128) NOT NULL DEFAULT '',
+    retrieval_strategy_ref VARCHAR(128) NOT NULL DEFAULT '',
+    fused_hit_count INTEGER NOT NULL DEFAULT 0,
+    channel_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE query_retrieval_runs IS 'Query 检索审计主表';
+COMMENT ON COLUMN query_retrieval_runs.query_id IS '查询标识';
+COMMENT ON COLUMN query_retrieval_runs.question IS '原始问题';
+COMMENT ON COLUMN query_retrieval_runs.normalized_question IS '归一化问题';
+COMMENT ON COLUMN query_retrieval_runs.retrieval_question IS '实际检索问题';
+COMMENT ON COLUMN query_retrieval_runs.version_tag IS '检索版本标签';
+COMMENT ON COLUMN query_retrieval_runs.strategy_tag IS '检索策略标签';
+COMMENT ON COLUMN query_retrieval_runs.question_type_tag IS '问题类型标签';
+COMMENT ON COLUMN query_retrieval_runs.retrieval_mode IS '检索执行模式';
+COMMENT ON COLUMN query_retrieval_runs.rewrite_applied IS '是否发生 query rewrite';
+COMMENT ON COLUMN query_retrieval_runs.rewrite_audit_ref IS 'query rewrite 审计引用';
+COMMENT ON COLUMN query_retrieval_runs.retrieval_strategy_ref IS '检索策略引用';
+COMMENT ON COLUMN query_retrieval_runs.fused_hit_count IS '最终融合命中数';
+COMMENT ON COLUMN query_retrieval_runs.channel_count IS '启用通道数';
+
+CREATE INDEX IF NOT EXISTS idx_query_retrieval_runs_query_id
+    ON query_retrieval_runs (query_id, created_at DESC, run_id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_query_retrieval_runs_strategy_tag
+    ON query_retrieval_runs (strategy_tag, created_at DESC, run_id DESC);
+
+CREATE TABLE IF NOT EXISTS query_retrieval_channel_hits (
+    hit_id BIGSERIAL PRIMARY KEY,
+    run_id BIGINT NOT NULL REFERENCES query_retrieval_runs (run_id) ON DELETE CASCADE,
+    channel_name VARCHAR(64) NOT NULL,
+    hit_rank INTEGER NOT NULL,
+    fused_rank INTEGER,
+    included_in_fused BOOLEAN NOT NULL DEFAULT FALSE,
+    channel_weight NUMERIC NOT NULL DEFAULT 0,
+    evidence_type VARCHAR(32) NOT NULL DEFAULT 'ARTICLE',
+    article_key VARCHAR(256),
+    concept_id VARCHAR(128),
+    title VARCHAR(255) NOT NULL DEFAULT '',
+    score NUMERIC NOT NULL DEFAULT 0,
+    source_paths_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE query_retrieval_channel_hits IS 'Query 检索通道命中明细表';
+COMMENT ON COLUMN query_retrieval_channel_hits.run_id IS '所属检索审计主键';
+COMMENT ON COLUMN query_retrieval_channel_hits.channel_name IS '检索通道名';
+COMMENT ON COLUMN query_retrieval_channel_hits.hit_rank IS '通道内排序';
+COMMENT ON COLUMN query_retrieval_channel_hits.fused_rank IS '最终融合排序';
+COMMENT ON COLUMN query_retrieval_channel_hits.included_in_fused IS '是否进入最终融合结果';
+COMMENT ON COLUMN query_retrieval_channel_hits.channel_weight IS '融合时使用的通道权重';
+COMMENT ON COLUMN query_retrieval_channel_hits.evidence_type IS '命中证据类型';
+COMMENT ON COLUMN query_retrieval_channel_hits.article_key IS '文章唯一键';
+COMMENT ON COLUMN query_retrieval_channel_hits.concept_id IS '概念标识';
+COMMENT ON COLUMN query_retrieval_channel_hits.title IS '命中标题';
+COMMENT ON COLUMN query_retrieval_channel_hits.score IS '通道原始得分';
+COMMENT ON COLUMN query_retrieval_channel_hits.source_paths_json IS '来源路径 JSON 数组';
+COMMENT ON COLUMN query_retrieval_channel_hits.metadata_json IS '命中元数据 JSON';
+
+CREATE INDEX IF NOT EXISTS idx_query_retrieval_channel_hits_run_channel_rank
+    ON query_retrieval_channel_hits (run_id, channel_name, hit_rank);
+
+CREATE INDEX IF NOT EXISTS idx_query_retrieval_channel_hits_run_fused_rank
+    ON query_retrieval_channel_hits (run_id, fused_rank);
+
+CREATE TABLE IF NOT EXISTS query_rewrite_rules (
+    id BIGSERIAL PRIMARY KEY,
+    rule_code VARCHAR(128) NOT NULL UNIQUE,
+    source_pattern TEXT NOT NULL,
+    rewrite_text TEXT NOT NULL,
+    scope VARCHAR(64) NOT NULL DEFAULT 'global',
+    priority INTEGER NOT NULL DEFAULT 100,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE query_rewrite_rules IS 'Query Rewrite 规则表';
+COMMENT ON COLUMN query_rewrite_rules.rule_code IS '规则编码';
+COMMENT ON COLUMN query_rewrite_rules.source_pattern IS '待匹配的别名、缩写或业务代号';
+COMMENT ON COLUMN query_rewrite_rules.rewrite_text IS '追加到检索问题中的扩写文本';
+COMMENT ON COLUMN query_rewrite_rules.scope IS '规则作用域';
+COMMENT ON COLUMN query_rewrite_rules.priority IS '规则优先级，值越大越先执行';
+COMMENT ON COLUMN query_rewrite_rules.enabled IS '是否启用';
+
+CREATE INDEX IF NOT EXISTS idx_query_rewrite_rules_enabled_priority
+    ON query_rewrite_rules (enabled, priority DESC, id ASC);
+
+CREATE TABLE IF NOT EXISTS query_rewrite_audits (
+    audit_id BIGSERIAL PRIMARY KEY,
+    query_id VARCHAR(64) NOT NULL,
+    original_question TEXT NOT NULL,
+    rewritten_question TEXT NOT NULL,
+    matched_rule_codes JSONB NOT NULL DEFAULT '[]'::jsonb,
+    rewrite_applied BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE query_rewrite_audits IS 'Query Rewrite 审计表';
+COMMENT ON COLUMN query_rewrite_audits.query_id IS '查询标识';
+COMMENT ON COLUMN query_rewrite_audits.original_question IS '原始问题';
+COMMENT ON COLUMN query_rewrite_audits.rewritten_question IS '改写后问题';
+COMMENT ON COLUMN query_rewrite_audits.matched_rule_codes IS '命中的改写规则编码';
+COMMENT ON COLUMN query_rewrite_audits.rewrite_applied IS '是否发生改写';
+
+CREATE INDEX IF NOT EXISTS idx_query_rewrite_audits_query_id
+    ON query_rewrite_audits (query_id);
 
 CREATE TABLE IF NOT EXISTS deep_research_runs (
     run_id BIGSERIAL PRIMARY KEY,

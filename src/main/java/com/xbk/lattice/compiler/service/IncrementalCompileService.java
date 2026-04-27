@@ -764,6 +764,9 @@ public class IncrementalCompileService {
                 if (targetArticleId == null || targetArticleId.isBlank()) {
                     continue;
                 }
+                if (!shouldPropagateIncrementalChange(propagationItem)) {
+                    continue;
+                }
                 String emittedPlanKey = normalizeConceptId(entry.getKey()) + "->" + normalizeConceptId(targetArticleId);
                 if (!emittedPlanKeys.add(emittedPlanKey)) {
                     continue;
@@ -776,6 +779,25 @@ public class IncrementalCompileService {
             }
         }
         return propagationPlans;
+    }
+
+    /**
+     * 判断当前传播影响项是否值得纳入增量编译传播。
+     *
+     * @param propagationItem 传播影响项
+     * @return 仅当存在事实依赖边时返回 true
+     */
+    private boolean shouldPropagateIncrementalChange(PropagationItem propagationItem) {
+        if (propagationItem == null || propagationItem.getTriggers() == null) {
+            return false;
+        }
+        for (String trigger : propagationItem.getTriggers()) {
+            String normalizedTrigger = normalizeConceptId(trigger);
+            if ("depends_on".equals(normalizedTrigger) || "wiki_link".equals(normalizedTrigger)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

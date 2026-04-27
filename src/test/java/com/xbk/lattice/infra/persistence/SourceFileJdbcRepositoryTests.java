@@ -97,6 +97,37 @@ class SourceFileJdbcRepositoryTests {
                 .contains("content_text")
                 .contains("metadata_json")
                 .contains("is_verbatim")
-                .contains("raw_path");
+                .contains("raw_path")
+                .contains("file_path_norm")
+                .contains("search_tsv");
+    }
+
+    /**
+     * 验证 source file 可通过数据库侧 lexical 查询召回。
+     */
+    @Test
+    void shouldSearchSourceFilesByLexicalIndex() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_source_test.source_files CASCADE");
+        sourceFileJdbcRepository.upsert(new SourceFileRecord(
+                "payment/order.md",
+                "# Payment",
+                "md",
+                42L,
+                "retry interval is 30s",
+                "{}",
+                false,
+                "payment/order.md"
+        ));
+
+        List<LexicalSearchRecord> hits = sourceFileJdbcRepository.searchLexical(
+                "retry interval",
+                List.of("payment", "retry", "interval"),
+                5,
+                "simple"
+        );
+
+        assertThat(hits).isNotEmpty();
+        assertThat(hits.get(0).getItemKey()).isEqualTo("payment/order.md");
+        assertThat(hits.get(0).getContent()).contains("# Payment");
     }
 }

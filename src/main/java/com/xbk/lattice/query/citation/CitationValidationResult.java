@@ -1,5 +1,9 @@
 package com.xbk.lattice.query.citation;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * Citation 校验结果
  *
@@ -69,15 +73,16 @@ public class CitationValidationResult {
      * @param ordinal 引用序号
      * @param validatedBy 校验来源
      */
+    @JsonCreator
     public CitationValidationResult(
-            String targetKey,
-            CitationSourceType sourceType,
-            CitationValidationStatus status,
-            double overlapScore,
-            String reason,
-            String matchedExcerpt,
-            int ordinal,
-            CitationValidationSource validatedBy
+            @JsonProperty("targetKey") String targetKey,
+            @JsonProperty("sourceType") CitationSourceType sourceType,
+            @JsonProperty("status") CitationValidationStatus status,
+            @JsonProperty("overlapScore") double overlapScore,
+            @JsonProperty("reason") String reason,
+            @JsonProperty("matchedExcerpt") String matchedExcerpt,
+            @JsonProperty("ordinal") int ordinal,
+            @JsonProperty("validatedBy") CitationValidationSource validatedBy
     ) {
         this.targetKey = targetKey;
         this.sourceType = sourceType;
@@ -166,6 +171,7 @@ public class CitationValidationResult {
      *
      * @return 是否已验证
      */
+    @JsonIgnore
     public boolean isVerified() {
         return status == CitationValidationStatus.VERIFIED;
     }
@@ -175,6 +181,7 @@ public class CitationValidationResult {
      *
      * @return 是否已降级
      */
+    @JsonIgnore
     public boolean isDemoted() {
         return status == CitationValidationStatus.DEMOTED || status == CitationValidationStatus.NOT_FOUND;
     }
@@ -184,6 +191,7 @@ public class CitationValidationResult {
      *
      * @return 是否已跳过
      */
+    @JsonIgnore
     public boolean isSkipped() {
         return status == CitationValidationStatus.SKIPPED;
     }

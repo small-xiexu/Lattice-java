@@ -211,8 +211,6 @@ public class DeepResearchOrchestrator {
         }
         finally {
             deepResearchExecutionRegistry.remove(queryId);
-            deepResearchWorkingSetStore.deleteByQueryId(queryId);
-            queryWorkingSetStore.deleteByQueryId(queryId);
         }
     }
 

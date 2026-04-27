@@ -166,7 +166,8 @@ public class QueryVectorConfigService {
      */
     private QueryVectorConfigState fromProperties(boolean rebuildRecommended, String rebuildReason) {
         Long embeddingModelProfileId = querySearchProperties.getVector().getEmbeddingModelProfileId();
-        EmbeddingProfileSummary profileSummary = loadProfileSummary(embeddingModelProfileId).orElse(null);
+        EmbeddingProfileSummary profileSummary = loadProfileSummary(embeddingModelProfileId)
+                .orElseGet(this::buildPropertyBackedSummary);
         return new QueryVectorConfigState(
                 querySearchProperties.getVector().isEnabled(),
                 embeddingModelProfileId,
@@ -180,6 +181,27 @@ public class QueryVectorConfigService {
                 "",
                 null,
                 null
+        );
+    }
+
+    /**
+     * 基于 properties 构造 legacy embedding 摘要。
+     *
+     * @return legacy embedding 摘要
+     */
+    private EmbeddingProfileSummary buildPropertyBackedSummary() {
+        String modelName = querySearchProperties.getVector().getEmbeddingModel();
+        if (!StringUtils.hasText(modelName)) {
+            return null;
+        }
+        Integer expectedDimensions = querySearchProperties.getVector().getExpectedDimensions() <= 0
+                ? null
+                : Integer.valueOf(querySearchProperties.getVector().getExpectedDimensions());
+        return new EmbeddingProfileSummary(
+                null,
+                "legacy",
+                modelName.trim(),
+                expectedDimensions
         );
     }
 

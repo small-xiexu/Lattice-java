@@ -1,5 +1,8 @@
 package com.xbk.lattice.query.citation;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * 答案审计快照
  *
@@ -22,7 +25,12 @@ public class QueryAnswerAuditSnapshot {
      * @param answerVersion 答案版本号
      * @param citationCheckReport Citation 检查报告
      */
-    public QueryAnswerAuditSnapshot(Long auditId, int answerVersion, CitationCheckReport citationCheckReport) {
+    @JsonCreator
+    public QueryAnswerAuditSnapshot(
+            @JsonProperty("auditId") Long auditId,
+            @JsonProperty("answerVersion") int answerVersion,
+            @JsonProperty("citationCheckReport") CitationCheckReport citationCheckReport
+    ) {
         this.auditId = auditId;
         this.answerVersion = answerVersion;
         this.citationCheckReport = citationCheckReport;

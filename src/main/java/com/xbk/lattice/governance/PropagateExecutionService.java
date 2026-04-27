@@ -3,6 +3,7 @@ package com.xbk.lattice.governance;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.article.service.ArticleIdentityResolver;
+import com.xbk.lattice.article.service.ArticleMarkdownSupport;
 import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
 import com.xbk.lattice.governance.domain.PropagationCheckPayload;
@@ -138,6 +139,11 @@ public class PropagateExecutionService {
                         downstreamArticle.getDependsOn(),
                         downstreamArticle.getRelated(),
                         downstreamArticle.getConfidence(),
+                        "needs_review"
+                );
+                updatedRecord = ArticleMarkdownSupport.synchronizeArticleRecord(
+                        updatedRecord,
+                        propagatedContent,
                         "needs_review"
                 );
                 articleJdbcRepository.upsert(updatedRecord);

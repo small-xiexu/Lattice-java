@@ -58,6 +58,7 @@ class ReviewDecisionPolicyTests {
         state.setAutoFixEnabled(true);
         state.setFixAttemptCount(1);
         state.setMaxFixRounds(1);
+        state.setHumanReviewSeverityThreshold("HIGH");
 
         ReviewPartition reviewPartition = reviewDecisionPolicy.partition(
                 state,
@@ -71,6 +72,30 @@ class ReviewDecisionPolicyTests {
         assertThat(reviewPartition.getNeedsHumanReview()).hasSize(1);
         assertThat(reviewPartition.getNeedsHumanReview().get(0).getArticle().getConceptId()).isEqualTo("needs-human-review");
         assertThat(reviewDecisionPolicy.decide(state, reviewPartition)).isEqualTo("persist_articles");
+    }
+
+    /**
+     * 验证自动修复耗尽后，低于人工复核阈值的审查问题会直接按通过状态收口。
+     */
+    @Test
+    void shouldAcceptArticleWhenRemainingIssuesAreBelowHumanReviewThreshold() {
+        CompileGraphState state = new CompileGraphState();
+        state.setAutoFixEnabled(true);
+        state.setFixAttemptCount(1);
+        state.setMaxFixRounds(1);
+        state.setHumanReviewSeverityThreshold("HIGH");
+
+        ReviewPartition reviewPartition = reviewDecisionPolicy.partition(
+                state,
+                List.of(createEnvelope("accepted-after-fix", ReviewResult.issuesFound(List.of(
+                        new ReviewIssue("MEDIUM", "STYLE", "只剩中等问题")
+                ))))
+        );
+
+        assertThat(reviewPartition.getAccepted()).hasSize(1);
+        assertThat(reviewPartition.getAccepted().get(0).getArticle().getConceptId()).isEqualTo("accepted-after-fix");
+        assertThat(reviewPartition.getAccepted().get(0).getReviewStatus()).isEqualTo("passed");
+        assertThat(reviewPartition.getNeedsHumanReview()).isEmpty();
     }
 
     private ArticleReviewEnvelope createEnvelope(String conceptId, ReviewResult reviewResult) {

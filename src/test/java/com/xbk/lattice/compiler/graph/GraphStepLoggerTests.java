@@ -28,6 +28,18 @@ class GraphStepLoggerTests {
         state.setJobId("job-001");
         state.setCompileMode("full");
         state.setSourceDir("/tmp/source");
+        state.setRawSourcesRef("job-001:raw_sources:v1");
+        state.setGroupedSourcesRef("job-001:grouped_sources:v1");
+        state.setSourceBatchesRef("job-001:source_batches:v1");
+        state.setAnalyzedConceptsRef("job-001:analyzed_concepts:v1");
+        state.setMergedConceptsRef("job-001:merged_concepts:v1");
+        state.setEnhancementConceptsRef("job-001:enhancement_concepts:v1");
+        state.setConceptsToCreateRef("job-001:concepts_to_create:v1");
+        state.setDraftArticlesRef("job-001:draft_articles:v1");
+        state.setReviewPartitionRef("job-001:review_partition:v1");
+        state.setAcceptedArticlesRef("job-001:accepted_articles:v1");
+        state.setNeedsHumanReviewArticlesRef("job-001:needs_human_review_articles:v1");
+        state.setAstExtractReportRef("job-001:ast_extract_report:v1");
         state.setReviewRoute("rule-based");
 
         StepExecutionHandle handle = graphStepLogger.beforeStep("review_articles", state, 1_000L);
@@ -41,9 +53,13 @@ class GraphStepLoggerTests {
         assertThat(repository.createdRecord.getStepExecutionId()).isEqualTo(handle.getStepExecutionId());
         assertThat(repository.createdRecord.getAgentRole()).isEqualTo("ReviewerAgent");
         assertThat(repository.createdRecord.getModelRoute()).isEqualTo("rule-based");
+        assertThat(repository.createdRecord.getInputSummary()).contains("rawSourcesRef=job-001:raw_sources:v1");
+        assertThat(repository.createdRecord.getInputSummary()).contains("astExtractReportRef=job-001:ast_extract_report:v1");
         assertThat(repository.succeededStepExecutionId).isEqualTo(handle.getStepExecutionId());
         assertThat(repository.succeededSequenceNo).isEqualTo(handle.getSequenceNo());
         assertThat(repository.succeededOutputSummary).contains("acceptedCount=1");
+        assertThat(repository.succeededOutputSummary).contains("acceptedRef=job-001:accepted_articles:v1");
+        assertThat(repository.succeededOutputSummary).contains("needsHumanReviewRef=job-001:needs_human_review_articles:v1");
     }
 
     /**

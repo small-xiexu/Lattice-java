@@ -416,6 +416,339 @@
       }
     }
   ],
+  "retrievalScenarios": [
+    {
+      "id": "retrieval_refkey_exact_dispatch",
+      "question": "12101 会写入哪个表",
+      "expectedArticleKeys": [
+        "dispatch-routing"
+      ],
+      "articles": [
+        {
+          "id": "dispatch-routing",
+          "title": "Dispatch Routing",
+          "summary": "业务码与下游表映射",
+          "body": "业务码 12101 会写入 fulfillment_request。\n\n当路由进入履约中心时，会继续沿用这张映射表。",
+          "referentialKeywords": [
+            "12101",
+            "fulfillment_request"
+          ]
+        },
+        {
+          "id": "dispatch-routing-legacy",
+          "title": "Dispatch Routing Legacy",
+          "summary": "历史业务码映射",
+          "body": "历史业务码 12103 会写入 fulfillment_archive。",
+          "referentialKeywords": [
+            "12103",
+            "fulfillment_archive"
+          ]
+        },
+        {
+          "id": "payment-gateway-overview",
+          "title": "Payment Gateway Overview",
+          "summary": "支付网关总览",
+          "body": "支付网关负责路由、签名和幂等控制。",
+          "referentialKeywords": [
+            "gateway",
+            "idempotent"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "retrieval_chunk_architecture_retry",
+      "question": "为什么支付超时要做重试编排",
+      "expectedArticleKeys": [
+        "payment-retry-architecture"
+      ],
+      "articles": [
+        {
+          "id": "payment-retry-architecture",
+          "title": "Payment Retry Architecture",
+          "summary": "支付超时后的受控重试方案",
+          "body": "支付链路包含网关、履约、通知三段。\n\n大多数请求会先进入主路由、风控校验和状态机推进，这些步骤本身并不解释重试的必要性。\n\n当支付超时发生时，系统使用重试编排把瞬时网络抖动与真实失败分开处理，避免把短暂抖动直接升级成订单失败，同时让幂等键与补偿任务有统一入口。\n\n如果连续多次超时，编排层会把请求转入补偿队列，而不是继续同步阻塞主交易线程。",
+          "referentialKeywords": [
+            "timeout",
+            "retry",
+            "compensation"
+          ]
+        },
+        {
+          "id": "payment-timeout-fallback",
+          "title": "Payment Timeout Fallback",
+          "summary": "支付超时兜底",
+          "body": "支付超时后可以展示兜底文案并提示稍后刷新。",
+          "referentialKeywords": [
+            "timeout",
+            "fallback"
+          ]
+        },
+        {
+          "id": "inventory-snapshot-guide",
+          "title": "Inventory Snapshot Guide",
+          "summary": "库存快照管理",
+          "body": "库存快照用于追踪异步库存事件的最终状态。",
+          "referentialKeywords": [
+            "inventory",
+            "snapshot"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "retrieval_config_exact_key",
+      "question": "payment.retry.maxAttempts 是什么配置",
+      "expectedArticleKeys": [
+        "payment-retry-config"
+      ],
+      "articles": [
+        {
+          "id": "payment-retry-config",
+          "title": "Payment Retry Config",
+          "summary": "支付重试配置说明",
+          "body": "配置键 payment.retry.maxAttempts 控制最大重试次数，默认值为 3。\n\n如果 payment.retry.intervalSeconds 没有覆盖，默认重试间隔为 30 秒。",
+          "referentialKeywords": [
+            "payment.retry.maxAttempts",
+            "payment.retry.intervalSeconds"
+          ]
+        },
+        {
+          "id": "payment-http-config",
+          "title": "Payment HTTP Config",
+          "summary": "支付 HTTP 客户端参数",
+          "body": "配置键 payment.http.connectTimeout 控制连接超时。",
+          "referentialKeywords": [
+            "payment.http.connectTimeout"
+          ]
+        },
+        {
+          "id": "refund-retry-guide",
+          "title": "Refund Retry Guide",
+          "summary": "退款重试说明",
+          "body": "退款链路会根据 refund.retry.maxAttempts 决定补偿次数。",
+          "referentialKeywords": [
+            "refund.retry.maxAttempts"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "retrieval_troubleshooting_retry_interval",
+      "question": "重试间隔一般多久",
+      "expectedArticleKeys": [
+        "payment-retry-ops"
+      ],
+      "articles": [
+        {
+          "id": "payment-retry-ops",
+          "title": "Payment Retry Ops",
+          "summary": "支付重试运维口径",
+          "body": "运维排障时，先确认重试次数，再确认重试间隔。\n\n当前支付超时场景的默认重试间隔固定为 30 秒，超过三次后任务会转入补偿队列。",
+          "referentialKeywords": [
+            "30s",
+            "retry-interval"
+          ]
+        },
+        {
+          "id": "payment-retry-fastlane",
+          "title": "Payment Retry Fastlane",
+          "summary": "灰度快速重试说明",
+          "body": "灰度快速链路会把少量任务的重试间隔改成 10 秒。",
+          "referentialKeywords": [
+            "10s",
+            "fastlane"
+          ]
+        },
+        {
+          "id": "retry-observability",
+          "title": "Retry Observability",
+          "summary": "重试监控",
+          "body": "监控面板会展示重试次数、失败率和积压量。",
+          "referentialKeywords": [
+            "retry-metrics"
+          ]
+        }
+      ]
+    }
+  ],
+  "realQuestionReplayScenarios": [
+    {
+      "id": "replay_dispatch_exact_refkey_realistic",
+      "question": "12101 这个码现在实际落哪张表，不要历史兼容说明。",
+      "expectedArticleKeys": [
+        "dispatch-routing-current"
+      ],
+      "expectedAnswerSnippets": [
+        "12101 会写入 fulfillment_request"
+      ],
+      "articles": [
+        {
+          "id": "dispatch-routing-current",
+          "title": "Dispatch Routing Current",
+          "summary": "当前业务码映射",
+          "body": "当前主链的 dispatch 路由以业务码为准。\n\n业务码 12101 会写入 fulfillment_request，后续再由履约中心继续处理。\n\n这份映射已经替换旧的兼容说明。",
+          "referentialKeywords": [
+            "12101",
+            "fulfillment_request"
+          ]
+        },
+        {
+          "id": "dispatch-compat-note",
+          "title": "12101 兼容迁移说明",
+          "summary": "历史兼容链路与回收策略",
+          "body": "12101 的历史兼容链路曾把旧数据同步到 fulfillment_archive。\n\n本文只描述退场中的兼容链路，不代表当前主链真正落表。",
+          "referentialKeywords": [
+            "12101",
+            "fulfillment_archive"
+          ]
+        },
+        {
+          "id": "dispatch-monitoring",
+          "title": "Dispatch Monitoring",
+          "summary": "路由监控看板",
+          "body": "监控面板会展示业务码、路由耗时和失败率。",
+          "referentialKeywords": [
+            "routing-metrics"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "replay_retry_why_realistic",
+      "question": "线上支付超时时，为什么不是直接判失败，而要先走重试编排？",
+      "expectedArticleKeys": [
+        "payment-retry-architecture"
+      ],
+      "expectedAnswerSnippets": [
+        "把瞬时网络抖动与真实失败分开处理",
+        "避免把短暂抖动直接升级成订单失败"
+      ],
+      "articles": [
+        {
+          "id": "payment-retry-architecture",
+          "title": "Payment Retry Architecture",
+          "summary": "支付超时后的受控重试方案",
+          "body": "支付链路包含网关、履约、通知三段。\n\n大多数请求会先进入主路由、风控校验和状态机推进，这些步骤本身并不解释重试的必要性。\n\n当支付超时发生时，系统使用重试编排把瞬时网络抖动与真实失败分开处理，避免把短暂抖动直接升级成订单失败，同时让幂等键与补偿任务有统一入口。\n\n如果连续多次超时，编排层会把请求转入补偿队列，而不是继续同步阻塞主交易线程。",
+          "referentialKeywords": [
+            "timeout",
+            "retry",
+            "compensation"
+          ]
+        },
+        {
+          "id": "payment-timeout-handbook",
+          "title": "Payment Timeout Handbook",
+          "summary": "支付超时排障手册",
+          "body": "支付超时后先给用户展示稍后刷新提示，并记录 timeout 日志。\n\n大多数情况下排障同学会先看超时原因，再决定是否需要人工干预。",
+          "referentialKeywords": [
+            "timeout",
+            "fallback"
+          ]
+        },
+        {
+          "id": "payment-failure-policy",
+          "title": "Payment Failure Policy",
+          "summary": "支付失败归档策略",
+          "body": "真正失败的交易才会进入失败归档和人工复核流程。",
+          "referentialKeywords": [
+            "failure",
+            "archive"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "replay_routeplanner_graph_realistic",
+      "question": "RoutePlanner 这一层最后调用的是哪个 service，别只给我入口地址。",
+      "expectedArticleKeys": [
+        "payment-routing"
+      ],
+      "expectedAnswerSnippets": [
+        "calls->payment.PaymentService.plan"
+      ],
+      "articles": [
+        {
+          "id": "payment-routing",
+          "title": "Payment Routing Overview",
+          "summary": "支付路由总览",
+          "body": "RoutePlanner 是支付路由入口，会接住 /payments 请求，并负责把请求送到后续交易编排层。\n\n这篇总览主要解释入口职责，不展开最终调用链。",
+          "referentialKeywords": [
+            "RoutePlanner",
+            "/payments"
+          ]
+        },
+        {
+          "id": "routeplanner-endpoint-doc",
+          "title": "RoutePlanner Endpoint Doc",
+          "summary": "RoutePlanner 接口入口说明",
+          "body": "RoutePlanner 暴露了 /payments 路径，用于接收支付请求。",
+          "referentialKeywords": [
+            "RoutePlanner",
+            "/payments"
+          ]
+        }
+      ],
+      "sourceFiles": {
+        "101": {
+          "id": 101,
+          "sourceId": 1,
+          "filePath": "src/main/java/payment/RoutePlanner.java",
+          "relativePath": "src/main/java/payment/RoutePlanner.java",
+          "contentPreview": "RoutePlanner",
+          "format": "JAVA",
+          "fileSize": 256,
+          "contentText": "class RoutePlanner {}",
+          "metadataJson": "{}",
+          "verbatim": false,
+          "rawPath": "src/main/java/payment/RoutePlanner.java"
+        }
+      },
+      "articleKeysBySourceFileId": {
+        "101": [
+          "payment-routing"
+        ]
+      },
+      "graphEntities": [
+        {
+          "id": "payment-routing#RoutePlanner",
+          "canonicalName": "payment.routing.RoutePlanner",
+          "simpleName": "RoutePlanner",
+          "entityType": "CLASS",
+          "systemLabel": "payment",
+          "sourceFileId": 101,
+          "anchorRef": "src/main/java/payment/RoutePlanner.java:12-24",
+          "resolutionStatus": "RESOLVED",
+          "metadataJson": "{\"package\":\"payment.routing\"}"
+        }
+      ],
+      "graphFacts": [
+        {
+          "entityId": "payment-routing#RoutePlanner",
+          "predicate": "annotation",
+          "value": "@RequestMapping",
+          "sourceRef": "src/main/java/payment/RoutePlanner.java",
+          "sourceStartLine": 12,
+          "sourceEndLine": 12,
+          "evidenceExcerpt": "@RequestMapping(\"/payments\")",
+          "confidence": 0.95,
+          "extractor": "annotation_extractor"
+        }
+      ],
+      "graphRelations": [
+        {
+          "srcId": "payment-routing#RoutePlanner",
+          "edgeType": "calls",
+          "dstId": "payment.PaymentService.plan",
+          "sourceRef": "src/main/java/payment/RoutePlanner.java",
+          "sourceStartLine": 18,
+          "sourceEndLine": 18,
+          "confidence": 0.8,
+          "extractor": "call_extractor"
+        }
+      ]
+    }
+  ],
   "graphScenarios": [
     {
       "id": "graph_routeplanner_grounding",

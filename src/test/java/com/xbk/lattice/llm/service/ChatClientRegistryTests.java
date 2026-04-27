@@ -114,7 +114,98 @@ class ChatClientRegistryTests {
         assertThat(routeB.getRequestCount()).isEqualTo(1);
         assertThat(routeA.getCapturedModels()).containsExactly("gpt-5.4");
         assertThat(routeB.getCapturedModels()).containsExactly("gpt-4.1-mini");
+        assertThat(routeA.getCapturedAcceptHeaders()).allSatisfy(acceptHeader ->
+                assertThat(String.valueOf(acceptHeader)).contains("application/json"));
+        assertThat(routeB.getCapturedAcceptHeaders()).allSatisfy(acceptHeader ->
+                assertThat(String.valueOf(acceptHeader)).contains("application/json"));
         assertThat(registry.getClientCount()).isEqualTo(2);
+    }
+
+    /**
+     * 验证 OpenAI compatible 动态 ChatClient 会显式要求 JSON 响应，避免网关误切到 SSE。
+     *
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldForceJsonAcceptHeaderForOpenAiCompatibleRoute() throws IOException {
+        StubOpenAiChatServer route = startOpenAiStubServer("route-json-only", 0, true);
+        ChatClientRegistry registry = new ChatClientRegistry(
+                RestClient.builder(),
+                WebClient.builder(),
+                new ObjectMapper(),
+                new AdvisorChainFactory()
+        );
+
+        ChatClientResponse response = registry.getOrCreate(createRouteResolution(
+                route.getBaseUrl(),
+                "key-json",
+                "gpt-5.4",
+                new BigDecimal("0.1"),
+                Integer.valueOf(64),
+                "query.answer.openai.json-only"
+        )).getChatClient()
+                .prompt()
+                .advisors(spec -> spec.params(new LlmInvocationContext(
+                        "query",
+                        "json-only",
+                        "scope-json",
+                        "answer",
+                        "query.answer.openai.json-only"
+                ).toAdvisorParams()))
+                .system("json-only-system")
+                .user("json-only-user")
+                .call()
+                .chatClientResponse();
+
+        assertThat(response.chatResponse().getResult().getOutput().getText()).isEqualTo("route-json-only");
+        assertThat(route.getCapturedAcceptHeaders()).allSatisfy(acceptHeader ->
+                assertThat(String.valueOf(acceptHeader)).contains("application/json"));
+    }
+
+    /**
+     * 验证即使兼容网关错误返回 text/event-stream，同步 ChatClient 仍能按 JSON 解析结果。
+     *
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldParseEventStreamMarkedJsonForOpenAiCompatibleRoute() throws IOException {
+        StubOpenAiChatServer route = startOpenAiStubServer(
+                "route-event-stream-json",
+                0,
+                false,
+                "text/event-stream"
+        );
+        ChatClientRegistry registry = new ChatClientRegistry(
+                RestClient.builder(),
+                WebClient.builder(),
+                new ObjectMapper(),
+                new AdvisorChainFactory()
+        );
+
+        ChatClientResponse response = registry.getOrCreate(createRouteResolution(
+                route.getBaseUrl(),
+                "key-event-stream",
+                "gpt-5.4",
+                new BigDecimal("0.1"),
+                Integer.valueOf(64),
+                "query.answer.openai.event-stream"
+        )).getChatClient()
+                .prompt()
+                .advisors(spec -> spec.params(new LlmInvocationContext(
+                        "query",
+                        "event-stream-json",
+                        "scope-event-stream",
+                        "answer",
+                        "query.answer.openai.event-stream"
+                ).toAdvisorParams()))
+                .system("event-stream-system")
+                .user("event-stream-user")
+                .call()
+                .chatClientResponse();
+
+        assertThat(response.chatResponse().getResult().getOutput().getText()).isEqualTo("route-event-stream-json");
+        assertThat(route.getCapturedAcceptHeaders()).allSatisfy(acceptHeader ->
+                assertThat(String.valueOf(acceptHeader)).contains("application/json"));
     }
 
     @Test
@@ -204,6 +295,31 @@ class ChatClientRegistryTests {
 
     private StubOpenAiChatServer startOpenAiStubServer(String answerText) throws IOException {
         StubOpenAiChatServer stubServer = new StubOpenAiChatServer(answerText);
+        stubServer.start();
+        openAiStubServers.add(stubServer);
+        return stubServer;
+    }
+
+    private StubOpenAiChatServer startOpenAiStubServer(
+            String answerText,
+            int transientFailureCount,
+            boolean eventStreamUnlessJsonAccept
+    ) throws IOException {
+        return startOpenAiStubServer(answerText, transientFailureCount, eventStreamUnlessJsonAccept, null);
+    }
+
+    private StubOpenAiChatServer startOpenAiStubServer(
+            String answerText,
+            int transientFailureCount,
+            boolean eventStreamUnlessJsonAccept,
+            String forcedResponseContentType
+    ) throws IOException {
+        StubOpenAiChatServer stubServer = new StubOpenAiChatServer(
+                answerText,
+                transientFailureCount,
+                eventStreamUnlessJsonAccept,
+                forcedResponseContentType
+        );
         stubServer.start();
         openAiStubServers.add(stubServer);
         return stubServer;

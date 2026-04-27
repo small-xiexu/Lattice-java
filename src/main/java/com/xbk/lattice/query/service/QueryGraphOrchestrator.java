@@ -4,7 +4,6 @@ import com.alibaba.cloud.ai.graph.CompiledGraph;
 import com.alibaba.cloud.ai.graph.CompileConfig;
 import com.alibaba.cloud.ai.graph.OverAllState;
 import com.xbk.lattice.api.query.QueryResponse;
-import com.xbk.lattice.query.graph.InMemoryQueryWorkingSetStore;
 import com.xbk.lattice.query.graph.QueryGraphConditions;
 import com.xbk.lattice.query.graph.QueryGraphDefinitionFactory;
 import com.xbk.lattice.query.graph.QueryGraphLifecycleListener;
@@ -120,9 +119,6 @@ public class QueryGraphOrchestrator {
         }
         catch (Exception ex) {
             throw new IllegalStateException("query graph execute failed", ex);
-        }
-        finally {
-            queryWorkingSetStore.deleteByQueryId(effectiveQueryId);
         }
     }
 

@@ -316,6 +316,98 @@ class IncrementalCompileServiceTests {
     }
 
     /**
+     * 验证仅通过 related 关联的文章不会被纳入增量传播，避免把旁路资料误并入正文事实。
+     *
+     * @param tempDir 临时目录
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldIgnoreRelatedOnlyArticlesDuringIncrementalPropagation(@TempDir Path tempDir) throws IOException {
+        FakeArticleJdbcRepository articleJdbcRepository = new FakeArticleJdbcRepository();
+        articleJdbcRepository.upsert(createExistingArticle(
+                "ops",
+                "Ops",
+                List.of("ops/postmortem.md"),
+                List.of(),
+                List.of("payments"),
+                "运行时观察",
+                """
+                        # Ops
+
+                        观察支付超时与熔断阈值
+                        """
+        ));
+        articleJdbcRepository.upsert(createExistingArticle(
+                "payments",
+                "Payments",
+                List.of("payments/gateway-config.yaml"),
+                List.of(),
+                List.of("ops"),
+                "支付配置",
+                """
+                        # Payments
+
+                        当前支付配置
+                        """
+        ));
+        FakeArticleChunkJdbcRepository articleChunkJdbcRepository = new FakeArticleChunkJdbcRepository();
+        articleChunkJdbcRepository.replaceChunks("ops", List.of("ops"));
+        articleChunkJdbcRepository.replaceChunks("payments", List.of("payments"));
+        articleJdbcRepository.clearUpsertHistory();
+        articleChunkJdbcRepository.clearReplaceHistory();
+        FakeSourceFileJdbcRepository sourceFileJdbcRepository = new FakeSourceFileJdbcRepository();
+        RecordingSynthesisArtifactsService synthesisArtifactsService = new RecordingSynthesisArtifactsService();
+        IncrementalCompileService incrementalCompileService = new IncrementalCompileService(
+                createCompilerProperties(),
+                null,
+                null,
+                null,
+                synthesisArtifactsService,
+                articleJdbcRepository,
+                articleChunkJdbcRepository,
+                sourceFileJdbcRepository
+        );
+
+        String paymentsContent = articleJdbcRepository.findByConceptId("payments").orElseThrow().getContent();
+
+        Path opsDir = Files.createDirectories(tempDir.resolve("ops"));
+        Files.writeString(
+                opsDir.resolve("postmortem.json"),
+                """
+                        {
+                          "concepts": [
+                            {
+                              "id": "ops",
+                              "title": "Ops",
+                              "description": "补充最新熔断阈值",
+                              "snippets": ["failure-rate-threshold=51"],
+                              "sections": [
+                                {
+                                  "heading": "Current Values",
+                                  "content": ["failure-rate-threshold=51", "observation-window=21m"],
+                                  "sources": ["ops/postmortem.json#current-values"]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                        """.trim(),
+                StandardCharsets.UTF_8
+        );
+
+        CompileResult compileResult = incrementalCompileService.incrementalCompile(tempDir);
+
+        ArticleRecord opsArticle = articleJdbcRepository.findByConceptId("ops").orElseThrow();
+        ArticleRecord paymentsArticle = articleJdbcRepository.findByConceptId("payments").orElseThrow();
+        assertThat(compileResult.getPersistedCount()).isEqualTo(1);
+        assertThat(opsArticle.getContent()).contains("failure-rate-threshold=51");
+        assertThat(paymentsArticle.getContent()).isEqualTo(paymentsContent);
+        assertThat(paymentsArticle.getSourcePaths()).containsExactly("payments/gateway-config.yaml");
+        assertThat(articleJdbcRepository.getUpsertedConceptIds()).containsExactly("ops");
+        assertThat(articleChunkJdbcRepository.getReplacedConceptIds()).containsExactly("ops");
+    }
+
+    /**
      * 验证整目录增量时会先滤掉未变化文件，只刷新真实受影响文章。
      *
      * @param tempDir 临时目录
@@ -584,10 +676,34 @@ class IncrementalCompileServiceTests {
             String summary,
             String body
     ) {
+        return createExistingArticle(conceptId, title, sourcePaths, dependsOn, List.of(), summary, body);
+    }
+
+    /**
+     * 创建已有文章。
+     *
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param sourcePaths 来源路径
+     * @param dependsOn 依赖概念
+     * @param related 相关概念
+     * @param summary 摘要
+     * @param body 主体
+     * @return 文章记录
+     */
+    private ArticleRecord createExistingArticle(
+            String conceptId,
+            String title,
+            List<String> sourcePaths,
+            List<String> dependsOn,
+            List<String> related,
+            String summary,
+            String body
+    ) {
         return new ArticleRecord(
                 conceptId,
                 title,
-                buildArticleContent(title, summary, sourcePaths, dependsOn, List.of(), body),
+                buildArticleContent(title, summary, sourcePaths, dependsOn, related, body),
                 "ACTIVE",
                 OffsetDateTime.now(),
                 sourcePaths,
@@ -595,7 +711,7 @@ class IncrementalCompileServiceTests {
                 summary,
                 List.of(),
                 dependsOn,
-                List.of(),
+                related,
                 "medium",
                 "pending"
         );

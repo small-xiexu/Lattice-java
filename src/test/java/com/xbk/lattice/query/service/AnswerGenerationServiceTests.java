@@ -250,6 +250,212 @@ class AnswerGenerationServiceTests {
     }
 
     /**
+     * 验证模型失败时，配置题 deterministic fallback 会忽略 frontmatter 元数据，并优先回答正文表格里的精确配置值。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldPreferBodyConfigFactsWhenFallbackAnsweringConfigurationQuestion() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("not-json-without-citation");
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "payment timeout retry 是什么配置",
+                List.of(
+                        new QueryArticleHit(
+                                QueryEvidenceType.ARTICLE,
+                                "runbooks",
+                                "Runbooks",
+                                """
+                                        ---
+                                        title: "Runbooks"
+                                        related: ["payments", "ops"]
+                                        review_status: passed
+                                        ---
+
+                                        # Runbooks
+
+                                        | 序号 | 检查项 | 说明 |
+                                        |---|---|---|
+                                        | 1 | `payment.timeout.retry=3` | 确认该配置值。 |
+                                        | 2 | PSP 响应时间是否持续高于 `2` 秒 | 查看上游 RT。 |
+                                        """,
+                                "{\"description\":\"支付排障 runbook\"}",
+                                List.of("runbooks/retry-troubleshooting.md"),
+                                3.0D
+                        ),
+                        new QueryArticleHit(
+                                QueryEvidenceType.ARTICLE,
+                                "payments",
+                                "Payments",
+                                """
+                                        ---
+                                        title: "Payments"
+                                        referential_keywords: ["payment.timeout.retry", "3"]
+                                        ---
+
+                                        # Payments
+
+                                        | 配置键 | 精确值 | 说明 |
+                                        |---|---:|---|
+                                        | `payment.timeout.retry` | `3` | 超时场景下的重试次数配置。 |
+                                        """,
+                                "{\"description\":\"支付配置\"}",
+                                List.of("payments/gateway-config.yaml"),
+                                2.5D
+                        )
+                )
+        );
+
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.FAILED);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("payment.timeout.retry = 3");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("超时场景下的重试次数配置");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("related: [\"payments\", \"ops\"]");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("review_status: passed");
+    }
+
+    /**
+     * 验证真实风格 Payments 文章在 fallback 里也会优先回答配置键和值，而不是返回概述句。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldPreferExactConfigValueOverOverviewWhenOnlyPaymentsArticleMatches() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("not-json-without-citation");
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "payment timeout retry 是什么配置",
+                List.of(
+                        new QueryArticleHit(
+                                QueryEvidenceType.ARTICLE,
+                                null,
+                                "legacy-default--payments",
+                                "payments",
+                                "Payments",
+                                """
+                                        ---
+                                        title: "Payments"
+                                        summary: "[编译] 现有资料主要包含两部分：`PaymentRetryPolicy` Java 类，以及 `payments/gateway-config.yaml` 配置文件。"
+                                        referential_keywords: ["payment.timeout.retry", "3"]
+                                        ---
+
+                                        # Payments
+
+                                        [编译] 现有资料主要包含两部分：`PaymentRetryPolicy` Java 类，以及 `payments/gateway-config.yaml` 配置文件。
+
+                                        | 配置键 | 精确值 | 说明 |
+                                        |---|---:|---|
+                                        | `payment.timeout.retry` | `3` | 支付超时相关的重试次数配置。 |
+                                        | `payment.circuit-breaker.failure-rate-threshold` | `55` | 断路器失败率阈值。 |
+
+                                        ## 代码常量与配置的对应关系
+
+                                        代码中的 `MAX_RETRY = 3` 与配置中的 `payment.timeout.retry = 3` 数值一致。
+                                        """,
+                                "{\"description\":\"支付配置\"}",
+                                List.of("payments/gateway-config.yaml"),
+                                3.0D
+                        )
+                )
+        );
+
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.RULE_BASED);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SKIPPED);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("payment.timeout.retry = 3");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("支付超时相关的重试次数配置");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("现有资料主要包含两部分");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("MAX_RETRY");
+    }
+
+    /**
+     * 验证“分别是多少”这类题目会优先返回同一篇文章里的多个精确值，而不是被旧配置概述带偏。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldReturnMultipleCurrentValuesForStructuredFactQuestion() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("not-json-without-citation");
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "failure-rate-threshold 和观察窗口现在分别是多少",
+                List.of(
+                        new QueryArticleHit(
+                                QueryEvidenceType.ARTICLE,
+                                null,
+                                "legacy-default--payments",
+                                "payments",
+                                "Payments",
+                                """
+                                        ---
+                                        title: "Payments"
+                                        summary: "旧网关配置仍保留在 payments 文档中。"
+                                        ---
+
+                                        # Payments
+
+                                        | 配置键 | 精确值 | 说明 |
+                                        |---|---:|---|
+                                        | `payment.circuit-breaker.failure-rate-threshold` | `55` | 断路器失败率阈值。 |
+                                        | `payment.circuit-breaker.observation-window-minutes` | `15` | 断路器观察窗口。 |
+                                        """,
+                                "{\"description\":\"旧支付配置\"}",
+                                List.of("payments/gateway-config.yaml"),
+                                2.0D
+                        ),
+                        new QueryArticleHit(
+                                QueryEvidenceType.ARTICLE,
+                                null,
+                                "legacy-default--ops",
+                                "ops",
+                                "Ops",
+                                """
+                                        ---
+                                        title: "Ops"
+                                        summary: "Ops 在这里主要指围绕支付超时问题的运行时观察与事故复盘知识，重点关注熔断阈值、观察窗口以及异常现象的联动关系。"
+                                        referential_keywords: ["failure-rate-threshold", "50", "20 分钟"]
+                                        ---
+
+                                        # Ops
+
+                                        ## 概述
+
+                                        Ops 主要聚焦于支付超时相关的运行时观察与事故复盘知识。
+
+                                        | 标识符 | 值 | 含义 |
+                                        |---|---:|---|
+                                        | `failure-rate-threshold` | `50` | 当前熔断阈值建议值 |
+                                        | 观察窗口 | `20 分钟` | 当前建议的观察窗口长度 |
+
+                                        ## 局限与注意事项
+
+                                        - `failure-rate-threshold = 50` 应视为当前建议值。
+                                        - `20 分钟` 观察窗口是建议配置，但来源未展开其适用条件。
+                                        """,
+                                "{\"description\":\"运行时观察与事故复盘\"}",
+                                List.of("ops/postmortem.md"),
+                                3.0D
+                        )
+                )
+        );
+
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("failure-rate-threshold = 50");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("观察窗口 = 20 分钟");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("应视为");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("15");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("55");
+    }
+
+    /**
      * 验证稳定结构化答案会写入 L1 prompt cache，并在下一次请求复用缓存。
      *
      * @throws Exception 反射构造异常

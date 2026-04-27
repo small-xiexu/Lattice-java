@@ -1,14 +1,13 @@
 package com.xbk.lattice.query.service;
 
-import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
-import com.xbk.lattice.infra.persistence.SourceFileChunkRecord;
+import com.xbk.lattice.infra.persistence.LexicalSearchRecord;
+import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * 源文件检索服务
@@ -21,15 +20,29 @@ import java.util.Locale;
 @Profile("jdbc")
 public class SourceSearchService {
 
-    private final SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository;
+    private final SourceFileJdbcRepository sourceFileJdbcRepository;
+
+    private final FtsConfigResolver ftsConfigResolver;
 
     /**
      * 创建源文件检索服务。
      *
-     * @param sourceFileChunkJdbcRepository 源文件分块仓储
+     * @param sourceFileJdbcRepository 源文件仓储
      */
-    public SourceSearchService(SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository) {
-        this.sourceFileChunkJdbcRepository = sourceFileChunkJdbcRepository;
+    public SourceSearchService(SourceFileJdbcRepository sourceFileJdbcRepository) {
+        this(sourceFileJdbcRepository, new FtsConfigResolver());
+    }
+
+    /**
+     * 创建源文件检索服务。
+     *
+     * @param sourceFileJdbcRepository 源文件仓储
+     * @param ftsConfigResolver FTS 配置解析器
+     */
+    @Autowired
+    public SourceSearchService(SourceFileJdbcRepository sourceFileJdbcRepository, FtsConfigResolver ftsConfigResolver) {
+        this.sourceFileJdbcRepository = sourceFileJdbcRepository;
+        this.ftsConfigResolver = ftsConfigResolver;
     }
 
     /**
@@ -40,7 +53,7 @@ public class SourceSearchService {
      * @return 命中列表
      */
     public List<QueryArticleHit> search(String question, int limit) {
-        if (sourceFileChunkJdbcRepository == null) {
+        if (sourceFileJdbcRepository == null) {
             return List.of();
         }
 
@@ -49,65 +62,32 @@ public class SourceSearchService {
             return List.of();
         }
 
+        String tsConfig = ftsConfigResolver.resolveArticleTsConfig();
+        List<LexicalSearchRecord> records = sourceFileJdbcRepository.searchLexical(question, queryTokens, limit, tsConfig);
         List<QueryArticleHit> matchedHits = new ArrayList<QueryArticleHit>();
-        for (SourceFileChunkRecord sourceFileChunkRecord : sourceFileChunkJdbcRepository.findAll()) {
-            double score = scoreChunk(sourceFileChunkRecord, queryTokens);
-            if (score <= 0) {
-                continue;
-            }
-            matchedHits.add(new QueryArticleHit(
-                    QueryEvidenceType.SOURCE,
-                    sourceFileChunkRecord.getFilePath() + "#" + sourceFileChunkRecord.getChunkIndex(),
-                    sourceFileChunkRecord.getFilePath(),
-                    sourceFileChunkRecord.getChunkText(),
-                    buildMetadataJson(sourceFileChunkRecord),
-                    List.of(sourceFileChunkRecord.getFilePath()),
-                    score
-            ));
+        for (LexicalSearchRecord record : records) {
+            matchedHits.add(toQueryArticleHit(record));
         }
-        matchedHits.sort(Comparator.comparing(QueryArticleHit::getScore).reversed()
-                .thenComparing(QueryArticleHit::getConceptId));
-        if (matchedHits.size() <= limit) {
-            return matchedHits;
-        }
-        return matchedHits.subList(0, limit);
+        return matchedHits;
     }
 
     /**
-     * 计算分块命中分数。
+     * 转换为查询命中。
      *
-     * @param sourceFileChunkRecord 源文件分块
-     * @param queryTokens 查询 token
-     * @return 命中分数
+     * @param record lexical 命中记录
+     * @return 查询命中
      */
-    private double scoreChunk(SourceFileChunkRecord sourceFileChunkRecord, List<String> queryTokens) {
-        String filePath = sourceFileChunkRecord.getFilePath().toLowerCase(Locale.ROOT);
-        String chunkText = sourceFileChunkRecord.getChunkText().toLowerCase(Locale.ROOT);
-        double score = sourceFileChunkRecord.isVerbatim() ? 0.5D : 0.0D;
-        for (String queryToken : queryTokens) {
-            if (filePath.contains(queryToken)) {
-                score += 1.0D;
-            }
-            if (chunkText.contains(queryToken)) {
-                score += 3.0D;
-            }
-        }
-        return score;
-    }
-
-    /**
-     * 构建源文件元数据 JSON。
-     *
-     * @param sourceFileChunkRecord 分块记录
-     * @return 元数据 JSON
-     */
-    private String buildMetadataJson(SourceFileChunkRecord sourceFileChunkRecord) {
-        return "{\"filePath\":\""
-                + sourceFileChunkRecord.getFilePath()
-                + "\",\"chunkIndex\":"
-                + sourceFileChunkRecord.getChunkIndex()
-                + ",\"verbatim\":"
-                + sourceFileChunkRecord.isVerbatim()
-                + "}";
+    private QueryArticleHit toQueryArticleHit(LexicalSearchRecord record) {
+        return new QueryArticleHit(
+                QueryEvidenceType.SOURCE,
+                record.getSourceId(),
+                record.getItemKey(),
+                record.getConceptId(),
+                record.getTitle(),
+                record.getContent(),
+                record.getMetadataJson(),
+                record.getSourcePaths(),
+                record.getScore()
+        );
     }
 }

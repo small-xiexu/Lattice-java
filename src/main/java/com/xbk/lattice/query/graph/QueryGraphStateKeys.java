@@ -17,6 +17,16 @@ public final class QueryGraphStateKeys {
 
     public static final String NORMALIZED_QUESTION = "normalizedQuestion";
 
+    public static final String REWRITTEN_QUESTION = "rewrittenQuestion";
+
+    public static final String QUERY_INTENT = "queryIntent";
+
+    public static final String REWRITE_AUDIT_REF = "rewriteAuditRef";
+
+    public static final String RETRIEVAL_STRATEGY_REF = "retrievalStrategyRef";
+
+    public static final String RETRIEVAL_AUDIT_REF = "retrievalAuditRef";
+
     public static final String LLM_SCOPE_TYPE = "llmScopeType";
 
     public static final String LLM_SCOPE_ID = "llmScopeId";
@@ -35,9 +45,13 @@ public final class QueryGraphStateKeys {
 
     public static final String FTS_HITS_REF = "ftsHitsRef";
 
+    public static final String ARTICLE_CHUNK_HITS_REF = "articleChunkHitsRef";
+
     public static final String REFKEY_HITS_REF = "refkeyHitsRef";
 
     public static final String SOURCE_HITS_REF = "sourceHitsRef";
+
+    public static final String SOURCE_CHUNK_HITS_REF = "sourceChunkHitsRef";
 
     public static final String CONTRIBUTION_HITS_REF = "contributionHitsRef";
 

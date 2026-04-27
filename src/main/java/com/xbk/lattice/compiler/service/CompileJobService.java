@@ -168,6 +168,26 @@ public class CompileJobService {
     }
 
     /**
+     * 读取最近编译作业。
+     *
+     * @param limit 返回数量
+     * @return 最近编译作业列表
+     */
+    public List<CompileJobRecord> listRecentJobs(int limit) {
+        return compileJobJdbcRepository.findRecent(limit);
+    }
+
+    /**
+     * 读取最近独立编译作业。
+     *
+     * @param limit 返回数量
+     * @return 最近独立编译作业列表
+     */
+    public List<CompileJobRecord> listRecentStandaloneJobs(int limit) {
+        return compileJobJdbcRepository.findRecentStandalone(limit);
+    }
+
+    /**
      * 读取单个编译作业。
      *
      * @param jobId 作业标识

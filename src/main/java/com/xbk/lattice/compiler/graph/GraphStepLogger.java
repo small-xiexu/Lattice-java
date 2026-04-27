@@ -136,15 +136,34 @@ public class GraphStepLogger {
     private String buildInputSummary(CompileGraphState state) {
         return "mode=" + state.getCompileMode()
                 + ", sourceDir=" + state.getSourceDir()
+                + ", rawSourcesRef=" + state.getRawSourcesRef()
+                + ", groupedSourcesRef=" + state.getGroupedSourcesRef()
+                + ", sourceBatchesRef=" + state.getSourceBatchesRef()
+                + ", analyzedRef=" + state.getAnalyzedConceptsRef()
                 + ", mergedRef=" + state.getMergedConceptsRef()
+                + ", enhancementRef=" + state.getEnhancementConceptsRef()
+                + ", conceptsToCreateRef=" + state.getConceptsToCreateRef()
                 + ", draftRef=" + state.getDraftArticlesRef()
                 + ", reviewPartitionRef=" + state.getReviewPartitionRef()
-                + ", acceptedRef=" + state.getAcceptedArticlesRef();
+                + ", acceptedRef=" + state.getAcceptedArticlesRef()
+                + ", astExtractReportRef=" + state.getAstExtractReportRef();
     }
 
     private String buildOutputSummary(CompileGraphState state) {
         return "persistedIds=" + state.getPersistedArticleIds()
+                + ", rawSourcesRef=" + state.getRawSourcesRef()
+                + ", groupedSourcesRef=" + state.getGroupedSourcesRef()
+                + ", sourceBatchesRef=" + state.getSourceBatchesRef()
+                + ", analyzedRef=" + state.getAnalyzedConceptsRef()
+                + ", mergedRef=" + state.getMergedConceptsRef()
+                + ", enhancementRef=" + state.getEnhancementConceptsRef()
+                + ", conceptsToCreateRef=" + state.getConceptsToCreateRef()
+                + ", draftRef=" + state.getDraftArticlesRef()
                 + ", reviewedRef=" + state.getReviewedArticlesRef()
+                + ", reviewPartitionRef=" + state.getReviewPartitionRef()
+                + ", acceptedRef=" + state.getAcceptedArticlesRef()
+                + ", needsHumanReviewRef=" + state.getNeedsHumanReviewArticlesRef()
+                + ", astExtractReportRef=" + state.getAstExtractReportRef()
                 + ", pendingReviewCount=" + state.getPendingReviewCount()
                 + ", acceptedCount=" + state.getAcceptedCount()
                 + ", needsHumanReviewCount=" + state.getNeedsHumanReviewCount()

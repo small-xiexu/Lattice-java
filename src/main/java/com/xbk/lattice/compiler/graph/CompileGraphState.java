@@ -83,6 +83,8 @@ public class CompileGraphState {
 
     private boolean allowPersistNeedsHumanReview;
 
+    private String humanReviewSeverityThreshold;
+
     private String compileRoute;
 
     private String reviewRoute;

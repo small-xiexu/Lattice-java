@@ -119,6 +119,53 @@ public class CompileJobJdbcRepository {
     }
 
     /**
+     * 查询最近的编译作业。
+     *
+     * @param limit 返回数量
+     * @return 最近编译作业列表
+     */
+    public List<CompileJobRecord> findRecent(int limit) {
+        return jdbcTemplate.query(
+                """
+                        select job_id, source_dir, source_id, source_sync_run_id, incremental,
+                               root_trace_id, orchestration_mode, status, worker_id, last_heartbeat_at,
+                               running_expires_at, current_step, progress_current, progress_total,
+                               progress_message, progress_updated_at, error_code, persisted_count, error_message,
+                               attempt_count, requested_at, started_at, finished_at
+                        from compile_jobs
+                        order by requested_at desc, job_id desc
+                        limit ?
+                        """,
+                this::mapCompileJobRecord,
+                Math.max(limit, 1)
+        );
+    }
+
+    /**
+     * 查询最近的独立编译作业。
+     *
+     * @param limit 返回数量
+     * @return 最近独立编译作业列表
+     */
+    public List<CompileJobRecord> findRecentStandalone(int limit) {
+        return jdbcTemplate.query(
+                """
+                        select job_id, source_dir, source_id, source_sync_run_id, incremental,
+                               root_trace_id, orchestration_mode, status, worker_id, last_heartbeat_at,
+                               running_expires_at, current_step, progress_current, progress_total,
+                               progress_message, progress_updated_at, error_code, persisted_count, error_message,
+                               attempt_count, requested_at, started_at, finished_at
+                        from compile_jobs
+                        where source_sync_run_id is null
+                        order by requested_at desc, job_id desc
+                        limit ?
+                        """,
+                this::mapCompileJobRecord,
+                Math.max(limit, 1)
+        );
+    }
+
+    /**
      * 按作业标识查询编译作业。
      *
      * @param jobId 作业标识

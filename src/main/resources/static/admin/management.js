@@ -12,6 +12,7 @@
         selectedSourceId: null,
         overview: null,
         health: null,
+        recentRunSummary: null,
         recentRuns: [],
         articleCount: 0,
         pendingRouteTab: null,
@@ -36,7 +37,7 @@
         bindIfPresent("refresh-summary", "click", refreshSummary);
         bindIfPresent("refresh-health", "click", refreshHealth);
         bindIfPresent("scroll-workbench-top", "click", scrollToWorkbenchTop);
-        bindIfPresent("refresh-jobs", "click", loadRecentRuns);
+        bindIfPresent("refresh-jobs", "click", loadProcessingTasks);
         bindIfPresent("refresh-sources", "click", loadSources);
         bindIfPresent("search-articles", "click", loadArticles);
         bindIfPresent("article-source-filter", "change", loadArticles);
@@ -537,7 +538,7 @@
         await loadSources();
         await Promise.all([
             loadSourceCredentials(),
-            loadRecentRuns(),
+            loadProcessingTasks(),
             loadArticles()
         ]);
         applyGitAccessMode(resolveGitAccessMode());
@@ -638,17 +639,19 @@
         }
     }
 
-    async function loadRecentRuns() {
+    async function loadProcessingTasks() {
         try {
-            const response = await fetchJson("/api/v1/admin/source-runs?limit=10");
-            const items = response || [];
+            const response = await fetchJson("/api/v1/admin/processing-tasks?limit=10");
+            const items = response && response.items ? response.items : [];
+            state.recentRunSummary = response && response.summary ? response.summary : null;
             state.recentRuns = items;
-            renderRecentRunOverview(items);
+            renderRecentRunOverview(state.recentRunSummary, items);
             renderRecentRunBoard(items);
             renderKnowledgeHelpSystem();
         }
         catch (error) {
-            showError("加载同步记录失败", error);
+            state.recentRunSummary = null;
+            showError("加载当前处理任务失败", error);
         }
     }
 
@@ -938,7 +941,7 @@
         }
         if (normalizeStatus(run.status) === "WAIT_CONFIRM") {
             activateKnowledgeTab("knowledge-runs");
-            setStatus("资料包需要人工确认归并方式，请在“最近同步运行”卡片中处理。", "warning", true);
+            setStatus("资料包需要人工确认归并方式，请在“当前处理任务”卡片中处理。", "warning", true);
             return;
         }
         setStatus(buildRunCompletionMessage(run), resolveRunNoticeTone(run), run.status === "FAILED");
@@ -970,7 +973,7 @@
             stopRunPolling();
             if (normalizeStatus(run.status) === "WAIT_CONFIRM") {
                 activateKnowledgeTab("knowledge-runs");
-                setStatus("资料包需要人工确认归并方式，请在“最近同步运行”卡片中处理。", "warning", true);
+                setStatus("资料包需要人工确认归并方式，请在“当前处理任务”卡片中处理。", "warning", true);
                 return;
             }
             setStatus(buildRunCompletionMessage(run), resolveRunNoticeTone(run), normalizeStatus(run.status) === "FAILED");
@@ -1053,7 +1056,7 @@
             return {
                 tone: "info",
                 title: "正在整理知识库状态",
-                description: "页面会先拉取总览、同步运行和已入库内容，再告诉你现在应该去哪个区块继续操作。",
+                description: "页面会先拉取总览、当前处理任务和已入库内容，再告诉你现在应该去哪个区块继续操作。",
                 actions: [
                     {label: "回到首屏状态", action: "workbench-top", className: "secondary-btn"}
                 ],
@@ -1070,11 +1073,11 @@
                 tone: "danger",
                 title: "有一批资料疑似卡住了",
                 description: buildKnowledgeHelpDescription(
-                        "最近同步运行已经长时间没有推进，先看当前步骤、最近心跳和原因摘要，再决定是否重新同步资料源。",
+                        "当前处理任务已经长时间没有推进，先看当前步骤、最近心跳和原因摘要，再决定是否重新同步资料源。",
                         buildRunReasonSummary(stalledRun)
                 ),
                 actions: [
-                    {label: "查看最近同步运行", action: "knowledge-runs", className: "primary-btn"},
+                    {label: "查看当前处理任务", action: "knowledge-runs", className: "primary-btn"},
                     {label: "回资料导入", action: "knowledge-upload", className: "ghost-btn"}
                 ],
                 faqKey: "upload-delay"
@@ -1089,11 +1092,11 @@
                 tone: "danger",
                 title: "最近一次入库失败了",
                 description: buildKnowledgeHelpDescription(
-                        "先看最近同步运行里的原因摘要，再判断是资料格式、解析方式、网络链路还是模型上游异常。",
+                        "先看当前处理任务里的原因摘要，再判断是资料格式、解析方式、网络链路还是模型上游异常。",
                         buildRunReasonSummary(failedRun)
                 ),
                 actions: [
-                    {label: "查看最近同步运行", action: "knowledge-runs", className: "primary-btn"},
+                    {label: "查看当前处理任务", action: "knowledge-runs", className: "primary-btn"},
                     {label: "回资料导入", action: "knowledge-upload", className: "ghost-btn"}
                 ],
                 faqKey: "upload-delay"
@@ -1107,9 +1110,9 @@
             return {
                 tone: "warning",
                 title: "有一批资料还在等待人工确认",
-                description: "系统已经接收到资料，但还不能自动判断是新建还是合并。先去最近同步运行处理确认，再决定是否继续提问。",
+                description: "系统已经接收到资料，但还不能自动判断是新建还是合并。先去当前处理任务处理确认，再决定是否继续提问。",
                 actions: [
-                    {label: "去最近同步运行", action: "knowledge-runs", className: "primary-btn"},
+                    {label: "去当前处理任务", action: "knowledge-runs", className: "primary-btn"},
                     {label: "看已入库内容", action: "knowledge-articles", className: "ghost-btn"}
                 ],
                 faqKey: "upload-delay"
@@ -1123,9 +1126,9 @@
             return {
                 tone: "warning",
                 title: "资料正在处理中",
-                description: "上传成功不等于已经进入可问答状态。先看最近同步运行确认当前阶段，等处理完成后再判断问答结果是否正常。",
+                description: "上传成功不等于已经进入可问答状态。先看当前处理任务确认当前阶段，等处理完成后再判断问答结果是否正常。",
                 actions: [
-                    {label: "查看最近同步运行", action: "knowledge-runs", className: "primary-btn"},
+                    {label: "查看当前处理任务", action: "knowledge-runs", className: "primary-btn"},
                     {label: "去已入库内容", action: "knowledge-articles", className: "ghost-btn"}
                 ],
                 faqKey: "upload-delay"
@@ -1163,7 +1166,7 @@
         return {
             tone: "success",
             title: "知识库已经可以使用",
-            description: "资料已经进入知识库，现在可以去知识问答直接提问；如果结果不准，再回到这里核对已入库内容和最近同步运行。",
+            description: "资料已经进入知识库，现在可以去知识问答直接提问；如果结果不准，再回到这里核对已入库内容和当前处理任务。",
             actions: [
                 {label: "去知识问答", action: "go-ask", className: "primary-btn"},
                 {label: "去已入库内容", action: "knowledge-articles", className: "ghost-btn"}
@@ -1483,33 +1486,38 @@
         document.getElementById("article-technical-info").innerHTML = "";
     }
 
-    function renderRecentRunOverview(items) {
+    function renderRecentRunOverview(summary, items) {
         const container = document.getElementById("recent-run-overview");
         if (!container) {
             return;
         }
         const effectiveItems = items || [];
-        const runningCount = effectiveItems.filter(function (item) {
+        const fallbackRunningCount = effectiveItems.filter(function (item) {
             return resolveRunDisplayStatus(item) === "RUNNING";
         }).length;
-        const waitingCount = effectiveItems.filter(function (item) {
+        const fallbackWaitingCount = effectiveItems.filter(function (item) {
             return normalizeStatus(item.status) === "WAIT_CONFIRM";
         }).length;
-        const stalledCount = effectiveItems.filter(function (item) {
+        const fallbackStalledCount = effectiveItems.filter(function (item) {
             return resolveRunDisplayStatus(item) === "STALLED";
         }).length;
-        const successCount = effectiveItems.filter(function (item) {
+        const fallbackSuccessCount = effectiveItems.filter(function (item) {
             const normalized = resolveRunDisplayStatus(item);
             return normalized === "SUCCEEDED" || normalized === "SKIPPED_NO_CHANGE";
         }).length;
-        const failedCount = effectiveItems.filter(function (item) {
+        const fallbackFailedCount = effectiveItems.filter(function (item) {
             return resolveRunDisplayStatus(item) === "FAILED" || normalizeStatus(item.status) === "FAILED";
         }).length;
+        const runningCount = Number(summary && summary.runningCount != null ? summary.runningCount : fallbackRunningCount);
+        const waitingCount = Number(summary && summary.waitingCount != null ? summary.waitingCount : fallbackWaitingCount);
+        const stalledCount = Number(summary && summary.stalledCount != null ? summary.stalledCount : fallbackStalledCount);
+        const successCount = Number(summary && summary.succeededCount != null ? summary.succeededCount : fallbackSuccessCount);
+        const failedCount = Number(summary && summary.failedCount != null ? summary.failedCount : fallbackFailedCount);
         const cards = [
             {
                 label: "运行中",
                 value: runningCount,
-                note: runningCount > 0 ? "系统仍在持续推进这些资料" : "当前没有正在推进的同步",
+                note: runningCount > 0 ? "系统仍在持续推进这些任务" : "当前没有正在推进的资料处理任务",
                 tone: runningCount > 0 ? "warning" : ""
             },
             {
@@ -1546,7 +1554,7 @@
             return;
         }
         if (!items || items.length === 0) {
-            container.innerHTML = "<div class='job-card'><p class='item-summary'>暂时没有同步记录</p></div>";
+            container.innerHTML = "<div class='job-card'><p class='item-summary'>暂时没有处理记录</p></div>";
             return;
         }
         const visibleItems = items.slice()
@@ -1567,7 +1575,7 @@
                 + renderBadge(item.sourceType || "UPLOAD")
                 + renderBadge(item.status)
                 + renderDerivedStatusBadge(item)
-                + renderBadge(item.syncAction || item.resolverDecision || "AUTO")
+                + renderTaskModeBadge(item)
                 + "</div>"
                 + "<div class='run-spotlight-time'>提交 " + escapeHtml(formatDateTime(item.requestedAt)) + "</div>"
                 + "</div>"
@@ -1589,7 +1597,9 @@
     }
 
     function buildRunProgressStrip(item, stageInfo) {
-        const steps = ["资料接收", "自动识别", "物化编译", "完成收口"];
+        const steps = item && item.taskType === "STANDALONE_COMPILE"
+                ? ["任务提交", "排队执行", "编译处理中", "完成收口"]
+                : ["资料接收", "自动识别", "物化编译", "完成收口"];
         const normalized = resolveRunDisplayStatus(item);
         return "<div class='run-progress-strip'>"
                 + steps.map(function (stepLabel, index) {
@@ -1716,7 +1726,7 @@
                     + "<div class='meta-row'>"
                     + renderBadge(item.status)
                     + renderDerivedStatusBadge(item)
-                    + renderBadge(item.syncAction || item.resolverDecision || "AUTO")
+                    + renderTaskModeBadge(item)
                     + renderBadge(item.sourceType || "UPLOAD")
                     + "</div>"
                     + "<h4>" + escapeHtml(getRunTitle(item)) + "</h4>"
@@ -1844,6 +1854,9 @@
     }
 
     function getRunTitle(item) {
+        if (item && item.title) {
+            return item.title;
+        }
         if (item.sourceName) {
             return item.sourceName;
         }
@@ -1853,7 +1866,7 @@
             }
             return item.sourceNames[0] + " 等 " + String(item.sourceNames.length) + " 个文件";
         }
-        return "资料同步运行 #" + String(item.runId);
+        return item && item.runId ? "资料处理任务 #" + String(item.runId) : "资料处理任务";
     }
 
     function renderDerivedStatusBadge(item) {
@@ -1862,6 +1875,19 @@
             return "";
         }
         return renderBadge(derivedStatus);
+    }
+
+    function renderTaskModeBadge(item) {
+        if (item && item.syncAction) {
+            return renderBadge(item.syncAction);
+        }
+        if (item && item.resolverDecision) {
+            return renderBadge(item.resolverDecision);
+        }
+        if (item && item.taskType === "SOURCE_SYNC") {
+            return renderBadge("AUTO");
+        }
+        return "";
     }
 
     function resolveRunDisplayStatus(item) {
@@ -2011,7 +2037,7 @@
         }
         if (displayStatus === "FAILED") {
             const message = item && item.errorMessage ? compactDisplayMessage(item.errorMessage) : "";
-            return message || "同步运行失败，请检查资料源配置、网络链路或上传内容。";
+            return message || "任务处理失败，请检查资料源配置、网络链路或上传内容。";
         }
         if (displayStatus === "RUNNING") {
             return compactDisplayMessage(item && item.compileProgressMessage) || "系统仍在推进当前编译步骤。";
@@ -2089,6 +2115,9 @@
     }
 
     function shouldShowResyncAction(item) {
+        if (item && item.taskType === "STANDALONE_COMPILE") {
+            return false;
+        }
         const sourceId = parseOptionalInteger(item && item.sourceId);
         if (sourceId == null) {
             return false;
@@ -2190,7 +2219,14 @@
     }
 
     function compareRunsByRequestedAtDesc(left, right) {
-        return toTimestamp(right && right.requestedAt) - toTimestamp(left && left.requestedAt);
+        return toTimestamp(resolveRunSortAt(right)) - toTimestamp(resolveRunSortAt(left));
+    }
+
+    function resolveRunSortAt(item) {
+        if (!item) {
+            return "";
+        }
+        return resolveRunLastProgressAt(item) || item.updatedAt || item.requestedAt || "";
     }
 
     function resolveArticleDisplayTitle(item) {
@@ -2965,6 +3001,7 @@
             COMPILE_QUEUED: "待编译",
             WAIT_CONFIRM: "待确认",
             SKIPPED_NO_CHANGE: "无变化跳过",
+            DIRECT_COMPILE: "直接编译",
             CONFIRMED: "已确认",
             NEW_SOURCE: "新建资料源",
             EXISTING_SOURCE_UPDATE: "更新已有资料源",

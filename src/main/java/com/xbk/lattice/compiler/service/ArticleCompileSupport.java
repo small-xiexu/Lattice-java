@@ -350,9 +350,12 @@ public class ArticleCompileSupport {
      * @return 最终文章记录
      */
     public ArticleRecord finalizeArticleForPersist(ArticleReviewEnvelope reviewEnvelope) {
-        String reviewStatus = "passed";
-        if (reviewEnvelope.getReviewResult() == null || !reviewEnvelope.getReviewResult().isPass()) {
-            reviewStatus = "needs_human_review";
+        String reviewStatus = reviewEnvelope == null ? "" : reviewEnvelope.getReviewStatus();
+        if (reviewStatus == null || reviewStatus.isBlank()) {
+            reviewStatus = "passed";
+            if (reviewEnvelope.getReviewResult() == null || !reviewEnvelope.getReviewResult().isPass()) {
+                reviewStatus = "needs_human_review";
+            }
         }
         return compileArticleNode.replaceReviewStatus(
                 reviewEnvelope.getArticle(),

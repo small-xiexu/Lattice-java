@@ -7,6 +7,7 @@ import com.xbk.lattice.query.citation.QueryAnswerAuditSnapshot;
 import com.xbk.lattice.query.domain.ReviewResult;
 import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import com.xbk.lattice.query.service.QueryArticleHit;
+import com.xbk.lattice.query.service.RetrievalStrategy;
 
 import java.util.List;
 
@@ -70,6 +71,23 @@ public interface QueryWorkingSetStore {
      * @return 融合命中
      */
     List<QueryArticleHit> loadFusedHits(String ref);
+
+    /**
+     * 保存检索策略。
+     *
+     * @param queryId 查询标识
+     * @param retrievalStrategy 检索策略
+     * @return 工作集引用
+     */
+    String saveRetrievalStrategy(String queryId, RetrievalStrategy retrievalStrategy);
+
+    /**
+     * 读取检索策略。
+     *
+     * @param ref 工作集引用
+     * @return 检索策略
+     */
+    RetrievalStrategy loadRetrievalStrategy(String ref);
 
     /**
      * 保存答案草稿。

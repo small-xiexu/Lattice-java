@@ -15,17 +15,26 @@ import com.xbk.lattice.query.domain.QueryAnswerPayload;
 import com.xbk.lattice.query.domain.ReviewIssue;
 import com.xbk.lattice.query.domain.ReviewResult;
 import com.xbk.lattice.query.service.AnswerGenerationService;
+import com.xbk.lattice.query.service.ArticleChunkFtsSearchService;
 import com.xbk.lattice.query.service.ChunkVectorSearchService;
 import com.xbk.lattice.query.service.ContributionSearchService;
 import com.xbk.lattice.query.service.FtsSearchService;
 import com.xbk.lattice.query.service.GraphSearchService;
+import com.xbk.lattice.query.service.QueryIntent;
+import com.xbk.lattice.query.service.QueryIntentClassifier;
 import com.xbk.lattice.query.service.QueryArticleHit;
 import com.xbk.lattice.query.service.QueryCacheStore;
 import com.xbk.lattice.query.service.QueryRetrievalSettingsService;
 import com.xbk.lattice.query.service.QueryRetrievalSettingsState;
+import com.xbk.lattice.query.service.QueryRewriteResult;
+import com.xbk.lattice.query.service.QueryRewriteService;
 import com.xbk.lattice.query.service.RefKeySearchService;
+import com.xbk.lattice.query.service.RetrievalAuditService;
+import com.xbk.lattice.query.service.RetrievalStrategy;
+import com.xbk.lattice.query.service.RetrievalStrategyResolver;
 import com.xbk.lattice.query.service.ReviewerAgent;
 import com.xbk.lattice.query.service.RrfFusionService;
+import com.xbk.lattice.query.service.SourceChunkFtsSearchService;
 import com.xbk.lattice.query.service.SourceSearchService;
 import com.xbk.lattice.query.service.VectorSearchService;
 import lombok.extern.slf4j.Slf4j;
@@ -53,25 +62,33 @@ public class QueryGraphDefinitionFactory {
 
     private static final int TOP_K = 8;
 
-    private static final String CHANNEL_FTS = "fts";
+    private static final String CHANNEL_FTS = RetrievalStrategyResolver.CHANNEL_FTS;
 
-    private static final String CHANNEL_REFKEY = "refkey";
+    private static final String CHANNEL_ARTICLE_CHUNK_FTS = RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS;
 
-    private static final String CHANNEL_SOURCE = "source";
+    private static final String CHANNEL_REFKEY = RetrievalStrategyResolver.CHANNEL_REFKEY;
 
-    private static final String CHANNEL_CONTRIBUTION = "contribution";
+    private static final String CHANNEL_SOURCE = RetrievalStrategyResolver.CHANNEL_SOURCE;
 
-    private static final String CHANNEL_GRAPH = "graph";
+    private static final String CHANNEL_SOURCE_CHUNK_FTS = RetrievalStrategyResolver.CHANNEL_SOURCE_CHUNK_FTS;
 
-    private static final String CHANNEL_ARTICLE_VECTOR = "article_vector";
+    private static final String CHANNEL_CONTRIBUTION = RetrievalStrategyResolver.CHANNEL_CONTRIBUTION;
 
-    private static final String CHANNEL_CHUNK_VECTOR = "chunk_vector";
+    private static final String CHANNEL_GRAPH = RetrievalStrategyResolver.CHANNEL_GRAPH;
+
+    private static final String CHANNEL_ARTICLE_VECTOR = RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR;
+
+    private static final String CHANNEL_CHUNK_VECTOR = RetrievalStrategyResolver.CHANNEL_CHUNK_VECTOR;
 
     private final FtsSearchService ftsSearchService;
+
+    private final ArticleChunkFtsSearchService articleChunkFtsSearchService;
 
     private final RefKeySearchService refKeySearchService;
 
     private final SourceSearchService sourceSearchService;
+
+    private final SourceChunkFtsSearchService sourceChunkFtsSearchService;
 
     private final ContributionSearchService contributionSearchService;
 
@@ -84,6 +101,14 @@ public class QueryGraphDefinitionFactory {
     private final RrfFusionService rrfFusionService;
 
     private final QueryRetrievalSettingsService queryRetrievalSettingsService;
+
+    private final QueryRewriteService queryRewriteService;
+
+    private final QueryIntentClassifier queryIntentClassifier;
+
+    private final RetrievalStrategyResolver retrievalStrategyResolver;
+
+    private final RetrievalAuditService retrievalAuditService;
 
     private final AnswerGenerationService answerGenerationService;
 
@@ -104,14 +129,20 @@ public class QueryGraphDefinitionFactory {
      */
     public QueryGraphDefinitionFactory(
             FtsSearchService ftsSearchService,
+            ArticleChunkFtsSearchService articleChunkFtsSearchService,
             RefKeySearchService refKeySearchService,
             SourceSearchService sourceSearchService,
+            SourceChunkFtsSearchService sourceChunkFtsSearchService,
             ContributionSearchService contributionSearchService,
             GraphSearchService graphSearchService,
             VectorSearchService vectorSearchService,
             ChunkVectorSearchService chunkVectorSearchService,
             RrfFusionService rrfFusionService,
             QueryRetrievalSettingsService queryRetrievalSettingsService,
+            QueryRewriteService queryRewriteService,
+            QueryIntentClassifier queryIntentClassifier,
+            RetrievalStrategyResolver retrievalStrategyResolver,
+            RetrievalAuditService retrievalAuditService,
             AnswerGenerationService answerGenerationService,
             QueryCacheStore queryCacheStore,
             ReviewerAgent reviewerAgent,
@@ -123,14 +154,22 @@ public class QueryGraphDefinitionFactory {
             QueryAnswerProjectionBuilder queryAnswerProjectionBuilder
     ) {
         this.ftsSearchService = ftsSearchService;
+        this.articleChunkFtsSearchService = articleChunkFtsSearchService;
         this.refKeySearchService = refKeySearchService;
         this.sourceSearchService = sourceSearchService;
+        this.sourceChunkFtsSearchService = sourceChunkFtsSearchService;
         this.contributionSearchService = contributionSearchService;
         this.graphSearchService = graphSearchService;
         this.vectorSearchService = vectorSearchService;
         this.chunkVectorSearchService = chunkVectorSearchService;
         this.rrfFusionService = rrfFusionService;
         this.queryRetrievalSettingsService = queryRetrievalSettingsService;
+        this.queryRewriteService = queryRewriteService == null ? new QueryRewriteService() : queryRewriteService;
+        this.queryIntentClassifier = queryIntentClassifier == null ? new QueryIntentClassifier() : queryIntentClassifier;
+        this.retrievalStrategyResolver = retrievalStrategyResolver == null
+                ? new RetrievalStrategyResolver()
+                : retrievalStrategyResolver;
+        this.retrievalAuditService = retrievalAuditService;
         this.answerGenerationService = answerGenerationService;
         this.queryCacheStore = queryCacheStore;
         this.reviewerAgent = reviewerAgent;
@@ -157,6 +196,9 @@ public class QueryGraphDefinitionFactory {
     public StateGraph build() throws Exception {
         StateGraph stateGraph = new StateGraph();
         stateGraph.addNode("normalize_question", AsyncNodeAction.node_async(this::normalizeQuestion));
+        stateGraph.addNode("rewrite_query", AsyncNodeAction.node_async(this::rewriteQuery));
+        stateGraph.addNode("classify_intent", AsyncNodeAction.node_async(this::classifyIntent));
+        stateGraph.addNode("resolve_retrieval_strategy", AsyncNodeAction.node_async(this::resolveRetrievalStrategy));
         stateGraph.addNode("check_cache", AsyncNodeAction.node_async(this::checkCache));
         stateGraph.addNode(
                 "dispatch_retrieval",
@@ -164,8 +206,10 @@ public class QueryGraphDefinitionFactory {
                 Map.of(
                         "retrieve_candidates_serial", "retrieve_candidates_serial",
                         "retrieve_fts", "retrieve_fts",
+                        "retrieve_article_chunk_fts", "retrieve_article_chunk_fts",
                         "retrieve_refkey", "retrieve_refkey",
                         "retrieve_source", "retrieve_source",
+                        "retrieve_source_chunk_fts", "retrieve_source_chunk_fts",
                         "retrieve_contribution", "retrieve_contribution",
                         "retrieve_graph", "retrieve_graph",
                         "retrieve_article_vector", "retrieve_article_vector",
@@ -174,8 +218,10 @@ public class QueryGraphDefinitionFactory {
         );
         stateGraph.addNode("retrieve_candidates_serial", AsyncNodeAction.node_async(this::retrieveCandidatesSerial));
         stateGraph.addNode("retrieve_fts", AsyncNodeAction.node_async(this::retrieveFts));
+        stateGraph.addNode("retrieve_article_chunk_fts", AsyncNodeAction.node_async(this::retrieveArticleChunkFts));
         stateGraph.addNode("retrieve_refkey", AsyncNodeAction.node_async(this::retrieveRefkey));
         stateGraph.addNode("retrieve_source", AsyncNodeAction.node_async(this::retrieveSource));
+        stateGraph.addNode("retrieve_source_chunk_fts", AsyncNodeAction.node_async(this::retrieveSourceChunkFts));
         stateGraph.addNode("retrieve_contribution", AsyncNodeAction.node_async(this::retrieveContribution));
         stateGraph.addNode("retrieve_graph", AsyncNodeAction.node_async(this::retrieveGraph));
         stateGraph.addNode("retrieve_article_vector", AsyncNodeAction.node_async(this::retrieveArticleVector));
@@ -191,7 +237,10 @@ public class QueryGraphDefinitionFactory {
         stateGraph.addNode("finalize_response", AsyncNodeAction.node_async(queryFinalizationGraphFragment::finalizeResponse));
 
         stateGraph.addEdge(StateGraph.START, "normalize_question");
-        stateGraph.addEdge("normalize_question", "check_cache");
+        stateGraph.addEdge("normalize_question", "rewrite_query");
+        stateGraph.addEdge("rewrite_query", "classify_intent");
+        stateGraph.addEdge("classify_intent", "resolve_retrieval_strategy");
+        stateGraph.addEdge("resolve_retrieval_strategy", "check_cache");
         stateGraph.addConditionalEdges(
                 "check_cache",
                 AsyncEdgeAction.edge_async(state -> queryGraphConditions.routeAfterCacheCheck(
@@ -206,8 +255,10 @@ public class QueryGraphDefinitionFactory {
         stateGraph.addEdge(
                 List.of(
                         "retrieve_fts",
+                        "retrieve_article_chunk_fts",
                         "retrieve_refkey",
                         "retrieve_source",
+                        "retrieve_source_chunk_fts",
                         "retrieve_contribution",
                         "retrieve_graph",
                         "retrieve_article_vector",
@@ -263,6 +314,39 @@ public class QueryGraphDefinitionFactory {
         return queryGraphStateMapper.toDeltaMap(state);
     }
 
+    private Map<String, Object> rewriteQuery(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
+        QueryRetrievalSettingsState retrievalSettings = retrievalSettings();
+        QueryRewriteResult rewriteResult = retrievalSettings.isRewriteEnabled()
+                ? queryRewriteService.rewrite(state.getQueryId(), state.getNormalizedQuestion())
+                : QueryRewriteResult.unchanged(state.getNormalizedQuestion());
+        state.setRewrittenQuestion(rewriteResult.getRewrittenQuestion());
+        state.setRewriteAuditRef(rewriteResult.getAuditRef());
+        return queryGraphStateMapper.toDeltaMap(state);
+    }
+
+    private Map<String, Object> classifyIntent(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
+        QueryIntent queryIntent = queryIntentClassifier.classify(effectiveRetrievalQuestion(state));
+        state.setQueryIntent(queryIntent.name());
+        return queryGraphStateMapper.toDeltaMap(state);
+    }
+
+    private Map<String, Object> resolveRetrievalStrategy(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
+        QueryIntent queryIntent = readQueryIntent(state.getQueryIntent());
+        RetrievalStrategy retrievalStrategy = retrievalStrategyResolver.resolve(
+                effectiveRetrievalQuestion(state),
+                queryIntent,
+                retrievalSettings()
+        );
+        state.setRetrievalStrategyRef(queryWorkingSetStore.saveRetrievalStrategy(
+                state.getQueryId(),
+                retrievalStrategy
+        ));
+        return queryGraphStateMapper.toDeltaMap(state);
+    }
+
     private Map<String, Object> checkCache(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
         QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
         QueryResponse cachedResponse = queryCacheStore.get(state.getNormalizedQuestion()).orElse(null);
@@ -287,20 +371,22 @@ public class QueryGraphDefinitionFactory {
             com.alibaba.cloud.ai.graph.RunnableConfig runnableConfig
     ) {
         QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
-        QueryRetrievalSettingsState retrievalSettings = retrievalSettings();
-        state.setRetrievalMode(retrievalSettings.isParallelEnabled() ? "parallel" : "serial");
+        RetrievalStrategy retrievalStrategy = currentStrategy(state);
+        state.setRetrievalMode(retrievalStrategy.isParallelEnabled() ? "parallel" : "serial");
         state.setRetrievalStartedAtEpochMs(System.currentTimeMillis());
         log.info(
                 "[VECTOR][RETRIEVE][START] queryId={}, mode={}, elapsedMs=0, success=true",
                 state.getQueryId(),
                 state.getRetrievalMode()
         );
-        if (retrievalSettings.isParallelEnabled()) {
+        if (retrievalStrategy.isParallelEnabled()) {
             return new MultiCommand(
                     List.of(
                             "retrieve_fts",
+                            "retrieve_article_chunk_fts",
                             "retrieve_refkey",
                             "retrieve_source",
+                            "retrieve_source_chunk_fts",
                             "retrieve_contribution",
                             "retrieve_graph",
                             "retrieve_article_vector",
@@ -318,77 +404,119 @@ public class QueryGraphDefinitionFactory {
     }
 
     private Map<String, Object> retrieveFts(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
         return saveSingleChannelHits(
-                queryGraphStateMapper.fromMap(overAllState.data()),
+                state,
                 CHANNEL_FTS,
-                ftsSearchService.search(readQuestion(overAllState), TOP_K)
+                shouldSearch(state, CHANNEL_FTS) ? ftsSearchService.search(readRetrievalQuestion(state), TOP_K) : List.of()
+        );
+    }
+
+    private Map<String, Object> retrieveArticleChunkFts(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
+        return saveSingleChannelHits(
+                state,
+                CHANNEL_ARTICLE_CHUNK_FTS,
+                shouldSearch(state, CHANNEL_ARTICLE_CHUNK_FTS)
+                        ? articleChunkFtsSearchService.search(readRetrievalQuestion(state), TOP_K)
+                        : List.of()
         );
     }
 
     private Map<String, Object> retrieveRefkey(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
         return saveSingleChannelHits(
-                queryGraphStateMapper.fromMap(overAllState.data()),
+                state,
                 CHANNEL_REFKEY,
-                refKeySearchService.search(readQuestion(overAllState), TOP_K)
+                shouldSearch(state, CHANNEL_REFKEY) ? refKeySearchService.search(readRetrievalQuestion(state), TOP_K) : List.of()
         );
     }
 
     private Map<String, Object> retrieveSource(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
         return saveSingleChannelHits(
-                queryGraphStateMapper.fromMap(overAllState.data()),
+                state,
                 CHANNEL_SOURCE,
-                sourceSearchService.search(readQuestion(overAllState), TOP_K)
+                shouldSearch(state, CHANNEL_SOURCE) ? sourceSearchService.search(readRetrievalQuestion(state), TOP_K) : List.of()
+        );
+    }
+
+    private Map<String, Object> retrieveSourceChunkFts(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
+        return saveSingleChannelHits(
+                state,
+                CHANNEL_SOURCE_CHUNK_FTS,
+                shouldSearch(state, CHANNEL_SOURCE_CHUNK_FTS)
+                        ? sourceChunkFtsSearchService.search(readRetrievalQuestion(state), TOP_K)
+                        : List.of()
         );
     }
 
     private Map<String, Object> retrieveContribution(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
         return saveSingleChannelHits(
-                queryGraphStateMapper.fromMap(overAllState.data()),
+                state,
                 CHANNEL_CONTRIBUTION,
-                contributionSearchService.search(readQuestion(overAllState), TOP_K)
+                shouldSearch(state, CHANNEL_CONTRIBUTION)
+                        ? contributionSearchService.search(readRetrievalQuestion(state), TOP_K)
+                        : List.of()
         );
     }
 
     private Map<String, Object> retrieveGraph(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
         return saveSingleChannelHits(
-                queryGraphStateMapper.fromMap(overAllState.data()),
+                state,
                 CHANNEL_GRAPH,
-                graphSearchService.search(readQuestion(overAllState), TOP_K)
+                shouldSearch(state, CHANNEL_GRAPH) ? graphSearchService.search(readRetrievalQuestion(state), TOP_K) : List.of()
         );
     }
 
     private Map<String, Object> retrieveArticleVector(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
         return saveSingleChannelHits(
-                queryGraphStateMapper.fromMap(overAllState.data()),
+                state,
                 CHANNEL_ARTICLE_VECTOR,
-                vectorSearchService.search(readQuestion(overAllState), TOP_K)
+                shouldSearch(state, CHANNEL_ARTICLE_VECTOR)
+                        ? vectorSearchService.search(readRetrievalQuestion(state), TOP_K)
+                        : List.of()
         );
     }
 
     private Map<String, Object> retrieveChunkVector(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
+        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
         return saveSingleChannelHits(
-                queryGraphStateMapper.fromMap(overAllState.data()),
+                state,
                 CHANNEL_CHUNK_VECTOR,
-                chunkVectorSearchService.search(readQuestion(overAllState), TOP_K)
+                shouldSearch(state, CHANNEL_CHUNK_VECTOR)
+                        ? chunkVectorSearchService.search(readRetrievalQuestion(state), TOP_K)
+                        : List.of()
         );
     }
 
     private Map<String, Object> fuseCandidates(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
         QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
-        QueryRetrievalSettingsState retrievalSettings = retrievalSettings();
+        RetrievalStrategy retrievalStrategy = currentStrategy(state);
         Map<String, List<QueryArticleHit>> channelHits = loadChannelHits(state);
-        Map<String, Double> weights = new LinkedHashMap<String, Double>();
-        weights.put(CHANNEL_FTS, retrievalSettings.getFtsWeight());
-        weights.put(CHANNEL_REFKEY, retrievalSettings.getFtsWeight());
-        weights.put(CHANNEL_SOURCE, retrievalSettings.getSourceWeight());
-        weights.put(CHANNEL_CONTRIBUTION, retrievalSettings.getContributionWeight());
-        weights.put(CHANNEL_GRAPH, retrievalSettings.getGraphWeight());
-        weights.put(CHANNEL_ARTICLE_VECTOR, retrievalSettings.getArticleVectorWeight());
-        weights.put(CHANNEL_CHUNK_VECTOR, retrievalSettings.getChunkVectorWeight());
-        List<QueryArticleHit> fusedHits = rrfFusionService.fuse(channelHits, weights, TOP_K, retrievalSettings.getRrfK());
+        Map<String, Double> weights = retrievalStrategy.getChannelWeights();
+        List<QueryArticleHit> fusedHits = rrfFusionService.fuse(channelHits, weights, TOP_K, retrievalStrategy.getRrfK());
         state.setHasFusedHits(!fusedHits.isEmpty());
         if (!fusedHits.isEmpty()) {
             state.setFusedHitsRef(queryWorkingSetStore.saveFusedHits(state.getQueryId(), fusedHits));
+        }
+        if (retrievalAuditService != null) {
+            state.setRetrievalAuditRef(retrievalAuditService.persist(
+                    state.getQueryId(),
+                    state.getQuestion(),
+                    state.getNormalizedQuestion(),
+                    retrievalStrategy,
+                    state.getRetrievalMode(),
+                    isRewriteApplied(state),
+                    state.getRewriteAuditRef(),
+                    state.getRetrievalStrategyRef(),
+                    channelHits,
+                    fusedHits
+            ));
         }
         long startedAt = state.getRetrievalStartedAtEpochMs();
         long elapsedMs = startedAt <= 0L ? 0L : System.currentTimeMillis() - startedAt;
@@ -537,20 +665,60 @@ public class QueryGraphDefinitionFactory {
         return new ArrayList<String>(sourcePaths);
     }
 
-    private String readQuestion(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
-        QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
-        return state.getQuestion();
-    }
-
     private Map<String, Object> saveAllRetrievalHits(QueryGraphState state) {
         Map<String, Object> delta = new LinkedHashMap<String, Object>();
-        delta.putAll(saveSingleChannelHits(state, CHANNEL_FTS, ftsSearchService.search(state.getQuestion(), TOP_K)));
-        delta.putAll(saveSingleChannelHits(state, CHANNEL_REFKEY, refKeySearchService.search(state.getQuestion(), TOP_K)));
-        delta.putAll(saveSingleChannelHits(state, CHANNEL_SOURCE, sourceSearchService.search(state.getQuestion(), TOP_K)));
-        delta.putAll(saveSingleChannelHits(state, CHANNEL_CONTRIBUTION, contributionSearchService.search(state.getQuestion(), TOP_K)));
-        delta.putAll(saveSingleChannelHits(state, CHANNEL_GRAPH, graphSearchService.search(state.getQuestion(), TOP_K)));
-        delta.putAll(saveSingleChannelHits(state, CHANNEL_ARTICLE_VECTOR, vectorSearchService.search(state.getQuestion(), TOP_K)));
-        delta.putAll(saveSingleChannelHits(state, CHANNEL_CHUNK_VECTOR, chunkVectorSearchService.search(state.getQuestion(), TOP_K)));
+        String retrievalQuestion = readRetrievalQuestion(state);
+        delta.putAll(saveSingleChannelHits(
+                state,
+                CHANNEL_FTS,
+                shouldSearch(state, CHANNEL_FTS) ? ftsSearchService.search(retrievalQuestion, TOP_K) : List.of()
+        ));
+        delta.putAll(saveSingleChannelHits(
+                state,
+                CHANNEL_ARTICLE_CHUNK_FTS,
+                shouldSearch(state, CHANNEL_ARTICLE_CHUNK_FTS)
+                        ? articleChunkFtsSearchService.search(retrievalQuestion, TOP_K)
+                        : List.of()
+        ));
+        delta.putAll(saveSingleChannelHits(
+                state,
+                CHANNEL_REFKEY,
+                shouldSearch(state, CHANNEL_REFKEY) ? refKeySearchService.search(retrievalQuestion, TOP_K) : List.of()
+        ));
+        delta.putAll(saveSingleChannelHits(
+                state,
+                CHANNEL_SOURCE,
+                shouldSearch(state, CHANNEL_SOURCE) ? sourceSearchService.search(retrievalQuestion, TOP_K) : List.of()
+        ));
+        delta.putAll(saveSingleChannelHits(
+                state,
+                CHANNEL_SOURCE_CHUNK_FTS,
+                shouldSearch(state, CHANNEL_SOURCE_CHUNK_FTS)
+                        ? sourceChunkFtsSearchService.search(retrievalQuestion, TOP_K)
+                        : List.of()
+        ));
+        delta.putAll(saveSingleChannelHits(
+                state,
+                CHANNEL_CONTRIBUTION,
+                shouldSearch(state, CHANNEL_CONTRIBUTION)
+                        ? contributionSearchService.search(retrievalQuestion, TOP_K)
+                        : List.of()
+        ));
+        delta.putAll(saveSingleChannelHits(
+                state,
+                CHANNEL_GRAPH,
+                shouldSearch(state, CHANNEL_GRAPH) ? graphSearchService.search(retrievalQuestion, TOP_K) : List.of()
+        ));
+        delta.putAll(saveSingleChannelHits(
+                state,
+                CHANNEL_ARTICLE_VECTOR,
+                shouldSearch(state, CHANNEL_ARTICLE_VECTOR) ? vectorSearchService.search(retrievalQuestion, TOP_K) : List.of()
+        ));
+        delta.putAll(saveSingleChannelHits(
+                state,
+                CHANNEL_CHUNK_VECTOR,
+                shouldSearch(state, CHANNEL_CHUNK_VECTOR) ? chunkVectorSearchService.search(retrievalQuestion, TOP_K) : List.of()
+        ));
         return delta;
     }
 
@@ -560,11 +728,17 @@ public class QueryGraphDefinitionFactory {
         if (CHANNEL_FTS.equals(channel)) {
             delta.put(QueryGraphStateKeys.FTS_HITS_REF, ref);
         }
+        else if (CHANNEL_ARTICLE_CHUNK_FTS.equals(channel)) {
+            delta.put(QueryGraphStateKeys.ARTICLE_CHUNK_HITS_REF, ref);
+        }
         else if (CHANNEL_REFKEY.equals(channel)) {
             delta.put(QueryGraphStateKeys.REFKEY_HITS_REF, ref);
         }
         else if (CHANNEL_SOURCE.equals(channel)) {
             delta.put(QueryGraphStateKeys.SOURCE_HITS_REF, ref);
+        }
+        else if (CHANNEL_SOURCE_CHUNK_FTS.equals(channel)) {
+            delta.put(QueryGraphStateKeys.SOURCE_CHUNK_HITS_REF, ref);
         }
         else if (CHANNEL_CONTRIBUTION.equals(channel)) {
             delta.put(QueryGraphStateKeys.CONTRIBUTION_HITS_REF, ref);
@@ -584,8 +758,10 @@ public class QueryGraphDefinitionFactory {
     private Map<String, List<QueryArticleHit>> loadChannelHits(QueryGraphState state) {
         Map<String, List<QueryArticleHit>> channelHits = new LinkedHashMap<String, List<QueryArticleHit>>();
         channelHits.put(CHANNEL_FTS, queryWorkingSetStore.loadHits(state.getFtsHitsRef()));
+        channelHits.put(CHANNEL_ARTICLE_CHUNK_FTS, queryWorkingSetStore.loadHits(state.getArticleChunkHitsRef()));
         channelHits.put(CHANNEL_REFKEY, queryWorkingSetStore.loadHits(state.getRefkeyHitsRef()));
         channelHits.put(CHANNEL_SOURCE, queryWorkingSetStore.loadHits(state.getSourceHitsRef()));
+        channelHits.put(CHANNEL_SOURCE_CHUNK_FTS, queryWorkingSetStore.loadHits(state.getSourceChunkHitsRef()));
         channelHits.put(CHANNEL_CONTRIBUTION, queryWorkingSetStore.loadHits(state.getContributionHitsRef()));
         channelHits.put(CHANNEL_GRAPH, queryWorkingSetStore.loadHits(state.getGraphHitsRef()));
         channelHits.put(CHANNEL_ARTICLE_VECTOR, queryWorkingSetStore.loadHits(state.getArticleVectorHitsRef()));
@@ -597,5 +773,67 @@ public class QueryGraphDefinitionFactory {
         return queryRetrievalSettingsService == null
                 ? new QueryRetrievalSettingsService().defaultState()
                 : queryRetrievalSettingsService.getCurrentState();
+    }
+
+    private boolean shouldSearch(QueryGraphState state, String channel) {
+        RetrievalStrategy retrievalStrategy = currentStrategy(state);
+        return retrievalStrategy.isChannelEnabled(channel);
+    }
+
+    private RetrievalStrategy currentStrategy(QueryGraphState state) {
+        RetrievalStrategy retrievalStrategy = queryWorkingSetStore.loadRetrievalStrategy(state.getRetrievalStrategyRef());
+        if (retrievalStrategy != null) {
+            return retrievalStrategy;
+        }
+        return retrievalStrategyResolver.resolve(
+                effectiveRetrievalQuestion(state),
+                readQueryIntent(state.getQueryIntent()),
+                retrievalSettings()
+        );
+    }
+
+    private String readRetrievalQuestion(QueryGraphState state) {
+        RetrievalStrategy retrievalStrategy = currentStrategy(state);
+        if (retrievalStrategy.getRetrievalQuestion() != null && !retrievalStrategy.getRetrievalQuestion().isBlank()) {
+            return retrievalStrategy.getRetrievalQuestion();
+        }
+        return effectiveRetrievalQuestion(state);
+    }
+
+    private String effectiveRetrievalQuestion(QueryGraphState state) {
+        if (state.getRewrittenQuestion() != null && !state.getRewrittenQuestion().isBlank()) {
+            return state.getRewrittenQuestion();
+        }
+        if (state.getNormalizedQuestion() != null && !state.getNormalizedQuestion().isBlank()) {
+            return state.getNormalizedQuestion();
+        }
+        return state.getQuestion();
+    }
+
+    private boolean isRewriteApplied(QueryGraphState state) {
+        if (state == null) {
+            return false;
+        }
+        String rewrittenQuestion = state.getRewrittenQuestion();
+        String normalizedQuestion = state.getNormalizedQuestion();
+        if (rewrittenQuestion == null || rewrittenQuestion.isBlank()) {
+            return false;
+        }
+        if (normalizedQuestion == null) {
+            return false;
+        }
+        return !rewrittenQuestion.equals(normalizedQuestion);
+    }
+
+    private QueryIntent readQueryIntent(String queryIntent) {
+        if (queryIntent == null || queryIntent.isBlank()) {
+            return QueryIntent.GENERAL;
+        }
+        try {
+            return QueryIntent.valueOf(queryIntent);
+        }
+        catch (IllegalArgumentException exception) {
+            return QueryIntent.GENERAL;
+        }
     }
 }

@@ -1,5 +1,8 @@
 package com.xbk.lattice.compiler.domain;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
 
 /**
@@ -24,7 +27,12 @@ public class SourceBatch {
      * @param groupKey 分组键
      * @param sources 源文件集合
      */
-    public SourceBatch(String batchId, String groupKey, List<RawSource> sources) {
+    @JsonCreator
+    public SourceBatch(
+            @JsonProperty("batchId") String batchId,
+            @JsonProperty("groupKey") String groupKey,
+            @JsonProperty("sources") List<RawSource> sources
+    ) {
         this.batchId = batchId;
         this.groupKey = groupKey;
         this.sources = sources;

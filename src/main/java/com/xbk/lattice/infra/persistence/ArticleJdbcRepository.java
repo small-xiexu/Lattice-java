@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.xbk.lattice.article.service.ArticleMarkdownSupport;
 import org.postgresql.util.PGobject;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.context.annotation.Profile;
@@ -47,13 +48,20 @@ public class ArticleJdbcRepository {
      * @param articleRecord 文章记录
      */
     public void upsert(ArticleRecord articleRecord) {
+        ArticleRecord normalizedArticleRecord = ArticleMarkdownSupport.synchronizeArticleRecord(
+                articleRecord,
+                articleRecord.getContent(),
+                articleRecord.getReviewStatus()
+        );
+        String searchText = buildArticleSearchText(normalizedArticleRecord);
+        String refkeyText = buildRefkeyText(normalizedArticleRecord);
         String sql = """
                 insert into articles (
                     source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
                     source_paths, metadata_json, summary, referential_keywords, depends_on,
-                    related, confidence, review_status
+                    related, confidence, review_status, search_text, search_tsv, refkey_text
                 )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, to_tsvector('simple'::regconfig, ?), ?)
                 on conflict (article_key) do update
                 set source_id = excluded.source_id,
                     concept_id = excluded.concept_id,
@@ -68,45 +76,51 @@ public class ArticleJdbcRepository {
                     depends_on = excluded.depends_on,
                     related = excluded.related,
                     confidence = excluded.confidence,
-                    review_status = excluded.review_status
+                    review_status = excluded.review_status,
+                    search_text = excluded.search_text,
+                    search_tsv = excluded.search_tsv,
+                    refkey_text = excluded.refkey_text
                 """;
         jdbcTemplate.update(connection -> {
             Array sourcePathsArray = connection.createArrayOf(
                     "text",
-                    articleRecord.getSourcePaths().toArray(new String[0])
+                    normalizedArticleRecord.getSourcePaths().toArray(new String[0])
             );
             Array referentialKeywordsArray = connection.createArrayOf(
                     "text",
-                    articleRecord.getReferentialKeywords().toArray(new String[0])
+                    normalizedArticleRecord.getReferentialKeywords().toArray(new String[0])
             );
             Array dependsOnArray = connection.createArrayOf(
                     "text",
-                    articleRecord.getDependsOn().toArray(new String[0])
+                    normalizedArticleRecord.getDependsOn().toArray(new String[0])
             );
             Array relatedArray = connection.createArrayOf(
                     "text",
-                    articleRecord.getRelated().toArray(new String[0])
+                    normalizedArticleRecord.getRelated().toArray(new String[0])
             );
             PGobject metadataJsonObject = new PGobject();
             metadataJsonObject.setType("jsonb");
-            metadataJsonObject.setValue(articleRecord.getMetadataJson());
+            metadataJsonObject.setValue(normalizedArticleRecord.getMetadataJson());
 
             java.sql.PreparedStatement preparedStatement = connection.prepareStatement(sql);
-            preparedStatement.setObject(1, articleRecord.getSourceId());
-            preparedStatement.setString(2, articleRecord.getArticleKey());
-            preparedStatement.setString(3, articleRecord.getConceptId());
-            preparedStatement.setString(4, articleRecord.getTitle());
-            preparedStatement.setString(5, articleRecord.getContent());
-            preparedStatement.setString(6, articleRecord.getLifecycle());
-            preparedStatement.setObject(7, articleRecord.getCompiledAt());
+            preparedStatement.setObject(1, normalizedArticleRecord.getSourceId());
+            preparedStatement.setString(2, normalizedArticleRecord.getArticleKey());
+            preparedStatement.setString(3, normalizedArticleRecord.getConceptId());
+            preparedStatement.setString(4, normalizedArticleRecord.getTitle());
+            preparedStatement.setString(5, normalizedArticleRecord.getContent());
+            preparedStatement.setString(6, normalizedArticleRecord.getLifecycle());
+            preparedStatement.setObject(7, normalizedArticleRecord.getCompiledAt());
             preparedStatement.setArray(8, sourcePathsArray);
             preparedStatement.setObject(9, metadataJsonObject);
-            preparedStatement.setString(10, articleRecord.getSummary());
+            preparedStatement.setString(10, normalizedArticleRecord.getSummary());
             preparedStatement.setArray(11, referentialKeywordsArray);
             preparedStatement.setArray(12, dependsOnArray);
             preparedStatement.setArray(13, relatedArray);
-            preparedStatement.setString(14, articleRecord.getConfidence());
-            preparedStatement.setString(15, articleRecord.getReviewStatus());
+            preparedStatement.setString(14, normalizedArticleRecord.getConfidence());
+            preparedStatement.setString(15, normalizedArticleRecord.getReviewStatus());
+            preparedStatement.setString(16, searchText);
+            preparedStatement.setString(17, searchText);
+            preparedStatement.setString(18, refkeyText);
             return preparedStatement;
         });
     }
@@ -441,6 +455,47 @@ public class ArticleJdbcRepository {
             sourcePaths.add(String.valueOf(value));
         }
         return sourcePaths;
+    }
+
+    /**
+     * 构建文章检索文本。
+     *
+     * @param articleRecord 文章记录
+     * @return 检索文本
+     */
+    private String buildArticleSearchText(ArticleRecord articleRecord) {
+        return String.join(
+                " ",
+                safeText(articleRecord.getTitle()),
+                safeText(articleRecord.getSummary()),
+                safeText(articleRecord.getContent()),
+                safeText(articleRecord.getMetadataJson())
+        ).trim();
+    }
+
+    /**
+     * 构建明确性关键词检索文本。
+     *
+     * @param articleRecord 文章记录
+     * @return 明确性关键词检索文本
+     */
+    private String buildRefkeyText(ArticleRecord articleRecord) {
+        return String.join(
+                " ",
+                safeText(articleRecord.getConceptId()),
+                safeText(articleRecord.getTitle()),
+                String.join(" ", articleRecord.getReferentialKeywords())
+        ).trim();
+    }
+
+    /**
+     * 返回非空文本。
+     *
+     * @param value 原始文本
+     * @return 非空文本
+     */
+    private String safeText(String value) {
+        return value == null ? "" : value;
     }
 
     private ObjectNode readMetadata(String metadataJson) {

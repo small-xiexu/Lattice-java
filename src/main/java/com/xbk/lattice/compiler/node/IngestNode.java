@@ -56,6 +56,10 @@ public class IngestNode {
             new HashSet<String>(Arrays.asList(".git", "target", "dist", "node_modules"))
     );
 
+    private static final Set<String> SKIPPED_FILENAMES = Collections.unmodifiableSet(
+            new HashSet<String>(Arrays.asList(".DS_Store", "Thumbs.db", "Desktop.ini"))
+    );
+
     private final CompilerProperties compilerProperties;
 
     private final PdfTextExtractor pdfTextExtractor;
@@ -135,14 +139,34 @@ public class IngestNode {
                 return false;
             }
         }
+        String fileName = path.getFileName().toString();
+        if (shouldSkipFileName(fileName)) {
+            return false;
+        }
 
-        String format = extractFormat(path.getFileName().toString());
+        String format = extractFormat(fileName);
         if ("class".equals(format) || "jar".equals(format)) {
             return false;
         }
         return SUPPORTED_TEXT_FORMATS.contains(format)
                 || SUPPORTED_DOCUMENT_FORMATS.contains(format)
                 || SUPPORTED_IMAGE_FORMATS.contains(format);
+    }
+
+    /**
+     * 判断是否应跳过系统元数据文件。
+     *
+     * @param fileName 文件名
+     * @return 需要跳过返回 true
+     */
+    private boolean shouldSkipFileName(String fileName) {
+        if (fileName == null || fileName.isBlank()) {
+            return true;
+        }
+        if (SKIPPED_FILENAMES.contains(fileName)) {
+            return true;
+        }
+        return fileName.startsWith("._");
     }
 
     /**

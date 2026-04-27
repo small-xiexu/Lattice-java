@@ -1,5 +1,8 @@
 package com.xbk.lattice.query.domain;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
 
 /**
@@ -24,7 +27,12 @@ public class ReviewResult {
      * @param status 审查状态
      * @param issues 审查问题
      */
-    public ReviewResult(boolean pass, ReviewStatus status, List<ReviewIssue> issues) {
+    @JsonCreator
+    public ReviewResult(
+            @JsonProperty("pass") boolean pass,
+            @JsonProperty("status") ReviewStatus status,
+            @JsonProperty("issues") List<ReviewIssue> issues
+    ) {
         this.pass = pass;
         this.status = status;
         this.issues = issues;

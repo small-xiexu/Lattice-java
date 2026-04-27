@@ -85,7 +85,7 @@
                                 <div id="knowledge-help-card" class="help-state-card" data-help-tone="info">
                                     <p class="help-card-eyebrow">现在该怎么做</p>
                                     <h3 class="help-card-title">正在整理知识库状态</h3>
-                                    <p class="help-card-description">页面会根据资料、同步运行和已入库内容，告诉你下一步应该去资料导入、最近同步运行还是知识问答。</p>
+                                    <p class="help-card-description">页面会根据资料、当前处理任务和已入库内容，告诉你下一步应该去资料导入、当前处理任务还是知识问答。</p>
                                 </div>
 
                                 <div class="hero-metric" aria-live="polite">
@@ -106,7 +106,7 @@
                     <section class="panel tab-nav-panel workbench-tab-nav-panel">
                         <div class="sub-tabs workbench-sub-tabs" role="tablist" aria-label="工作台二级标签">
                             <button id="knowledge-tab-upload" class="tab-btn active" type="button" role="tab" aria-selected="true" data-tab-trigger="knowledge-upload">资料导入</button>
-                            <button id="knowledge-tab-runs" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="knowledge-runs">最近同步运行</button>
+                            <button id="knowledge-tab-runs" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="knowledge-runs">当前处理任务</button>
                             <button id="knowledge-tab-articles" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="knowledge-articles">已入库内容</button>
                         </div>
                     </section>
@@ -265,8 +265,8 @@
                         <section class="panel">
                             <div class="panel-title-row">
                                 <div>
-                                    <h2>最近同步运行</h2>
-                                    <p>先看整体运行概况，再看每条任务的编译态、当前步骤、当前进度、最近推进时间和原因摘要。这样上传、Git 和目录同步不会混成一串难读的列表。</p>
+                                    <h2>当前处理任务</h2>
+                                    <p>先看整体运行概况，再看每条任务的编译态、当前步骤、当前进度、最近推进时间和原因摘要。这样上传、Git、目录同步和直接编译都不会混成一串难读的列表。</p>
                                 </div>
                                 <button id="refresh-jobs" class="ghost-btn" type="button">刷新记录</button>
                             </div>
@@ -426,7 +426,7 @@
                             <details class="advanced-panel" data-help-faq-key="first-steps">
                                 <summary>第一次进入这个页面先做什么</summary>
                                 <div class="advanced-panel-body">
-                                    <p class="muted">先看首屏状态判断当前能不能直接问；如果还不能问，就先去“资料导入”上传文件或接 Git 仓库；导入后切到“最近同步运行”看处理进度，最后再到“已入库内容”确认结果。</p>
+                                    <p class="muted">先看首屏状态判断当前能不能直接问；如果还不能问，就先去“资料导入”上传文件或接 Git 仓库；导入后切到“当前处理任务”看处理进度，最后再到“已入库内容”确认结果。</p>
                                     <div class="help-action-row">
                                         <button id="scroll-workbench-top" class="secondary-btn" type="button">回到首屏状态</button>
                                         <button class="ghost-btn" type="button" data-tab-open="knowledge-upload">去资料导入</button>
@@ -437,9 +437,9 @@
                             <details class="advanced-panel" data-help-faq-key="upload-delay">
                                 <summary>为什么上传后一直看不到入库结果</summary>
                                 <div class="advanced-panel-body">
-                                    <p class="muted">先到“最近同步运行”看任务是不是还在排队或运行中；如果已经失败，优先看资料源与文件区块里的同步历史和文件解析方式，再决定是资料格式问题、解析问题，还是连接问题。</p>
+                                    <p class="muted">先到“当前处理任务”看任务是不是还在排队或运行中；如果已经失败，优先看资料源与文件区块里的同步历史和文件解析方式，再决定是资料格式问题、解析问题，还是连接问题。</p>
                                     <div class="help-action-row">
-                                        <button class="secondary-btn" type="button" data-tab-open="knowledge-runs">查看最近同步运行</button>
+                                        <button class="secondary-btn" type="button" data-tab-open="knowledge-runs">查看当前处理任务</button>
                                         <button class="ghost-btn" type="button" data-tab-open="knowledge-upload">回资料导入</button>
                                     </div>
                                 </div>

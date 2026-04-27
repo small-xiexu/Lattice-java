@@ -7,6 +7,8 @@ import com.xbk.lattice.query.citation.QueryAnswerAuditSnapshot;
 import com.xbk.lattice.query.domain.ReviewResult;
 import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import com.xbk.lattice.query.service.QueryArticleHit;
+import com.xbk.lattice.query.service.RetrievalStrategy;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -25,6 +27,12 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Component
 @Profile("jdbc")
+@ConditionalOnProperty(
+        prefix = "lattice.query.working-set",
+        name = "store",
+        havingValue = "in-memory",
+        matchIfMissing = true
+)
 public class InMemoryQueryWorkingSetStore implements QueryWorkingSetStore {
 
     private final Map<String, Object> store = new ConcurrentHashMap<String, Object>();
@@ -140,6 +148,38 @@ public class InMemoryQueryWorkingSetStore implements QueryWorkingSetStore {
         }
         List<?> listValue = (List<?>) value;
         return new ArrayList<QueryArticleHit>((List<QueryArticleHit>) listValue);
+    }
+
+    /**
+     * 保存检索策略。
+     *
+     * @param queryId 查询标识
+     * @param retrievalStrategy 检索策略
+     * @return 工作集引用
+     */
+    @Override
+    public String saveRetrievalStrategy(String queryId, RetrievalStrategy retrievalStrategy) {
+        String ref = buildRef(queryId, "retrieval-strategy");
+        store.put(ref, retrievalStrategy);
+        return ref;
+    }
+
+    /**
+     * 读取检索策略。
+     *
+     * @param ref 工作集引用
+     * @return 检索策略
+     */
+    @Override
+    public RetrievalStrategy loadRetrievalStrategy(String ref) {
+        if (!hasRef(ref)) {
+            return null;
+        }
+        Object value = store.get(ref);
+        if (value instanceof RetrievalStrategy) {
+            return (RetrievalStrategy) value;
+        }
+        return null;
     }
 
     /**

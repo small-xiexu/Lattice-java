@@ -148,6 +148,14 @@ class ManagementJsRuntimeTests {
                 assert(runs.buildRunReasonSummary(failedRun).includes("链路异常"),
                     "failed run should map stable error code to friendly copy");
 
+                const standaloneCompileRun = {
+                    taskType: "STANDALONE_COMPILE",
+                    status: "RUNNING",
+                    sourceId: 1
+                };
+                assert(runs.shouldShowResyncAction(standaloneCompileRun) === false,
+                    "standalone compile task should not expose source resync action");
+
                 const sanitized = runs.sanitizeDisplayMessage(
                     "java.net.SocketTimeoutException: Read timed out\\n at com.example.Test"
                 );
