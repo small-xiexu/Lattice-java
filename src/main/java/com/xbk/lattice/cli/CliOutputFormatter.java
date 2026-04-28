@@ -2,6 +2,7 @@ package com.xbk.lattice.cli;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 
 /**
  * CLI 输出格式化器
@@ -12,7 +13,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 public final class CliOutputFormatter {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
+            .findAndRegisterModules()
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     private CliOutputFormatter() {
     }

@@ -3,6 +3,7 @@ package com.xbk.lattice.api.query;
 import com.xbk.lattice.query.service.QueryFacadeService;
 import jakarta.validation.Valid;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -37,7 +38,7 @@ public class QueryController {
      * @param queryRequest 查询请求
      * @return 查询响应
      */
-    @PostMapping
+    @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public QueryResponse query(@Valid @RequestBody QueryRequest queryRequest) {
         return queryFacadeService.query(queryRequest);
     }

@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -75,6 +76,7 @@ public class DeepResearchSynthesizer {
     ) {
         InternalAnswerDraft internalAnswerDraft = buildInternalAnswerDraft(question, layerSummaries, evidenceLedger);
         AnswerProjectionBundle answerProjectionBundle = deepResearchProjector.project(internalAnswerDraft, evidenceLedger);
+        answerProjectionBundle = sanitizeAnswerProjectionBundle(answerProjectionBundle);
         String answerMarkdown = answerProjectionBundle.getAnswerMarkdown();
         CitationCheckReport citationCheckReport = citationCheckService.check(answerMarkdown, answerProjectionBundle);
         if (citationCheckService.shouldRepair(citationCheckReport, CITATION_CHECK_OPTIONS, 0)) {
@@ -84,6 +86,8 @@ public class DeepResearchSynthesizer {
                     citationCheckReport,
                     answerMarkdown
             );
+            answerProjectionBundle = sanitizeAnswerProjectionBundle(answerProjectionBundle);
+            answerMarkdown = answerProjectionBundle.getAnswerMarkdown();
             citationCheckReport = citationCheckService.check(answerMarkdown, answerProjectionBundle);
         }
         DeepResearchSynthesisResult result = new DeepResearchSynthesisResult();
@@ -98,6 +102,115 @@ public class DeepResearchSynthesizer {
         result.setHasConflicts(evidenceLedger != null && (evidenceLedger.hasConflicts() || containsConflictSignals(evidenceLedger)));
         result.setEvidenceCardCount(evidenceLedger == null ? 0 : evidenceLedger.cardCount());
         return result;
+    }
+
+    /**
+     * 清洗出站投影答案，避免 Deep Research 内部摘要与文档元数据泄漏到 HTTP 正文。
+     *
+     * @param answerProjectionBundle 原始投影包
+     * @return 清洗后的投影包
+     */
+    private AnswerProjectionBundle sanitizeAnswerProjectionBundle(AnswerProjectionBundle answerProjectionBundle) {
+        if (answerProjectionBundle == null || answerProjectionBundle.getAnswerMarkdown() == null) {
+            return answerProjectionBundle;
+        }
+        String sanitizedMarkdown = sanitizeUserFacingMarkdown(answerProjectionBundle.getAnswerMarkdown());
+        if (sanitizedMarkdown.equals(answerProjectionBundle.getAnswerMarkdown())) {
+            return answerProjectionBundle;
+        }
+        return new AnswerProjectionBundle(
+                sanitizedMarkdown,
+                answerProjectionBundle.getProjections() == null ? List.of() : answerProjectionBundle.getProjections()
+        );
+    }
+
+    /**
+     * 清洗用户可见 Markdown。
+     *
+     * @param answerMarkdown 原始答案
+     * @return 清洗后的答案
+     */
+    private String sanitizeUserFacingMarkdown(String answerMarkdown) {
+        if (answerMarkdown == null || answerMarkdown.isBlank()) {
+            return "";
+        }
+        List<String> keptLines = new ArrayList<String>();
+        boolean skippingInternalSection = false;
+        boolean skippingFrontMatter = false;
+        String[] lines = answerMarkdown.replace("\r\n", "\n").split("\n");
+        for (String line : lines) {
+            String trimmedLine = line == null ? "" : line.trim();
+            if ("---".equals(trimmedLine)) {
+                skippingFrontMatter = !skippingFrontMatter;
+                continue;
+            }
+            if (skippingFrontMatter) {
+                continue;
+            }
+            if (isInternalDeepResearchHeading(trimmedLine)) {
+                skippingInternalSection = true;
+                continue;
+            }
+            if (skippingInternalSection && trimmedLine.startsWith("## ")) {
+                skippingInternalSection = false;
+            }
+            if (skippingInternalSection || looksLikeMetadataLeak(trimmedLine)) {
+                continue;
+            }
+            keptLines.add(line);
+        }
+        String sanitizedMarkdown = String.join("\n", keptLines)
+                .replaceAll("\\n{3,}", "\n\n")
+                .trim();
+        return sanitizedMarkdown.isBlank() ? "当前证据不足，无法生成可核验引用版答案" : sanitizedMarkdown;
+    }
+
+    /**
+     * 判断标题是否属于内部 Deep Research 执行说明。
+     *
+     * @param trimmedLine 已裁剪行
+     * @return 是内部标题时返回 true
+     */
+    private boolean isInternalDeepResearchHeading(String trimmedLine) {
+        return "## 分层摘要".equals(trimmedLine) || "## 缺失事实".equals(trimmedLine);
+    }
+
+    /**
+     * 判断一行文本是否像从 prompt 或文档 front matter 泄漏出的元数据。
+     *
+     * @param trimmedLine 已裁剪行
+     * @return 像元数据泄漏时返回 true
+     */
+    private boolean looksLikeMetadataLeak(String trimmedLine) {
+        if (trimmedLine == null || trimmedLine.isBlank()) {
+            return false;
+        }
+        String normalizedLine = trimmedLine;
+        while (normalizedLine.startsWith("-") || normalizedLine.startsWith("*")) {
+            normalizedLine = normalizedLine.substring(1).trim();
+        }
+        String lowerLine = normalizedLine.toLowerCase(Locale.ROOT);
+        if (lowerLine.startsWith("metadata:")
+                || lowerLine.startsWith("metadatajson:")
+                || lowerLine.startsWith("metadata_json:")
+                || lowerLine.startsWith("sourcepaths:")
+                || lowerLine.startsWith("source_paths:")
+                || lowerLine.startsWith("articlekey:")
+                || lowerLine.startsWith("article_key:")
+                || lowerLine.startsWith("conceptid:")
+                || lowerLine.startsWith("concept_id:")
+                || lowerLine.startsWith("compiledat:")
+                || lowerLine.startsWith("compiled_at:")
+                || lowerLine.startsWith("reviewstatus:")
+                || lowerLine.startsWith("review_status:")
+                || lowerLine.startsWith("文档元数据")) {
+            return true;
+        }
+        return normalizedLine.startsWith("{")
+                && (normalizedLine.contains("\"metadata\"")
+                || normalizedLine.contains("\"sourcePaths\"")
+                || normalizedLine.contains("\"articleKey\"")
+                || normalizedLine.contains("\"conceptId\""));
     }
 
     /**

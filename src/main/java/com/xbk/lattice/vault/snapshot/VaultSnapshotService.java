@@ -150,15 +150,10 @@ public class VaultSnapshotService {
      * @throws IOException IO 异常
      */
     public RepoRollbackResult rollback(Path vaultDir, long snapshotId) throws IOException {
+        RepoSnapshotRecord snapshotRecord = requireSnapshot(snapshotId);
         restoreFromSnapshot(snapshotId);
-        vaultExportService.export(vaultDir);
-        String commitId = vaultGitService.commitAll(
-                vaultDir,
-                "[lattice:rollback] restored-to-snapshot=" + snapshotId
-        );
-        if (commitId == null || commitId.isBlank()) {
-            commitId = vaultGitService.headCommitId(vaultDir);
-        }
+        vaultGitService.restoreWorkTreeToCommit(vaultDir, snapshotRecord.getGitCommit());
+        String commitId = vaultGitService.headCommitId(vaultDir);
         if (commitId == null || commitId.isBlank()) {
             throw new IllegalStateException("无法为 repo rollback 绑定 Vault Git commit: " + vaultDir);
         }

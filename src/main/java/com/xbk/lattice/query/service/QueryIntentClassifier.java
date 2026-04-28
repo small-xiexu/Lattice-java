@@ -27,6 +27,9 @@ public class QueryIntentClassifier {
             return QueryIntent.GENERAL;
         }
         String normalizedQuestion = question.toLowerCase(Locale.ROOT);
+        if (looksLikeArchitectureQuestion(normalizedQuestion)) {
+            return QueryIntent.ARCHITECTURE;
+        }
         if (containsAny(normalizedQuestion, ".java", "class", "method", "controller", "service", "repository",
                 "调用链", "类名", "方法", "接口实现", "源码", "代码")) {
             return QueryIntent.CODE_STRUCTURE;
@@ -39,11 +42,33 @@ public class QueryIntentClassifier {
                 "排查", "为什么不", "无法", "超时")) {
             return QueryIntent.TROUBLESHOOTING;
         }
-        if (containsAny(normalizedQuestion, "architecture", "design", "adr", "架构", "设计", "方案", "取舍",
-                "为什么要", "优缺点", "对比")) {
-            return QueryIntent.ARCHITECTURE;
-        }
         return QueryIntent.GENERAL;
+    }
+
+    /**
+     * 判断问题是否更偏架构解释。
+     *
+     * @param normalizedQuestion 归一化问题
+     * @return 架构题返回 true
+     */
+    private boolean looksLikeArchitectureQuestion(String normalizedQuestion) {
+        return containsAny(
+                normalizedQuestion,
+                "architecture",
+                "design",
+                "adr",
+                "架构",
+                "设计",
+                "方案",
+                "取舍",
+                "为什么要",
+                "优缺点",
+                "对比",
+                "消息队列",
+                "同步调用",
+                "异步",
+                "解耦"
+        );
     }
 
     /**

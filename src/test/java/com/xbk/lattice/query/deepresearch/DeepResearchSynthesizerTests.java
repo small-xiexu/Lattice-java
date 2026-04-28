@@ -175,6 +175,34 @@ class DeepResearchSynthesizerTests {
         assertThat(internalAnswerDraft.getDraftMarkdown()).doesNotContain("task-1", "task-2");
     }
 
+    /**
+     * 验证最终出站答案会移除内部层摘要与文档元数据行，避免 HTTP 正文污染。
+     */
+    @Test
+    void shouldSanitizeInternalMetadataFromProjectedAnswer() {
+        EvidenceLedger evidenceLedger = new EvidenceLedger();
+        EvidenceCard evidenceCard = new EvidenceCard();
+        evidenceCard.setEvidenceId("ev#1");
+        evidenceCard.setTaskId("task-1");
+        evidenceCard.getEvidenceAnchors().add(articleAnchor("ev#1"));
+        evidenceCard.getFactFindings().add(factFinding("ev#1", "5"));
+        evidenceLedger.addCard(evidenceCard);
+        LayerSummary layerSummary = new LayerSummary();
+        layerSummary.setLayerIndex(0);
+        layerSummary.setSummaryMarkdown("""
+                metadata: {"sourcePaths":["docs/项目启动配置清单.md"],"articleKey":"startup"}
+                sourcePaths: docs/项目启动配置清单.md
+                """);
+
+        DeepResearchSynthesisResult synthesisResult = new DeepResearchSynthesizer(new NoopCitationCheckService())
+                .synthesize("PaymentService 默认重试次数是多少", List.of(layerSummary), evidenceLedger);
+
+        assertThat(synthesisResult.getAnswerMarkdown()).contains("PaymentService 默认最多重试 5 次");
+        assertThat(synthesisResult.getAnswerMarkdown()).contains("[[payment-routing]]");
+        assertThat(synthesisResult.getAnswerMarkdown())
+                .doesNotContain("## 分层摘要", "metadata:", "sourcePaths", "articleKey", "conceptId");
+    }
+
     private EvidenceAnchor articleAnchor(String anchorId) {
         EvidenceAnchor evidenceAnchor = new EvidenceAnchor();
         evidenceAnchor.setAnchorId(anchorId);

@@ -281,6 +281,10 @@ public class KnowledgeSearchService {
         if (retrievalStrategy == null || !retrievalStrategy.isChannelEnabled(channel)) {
             return List.of();
         }
-        return supplier.get();
+        return QueryHitIntentReranker.rerank(
+                retrievalStrategy.getRetrievalQuestion(),
+                retrievalStrategy.getQueryIntent(),
+                supplier.get()
+        );
     }
 }

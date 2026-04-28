@@ -24,6 +24,7 @@ import com.xbk.lattice.query.service.QueryIntent;
 import com.xbk.lattice.query.service.QueryIntentClassifier;
 import com.xbk.lattice.query.service.QueryArticleHit;
 import com.xbk.lattice.query.service.QueryCacheStore;
+import com.xbk.lattice.query.service.QueryHitIntentReranker;
 import com.xbk.lattice.query.service.QueryRetrievalSettingsService;
 import com.xbk.lattice.query.service.QueryRetrievalSettingsState;
 import com.xbk.lattice.query.service.QueryRewriteResult;
@@ -723,7 +724,12 @@ public class QueryGraphDefinitionFactory {
     }
 
     private Map<String, Object> saveSingleChannelHits(QueryGraphState state, String channel, List<QueryArticleHit> hits) {
-        String ref = queryWorkingSetStore.saveHits(state.getQueryId(), channel, hits);
+        List<QueryArticleHit> rerankedHits = QueryHitIntentReranker.rerank(
+                readRetrievalQuestion(state),
+                readQueryIntent(state),
+                hits
+        );
+        String ref = queryWorkingSetStore.saveHits(state.getQueryId(), channel, rerankedHits);
         Map<String, Object> delta = new LinkedHashMap<String, Object>();
         if (CHANNEL_FTS.equals(channel)) {
             delta.put(QueryGraphStateKeys.FTS_HITS_REF, ref);
@@ -753,6 +759,24 @@ public class QueryGraphDefinitionFactory {
             delta.put(QueryGraphStateKeys.CHUNK_VECTOR_HITS_REF, ref);
         }
         return delta;
+    }
+
+    /**
+     * 读取当前查询意图。
+     *
+     * @param state 图状态
+     * @return 查询意图
+     */
+    private QueryIntent readQueryIntent(QueryGraphState state) {
+        if (state == null || state.getQueryIntent() == null || state.getQueryIntent().isBlank()) {
+            return QueryIntent.GENERAL;
+        }
+        try {
+            return QueryIntent.valueOf(state.getQueryIntent());
+        }
+        catch (IllegalArgumentException exception) {
+            return QueryIntent.GENERAL;
+        }
     }
 
     private Map<String, List<QueryArticleHit>> loadChannelHits(QueryGraphState state) {

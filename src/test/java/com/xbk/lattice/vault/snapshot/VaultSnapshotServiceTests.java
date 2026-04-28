@@ -208,6 +208,44 @@ class VaultSnapshotServiceTests {
         assertThat(vaultSnapshotService.diff(vaultDir, baseline.getSnapshotId())).isEmpty();
     }
 
+    /**
+     * 验证 rollback 会把贡献导出和 manifest 噪音一并恢复到 baseline Git 树。
+     *
+     * @param tempDir 临时目录
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldRemoveContributionAndManifestDiffNoiseAfterRollback(@TempDir Path tempDir) throws Exception {
+        resetTables();
+        Path vaultDir = tempDir.resolve("vault");
+
+        Long sourceId = createManagedSourceId();
+        seedBaselineState(sourceId);
+        contributionJdbcRepository.deleteAll();
+        RepoBaselineResult baseline = vaultSnapshotService.createBaselineSnapshot(vaultDir, "baseline-without-contribution");
+
+        contributionJdbcRepository.save(new ContributionRecord(
+                UUID.fromString("55555555-5555-5555-5555-555555555555"),
+                "confirmed query?",
+                "confirmed answer",
+                "{}",
+                "tester",
+                OffsetDateTime.parse("2026-04-16T20:10:00+08:00")
+        ));
+        vaultExportService.export(vaultDir);
+        String contributionCommitId = vaultGitService.commitAll(vaultDir, "[lattice:manual] contribution-noise");
+
+        RepoRollbackResult rollbackResult = vaultSnapshotService.rollback(vaultDir, baseline.getSnapshotId());
+
+        assertThat(contributionCommitId).isNotBlank();
+        assertThat(rollbackResult.getRestoredSnapshotId()).isEqualTo(baseline.getSnapshotId());
+        assertThat(vaultSnapshotService.diff(vaultDir, baseline.getSnapshotId())).isEmpty();
+        assertThat(vaultGitService.headCommitId(vaultDir)).isEqualTo(baseline.getGitCommit());
+        assertThat(Files.exists(vaultDir.resolve(
+                "_contributions/confirmed_query-2026-04-16T20-10-00-55555555-5555-5555-5555-555555555555.md"
+        ))).isFalse();
+    }
+
     private void seedBaselineState(Long sourceId) {
         articleJdbcRepository.upsert(new ArticleRecord(
                 sourceId,

@@ -26,6 +26,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -96,6 +97,7 @@ class QueryControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"question\":\"payment timeout retry=3 是什么配置\"}"))
                 .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.queryId").isNotEmpty())
                 .andExpect(jsonPath("$.answer").value(org.hamcrest.Matchers.containsString("retry=3")))
                 .andExpect(jsonPath("$.answerOutcome").isNotEmpty())

@@ -1,6 +1,7 @@
 package com.xbk.lattice.vault.snapshot;
 
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.ResetCommand;
 import org.eclipse.jgit.api.Status;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
@@ -131,6 +132,37 @@ public class VaultGitService {
                 return null;
             }
             return headObjectId.getName();
+        }
+    }
+
+    /**
+     * 将 Vault 工作树恢复到指定提交，并清理未跟踪文件。
+     *
+     * @param vaultDir Vault 目录
+     * @param commitId 目标提交
+     * @throws IOException IO 异常
+     */
+    public void restoreWorkTreeToCommit(Path vaultDir, String commitId) throws IOException {
+        ensureRepository(vaultDir);
+        if (commitId == null || commitId.isBlank()) {
+            throw new IllegalArgumentException("commitId 不能为空");
+        }
+        try (Git git = Git.open(vaultDir.toFile())) {
+            ObjectId targetCommit = git.getRepository().resolve(commitId);
+            if (targetCommit == null) {
+                throw new IllegalArgumentException("Vault Git commit 不存在: " + commitId);
+            }
+            git.reset()
+                    .setMode(ResetCommand.ResetType.HARD)
+                    .setRef(targetCommit.getName())
+                    .call();
+            git.clean()
+                    .setCleanDirectories(true)
+                    .setForce(true)
+                    .call();
+        }
+        catch (Exception exception) {
+            throw new IOException("恢复 Vault Git 工作树失败: " + vaultDir + ", commit=" + commitId, exception);
         }
     }
 
