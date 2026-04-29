@@ -85,13 +85,32 @@ public class QueryGraphConditions {
             return "persist_response";
         }
         if (report.isNoCitation()) {
+            if (state.getCitationRepairAttemptCount() < CITATION_CHECK_OPTIONS.getMaxRepairRounds()) {
+                return "citation_repair";
+            }
             return "persist_response";
         }
-        if (report.getDemotedCount() > 0 || report.getCoverageRate() < CITATION_CHECK_OPTIONS.getMinCitationCoverage()) {
+        if (shouldRepairCitationReport(report)) {
             if (state.getCitationRepairAttemptCount() < CITATION_CHECK_OPTIONS.getMaxRepairRounds()) {
                 return "citation_repair";
             }
         }
         return "persist_response";
+    }
+
+    /**
+     * 判断 citation 报告是否需要进入修复节点。
+     *
+     * @param report Citation 检查报告
+     * @return 需要修复返回 true
+     */
+    private boolean shouldRepairCitationReport(CitationCheckReport report) {
+        if (report.getCoverageRate() < CITATION_CHECK_OPTIONS.getMinCitationCoverage()) {
+            return true;
+        }
+        if (report.getDemotedCount() <= 0) {
+            return false;
+        }
+        return report.getVerifiedCount() <= 0 && report.getSkippedCount() <= 0;
     }
 }

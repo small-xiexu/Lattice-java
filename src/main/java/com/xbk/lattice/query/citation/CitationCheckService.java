@@ -163,6 +163,14 @@ public class CitationCheckService {
                 continue;
             }
             if (repairDecision.shouldDowngradeClaim()) {
+                String nearestUsableCitationLiteral = nearestUsableCitationLiteral(claimSegment, report);
+                if (!nearestUsableCitationLiteral.isBlank()) {
+                    repairedAnswer = repairedAnswer.replace(
+                            claimSegment.getParagraphText(),
+                            claimSegment.getClaimText() + " " + nearestUsableCitationLiteral
+                    );
+                    continue;
+                }
                 repairedAnswer = repairedAnswer.replace(
                         claimSegment.getParagraphText(),
                         appendEvidenceInsufficientMarker(claimSegment.getClaimText())
@@ -178,12 +186,45 @@ public class CitationCheckService {
                     || claimSegment.getClaimText().contains("当前证据不足")) {
                 continue;
             }
+            String nearestUsableCitationLiteral = nearestUsableCitationLiteral(claimSegment, report);
+            if (!nearestUsableCitationLiteral.isBlank()) {
+                repairedAnswer = repairedAnswer.replace(
+                        claimSegment.getParagraphText(),
+                        claimSegment.getClaimText() + " " + nearestUsableCitationLiteral
+                );
+                continue;
+            }
             repairedAnswer = repairedAnswer.replace(
                     claimSegment.getParagraphText(),
                     appendEvidenceInsufficientMarker(claimSegment.getClaimText())
             );
         }
         return normalizeEvidenceInsufficientMarkers(repairedAnswer);
+    }
+
+    private String nearestUsableCitationLiteral(ClaimSegment currentClaimSegment, CitationCheckReport report) {
+        if (currentClaimSegment == null || report == null || report.getClaimSegments() == null) {
+            return "";
+        }
+        String nearestCitationLiteral = "";
+        int currentIndex = currentClaimSegment.getClaimIndex();
+        int nearestDistance = Integer.MAX_VALUE;
+        for (ClaimSegment candidateClaimSegment : report.getClaimSegments()) {
+            if (candidateClaimSegment == null || candidateClaimSegment.getCitations().isEmpty()) {
+                continue;
+            }
+            int distance = Math.abs(candidateClaimSegment.getClaimIndex() - currentIndex);
+            for (Citation citation : candidateClaimSegment.getCitations()) {
+                CitationValidationResult validationResult = resolveValidationResult(report, citation.getOrdinal());
+                if (validationResult != null && (validationResult.isVerified() || validationResult.isSkipped())) {
+                    if (distance < nearestDistance) {
+                        nearestDistance = distance;
+                        nearestCitationLiteral = citation.getLiteral();
+                    }
+                }
+            }
+        }
+        return nearestCitationLiteral;
     }
 
     /**

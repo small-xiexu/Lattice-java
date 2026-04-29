@@ -100,6 +100,7 @@ class ManagementJsRuntimeTests {
                 vm.runInNewContext(source, sandbox, { filename: "management.js" });
 
                 const runs = sandbox.__LATTICE_ADMIN_TEST__.runs;
+                const sourceUi = sandbox.__LATTICE_ADMIN_TEST__.source;
 
                 function assert(condition, message) {
                     if (!condition) {
@@ -108,6 +109,7 @@ class ManagementJsRuntimeTests {
                 }
 
                 assert(runs, "missing __LATTICE_ADMIN_TEST__.runs export");
+                assert(sourceUi, "missing __LATTICE_ADMIN_TEST__.source export");
 
                 const fallbackRun = { status: "RUNNING" };
                 assert(runs.resolveRunDisplayStatus(fallbackRun) === "RUNNING",
@@ -125,6 +127,7 @@ class ManagementJsRuntimeTests {
                     compileProgressTotal: 6,
                     compileProgressMessage: "正在审查第 2 篇文章",
                     compileLastHeartbeatAt: "2026-04-24T08:00:00+08:00",
+                    sourceNames: ["docs/payment/order-guide.md", "docs/payment/retry.md"],
                     sourceId: 12
                 };
                 const runtimeSnapshot = runs.buildRunRuntimeSnapshot(stalledRun);
@@ -140,6 +143,25 @@ class ManagementJsRuntimeTests {
                     "stalled run should explain stalled reason");
                 assert(runs.shouldShowResyncAction(stalledRun) === true,
                     "stalled run should expose resync action");
+                const compactRunMarkup = runs.renderSourceRunListItem(stalledRun, true);
+                assert(compactRunMarkup.includes("detail-compact-item active"),
+                    "source run list should render compact active rows");
+                assert(!compactRunMarkup.includes("run-runtime-grid"),
+                    "source run list row should stay compact and not inline runtime snapshot");
+                const runDetailMarkup = runs.buildSourceRunDetailCard(stalledRun, {
+                    label: "疑似卡住",
+                    nextStep: "查看最近推进时间并重新同步资料源",
+                    stepIndex: 2,
+                    tone: "danger"
+                });
+                assert(runDetailMarkup.includes("run-runtime-summary"),
+                    "selected source run detail should render compact runtime summary");
+                assert(runDetailMarkup.includes("本次文件"),
+                    "selected source run detail should expose processed file summary");
+                assert(runDetailMarkup.includes("最近更新时间"),
+                    "selected source run detail should merge timestamps into updated-at copy");
+                assert(runDetailMarkup.includes("card-actions"),
+                    "selected source run detail should keep action buttons");
 
                 const failedRun = {
                     status: "FAILED",
@@ -171,6 +193,22 @@ class ManagementJsRuntimeTests {
                 });
                 assert(conflictMessage.includes("已经有运行中的同步任务"),
                     "should use stable conflict message instead of raw backend message");
+
+                const sourceFile = {
+                    relativePath: "docs/payment/order-guide.md",
+                    format: "md",
+                    fileSize: 2048,
+                    parseMode: "NATIVE",
+                    parseProvider: "default-parser"
+                };
+                const compactFileMarkup = sourceUi.renderSourceFileListItem(sourceFile, true);
+                assert(compactFileMarkup.includes("order-guide.md"),
+                    "source file list should render file base name");
+                assert(!compactFileMarkup.includes("run-runtime-grid"),
+                    "source file list row should stay compact");
+                const fileDetailMarkup = sourceUi.buildSourceFileDetailCard(sourceFile);
+                assert(fileDetailMarkup.includes("完整路径"),
+                    "selected source file detail should expose full relative path");
 
                 console.log("management-js-runtime-tests:ok");
                 """;

@@ -94,6 +94,24 @@ class CitationExtractorTests {
     }
 
     /**
+     * 验证同一段里 citation 挂在后续短句时，也会回补给前面的无引用短句。
+     */
+    @Test
+    void shouldBackfillFollowingCitationToPreviousSentenceClaimsInSameBlock() {
+        CitationExtractor citationExtractor = new CitationExtractor();
+
+        List<ClaimSegment> claimSegments = citationExtractor.extractClaims("""
+                IAG 是统一身份验证服务。它主要完成身份验证请求接收与令牌返回： [[legacy-default--iag集成指南]]
+                """);
+
+        assertThat(claimSegments).hasSize(2);
+        assertThat(claimSegments.get(0).getCitations()).extracting(Citation::getLiteral)
+                .containsExactly("[[legacy-default--iag集成指南]]");
+        assertThat(claimSegments.get(1).getCitations()).extracting(Citation::getLiteral)
+                .containsExactly("[[legacy-default--iag集成指南]]");
+    }
+
+    /**
      * 验证 SOURCE_FILE literal 携带行号时，targetKey 仍归一化为 relative path。
      */
     @Test
@@ -154,5 +172,33 @@ class CitationExtractorTests {
 
         assertThat(claimSegments).hasSize(1);
         assertThat(claimSegments.get(0).getClaimText()).isEqualTo("PaymentService 默认最多重试 5 次");
+    }
+
+    /**
+     * 验证带引用的 Markdown 表格数据行会作为可核验 claim，而不是被结构性过滤吞掉。
+     */
+    @Test
+    void shouldExtractCitationClaimsFromMarkdownTableRows() {
+        CitationExtractor citationExtractor = new CitationExtractor();
+
+        List<ClaimSegment> claimSegments = citationExtractor.extractClaims("""
+                ## 结论
+
+                | 字段 | 类型 | 说明 | 引用 |
+                | --- | --- | --- | --- |
+                | amount | string | 交易金额，单位元，小数点2位 | [[swip-fields]] |
+                | respCode | string | 返回码2位，00成功 | [[swip-fields]] |
+                """);
+
+        assertThat(claimSegments).hasSize(2);
+        assertThat(claimSegments).extracting(ClaimSegment::getClaimText)
+                .containsExactly(
+                        "字段：amount；类型：string；说明：交易金额，单位元，小数点2位；引用：",
+                        "字段：respCode；类型：string；说明：返回码2位，00成功；引用："
+                );
+        assertThat(claimSegments.get(0).getCitations()).extracting(Citation::getLiteral)
+                .containsExactly("[[swip-fields]]");
+        assertThat(claimSegments.get(1).getCitations()).extracting(Citation::getLiteral)
+                .containsExactly("[[swip-fields]]");
     }
 }

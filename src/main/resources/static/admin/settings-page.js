@@ -46,12 +46,43 @@
                 summary: "按复核意见重写回答",
                 description: "在需要时生成更稳妥的最终答复。"
             }
+        ],
+        deep_research: [
+            {
+                value: "planner",
+                label: "研究规划",
+                stage: "第 1 步",
+                summary: "拆解问题并规划研究路径",
+                description: "先把复杂问题拆成可验证的研究任务，避免一上来直接开答。"
+            },
+            {
+                value: "researcher",
+                label: "证据研究",
+                stage: "第 2 步",
+                summary: "按子任务检索并提取证据",
+                description: "负责逐层检索、抽取事实和整理证据，是最重的一步。"
+            },
+            {
+                value: "synthesizer",
+                label: "综合收口",
+                stage: "第 3 步",
+                summary: "汇总各层结果并形成答案",
+                description: "把多轮研究结果收束成最终答案，并整理最终引用。"
+            },
+            {
+                value: "reviewer",
+                label: "研究复核",
+                stage: "第 4 步",
+                summary: "检查结论与证据是否一致",
+                description: "确认深度研究的最终结论、证据链和引用是否站得住。"
+            }
         ]
     };
 
     const LLM_SCENE_LABELS = {
         compile: "知识入库",
-        query: "知识问答"
+        query: "知识问答",
+        deep_research: "深度研究"
     };
 
     const SETTINGS_TOAST_AUTO_DISMISS_MS = 4200;
@@ -2529,5 +2560,16 @@
                 .replaceAll(">", "&gt;")
                 .replaceAll("\"", "&quot;")
                 .replaceAll("'", "&#39;");
+    }
+
+    if (typeof globalThis !== "undefined" && globalThis.__LATTICE_ADMIN_TEST__) {
+        globalThis.__LATTICE_ADMIN_TEST__.settingsPage = {
+            getBindingSceneLabel: getBindingSceneLabel,
+            getBindingRoleLabel: getBindingRoleLabel,
+            getBindingRoleSummary: getBindingRoleSummary,
+            getBindingRoleOptions: function (scene) {
+                return LLM_BINDING_ROLE_OPTIONS[scene] || [];
+            }
+        };
     }
 })();

@@ -220,6 +220,7 @@ public class SourceFileJdbcRepository {
                        sf.file_path,
                        sf.relative_path,
                        sf.content_preview,
+                       sf.content_text,
                        sf.metadata_json::text as metadata_json,
                        sf.is_verbatim,
                        ts_rank_cd(sf.search_tsv, query.tsq)
@@ -381,7 +382,7 @@ public class SourceFileJdbcRepository {
                 filePath,
                 filePath,
                 resultSet.getString("relative_path"),
-                resultSet.getString("content_preview"),
+                resultSet.getString("content_text"),
                 resultSet.getString("metadata_json"),
                 List.of(filePath),
                 null,

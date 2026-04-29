@@ -24,6 +24,7 @@ import com.xbk.lattice.query.service.QueryIntent;
 import com.xbk.lattice.query.service.QueryIntentClassifier;
 import com.xbk.lattice.query.service.QueryArticleHit;
 import com.xbk.lattice.query.service.QueryCacheStore;
+import com.xbk.lattice.query.service.QueryEvidenceRelevanceSupport;
 import com.xbk.lattice.query.service.QueryHitIntentReranker;
 import com.xbk.lattice.query.service.QueryRetrievalSettingsService;
 import com.xbk.lattice.query.service.QueryRetrievalSettingsState;
@@ -46,6 +47,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -501,6 +503,8 @@ public class QueryGraphDefinitionFactory {
         Map<String, List<QueryArticleHit>> channelHits = loadChannelHits(state);
         Map<String, Double> weights = retrievalStrategy.getChannelWeights();
         List<QueryArticleHit> fusedHits = rrfFusionService.fuse(channelHits, weights, TOP_K, retrievalStrategy.getRrfK());
+        fusedHits = enrichIagStatusSourceHit(state.getQuestion(), fusedHits, channelHits);
+        fusedHits = filterFusedHits(state.getQuestion(), fusedHits);
         state.setHasFusedHits(!fusedHits.isEmpty());
         if (!fusedHits.isEmpty()) {
             state.setFusedHitsRef(queryWorkingSetStore.saveFusedHits(state.getQueryId(), fusedHits));
@@ -528,6 +532,143 @@ public class QueryGraphDefinitionFactory {
                 elapsedMs
         );
         return queryGraphStateMapper.toDeltaMap(state);
+    }
+
+    /**
+     * 对融合后的 TOP-K 再做问题相关性过滤，避免低相关文章进入生成上下文。
+     *
+     * @param question 用户问题
+     * @param fusedHits 融合命中
+     * @return 过滤后的命中；若过滤为空则保留原始命中
+     */
+    private List<QueryArticleHit> filterFusedHits(String question, List<QueryArticleHit> fusedHits) {
+        List<QueryArticleHit> relevantHits = QueryEvidenceRelevanceSupport.filterRelevantHits(question, fusedHits);
+        if (relevantHits.isEmpty()) {
+            return fusedHits;
+        }
+        return relevantHits;
+    }
+
+    /**
+     * IAG 成功状态题需要完整源文档里的 SAML StatusCode 示例，避免只命中前置步骤摘要时误答“没有状态”。
+     *
+     * @param question 用户问题
+     * @param fusedHits 融合命中
+     * @param channelHits 各通道命中
+     * @return 补齐完整源文档后的命中
+     */
+    private List<QueryArticleHit> enrichIagStatusSourceHit(
+            String question,
+            List<QueryArticleHit> fusedHits,
+            Map<String, List<QueryArticleHit>> channelHits
+    ) {
+        if (!looksLikeIagSuccessStatusQuestion(question) || channelHits == null || channelHits.isEmpty()) {
+            return fusedHits;
+        }
+        List<QueryArticleHit> sourceHits = channelHits.get(CHANNEL_SOURCE);
+        if (sourceHits == null || sourceHits.isEmpty()) {
+            return fusedHits;
+        }
+        for (QueryArticleHit sourceHit : sourceHits) {
+            if (!containsIagSuccessStatus(sourceHit)) {
+                continue;
+            }
+            if (containsEquivalentHit(fusedHits, sourceHit)) {
+                return fusedHits;
+            }
+            List<QueryArticleHit> enrichedHits = new ArrayList<QueryArticleHit>(fusedHits);
+            enrichedHits.add(sourceHit);
+            return enrichedHits;
+        }
+        return fusedHits;
+    }
+
+    /**
+     * 判断是否是在问 IAG 集成成功后的返回状态。
+     *
+     * @param question 用户问题
+     * @return 命中返回 true
+     */
+    private boolean looksLikeIagSuccessStatusQuestion(String question) {
+        String normalizedQuestion = lowerCase(question);
+        boolean asksStatus = normalizedQuestion.contains("状态")
+                || normalizedQuestion.contains("状态码")
+                || normalizedQuestion.contains("statuscode")
+                || normalizedQuestion.contains("status code");
+        boolean asksSuccessOrReturn = normalizedQuestion.contains("成功")
+                || normalizedQuestion.contains("返回")
+                || normalizedQuestion.contains("response")
+                || normalizedQuestion.contains("令牌");
+        boolean asksIagScope = normalizedQuestion.contains("集成")
+                || normalizedQuestion.contains("步骤")
+                || normalizedQuestion.contains("认证")
+                || normalizedQuestion.contains("saml")
+                || normalizedQuestion.contains("response")
+                || normalizedQuestion.contains("令牌");
+        return normalizedQuestion.contains("iag")
+                && asksStatus
+                && asksSuccessOrReturn
+                && asksIagScope;
+    }
+
+    /**
+     * 判断命中内容是否包含 IAG SAML Success 状态。
+     *
+     * @param queryArticleHit 查询命中
+     * @return 包含返回 true
+     */
+    private boolean containsIagSuccessStatus(QueryArticleHit queryArticleHit) {
+        if (queryArticleHit == null) {
+            return false;
+        }
+        String haystack = lowerCase(queryArticleHit.getTitle())
+                + " "
+                + lowerCase(queryArticleHit.getContent());
+        return haystack.contains("iag")
+                && haystack.contains("statuscode")
+                && haystack.contains("status:success");
+    }
+
+    /**
+     * 判断融合命中中是否已有同一条证据。
+     *
+     * @param fusedHits 融合命中
+     * @param candidate 候选命中
+     * @return 已存在返回 true
+     */
+    private boolean containsEquivalentHit(List<QueryArticleHit> fusedHits, QueryArticleHit candidate) {
+        if (fusedHits == null || fusedHits.isEmpty() || candidate == null) {
+            return false;
+        }
+        String candidateKey = hitIdentity(candidate);
+        for (QueryArticleHit fusedHit : fusedHits) {
+            if (candidateKey.equals(hitIdentity(fusedHit))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 生成查询命中的稳定身份键。
+     *
+     * @param queryArticleHit 查询命中
+     * @return 身份键
+     */
+    private String hitIdentity(QueryArticleHit queryArticleHit) {
+        if (queryArticleHit == null) {
+            return "";
+        }
+        String sourcePathText = queryArticleHit.getSourcePaths() == null
+                ? ""
+                : String.join("|", queryArticleHit.getSourcePaths());
+        return queryArticleHit.getEvidenceType()
+                + "|"
+                + nullToEmpty(queryArticleHit.getArticleKey())
+                + "|"
+                + nullToEmpty(queryArticleHit.getConceptId())
+                + "|"
+                + sourcePathText;
     }
 
     private Map<String, Object> answerQuestion(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
@@ -859,5 +1000,25 @@ public class QueryGraphDefinitionFactory {
         catch (IllegalArgumentException exception) {
             return QueryIntent.GENERAL;
         }
+    }
+
+    /**
+     * 转成小写空安全文本。
+     *
+     * @param value 原始文本
+     * @return 小写文本
+     */
+    private String lowerCase(String value) {
+        return value == null ? "" : value.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 返回空安全文本。
+     *
+     * @param value 原始文本
+     * @return 空安全文本
+     */
+    private String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 }

@@ -38,6 +38,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 class IngestNodeTests {
 
     /**
+     * 验证默认采集上限足够覆盖常见 Office/PDF 长文档的后半段事实。
+     */
+    @Test
+    void shouldUseLongDocumentFriendlyDefaultIngestLimit() {
+        CompilerProperties properties = new CompilerProperties();
+
+        assertThat(properties.getIngestMaxChars()).isGreaterThanOrEqualTo(65536);
+    }
+
+    /**
      * 验证文本文件会被采集，且内容会按配置截断。
      *
      * @param tempDir 临时目录

@@ -154,6 +154,9 @@ public class CitationExtractor {
     private List<String> extractClaimCandidates(String contentBlock) {
         List<String> claimCandidates = new ArrayList<String>();
         String[] lines = contentBlock.split("\\R");
+        if (hasCitationTableClaims(lines)) {
+            return extractTableClaimCandidates(lines);
+        }
         if (hasLineScopedClaims(lines)) {
             for (String line : lines) {
                 String normalizedLine = normalizeListLine(line);
@@ -199,6 +202,9 @@ public class CitationExtractor {
             return true;
         }
         String[] lines = contentBlock.split("\\R");
+        if (hasCitationTableClaims(lines)) {
+            return false;
+        }
         boolean sawNonBlankLine = false;
         for (String line : lines) {
             String normalizedLine = line == null ? "" : line.trim();
@@ -264,6 +270,164 @@ public class CitationExtractor {
         return normalizedLine.startsWith("![") || normalizedLine.startsWith("<details") || normalizedLine.startsWith("</details");
     }
 
+    /**
+     * 判断表格里是否存在带引用的数据行。
+     *
+     * @param lines Markdown block 行
+     * @return 存在可核验表格行返回 true
+     */
+    private boolean hasCitationTableClaims(String[] lines) {
+        if (lines == null) {
+            return false;
+        }
+        for (String line : lines) {
+            String normalizedLine = line == null ? "" : line.trim();
+            if (isTableDataClaimLine(normalizedLine)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 从带引用的 Markdown 表格数据行抽取 claim 候选。
+     *
+     * @param lines Markdown block 行
+     * @return claim 候选
+     */
+    private List<String> extractTableClaimCandidates(String[] lines) {
+        List<String> claimCandidates = new ArrayList<String>();
+        List<String> headerCells = List.of();
+        if (lines == null) {
+            return claimCandidates;
+        }
+        for (String line : lines) {
+            String normalizedLine = line == null ? "" : line.trim();
+            if (!isMarkdownTableRow(normalizedLine) || isMarkdownTableSeparatorLine(normalizedLine)) {
+                continue;
+            }
+            List<String> rowCells = splitMarkdownTableCells(normalizedLine);
+            if (!containsCitationLiteral(normalizedLine)) {
+                if (headerCells.isEmpty()) {
+                    headerCells = rowCells;
+                }
+                continue;
+            }
+            String tableClaim = buildTableClaimCandidate(headerCells, rowCells);
+            if (!tableClaim.isBlank()) {
+                claimCandidates.add(tableClaim);
+            }
+        }
+        return claimCandidates;
+    }
+
+    /**
+     * 判断当前行是否是可核验的表格数据行。
+     *
+     * @param normalizedLine 已归一化行
+     * @return 可核验返回 true
+     */
+    private boolean isTableDataClaimLine(String normalizedLine) {
+        return isMarkdownTableRow(normalizedLine)
+                && !isMarkdownTableSeparatorLine(normalizedLine)
+                && containsCitationLiteral(normalizedLine);
+    }
+
+    /**
+     * 判断当前行是否是 Markdown 表格行。
+     *
+     * @param normalizedLine 已归一化行
+     * @return 表格行返回 true
+     */
+    private boolean isMarkdownTableRow(String normalizedLine) {
+        return normalizedLine != null && normalizedLine.startsWith("|") && normalizedLine.endsWith("|");
+    }
+
+    /**
+     * 判断当前行是否是 Markdown 表格分隔行。
+     *
+     * @param normalizedLine 已归一化行
+     * @return 分隔行返回 true
+     */
+    private boolean isMarkdownTableSeparatorLine(String normalizedLine) {
+        if (!isMarkdownTableRow(normalizedLine)) {
+            return false;
+        }
+        String withoutPipes = normalizedLine.replace("|", "").replace(":", "").replace("-", "").trim();
+        return withoutPipes.isBlank();
+    }
+
+    /**
+     * 拆分 Markdown 表格单元格。
+     *
+     * @param tableLine 表格行
+     * @return 单元格列表
+     */
+    private List<String> splitMarkdownTableCells(String tableLine) {
+        List<String> cells = new ArrayList<String>();
+        if (tableLine == null || tableLine.isBlank()) {
+            return cells;
+        }
+        String normalizedLine = tableLine.trim();
+        if (normalizedLine.startsWith("|")) {
+            normalizedLine = normalizedLine.substring(1);
+        }
+        if (normalizedLine.endsWith("|")) {
+            normalizedLine = normalizedLine.substring(0, normalizedLine.length() - 1);
+        }
+        String[] rawCells = normalizedLine.split("\\|", -1);
+        for (String rawCell : rawCells) {
+            String cell = rawCell == null ? "" : rawCell.trim();
+            cells.add(cell);
+        }
+        return cells;
+    }
+
+    /**
+     * 把表格数据行转换为可校验 claim 文本。
+     *
+     * @param headerCells 表头
+     * @param rowCells 数据行
+     * @return claim 文本
+     */
+    private String buildTableClaimCandidate(List<String> headerCells, List<String> rowCells) {
+        if (rowCells == null || rowCells.isEmpty()) {
+            return "";
+        }
+        List<String> parts = new ArrayList<String>();
+        for (int index = 0; index < rowCells.size(); index++) {
+            String rowCell = rowCells.get(index) == null ? "" : rowCells.get(index).trim();
+            if (rowCell.isBlank()) {
+                continue;
+            }
+            String headerCell = resolveHeaderCell(headerCells, index);
+            if (headerCell.isBlank()) {
+                parts.add(rowCell);
+                continue;
+            }
+            parts.add(headerCell + "：" + rowCell);
+        }
+        return String.join("；", parts);
+    }
+
+    /**
+     * 取指定位置的表头单元格。
+     *
+     * @param headerCells 表头
+     * @param index 单元格下标
+     * @return 表头文本
+     */
+    private String resolveHeaderCell(List<String> headerCells, int index) {
+        if (headerCells == null || index < 0 || index >= headerCells.size()) {
+            return "";
+        }
+        String headerCell = headerCells.get(index);
+        if (headerCell == null) {
+            return "";
+        }
+        return stripCitationLiteral(headerCell).trim();
+    }
+
     private String normalizeListLine(String line) {
         String normalizedLine = line == null ? "" : line.trim();
         normalizedLine = normalizedLine.replaceFirst("^[-*]\\s+", "");
@@ -298,7 +462,53 @@ public class CitationExtractor {
             }
             claimCandidates.add(normalizedSegment);
         }
+        propagateFollowingCitationToPreviousClaims(claimCandidates);
         return claimCandidates;
+    }
+
+    private void propagateFollowingCitationToPreviousClaims(List<String> claimCandidates) {
+        if (claimCandidates == null || claimCandidates.size() <= 1) {
+            return;
+        }
+        List<Integer> pendingCitationIndexes = new ArrayList<Integer>();
+        for (int index = 0; index < claimCandidates.size(); index++) {
+            String claimCandidate = claimCandidates.get(index);
+            if (!containsCitationLiteral(claimCandidate)) {
+                pendingCitationIndexes.add(Integer.valueOf(index));
+                continue;
+            }
+            if (pendingCitationIndexes.isEmpty()) {
+                continue;
+            }
+            String citationTail = extractCitationTail(claimCandidate);
+            if (citationTail.isBlank()) {
+                pendingCitationIndexes.clear();
+                continue;
+            }
+            for (Integer pendingCitationIndex : pendingCitationIndexes) {
+                String previousClaim = claimCandidates.get(pendingCitationIndex.intValue());
+                claimCandidates.set(pendingCitationIndex.intValue(), previousClaim + " " + citationTail);
+            }
+            pendingCitationIndexes.clear();
+        }
+    }
+
+    private String extractCitationTail(String content) {
+        if (content == null || content.isBlank() || !containsCitationLiteral(content)) {
+            return "";
+        }
+        List<String> citationLiterals = new ArrayList<String>();
+        Matcher articleMatcher = ARTICLE_PATTERN.matcher(content);
+        while (articleMatcher.find()) {
+            citationLiterals.add(articleMatcher.group());
+        }
+        Matcher sourceMatcher = SOURCE_PATTERN.matcher(content);
+        while (sourceMatcher.find()) {
+            citationLiterals.add(buildCanonicalSourceLiteral(sourceMatcher.group(1) != null
+                    ? sourceMatcher.group(1)
+                    : sourceMatcher.group(2)));
+        }
+        return String.join("", citationLiterals);
     }
 
     private void appendCitationTail(List<String> claimCandidates, String citationTail) {

@@ -24,6 +24,10 @@ import java.util.Optional;
 @Profile("jdbc")
 public class ArticleChunkVectorJdbcRepository {
 
+    private static final String ANN_INDEX_NAME_HNSW = "idx_article_chunk_vector_index_embedding_hnsw";
+
+    private static final String ANN_INDEX_NAME_IVFFLAT = "idx_article_chunk_vector_index_embedding_ivfflat";
+
     private final JdbcTemplate jdbcTemplate;
 
     /**
@@ -143,9 +147,38 @@ public class ArticleChunkVectorJdbcRepository {
             return;
         }
 
+        dropEmbeddingAnnIndexes();
         jdbcTemplate.execute(
                 "alter table article_chunk_vector_index alter column embedding type "
                         + vectorTypeName + "(" + targetDimensions + ")"
+        );
+    }
+
+    /**
+     * 确保 chunk 向量表已具备可用的 ANN 索引。
+     */
+    public void ensureEmbeddingAnnIndex() {
+        if (jdbcTemplate == null) {
+            return;
+        }
+        String annIndexMethod = resolvePreferredAnnIndexMethod();
+        if (annIndexMethod.isBlank()) {
+            return;
+        }
+        String opClass = resolveVectorOperatorClass();
+        if (opClass.isBlank()) {
+            return;
+        }
+        if ("hnsw".equals(annIndexMethod)) {
+            jdbcTemplate.execute(
+                    "create index if not exists " + ANN_INDEX_NAME_HNSW
+                            + " on article_chunk_vector_index using hnsw (embedding " + opClass + ")"
+            );
+            return;
+        }
+        jdbcTemplate.execute(
+                "create index if not exists " + ANN_INDEX_NAME_IVFFLAT
+                        + " on article_chunk_vector_index using ivfflat (embedding " + opClass + ") with (lists = 100)"
         );
     }
 
@@ -303,6 +336,46 @@ public class ArticleChunkVectorJdbcRepository {
             return "";
         }
         return values.get(0);
+    }
+
+    /**
+     * 解析当前优先使用的 ANN 索引实现。
+     *
+     * @return 索引实现名
+     */
+    private String resolvePreferredAnnIndexMethod() {
+        List<String> methods = jdbcTemplate.queryForList(
+                "select amname from pg_am where amname in ('hnsw','ivfflat') order by case amname when 'hnsw' then 0 else 1 end",
+                String.class
+        );
+        if (methods.isEmpty() || methods.get(0) == null) {
+            return "";
+        }
+        return methods.get(0);
+    }
+
+    /**
+     * 解析向量索引使用的 opclass。
+     *
+     * @return schema-qualified opclass
+     */
+    private String resolveVectorOperatorClass() {
+        List<String> values = jdbcTemplate.queryForList(
+                "select opcnamespace::regnamespace || '.vector_cosine_ops' from pg_opclass where opcname = 'vector_cosine_ops' order by oid asc limit 1",
+                String.class
+        );
+        if (values.isEmpty() || values.get(0) == null) {
+            return "";
+        }
+        return values.get(0);
+    }
+
+    /**
+     * 删除历史 ANN 索引，便于在切换向量维度时重新创建。
+     */
+    private void dropEmbeddingAnnIndexes() {
+        jdbcTemplate.execute("drop index if exists " + ANN_INDEX_NAME_HNSW);
+        jdbcTemplate.execute("drop index if exists " + ANN_INDEX_NAME_IVFFLAT);
     }
 
     /**

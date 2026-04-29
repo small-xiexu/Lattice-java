@@ -171,6 +171,30 @@ class ArticleVectorIndexServiceTests {
     }
 
     /**
+     * 验证文章级向量在首次命中过长输入限制时，会自动裁剪后重试并完成落库。
+     */
+    @Test
+    void shouldRetryWithCompactEmbeddingTextWhenProviderRejectsLongInput() {
+        QuerySearchProperties querySearchProperties = new QuerySearchProperties();
+        querySearchProperties.getVector().setEnabled(true);
+        querySearchProperties.getVector().setEmbeddingModel("text-embedding-3-small");
+
+        FakeArticleVectorJdbcRepository articleVectorJdbcRepository = new FakeArticleVectorJdbcRepository();
+        RetryOnSecondCallEmbeddingModel embeddingModel = new RetryOnSecondCallEmbeddingModel(createEmbedding(0.11F, 1536));
+        ArticleVectorIndexService articleVectorIndexService = new ArticleVectorIndexService(
+                querySearchProperties,
+                new FixedSearchCapabilityService(true, true, true),
+                articleVectorJdbcRepository,
+                embeddingModel
+        );
+
+        articleVectorIndexService.indexArticle(createLongArticleRecord("oversized-article"));
+
+        assertThat(articleVectorJdbcRepository.getSavedRecords()).hasSize(1);
+        assertThat(embeddingModel.getCallCount()).isEqualTo(2);
+    }
+
+    /**
      * 创建测试文章记录。
      *
      * @param conceptId 概念标识
@@ -188,6 +212,34 @@ class ArticleVectorIndexServiceTests {
                 "{\"description\":\"" + summary + "\"}",
                 summary,
                 List.of("retry=3"),
+                List.of(),
+                List.of(),
+                "high",
+                "passed"
+        );
+    }
+
+    /**
+     * 创建超长正文文章。
+     *
+     * @param conceptId 概念标识
+     * @return 文章记录
+     */
+    private ArticleRecord createLongArticleRecord(String conceptId) {
+        StringBuilder contentBuilder = new StringBuilder("# Long Article\n\n");
+        for (int index = 0; index < 4000; index++) {
+            contentBuilder.append("OCR 状态说明段落 ").append(index).append("：还没有可用的识别连接。");
+        }
+        return new ArticleRecord(
+                conceptId,
+                "Long Article",
+                contentBuilder.toString(),
+                "ACTIVE",
+                OffsetDateTime.now(),
+                List.of("docs/long-article.md"),
+                "{\"description\":\"超长文章\"}",
+                "超长文章",
+                List.of("ocr", "识别连接"),
                 List.of(),
                 List.of(),
                 "high",
@@ -431,6 +483,62 @@ class ArticleVectorIndexServiceTests {
             OpenAiEmbeddingOptions options = (OpenAiEmbeddingOptions) request.getOptions();
             lastRequestedModel = options.getModel();
             lastRequestedDimensions = options.getDimensions();
+        }
+    }
+
+    /**
+     * 首次调用模拟供应商 8192 tokens 限制，第二次返回正常 embedding。
+     *
+     * @author xiexu
+     */
+    private static class RetryOnSecondCallEmbeddingModel implements EmbeddingModel {
+
+        private final float[] embedding;
+
+        private int callCount;
+
+        /**
+         * 创建可重试 embedding 模型替身。
+         *
+         * @param embedding 返回向量
+         */
+        private RetryOnSecondCallEmbeddingModel(float[] embedding) {
+            this.embedding = embedding;
+        }
+
+        /**
+         * 执行 embedding 请求。
+         *
+         * @param request embedding 请求
+         * @return embedding 响应
+         */
+        @Override
+        public EmbeddingResponse call(EmbeddingRequest request) {
+            callCount++;
+            if (callCount == 1) {
+                throw new IllegalStateException("413 - input must have less than 8192 tokens");
+            }
+            return new EmbeddingResponse(List.of(new Embedding(embedding, 0)));
+        }
+
+        /**
+         * 对文档执行 embedding。
+         *
+         * @param document 文档
+         * @return embedding 向量
+         */
+        @Override
+        public float[] embed(Document document) {
+            return embedding;
+        }
+
+        /**
+         * 返回调用次数。
+         *
+         * @return 调用次数
+         */
+        private int getCallCount() {
+            return callCount;
         }
     }
 }

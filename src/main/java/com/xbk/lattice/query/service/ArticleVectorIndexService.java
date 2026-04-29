@@ -1,5 +1,6 @@
 package com.xbk.lattice.query.service;
 
+import com.xbk.lattice.article.service.ArticleMarkdownSupport;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.ArticleVectorJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleVectorRecord;
@@ -31,6 +32,10 @@ import java.util.regex.Pattern;
 @Service
 @Profile("jdbc")
 public class ArticleVectorIndexService {
+
+    private static final int RETRY_EMBEDDING_TEXT_MAX_CHARS = 6000;
+
+    private static final int RETRY_EMBEDDING_TEXT_MIN_CHARS = 3000;
 
     private static final Pattern VECTOR_DIMENSIONS_PATTERN = Pattern.compile(".*vector\\((\\d+)\\)$");
 
@@ -121,7 +126,7 @@ public class ArticleVectorIndexService {
         }
 
         try {
-            float[] embedding = configuredVectorEmbeddingService.embed(buildEmbeddingText(articleRecord));
+            float[] embedding = embedArticle(articleRecord);
             if (!hasExpectedDimensions(embedding, articleRecord.getConceptId())) {
                 return;
             }
@@ -139,6 +144,32 @@ public class ArticleVectorIndexService {
         }
         catch (RuntimeException ex) {
             log.warn("Vector indexing fallback for article: {}", articleRecord.getConceptId(), ex);
+        }
+    }
+
+    /**
+     * 生成文章级 embedding，并在输入过长时自动回退到裁剪后的语义摘要文本。
+     *
+     * @param articleRecord 文章记录
+     * @return embedding 向量
+     */
+    private float[] embedArticle(ArticleRecord articleRecord) {
+        String fullEmbeddingText = buildEmbeddingText(articleRecord);
+        try {
+            return configuredVectorEmbeddingService.embed(fullEmbeddingText);
+        }
+        catch (RuntimeException exception) {
+            if (!isInputTooLongException(exception)) {
+                throw exception;
+            }
+            String compactEmbeddingText = buildCompactEmbeddingText(articleRecord, RETRY_EMBEDDING_TEXT_MAX_CHARS);
+            log.info(
+                    "Retry vector indexing with compact embedding text for article: {}, fullChars: {}, compactChars: {}",
+                    articleRecord.getConceptId(),
+                    fullEmbeddingText.length(),
+                    compactEmbeddingText.length()
+            );
+            return configuredVectorEmbeddingService.embed(compactEmbeddingText);
         }
     }
 
@@ -264,6 +295,67 @@ public class ArticleVectorIndexService {
             stringBuilder.append('\n').append(String.join("\n", articleRecord.getSourcePaths()));
         }
         return stringBuilder.toString();
+    }
+
+    /**
+     * 构建输入过长时的紧凑 embedding 文本，优先保留标题、摘要、正文前部与来源路径。
+     *
+     * @param articleRecord 文章记录
+     * @param maxChars 最大字符数
+     * @return 裁剪后的 embedding 文本
+     */
+    private String buildCompactEmbeddingText(ArticleRecord articleRecord, int maxChars) {
+        int safeMaxChars = Math.max(RETRY_EMBEDDING_TEXT_MIN_CHARS, maxChars);
+        StringBuilder stringBuilder = new StringBuilder();
+        appendWithinLimit(stringBuilder, articleRecord.getTitle(), safeMaxChars);
+        appendWithinLimit(stringBuilder, "\n", safeMaxChars);
+        if (articleRecord.getSummary() != null && !articleRecord.getSummary().isBlank()) {
+            appendWithinLimit(stringBuilder, articleRecord.getSummary(), safeMaxChars);
+            appendWithinLimit(stringBuilder, "\n", safeMaxChars);
+        }
+        appendWithinLimit(stringBuilder, ArticleMarkdownSupport.extractBody(articleRecord.getContent()), safeMaxChars);
+        if (!articleRecord.getSourcePaths().isEmpty() && stringBuilder.length() < safeMaxChars) {
+            appendWithinLimit(stringBuilder, "\n", safeMaxChars);
+            appendWithinLimit(stringBuilder, String.join("\n", articleRecord.getSourcePaths()), safeMaxChars);
+        }
+        return stringBuilder.toString();
+    }
+
+    /**
+     * 在给定预算内追加文本。
+     *
+     * @param stringBuilder 文本构建器
+     * @param segment 待追加文本
+     * @param maxChars 最大字符数
+     */
+    private void appendWithinLimit(StringBuilder stringBuilder, String segment, int maxChars) {
+        if (segment == null || segment.isBlank() || stringBuilder.length() >= maxChars) {
+            return;
+        }
+        int remaining = maxChars - stringBuilder.length();
+        if (segment.length() <= remaining) {
+            stringBuilder.append(segment);
+            return;
+        }
+        stringBuilder.append(segment, 0, remaining);
+    }
+
+    /**
+     * 判断异常是否由 embedding 输入过长触发。
+     *
+     * @param exception 运行时异常
+     * @return 输入过长返回 true
+     */
+    private boolean isInputTooLongException(RuntimeException exception) {
+        String message = exception.getMessage();
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String normalizedMessage = message.toLowerCase();
+        return normalizedMessage.contains("less than 8192 tokens")
+                || normalizedMessage.contains("too many tokens")
+                || normalizedMessage.contains("input is too long")
+                || normalizedMessage.contains("413");
     }
 
     /**

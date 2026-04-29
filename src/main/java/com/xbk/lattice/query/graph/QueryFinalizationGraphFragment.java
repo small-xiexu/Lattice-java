@@ -298,15 +298,26 @@ public class QueryFinalizationGraphFragment {
         if (report == null || answerGenerationService == null) {
             return false;
         }
-        if (report.isNoCitation()) {
-            return true;
-        }
         if (state.getCitationRepairAttemptCount() < CITATION_CHECK_OPTIONS.getMaxRepairRounds()) {
             return false;
         }
-        return report.getDemotedCount() > 0
-                || report.getCoverageRate() < CITATION_CHECK_OPTIONS.getMinCitationCoverage()
-                || report.getProjectionMismatchCount() > 0;
+        if (report.isNoCitation()) {
+            return true;
+        }
+        return !hasUsableCitationEvidence(report);
+    }
+
+    /**
+     * 判断 citation 报告里是否仍有可保留的证据支撑。
+     *
+     * @param report citation 检查报告
+     * @return 存在可用 citation 返回 true
+     */
+    private boolean hasUsableCitationEvidence(CitationCheckReport report) {
+        if (report == null || report.isNoCitation()) {
+            return false;
+        }
+        return report.getVerifiedCount() > 0 || report.getSkippedCount() > 0 || report.getCoverageRate() > 0.0D;
     }
 
     /**

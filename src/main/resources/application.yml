@@ -72,6 +72,7 @@ lattice:
       reviewer-input-price-per-1k-tokens: ${LATTICE_LLM_REVIEWER_INPUT_PRICE_PER_1K:0.003000}
       reviewer-output-price-per-1k-tokens: ${LATTICE_LLM_REVIEWER_OUTPUT_PRICE_PER_1K:0.015000}
   compiler:
+    ingest-max-chars: ${LATTICE_COMPILER_INGEST_MAX_CHARS:65536}
     orchestration:
       default-mode: ${LATTICE_COMPILER_ORCHESTRATION_DEFAULT_MODE:state_graph}
     working-set:

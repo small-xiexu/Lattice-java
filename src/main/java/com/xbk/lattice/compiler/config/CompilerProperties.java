@@ -15,7 +15,7 @@ import java.util.List;
 @ConfigurationProperties(prefix = "lattice.compiler")
 public class CompilerProperties {
 
-    private int ingestMaxChars = 8192;
+    private int ingestMaxChars = 65536;
 
     private int batchMaxChars = 40000;
 

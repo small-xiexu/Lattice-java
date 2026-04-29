@@ -11,6 +11,8 @@ public enum ModelExecutionStatus {
 
     SUCCESS,
 
+    DEGRADED,
+
     FAILED,
 
     SKIPPED

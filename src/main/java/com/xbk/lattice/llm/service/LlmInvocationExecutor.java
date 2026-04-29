@@ -1,5 +1,8 @@
 package com.xbk.lattice.llm.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.config.LlmProperties;
 import com.xbk.lattice.observability.StructuredEventLogger;
 import lombok.extern.slf4j.Slf4j;
@@ -29,11 +32,17 @@ import java.util.Map;
 @Profile("jdbc")
 public class LlmInvocationExecutor {
 
+    private static final String OPENAI_PROVIDER = "openai";
+
+    private static final String OPENAI_COMPATIBLE_PROVIDER = "openai_compatible";
+
     private final ChatClientRegistry chatClientRegistry;
 
     private final LlmProperties llmProperties;
 
     private final StructuredEventLogger structuredEventLogger;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * 创建 LLM 调用执行器。
@@ -122,12 +131,13 @@ public class LlmInvocationExecutor {
             String systemPrompt,
             String userPrompt
     ) {
+        LlmRouteResolution effectiveRouteResolution = augmentRouteForStructuredOutput(routeResolution, invocationContext);
         return LlmRetrySupport.executeWithRetry(
                 "ChatClient invocation",
-                routeResolution,
+                effectiveRouteResolution,
                 invocationContext == null ? "" : invocationContext.getPurpose(),
-                retryObservation -> logRetryAttempt(routeResolution, invocationContext, retryObservation),
-                () -> chatClientRegistry.getOrCreate(routeResolution)
+                retryObservation -> logRetryAttempt(effectiveRouteResolution, invocationContext, retryObservation),
+                () -> chatClientRegistry.getOrCreate(effectiveRouteResolution)
                         .getChatClient()
                         .prompt()
                         .advisors(spec -> spec.params(invocationContext.toAdvisorParams()))
@@ -136,6 +146,113 @@ public class LlmInvocationExecutor {
                         .call()
                         .chatClientResponse()
         );
+    }
+
+    /**
+     * 针对结构化问答用途，为 OpenAI 路由补充 response_format 约束。
+     *
+     * @param routeResolution 原始路由
+     * @param invocationContext 调用上下文
+     * @return 增强后的路由
+     */
+    private LlmRouteResolution augmentRouteForStructuredOutput(
+            LlmRouteResolution routeResolution,
+            LlmInvocationContext invocationContext
+    ) {
+        if (!shouldForceJsonResponseFormat(routeResolution, invocationContext)) {
+            return routeResolution;
+        }
+        String mergedExtraOptionsJson = mergeJsonObject(
+                routeResolution.getExtraOptionsJson(),
+                "{\"response_format\":{\"type\":\"json_object\"}}"
+        );
+        return new LlmRouteResolution(
+                routeResolution.getScopeType(),
+                routeResolution.getScopeId(),
+                routeResolution.getScene(),
+                routeResolution.getAgentRole(),
+                routeResolution.getBindingId(),
+                routeResolution.getSnapshotId(),
+                routeResolution.getSnapshotVersion(),
+                routeResolution.getRouteLabel(),
+                routeResolution.getProviderType(),
+                routeResolution.getBaseUrl(),
+                routeResolution.getApiKey(),
+                routeResolution.getModelName(),
+                routeResolution.getTemperature(),
+                routeResolution.getMaxTokens(),
+                routeResolution.getTimeoutSeconds(),
+                mergedExtraOptionsJson,
+                routeResolution.getInputPricePer1kTokens(),
+                routeResolution.getOutputPricePer1kTokens(),
+                routeResolution.isSnapshotBacked()
+        );
+    }
+
+    /**
+     * 判断当前是否应强制开启 JSON response_format。
+     *
+     * @param routeResolution 原始路由
+     * @param invocationContext 调用上下文
+     * @return 需要强制返回 true
+     */
+    private boolean shouldForceJsonResponseFormat(
+            LlmRouteResolution routeResolution,
+            LlmInvocationContext invocationContext
+    ) {
+        if (routeResolution == null || invocationContext == null) {
+            return false;
+        }
+        String providerType = normalizeProviderType(routeResolution.getProviderType());
+        if (!OPENAI_PROVIDER.equals(providerType) && !OPENAI_COMPATIBLE_PROVIDER.equals(providerType)) {
+            return false;
+        }
+        String purpose = invocationContext.getPurpose();
+        return "query-answer-structured".equals(purpose)
+                || "query-rewrite-from-review-structured".equals(purpose);
+    }
+
+    /**
+     * 合并扩展参数 JSON。
+     *
+     * @param baseJson 基础 JSON
+     * @param overlayJson 覆盖 JSON
+     * @return 合并后的 JSON
+     */
+    private String mergeJsonObject(String baseJson, String overlayJson) {
+        try {
+            JsonNode baseNode = parseObjectNode(baseJson);
+            JsonNode overlayNode = parseObjectNode(overlayJson);
+            if (baseNode instanceof com.fasterxml.jackson.databind.node.ObjectNode baseObjectNode
+                    && overlayNode instanceof com.fasterxml.jackson.databind.node.ObjectNode overlayObjectNode) {
+                baseObjectNode.setAll(overlayObjectNode);
+                return objectMapper.writeValueAsString(baseObjectNode);
+            }
+            return overlayJson;
+        }
+        catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to merge structured output options", exception);
+        }
+    }
+
+    /**
+     * 解析对象 JSON 节点；空值时返回空对象。
+     *
+     * @param jsonValue JSON 字符串
+     * @return 对象节点
+     */
+    private JsonNode parseObjectNode(String jsonValue) throws JsonProcessingException {
+        if (jsonValue == null || jsonValue.isBlank()) {
+            return objectMapper.createObjectNode();
+        }
+        JsonNode jsonNode = objectMapper.readTree(jsonValue);
+        if (jsonNode == null || jsonNode.isNull()) {
+            return objectMapper.createObjectNode();
+        }
+        if (!jsonNode.isObject()) {
+            throw new IllegalStateException("extraOptionsJson must be a JSON object");
+        }
+        return jsonNode.deepCopy();
     }
 
     private void logRetryAttempt(
@@ -239,6 +356,13 @@ public class LlmInvocationExecutor {
             return null;
         }
         return trimmedValue;
+    }
+
+    private String normalizeProviderType(String providerType) {
+        if (providerType == null || providerType.isBlank()) {
+            return OPENAI_PROVIDER;
+        }
+        return providerType.trim().toLowerCase(Locale.ROOT);
     }
 
     private String extractContent(ChatClientResponse response) {

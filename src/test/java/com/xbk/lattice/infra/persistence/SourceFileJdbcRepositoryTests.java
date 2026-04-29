@@ -128,6 +128,6 @@ class SourceFileJdbcRepositoryTests {
 
         assertThat(hits).isNotEmpty();
         assertThat(hits.get(0).getItemKey()).isEqualTo("payment/order.md");
-        assertThat(hits.get(0).getContent()).contains("# Payment");
+        assertThat(hits.get(0).getContent()).contains("retry interval is 30s");
     }
 }

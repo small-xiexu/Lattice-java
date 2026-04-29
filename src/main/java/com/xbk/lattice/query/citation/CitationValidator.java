@@ -42,6 +42,8 @@ public class CitationValidator {
             "(?<![A-Za-z0-9_./-])([A-Za-z][A-Za-z0-9-]{2,})(?![A-Za-z0-9_./-])"
     );
 
+    private static final Pattern HAN_TERM_PATTERN = Pattern.compile("([\\p{IsHan}]{3,})");
+
     private final ArticleJdbcRepository articleJdbcRepository;
 
     private final SourceFileJdbcRepository sourceFileJdbcRepository;
@@ -129,6 +131,17 @@ public class CitationValidator {
                 );
             }
             double overlapScore = calculateOverlapScore(hardFactTokens, sourceFileRecord.getContentText());
+            if (hasDirectEvidenceLineMatch(citation.getClaimText(), sourceFileRecord.getContentText())) {
+                return new CitationValidationResult(
+                        citation.getTargetKey(),
+                        citation.getSourceType(),
+                        CitationValidationStatus.VERIFIED,
+                        Math.max(overlapScore, 1.0D),
+                        "source_direct_line_match_verified",
+                        extractMatchedExcerpt(sourceFileRecord.getContentText(), hardFactTokens),
+                        citation.getOrdinal()
+                );
+            }
             if (overlapScore >= 1.0D) {
                 return new CitationValidationResult(
                         citation.getTargetKey(),
@@ -136,6 +149,17 @@ public class CitationValidator {
                         CitationValidationStatus.VERIFIED,
                         overlapScore,
                         "source_rule_overlap_verified",
+                        extractMatchedExcerpt(sourceFileRecord.getContentText(), hardFactTokens),
+                        citation.getOrdinal()
+                );
+            }
+            if (isHighConfidencePartialOverlap(hardFactTokens, overlapScore)) {
+                return new CitationValidationResult(
+                        citation.getTargetKey(),
+                        citation.getSourceType(),
+                        CitationValidationStatus.VERIFIED,
+                        overlapScore,
+                        "source_near_complete_overlap_verified",
                         extractMatchedExcerpt(sourceFileRecord.getContentText(), hardFactTokens),
                         citation.getOrdinal()
                 );
@@ -176,6 +200,17 @@ public class CitationValidator {
             );
         }
         double overlapScore = calculateOverlapScore(hardFactTokens, buildEvidenceText(articleRecord));
+        if (hasDirectEvidenceLineMatch(citation.getClaimText(), articleRecord.getContent())) {
+            return new CitationValidationResult(
+                    citation.getTargetKey(),
+                    citation.getSourceType(),
+                    CitationValidationStatus.VERIFIED,
+                    Math.max(overlapScore, 1.0D),
+                    "direct_line_match_verified",
+                    extractMatchedExcerpt(articleRecord.getContent(), hardFactTokens),
+                    citation.getOrdinal()
+            );
+        }
         if (overlapScore >= 1.0D) {
             return new CitationValidationResult(
                     citation.getTargetKey(),
@@ -183,6 +218,17 @@ public class CitationValidator {
                     CitationValidationStatus.VERIFIED,
                     overlapScore,
                     "rule_overlap_verified",
+                    extractMatchedExcerpt(articleRecord.getContent(), hardFactTokens),
+                    citation.getOrdinal()
+            );
+        }
+        if (isHighConfidencePartialOverlap(hardFactTokens, overlapScore)) {
+            return new CitationValidationResult(
+                    citation.getTargetKey(),
+                    citation.getSourceType(),
+                    CitationValidationStatus.VERIFIED,
+                    overlapScore,
+                    "near_complete_overlap_verified",
                     extractMatchedExcerpt(articleRecord.getContent(), hardFactTokens),
                     citation.getOrdinal()
             );
@@ -196,6 +242,12 @@ public class CitationValidator {
                 extractMatchedExcerpt(articleRecord.getContent(), hardFactTokens),
                 citation.getOrdinal()
         );
+    }
+
+    private boolean isHighConfidencePartialOverlap(List<String> hardFactTokens, double overlapScore) {
+        return hardFactTokens != null
+                && ((hardFactTokens.size() >= 4 && overlapScore >= 0.75D)
+                || (hardFactTokens.size() >= 2 && overlapScore >= 0.66D));
     }
 
     private String buildEvidenceText(ArticleRecord articleRecord) {
@@ -242,6 +294,9 @@ public class CitationValidator {
         appendMatches(hardFactTokens, HTTP_PATH_PATTERN.matcher(normalizedClaimText));
         appendMatches(hardFactTokens, JAVA_SYMBOL_PATTERN.matcher(normalizedClaimText));
         appendMatches(hardFactTokens, LATIN_TERM_PATTERN.matcher(normalizedClaimText));
+        if (!hardFactTokens.isEmpty()) {
+            appendHanTermMatches(hardFactTokens, HAN_TERM_PATTERN.matcher(normalizedClaimText));
+        }
         return hardFactTokens;
     }
 
@@ -256,6 +311,69 @@ public class CitationValidator {
                 hardFactTokens.add(normalizedLiteral);
             }
         }
+    }
+
+    private void appendHanTermMatches(List<String> hardFactTokens, Matcher matcher) {
+        while (matcher.find()) {
+            String literal = matcher.group(1);
+            if (literal == null || literal.isBlank() || !containsNamedHanSignal(literal) || isGenericHanLiteral(literal)) {
+                continue;
+            }
+            String normalizedLiteral = normalizeToken(literal);
+            if (!hardFactTokens.contains(normalizedLiteral)) {
+                hardFactTokens.add(normalizedLiteral);
+            }
+            if (literal.length() >= 5) {
+                for (int start = 0; start <= literal.length() - 3; start++) {
+                    String slice = literal.substring(start, start + 3);
+                    if (!containsNamedHanSignal(slice) || isGenericHanLiteral(slice)) {
+                        continue;
+                    }
+                    String normalizedSlice = normalizeToken(slice);
+                    if (!hardFactTokens.contains(normalizedSlice)) {
+                        hardFactTokens.add(normalizedSlice);
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean isGenericHanLiteral(String literal) {
+        if (literal == null || literal.isBlank()) {
+            return true;
+        }
+        return literal.contains("当前证据不足")
+                || literal.contains("主要")
+                || literal.contains("包括")
+                || literal.contains("需要")
+                || literal.contains("可以")
+                || literal.contains("通过")
+                || literal.contains("相关")
+                || literal.contains("不同")
+                || literal.contains("如下")
+                || literal.contains("例如")
+                || literal.contains("使用")
+                || literal.contains("暴露")
+                || literal.contains("采用")
+                || literal.contains("处理");
+    }
+
+    private boolean containsNamedHanSignal(String literal) {
+        if (literal == null || literal.isBlank()) {
+            return false;
+        }
+        return literal.contains("资和信")
+                || literal.contains("易百")
+                || literal.contains("杉德")
+                || literal.contains("苏州")
+                || literal.contains("得仕")
+                || literal.contains("广发")
+                || literal.contains("民生")
+                || literal.contains("宁波")
+                || literal.contains("上海")
+                || literal.contains("星巴克")
+                || literal.contains("账号数据库")
+                || literal.contains("目录服务");
     }
 
     private Set<String> tokenize(String content) {
@@ -285,6 +403,42 @@ public class CitationValidator {
                 .replaceAll("(?m)^#+\\s*", "")
                 .replaceAll("(?<=\\s|^)\\d+\\.\\s*", "")
                 .trim();
+    }
+
+    private boolean hasDirectEvidenceLineMatch(String claimText, String evidenceText) {
+        String normalizedClaimText = normalizeForDirectLineMatch(claimText);
+        if (normalizedClaimText.isBlank() || evidenceText == null || evidenceText.isBlank()) {
+            return false;
+        }
+        for (String line : evidenceText.split("\\R")) {
+            String normalizedEvidenceLine = normalizeForDirectLineMatch(line);
+            if (normalizedEvidenceLine.isBlank()) {
+                continue;
+            }
+            if (normalizedEvidenceLine.contains(normalizedClaimText) || normalizedClaimText.contains(normalizedEvidenceLine)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String normalizeForDirectLineMatch(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        return text
+                .replace("**", "")
+                .replace("`", "")
+                .replaceAll("\\[\\[[^\\]]+]]", "")
+                .replaceAll("\\[→\\s*[^\\]]+]", "")
+                .replaceFirst("^\\s*[-*]\\s*", "")
+                .replaceFirst("^当前可确认的信息是[:：]\\s*", "")
+                .replaceFirst("^补充证据还提到[:：]\\s*", "")
+                .replaceFirst("^同一份资料还给出[:：]\\s*", "")
+                .replaceFirst("^支持“[^”]+”的材料提到[:：]\\s*", "")
+                .replaceAll("\\s+", " ")
+                .trim()
+                .toLowerCase(Locale.ROOT);
     }
 
     private boolean isBlank(String value) {

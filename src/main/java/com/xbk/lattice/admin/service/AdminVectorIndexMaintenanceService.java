@@ -188,6 +188,10 @@ public class AdminVectorIndexMaintenanceService {
             }
             articleChunkVectorIndexService.indexArticles(articleRecords);
         }
+        articleVectorJdbcRepository.ensureEmbeddingAnnIndex();
+        if (articleChunkVectorJdbcRepository != null) {
+            articleChunkVectorJdbcRepository.ensureEmbeddingAnnIndex();
+        }
         int indexedArticleCount = articleVectorJdbcRepository.countAll();
         int indexedChunkCount = articleChunkVectorJdbcRepository == null
                 ? 0

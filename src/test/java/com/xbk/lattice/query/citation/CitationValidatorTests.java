@@ -89,6 +89,46 @@ class CitationValidatorTests {
     }
 
     @Test
+    void shouldVerifySourceCitationByDirectLineMatchWhenClaimWrapsEvidenceLine() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository()
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[→ src/main/java/payment/RoutePlanner.java]",
+                CitationSourceType.SOURCE_FILE,
+                "src/main/java/payment/RoutePlanner.java",
+                "当前可确认的信息是：RoutePlanner 暴露了 /payments 路径",
+                "当前可确认的信息是：RoutePlanner 暴露了 /payments 路径 [→ src/main/java/payment/RoutePlanner.java]"
+        ));
+
+        assertThat(result.isVerified()).isTrue();
+        assertThat(result.getReason()).isIn("source_direct_line_match_verified", "source_rule_overlap_verified");
+    }
+
+    @Test
+    void shouldVerifyNearCompleteEnumerationOverlapForSpreadsheetFacts() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository()
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[→ SWIP网关中各支付渠道交易报文字段定义.xlsx]",
+                CitationSourceType.SOURCE_FILE,
+                "SWIP网关中各支付渠道交易报文字段定义.xlsx",
+                "资和信 SVC 卡支持 01/02/04/51/52/61/62/99",
+                "资和信 SVC 卡支持 01/02/04/51/52/61/62/99 [→ SWIP网关中各支付渠道交易报文字段定义.xlsx]"
+        ));
+
+        assertThat(result.isVerified()).isTrue();
+        assertThat(result.getReason()).isEqualTo("source_near_complete_overlap_verified");
+    }
+
+    @Test
     void shouldSkipClaimWithoutHardFactLiterals() {
         CitationValidator citationValidator = new CitationValidator(
                 new FixedArticleJdbcRepository(),
@@ -234,28 +274,47 @@ class CitationValidatorTests {
 
         @Override
         public Optional<SourceFileRecord> findByPath(String filePath) {
-            if (!"src/main/java/payment/RoutePlanner.java".equals(filePath)) {
-                return Optional.empty();
+            if ("SWIP网关中各支付渠道交易报文字段定义.xlsx".equals(filePath)) {
+                return Optional.of(new SourceFileRecord(
+                        102L,
+                        1L,
+                        "SWIP网关中各支付渠道交易报文字段定义.xlsx",
+                        "SWIP网关中各支付渠道交易报文字段定义.xlsx",
+                        null,
+                        "XLSX",
+                        "XLSX",
+                        256L,
+                        """
+                        渠道,transactionType
+                        资和信 SVC 卡,01 02 04 51 52 61 62
+                        """,
+                        "{}",
+                        false,
+                        "SWIP网关中各支付渠道交易报文字段定义.xlsx"
+                ));
             }
-            return Optional.of(new SourceFileRecord(
-                    101L,
-                    1L,
-                    "src/main/java/payment/RoutePlanner.java",
-                    "src/main/java/payment/RoutePlanner.java",
-                    null,
-                    "@RequestMapping(\"/payments\")",
-                    "JAVA",
-                    128L,
-                    """
-                    @RequestMapping("/payments")
-                    class RoutePlanner {
-                        void route() {}
-                    }
-                    """,
-                    "{}",
-                    false,
-                    "src/main/java/payment/RoutePlanner.java"
-            ));
+            if ("src/main/java/payment/RoutePlanner.java".equals(filePath)) {
+                return Optional.of(new SourceFileRecord(
+                        101L,
+                        1L,
+                        "src/main/java/payment/RoutePlanner.java",
+                        "src/main/java/payment/RoutePlanner.java",
+                        null,
+                        "@RequestMapping(\"/payments\")",
+                        "JAVA",
+                        128L,
+                        """
+                        @RequestMapping("/payments")
+                        class RoutePlanner {
+                            void route() {}
+                        }
+                        """,
+                        "{}",
+                        false,
+                        "src/main/java/payment/RoutePlanner.java"
+                ));
+            }
+            return Optional.empty();
         }
     }
 }

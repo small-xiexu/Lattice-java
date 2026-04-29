@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>邪修智库｜工作台</title>
-    <link rel="stylesheet" href="/admin/admin.css?v=20260423-admin-align-3">
+    <link rel="stylesheet" href="/admin/admin.css?v=20260428-detail-focus-2">
 </head>
 <body>
 <div class="app-shell">
@@ -304,13 +304,25 @@
                                     </div>
                                     <div class="detail-stack">
                                         <section class="detail-section">
-                                            <h4>同步历史</h4>
-                                            <div id="source-run-list" class="job-list top-gap"></div>
+                                            <div class="detail-section-header">
+                                                <div>
+                                                    <h4>同步历史</h4>
+                                                    <p class="detail-section-copy">先看摘要列表，选中后再看当前这次处理的完整详情。</p>
+                                                </div>
+                                            </div>
+                                            <div id="source-run-list" class="detail-compact-list top-gap"></div>
+                                            <div id="source-run-detail" class="detail-focus-card top-gap" hidden></div>
                                         </section>
 
                                         <section class="detail-section">
-                                            <h4>文件解析方式</h4>
-                                            <div id="source-file-list" class="job-list top-gap"></div>
+                                            <div class="detail-section-header">
+                                                <div>
+                                                    <h4>文件解析方式</h4>
+                                                    <p class="detail-section-copy">文件列表默认保持紧凑，只在选中后展示完整路径和解析细节。</p>
+                                                </div>
+                                            </div>
+                                            <div id="source-file-list" class="detail-compact-list top-gap"></div>
+                                            <div id="source-file-detail" class="detail-focus-card top-gap" hidden></div>
                                         </section>
 
                                         <section class="detail-section">
@@ -484,6 +496,6 @@
     </div>
  </div>
 <script src="/admin/admin-tabs.js?v=20260419-tabs-1"></script>
-<script src="/admin/management.js?v=20260424-source-console-16"></script>
+<script src="/admin/management.js?v=20260428-source-console-19"></script>
 </body>
 </html>

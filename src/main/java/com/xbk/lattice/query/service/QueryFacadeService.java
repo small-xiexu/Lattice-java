@@ -31,6 +31,8 @@ public class QueryFacadeService {
 
     private final DeepResearchRouter deepResearchRouter;
 
+    private final OperationalQueryStatusService operationalQueryStatusService;
+
     private final PendingQueryManager pendingQueryManager;
 
     private final StructuredEventLogger structuredEventLogger;
@@ -41,6 +43,7 @@ public class QueryFacadeService {
      * @param queryGraphOrchestrator 问答图编排器
      * @param deepResearchOrchestrator Deep Research 编排器
      * @param deepResearchRouter Deep Research 路由器
+     * @param operationalQueryStatusService 运行态问答状态服务
      * @param pendingQueryManager PendingQuery 管理器
      */
     @Autowired
@@ -48,12 +51,14 @@ public class QueryFacadeService {
             QueryGraphOrchestrator queryGraphOrchestrator,
             DeepResearchOrchestrator deepResearchOrchestrator,
             DeepResearchRouter deepResearchRouter,
+            OperationalQueryStatusService operationalQueryStatusService,
             PendingQueryManager pendingQueryManager,
             StructuredEventLogger structuredEventLogger
     ) {
         this.queryGraphOrchestrator = queryGraphOrchestrator;
         this.deepResearchOrchestrator = deepResearchOrchestrator;
         this.deepResearchRouter = deepResearchRouter;
+        this.operationalQueryStatusService = operationalQueryStatusService;
         this.pendingQueryManager = pendingQueryManager;
         this.structuredEventLogger = structuredEventLogger;
     }
@@ -102,13 +107,19 @@ public class QueryFacadeService {
      * @return 查询响应
      */
     private QueryResponse routeAndExecute(QueryRequest queryRequest, String queryId) {
+        String question = queryRequest == null ? null : queryRequest.getQuestion();
+        QueryResponse operationalQueryResponse = operationalQueryStatusService == null
+                ? null
+                : operationalQueryStatusService.resolve(question);
+        if (operationalQueryResponse != null) {
+            return operationalQueryResponse;
+        }
         if (queryRequest != null
                 && deepResearchOrchestrator != null
                 && deepResearchRouter != null
                 && deepResearchRouter.shouldRoute(queryRequest)) {
             return deepResearchOrchestrator.execute(queryRequest, queryId);
         }
-        String question = queryRequest == null ? null : queryRequest.getQuestion();
         return queryGraphOrchestrator.execute(question, queryId);
     }
 
@@ -142,7 +153,19 @@ public class QueryFacadeService {
      * @return 是否需要创建 pending query
      */
     private boolean shouldAttachPendingQuery(QueryResponse queryResponse) {
-        return !(queryResponse.getSources().isEmpty() && queryResponse.getArticles().isEmpty());
+        if (queryResponse.getSources().isEmpty() && queryResponse.getArticles().isEmpty()) {
+            return false;
+        }
+        boolean runtimeSourcesOnly = queryResponse.getSources().stream().allMatch(source ->
+                OperationalQueryStatusService.RUNTIME_STATUS_DERIVATION.equalsIgnoreCase(source.getDerivation())
+        );
+        boolean runtimeArticlesOnly = queryResponse.getArticles().stream().allMatch(article ->
+                OperationalQueryStatusService.RUNTIME_STATUS_DERIVATION.equalsIgnoreCase(article.getDerivation())
+        );
+        if (runtimeSourcesOnly && runtimeArticlesOnly) {
+            return false;
+        }
+        return true;
     }
 
     private void logQueryReceived(String queryId, String question) {

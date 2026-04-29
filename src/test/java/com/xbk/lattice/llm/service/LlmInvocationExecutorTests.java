@@ -105,6 +105,63 @@ class LlmInvocationExecutorTests {
     }
 
     /**
+     * 验证结构化问答用途会自动下发 OpenAI JSON mode。
+     *
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldAttachJsonResponseFormatForStructuredQueryPurpose() throws IOException {
+        openAiStubServer = new StubOpenAiChatServer("structured-route-ok");
+        openAiStubServer.start();
+        ChatClientRegistry chatClientRegistry = new ChatClientRegistry(
+                RestClient.builder(),
+                WebClient.builder(),
+                new ObjectMapper(),
+                new AdvisorChainFactory()
+        );
+        LlmProperties llmProperties = new LlmProperties();
+        llmProperties.setCacheKeyPrefix("llm:cache:");
+        LlmInvocationExecutor llmInvocationExecutor = new LlmInvocationExecutor(chatClientRegistry, llmProperties);
+        LlmRouteResolution routeResolution = new LlmRouteResolution(
+                "query_request",
+                "query-structured-1",
+                "query",
+                "answer",
+                Long.valueOf(11L),
+                Long.valueOf(22L),
+                Integer.valueOf(3),
+                "query.answer.openai",
+                "openai",
+                openAiStubServer.getBaseUrl(),
+                "test-key",
+                "gpt-5.4",
+                new BigDecimal("0.2"),
+                Integer.valueOf(96),
+                Integer.valueOf(30),
+                "{}",
+                new BigDecimal("0.001"),
+                new BigDecimal("0.002"),
+                true
+        );
+
+        llmInvocationExecutor.execute(
+                routeResolution,
+                new LlmInvocationContext(
+                        "query",
+                        "query-answer-structured",
+                        "query-structured-1",
+                        "answer",
+                        "query.answer.openai"
+                ),
+                "你是查询助手",
+                "请输出结构化答案",
+                "llm:cache:structured:test"
+        );
+
+        assertThat(openAiStubServer.getCapturedResponseFormatTypes()).containsExactly("json_object");
+    }
+
+    /**
      * 验证 raw 调用遇到瞬时 5xx 后会自动重试并成功返回。
      *
      * @throws IOException IO 异常

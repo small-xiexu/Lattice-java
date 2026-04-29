@@ -7,6 +7,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * 合成产物服务
@@ -55,10 +58,53 @@ public class SynthesisArtifactsService {
      */
     public void generateAll(String scopeId, List<MergedConcept> mergedConcepts) {
         String conceptSummary = buildConceptSummary(mergedConcepts);
-        saveArtifact(scopeId, "index", "Knowledge Base Index", LatticePrompts.SYSTEM_COMPILE_INDEX, conceptSummary);
-        saveArtifact(scopeId, "timeline", "Knowledge Timeline", LatticePrompts.SYSTEM_COMPILE_TIMELINE, conceptSummary);
-        saveArtifact(scopeId, "tradeoffs", "Knowledge Trade-offs", LatticePrompts.SYSTEM_COMPILE_TRADEOFFS, conceptSummary);
-        saveArtifact(scopeId, "gaps", "Knowledge Gaps", LatticePrompts.SYSTEM_COMPILE_GAPS, conceptSummary);
+        ExecutorService executorService = Executors.newFixedThreadPool(4);
+        try {
+            CompletableFuture<Void> indexFuture = CompletableFuture.runAsync(
+                    () -> saveArtifact(
+                            scopeId,
+                            "index",
+                            "Knowledge Base Index",
+                            LatticePrompts.SYSTEM_COMPILE_INDEX,
+                            conceptSummary
+                    ),
+                    executorService
+            );
+            CompletableFuture<Void> timelineFuture = CompletableFuture.runAsync(
+                    () -> saveArtifact(
+                            scopeId,
+                            "timeline",
+                            "Knowledge Timeline",
+                            LatticePrompts.SYSTEM_COMPILE_TIMELINE,
+                            conceptSummary
+                    ),
+                    executorService
+            );
+            CompletableFuture<Void> tradeoffsFuture = CompletableFuture.runAsync(
+                    () -> saveArtifact(
+                            scopeId,
+                            "tradeoffs",
+                            "Knowledge Trade-offs",
+                            LatticePrompts.SYSTEM_COMPILE_TRADEOFFS,
+                            conceptSummary
+                    ),
+                    executorService
+            );
+            CompletableFuture<Void> gapsFuture = CompletableFuture.runAsync(
+                    () -> saveArtifact(
+                            scopeId,
+                            "gaps",
+                            "Knowledge Gaps",
+                            LatticePrompts.SYSTEM_COMPILE_GAPS,
+                            conceptSummary
+                    ),
+                    executorService
+            );
+            CompletableFuture.allOf(indexFuture, timelineFuture, tradeoffsFuture, gapsFuture).join();
+        }
+        finally {
+            executorService.shutdown();
+        }
     }
 
     /**

@@ -82,12 +82,28 @@ public class QueryAnswerPayload {
     }
 
     /**
-     * 创建模型失败后的降级答案载荷。
+     * 创建模型返回不可复用结果后的降级答案载荷。
      *
      * @param answerMarkdown Markdown 答案
      * @return Query 答案载荷
      */
     public static QueryAnswerPayload fallback(String answerMarkdown) {
+        return new QueryAnswerPayload(
+                answerMarkdown,
+                AnswerOutcome.PARTIAL_ANSWER,
+                GenerationMode.FALLBACK,
+                ModelExecutionStatus.DEGRADED,
+                false
+        );
+    }
+
+    /**
+     * 创建模型执行异常后的降级答案载荷。
+     *
+     * @param answerMarkdown Markdown 答案
+     * @return Query 答案载荷
+     */
+    public static QueryAnswerPayload failedFallback(String answerMarkdown) {
         return new QueryAnswerPayload(
                 answerMarkdown,
                 AnswerOutcome.PARTIAL_ANSWER,

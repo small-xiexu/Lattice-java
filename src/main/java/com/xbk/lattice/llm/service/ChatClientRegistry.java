@@ -14,6 +14,7 @@ import org.springframework.ai.model.tool.DefaultToolCallingManager;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.ai.openai.api.ResponseFormat;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.context.annotation.Profile;
@@ -278,6 +279,7 @@ public class ChatClientRegistry {
     }
 
     private OpenAiChatOptions buildDefaultOptions(LlmRouteResolution routeResolution) {
+        JsonNode extraOptionsNode = readExtraOptions(routeResolution.getExtraOptionsJson());
         OpenAiChatOptions.Builder builder = OpenAiChatOptions.builder()
                 .model(routeResolution.getModelName())
                 .streamUsage(false)
@@ -289,7 +291,11 @@ public class ChatClientRegistry {
         if (routeResolution.getMaxTokens() != null) {
             builder.maxTokens(routeResolution.getMaxTokens());
         }
-        Map<String, Object> extraBody = parseExtraBody(routeResolution.getExtraOptionsJson());
+        ResponseFormat responseFormat = parseResponseFormat(extraOptionsNode);
+        if (responseFormat != null) {
+            builder.responseFormat(responseFormat);
+        }
+        Map<String, Object> extraBody = parseExtraBody(extraOptionsNode);
         if (!extraBody.isEmpty()) {
             builder.extraBody(extraBody);
         }
@@ -317,22 +323,71 @@ public class ChatClientRegistry {
         return builder.build();
     }
 
-    private Map<String, Object> parseExtraBody(String extraOptionsJson) {
+    private JsonNode readExtraOptions(String extraOptionsJson) {
         if (!StringUtils.hasText(extraOptionsJson)) {
-            return Map.of();
+            return null;
         }
         try {
             JsonNode rootNode = objectMapper.readTree(extraOptionsJson);
             if (!rootNode.isObject()) {
-                return Map.of();
+                return null;
             }
-            Map<String, Object> values = new LinkedHashMap<String, Object>();
-            rootNode.fields().forEachRemaining(entry -> values.put(entry.getKey(), convertNode(entry.getValue())));
-            return values;
+            return rootNode;
         }
         catch (JsonProcessingException exception) {
             throw new IllegalStateException("Failed to parse OpenAI chat extra options", exception);
         }
+    }
+
+    private Map<String, Object> parseExtraBody(JsonNode rootNode) {
+        if (rootNode == null || !rootNode.isObject()) {
+            return Map.of();
+        }
+        Map<String, Object> values = new LinkedHashMap<String, Object>();
+        rootNode.fields().forEachRemaining(entry -> {
+            if ("response_format".equals(entry.getKey())) {
+                return;
+            }
+            values.put(entry.getKey(), convertNode(entry.getValue()));
+        });
+        return values;
+    }
+
+    private ResponseFormat parseResponseFormat(JsonNode rootNode) {
+        if (rootNode == null || !rootNode.isObject() || !rootNode.has("response_format")) {
+            return null;
+        }
+        JsonNode responseFormatNode = rootNode.get("response_format");
+        if (responseFormatNode == null || !responseFormatNode.isObject()) {
+            return null;
+        }
+        String type = responseFormatNode.path("type").asText("");
+        if (!StringUtils.hasText(type)) {
+            return null;
+        }
+        if ("json_object".equalsIgnoreCase(type)) {
+            return ResponseFormat.builder().type(ResponseFormat.Type.JSON_OBJECT).build();
+        }
+        if ("json_schema".equalsIgnoreCase(type)) {
+            JsonNode jsonSchemaNode = responseFormatNode.get("json_schema");
+            if (jsonSchemaNode == null || jsonSchemaNode.isNull()) {
+                return ResponseFormat.builder().type(ResponseFormat.Type.JSON_SCHEMA).build();
+            }
+            Object schemaObject = convertNode(jsonSchemaNode.path("schema"));
+            if (!(schemaObject instanceof Map<?, ?> schemaMap)) {
+                return ResponseFormat.builder().type(ResponseFormat.Type.JSON_SCHEMA).build();
+            }
+            ResponseFormat.JsonSchema jsonSchema = ResponseFormat.JsonSchema.builder()
+                    .name(responseFormatNode.path("json_schema").path("name").asText("custom_schema"))
+                    .schema((Map<String, Object>) schemaMap)
+                    .strict(Boolean.valueOf(responseFormatNode.path("json_schema").path("strict").asBoolean(true)))
+                    .build();
+            return ResponseFormat.builder()
+                    .type(ResponseFormat.Type.JSON_SCHEMA)
+                    .jsonSchema(jsonSchema)
+                    .build();
+        }
+        return null;
     }
 
     private Object convertNode(JsonNode jsonNode) {

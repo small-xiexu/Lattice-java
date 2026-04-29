@@ -10,6 +10,8 @@
         selectedArticleId: null,
         selectedArticleSourceId: null,
         selectedSourceId: null,
+        selectedSourceRunKey: null,
+        selectedSourceFilePath: null,
         overview: null,
         health: null,
         recentRunSummary: null,
@@ -20,6 +22,8 @@
         uploadFiles: [],
         sourceCredentials: [],
         sources: [],
+        sourceRuns: [],
+        sourceFiles: [],
         activeRunId: null
     };
 
@@ -1352,6 +1356,8 @@
     }
 
     function renderSourceDetail(source, runs, files) {
+        state.sourceRuns = runs || [];
+        state.sourceFiles = files || [];
         document.getElementById("source-detail-title").textContent = source.name || source.sourceCode || "未命名资料源";
         document.getElementById("source-detail-meta").textContent = [
             source.sourceCode,
@@ -1361,34 +1367,188 @@
             source.lastSyncAt ? "最近同步：" + formatDateTime(source.lastSyncAt) : "最近同步：未执行"
         ].join(" | ");
         document.getElementById("source-detail-config").textContent = prettyJson(source.configJson);
-        renderRunCollection("source-run-list", runs, "当前资料源还没有同步历史");
-        renderSourceFileList(files);
+        renderSourceRunList(state.sourceRuns);
+        renderSourceFileList(state.sourceFiles);
+    }
+
+    function renderSourceRunList(runs) {
+        const container = document.getElementById("source-run-list");
+        const detail = document.getElementById("source-run-detail");
+        if (!runs || runs.length === 0) {
+            state.selectedSourceRunKey = null;
+            if (container) {
+                container.innerHTML = "<div class='detail-compact-empty'><p class='item-summary'>当前资料源还没有同步历史。</p></div>";
+            }
+            if (detail) {
+                detail.hidden = true;
+                detail.innerHTML = "";
+            }
+            return;
+        }
+        const visibleItems = runs.slice()
+                .sort(compareRunsByRequestedAtDesc)
+                .slice(0, 8);
+        if (!containsSourceRun(visibleItems, state.selectedSourceRunKey)) {
+            state.selectedSourceRunKey = resolveSourceRunKey(visibleItems[0]);
+        }
+        container.innerHTML = visibleItems.map(function (item) {
+            return renderSourceRunListItem(item, state.selectedSourceRunKey === resolveSourceRunKey(item));
+        }).join("");
+        container.querySelectorAll("[data-source-run-key]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                state.selectedSourceRunKey = button.dataset.sourceRunKey;
+                renderSourceRunList(state.sourceRuns);
+            });
+        });
+        const selectedRun = findSourceRunByKey(visibleItems, state.selectedSourceRunKey);
+        renderSourceRunDetail(selectedRun);
+    }
+
+    function renderSourceRunListItem(item, active) {
+        const runKey = resolveSourceRunKey(item);
+        const stageInfo = getRunStageInfo(item);
+        const lastProgressAt = resolveRunLastProgressAt(item);
+        return "<button class='detail-compact-item" + (active ? " active" : "") + "' data-source-run-key='"
+                + escapeHtml(runKey) + "' type='button'>"
+                + "<div class='detail-compact-title-row'>"
+                + "<div class='meta-row'>"
+                + renderBadge(item.status)
+                + renderDerivedStatusBadge(item)
+                + "<span class='pill'>阶段：" + escapeHtml(stageInfo.label) + "</span>"
+                + "</div>"
+                + "<span class='detail-compact-time'>" + escapeHtml(formatDateTime(item.requestedAt)) + "</span>"
+                + "</div>"
+                + "<h5 class='detail-compact-title'>" + escapeHtml(getRunTitle(item)) + "</h5>"
+                + "<p class='detail-compact-summary'>" + escapeHtml(getRunSummary(item)) + "</p>"
+                + "<p class='detail-compact-meta'>"
+                + escapeHtml(lastProgressAt
+                        ? "最近推进 " + formatDateTime(lastProgressAt)
+                        : getRunMetaLine(item))
+                + "</p>"
+                + "</button>";
+    }
+
+    function renderSourceRunDetail(item) {
+        const container = document.getElementById("source-run-detail");
+        if (!container) {
+            return;
+        }
+        if (!item) {
+            container.hidden = true;
+            container.innerHTML = "";
+            return;
+        }
+        const stageInfo = getRunStageInfo(item);
+        container.hidden = false;
+        container.innerHTML = buildSourceRunDetailCard(item, stageInfo);
+        bindRunActions(container);
+    }
+
+    function buildSourceRunDetailCard(item, stageInfo) {
+        const fileSummary = buildRunFileSummary(item);
+        return "<div class='detail-focus-header'>"
+                + "<div>"
+                + "<span class='detail-focus-kicker'>选中运行详情</span>"
+                + "<p class='detail-focus-copy'>" + escapeHtml(getRunSummary(item)) + "</p>"
+                + (fileSummary
+                ? "<p class='detail-focus-files'><strong>本次文件：</strong>" + escapeHtml(fileSummary) + "</p>"
+                : "")
+                + "</div>"
+                + "<span class='detail-focus-time'>最近更新时间 "
+                + escapeHtml(formatDateTime(resolveRunUpdatedAt(item)))
+                + "</span>"
+                + "</div>"
+                + buildRunDetailFacts(item)
+                + "<div class='run-spotlight-highlights'>"
+                + "<span class='surface-chip'>当前阶段：" + escapeHtml(stageInfo.label) + "</span>"
+                + "<span class='surface-chip'>下一步：" + escapeHtml(stageInfo.nextStep) + "</span>"
+                + "</div>"
+                + buildRunProgressStrip(item, stageInfo)
+                + buildRunRuntimeSnapshot(item)
+                + buildRunFailurePanel(item)
+                + buildRunActions(item);
     }
 
     function renderSourceFileList(files) {
         const container = document.getElementById("source-file-list");
+        const detail = document.getElementById("source-file-detail");
         if (!files || files.length === 0) {
-            container.innerHTML = "<div class='job-card'><p class='item-summary'>当前资料源还没有已物化文件。完成一次同步后，这里会展示解析方式与文件格式。</p></div>";
+            state.selectedSourceFilePath = null;
+            container.innerHTML = "<div class='detail-compact-empty'><p class='item-summary'>当前资料源还没有已物化文件。完成一次同步后，这里会展示解析方式与文件格式。</p></div>";
+            if (detail) {
+                detail.hidden = true;
+                detail.innerHTML = "";
+            }
             return;
         }
         const sortedFiles = files.slice().sort(function (left, right) {
             return String(left.relativePath || "").localeCompare(String(right.relativePath || ""));
         });
+        if (!containsSourceFile(sortedFiles, state.selectedSourceFilePath)) {
+            state.selectedSourceFilePath = resolveSourceFileKey(sortedFiles[0]);
+        }
         container.innerHTML = sortedFiles.map(function (item) {
-            return "<div class='job-card'>"
-                    + "<div class='meta-row'>"
-                    + renderBadge(item.format)
-                    + renderBadge(item.parseMode || "UNKNOWN")
-                    + "</div>"
-                    + "<h4>" + escapeHtml(item.relativePath || "-") + "</h4>"
-                    + "<p class='item-summary'>"
-                    + escapeHtml(buildSourceFileSummary(item))
-                    + "</p>"
-                    + "<p class='job-meta-line'>"
-                    + escapeHtml(buildSourceFileMeta(item))
-                    + "</p>"
-                    + "</div>";
+            return renderSourceFileListItem(item, state.selectedSourceFilePath === resolveSourceFileKey(item));
         }).join("");
+        container.querySelectorAll("[data-source-file-path]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                state.selectedSourceFilePath = button.dataset.sourceFilePath;
+                renderSourceFileList(state.sourceFiles);
+            });
+        });
+        renderSourceFileDetail(findSourceFileByKey(sortedFiles, state.selectedSourceFilePath));
+    }
+
+    function renderSourceFileListItem(item, active) {
+        const relativePath = item.relativePath || "-";
+        const fileName = extractSourceFileName(relativePath);
+        return "<button class='detail-compact-item" + (active ? " active" : "") + "' data-source-file-path='"
+                + escapeHtml(resolveSourceFileKey(item)) + "' type='button'>"
+                + "<div class='detail-compact-title-row'>"
+                + "<div class='meta-row'>"
+                + renderBadge(item.format)
+                + renderBadge(item.parseMode || "UNKNOWN")
+                + "</div>"
+                + "<span class='detail-compact-time'>" + escapeHtml(formatBytes(item.fileSize)) + "</span>"
+                + "</div>"
+                + "<h5 class='detail-compact-title'>" + escapeHtml(fileName || relativePath) + "</h5>"
+                + "<p class='detail-compact-path'>" + escapeHtml(relativePath) + "</p>"
+                + "<p class='detail-compact-meta'>" + escapeHtml(buildSourceFileMeta(item)) + "</p>"
+                + "</button>";
+    }
+
+    function renderSourceFileDetail(item) {
+        const container = document.getElementById("source-file-detail");
+        if (!container) {
+            return;
+        }
+        if (!item) {
+            container.hidden = true;
+            container.innerHTML = "";
+            return;
+        }
+        container.hidden = false;
+        container.innerHTML = buildSourceFileDetailCard(item);
+    }
+
+    function buildSourceFileDetailCard(item) {
+        return "<div class='detail-focus-header'>"
+                + "<div>"
+                + "<span class='detail-focus-kicker'>选中文件详情</span>"
+                + "<h5>" + escapeHtml(extractSourceFileName(item.relativePath || "") || item.relativePath || "-") + "</h5>"
+                + "<p class='detail-focus-copy'>" + escapeHtml(buildSourceFileSummary(item)) + "</p>"
+                + "</div>"
+                + "<div class='meta-row'>"
+                + renderBadge(item.format)
+                + renderBadge(item.parseMode || "UNKNOWN")
+                + "</div>"
+                + "</div>"
+                + "<div class='run-runtime-grid detail-focus-grid'>"
+                + buildRunRuntimeItem("完整路径", item.relativePath || "-", true)
+                + buildRunRuntimeItem("文件大小", formatBytes(item.fileSize))
+                + buildRunRuntimeItem("解析提供方", item.parseProvider || "默认解析链")
+                + buildRunRuntimeItem("解析方式", item.parseMode ? getBadgeLabel(item.parseMode) : "未记录")
+                + "</div>";
     }
 
     function renderArticleList(response) {
@@ -1465,10 +1625,18 @@
     }
 
     function clearSourceDetail() {
+        state.sourceRuns = [];
+        state.sourceFiles = [];
+        state.selectedSourceRunKey = null;
+        state.selectedSourceFilePath = null;
         document.getElementById("source-detail-title").textContent = "请选择一个资料源";
         document.getElementById("source-detail-meta").textContent = "";
-        document.getElementById("source-run-list").innerHTML = "<div class='job-card'><p class='item-summary'>暂无同步历史</p></div>";
-        document.getElementById("source-file-list").innerHTML = "<div class='job-card'><p class='item-summary'>暂无文件</p></div>";
+        document.getElementById("source-run-list").innerHTML = "<div class='detail-compact-empty'><p class='item-summary'>暂无同步历史</p></div>";
+        document.getElementById("source-file-list").innerHTML = "<div class='detail-compact-empty'><p class='item-summary'>暂无文件</p></div>";
+        document.getElementById("source-run-detail").hidden = true;
+        document.getElementById("source-run-detail").innerHTML = "";
+        document.getElementById("source-file-detail").hidden = true;
+        document.getElementById("source-file-detail").innerHTML = "";
         document.getElementById("source-detail-config").textContent = "暂无配置";
     }
 
@@ -1588,7 +1756,6 @@
                 + buildRunProgressStrip(item, stageInfo)
                 + buildRunRuntimeSnapshot(item)
                 + "<div class='run-spotlight-footnotes'>"
-                + "<p class='run-spotlight-note'><strong>来源概况：</strong>" + escapeHtml(buildRunSourcePreview(item)) + "</p>"
                 + "<p class='run-spotlight-note'><strong>任务线索：</strong>" + escapeHtml(buildRunOperationalNote(item)) + "</p>"
                 + "</div>"
                 + buildRunFailurePanel(item)
@@ -1675,20 +1842,6 @@
         return {label: getBadgeLabel(item.status), nextStep: "等待系统继续处理", stepIndex: 0, tone: "warning"};
     }
 
-    function buildRunSourcePreview(item) {
-        if (item.sourceName) {
-            return item.sourceName;
-        }
-        if (!item.sourceNames || item.sourceNames.length === 0) {
-            return "系统正在整理来源文件";
-        }
-        if (item.sourceNames.length === 1) {
-            return item.sourceNames[0];
-        }
-        const preview = item.sourceNames.slice(0, 2).join("、");
-        return preview + " 等 " + String(item.sourceNames.length) + " 个文件";
-    }
-
     function buildRunOperationalNote(item) {
         const parts = [];
         if (item.resolverDecision) {
@@ -1710,34 +1863,6 @@
             parts.push("最近推进 " + formatDateTime(resolveRunLastProgressAt(item)));
         }
         return parts.length > 0 ? parts.join(" · ") : "系统正在继续处理这条同步任务";
-    }
-
-    function renderRunCollection(containerId, items, emptyMessage) {
-        const container = document.getElementById(containerId);
-        if (!items || items.length === 0) {
-            container.innerHTML = "<div class='job-card'><p class='item-summary'>" + escapeHtml(emptyMessage) + "</p></div>";
-            return;
-        }
-        const visibleItems = items.slice()
-                .sort(compareRunsByRequestedAtDesc)
-                .slice(0, 6);
-        container.innerHTML = visibleItems.map(function (item) {
-            return "<div class='job-card'>"
-                    + "<div class='meta-row'>"
-                    + renderBadge(item.status)
-                    + renderDerivedStatusBadge(item)
-                    + renderTaskModeBadge(item)
-                    + renderBadge(item.sourceType || "UPLOAD")
-                    + "</div>"
-                    + "<h4>" + escapeHtml(getRunTitle(item)) + "</h4>"
-                    + "<p class='item-summary'>" + escapeHtml(getRunSummary(item)) + "</p>"
-                    + "<p class='job-meta-line'>" + escapeHtml(getRunMetaLine(item)) + "</p>"
-                    + buildRunRuntimeSnapshot(item)
-                    + buildRunFailurePanel(item)
-                    + buildRunActions(item)
-                    + "</div>";
-        }).join("");
-        bindRunActions(container);
     }
 
     function bindRunActions(container) {
@@ -1813,6 +1938,64 @@
         });
     }
 
+    function resolveSourceRunKey(item) {
+        if (item && item.runId != null) {
+            return "run-" + String(item.runId);
+        }
+        return [
+            item && item.sourceId != null ? String(item.sourceId) : "",
+            item && item.requestedAt ? String(item.requestedAt) : "",
+            item && item.title ? String(item.title) : "",
+            item && item.status ? String(item.status) : ""
+        ].join("::");
+    }
+
+    function containsSourceRun(items, selectedKey) {
+        if (!selectedKey) {
+            return false;
+        }
+        return items.some(function (item) {
+            return resolveSourceRunKey(item) === selectedKey;
+        });
+    }
+
+    function findSourceRunByKey(items, selectedKey) {
+        if (!selectedKey) {
+            return null;
+        }
+        for (let index = 0; index < items.length; index++) {
+            if (resolveSourceRunKey(items[index]) === selectedKey) {
+                return items[index];
+            }
+        }
+        return null;
+    }
+
+    function resolveSourceFileKey(item) {
+        return item && item.relativePath ? String(item.relativePath) : "";
+    }
+
+    function containsSourceFile(items, selectedKey) {
+        if (!selectedKey) {
+            return false;
+        }
+        return items.some(function (item) {
+            return resolveSourceFileKey(item) === selectedKey;
+        });
+    }
+
+    function findSourceFileByKey(items, selectedKey) {
+        if (!selectedKey) {
+            return null;
+        }
+        for (let index = 0; index < items.length; index++) {
+            if (resolveSourceFileKey(items[index]) === selectedKey) {
+                return items[index];
+            }
+        }
+        return null;
+    }
+
     function highlightArticle(articleId, sourceId) {
         document.querySelectorAll("#article-list .list-item").forEach(function (item) {
             const sameArticle = item.dataset.articleId === String(articleId || "");
@@ -1867,6 +2050,87 @@
             return item.sourceNames[0] + " 等 " + String(item.sourceNames.length) + " 个文件";
         }
         return item && item.runId ? "资料处理任务 #" + String(item.runId) : "资料处理任务";
+    }
+
+    function buildRunFileSummary(item) {
+        const fileNames = resolveRunFileNames(item);
+        if (fileNames.length === 0) {
+            return "";
+        }
+        if (fileNames.length === 1) {
+            return fileNames[0];
+        }
+        if (fileNames.length === 2) {
+            return fileNames[0] + "、" + fileNames[1];
+        }
+        return fileNames[0] + "、" + fileNames[1] + " 等 " + String(fileNames.length) + " 个文件";
+    }
+
+    function resolveRunFileNames(item) {
+        const fromEvidence = readRunFileNamesFromEvidence(item && item.evidenceJson);
+        if (fromEvidence.length > 0) {
+            return fromEvidence;
+        }
+        const fromSourceNames = Array.isArray(item && item.sourceNames) ? item.sourceNames : [];
+        return uniqueNonEmptyStrings(fromSourceNames);
+    }
+
+    function readRunFileNamesFromEvidence(evidenceJson) {
+        if (!evidenceJson || typeof evidenceJson !== "string") {
+            return [];
+        }
+        try {
+            const evidence = JSON.parse(evidenceJson);
+            const bundleSummary = evidence && typeof evidence === "object" ? evidence.bundleSummary : null;
+            const relativePathsSample = bundleSummary && Array.isArray(bundleSummary.relativePathsSample)
+                    ? bundleSummary.relativePathsSample
+                    : [];
+            return uniqueNonEmptyStrings(relativePathsSample);
+        }
+        catch (error) {
+            return [];
+        }
+    }
+
+    function uniqueNonEmptyStrings(items) {
+        const result = [];
+        const seen = new Set();
+        (items || []).forEach(function (item) {
+            const normalized = String(item || "").trim();
+            if (!normalized || seen.has(normalized)) {
+                return;
+            }
+            seen.add(normalized);
+            result.push(normalized);
+        });
+        return result;
+    }
+
+    function buildRunDetailFacts(item) {
+        const facts = [];
+        if (item && item.sourceType) {
+            facts.push({label: "类型", value: getBadgeLabel(item.sourceType)});
+        }
+        if (item && item.resolverDecision) {
+            facts.push({label: "决策", value: getBadgeLabel(item.resolverDecision)});
+        }
+        if (item && item.syncAction) {
+            facts.push({label: "动作", value: getBadgeLabel(item.syncAction)});
+        }
+        if (facts.length === 0) {
+            return "";
+        }
+        return "<div class='run-runtime-inline-list detail-fact-list'>"
+                + facts.map(function (fact) {
+                    return buildRunRuntimeBadge(fact.label, fact.value);
+                }).join("")
+                + "</div>";
+    }
+
+    function resolveRunUpdatedAt(item) {
+        return item && (item.finishedAt || item.updatedAt || item.compileLastHeartbeatAt || item.requestedAt)
+                ? (item.finishedAt || item.updatedAt || item.compileLastHeartbeatAt || item.requestedAt)
+                : "";
     }
 
     function renderDerivedStatusBadge(item) {
@@ -2078,22 +2342,29 @@
     }
 
     function buildRunRuntimeSnapshot(item) {
-        return "<div class='run-runtime-grid'>"
-                + buildRunRuntimeItem("编译态", getBadgeLabel(resolveRunDisplayStatus(item) || item.status))
-                + buildRunRuntimeItem("当前步骤", resolveRunStepLabel(item))
-                + buildRunRuntimeItem("当前进度", resolveRunProgressText(item))
-                + buildRunRuntimeItem("最近推进", formatDateTime(resolveRunLastProgressAt(item)))
-                + buildRunRuntimeItem(
-                        "原因摘要",
-                        buildRunReasonSummary(item),
-                        true
-                )
+        return "<div class='run-runtime-summary'>"
+                + "<div class='run-runtime-inline-list'>"
+                + buildRunRuntimeBadge("编译态", getBadgeLabel(resolveRunDisplayStatus(item) || item.status))
+                + buildRunRuntimeBadge("当前步骤", resolveRunStepLabel(item))
+                + buildRunRuntimeBadge("当前进度", resolveRunProgressText(item))
+                + "</div>"
+                + "<div class='run-runtime-reason'>"
+                + "<span class='run-runtime-label'>原因摘要</span>"
+                + "<strong class='run-runtime-value'>" + escapeHtml(buildRunReasonSummary(item) || "暂无") + "</strong>"
+                + "</div>"
                 + "</div>";
     }
 
     function buildRunRuntimeItem(label, value, wide) {
         const className = wide ? "run-runtime-item run-runtime-item-wide" : "run-runtime-item";
         return "<div class='" + className + "'>"
+                + "<span class='run-runtime-label'>" + escapeHtml(label) + "</span>"
+                + "<strong class='run-runtime-value'>" + escapeHtml(value || "暂无") + "</strong>"
+                + "</div>";
+    }
+
+    function buildRunRuntimeBadge(label, value) {
+        return "<div class='run-runtime-badge'>"
                 + "<span class='run-runtime-label'>" + escapeHtml(label) + "</span>"
                 + "<strong class='run-runtime-value'>" + escapeHtml(value || "暂无") + "</strong>"
                 + "</div>";
@@ -3075,9 +3346,17 @@
             resolveRunProgressText: resolveRunProgressText,
             buildRunReasonSummary: buildRunReasonSummary,
             buildRunRuntimeSnapshot: buildRunRuntimeSnapshot,
+            renderSourceRunListItem: renderSourceRunListItem,
+            buildSourceRunDetailCard: buildSourceRunDetailCard,
             shouldShowResyncAction: shouldShowResyncAction,
             sanitizeDisplayMessage: sanitizeDisplayMessage,
             resolveHttpErrorDisplayMessage: resolveHttpErrorDisplayMessage
+        };
+        globalThis.__LATTICE_ADMIN_TEST__.source = {
+            renderSourceFileListItem: renderSourceFileListItem,
+            buildSourceFileDetailCard: buildSourceFileDetailCard,
+            resolveSourceRunKey: resolveSourceRunKey,
+            resolveSourceFileKey: resolveSourceFileKey
         };
         globalThis.__LATTICE_ADMIN_TEST__.article = {
             resolveArticleDisplayTitle: resolveArticleDisplayTitle,

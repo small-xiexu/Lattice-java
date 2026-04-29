@@ -276,7 +276,7 @@ class LatticeMcpToolsTest {
          * @param response 预置响应
          */
         private FixedQueryFacadeService(QueryResponse response) {
-            super(null, null, null, null, null);
+            super(null, null, null, null, null, null);
             this.response = response;
         }
 

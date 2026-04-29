@@ -5,6 +5,7 @@
         knowledgeReady: false,
         knowledgeProcessing: false,
         knowledgeWaitingConfirm: false,
+        isSubmitting: false,
         hasSubmitted: false,
         lastQueryFailed: false,
         lastQueryError: "",
@@ -76,7 +77,12 @@
             setStatus("当前知识库还没有可用资料，请先上传并处理文档", "warning");
             return;
         }
+        if (state.isSubmitting) {
+            setStatus("当前问题仍在处理中，请等待当前回答返回后再继续提问。", "warning");
+            return;
+        }
         state.hasSubmitted = true;
+        setAskSubmitting(true);
         toggleAskResultExperience(true);
         renderLoadingState();
         setStatus("正在生成回答...", "info");
@@ -136,6 +142,9 @@
             renderResultGuide();
             syncAskFaqOpenState();
             showError("知识问答失败", error);
+        }
+        finally {
+            setAskSubmitting(false);
         }
     }
 
@@ -223,20 +232,19 @@
             return String(item.status || "").toUpperCase() === "WAIT_CONFIRM";
         });
         const hint = document.getElementById("ask-ready-hint");
-        const askButton = document.getElementById("submit-question");
         state.knowledgeReady = (status.articleCount || 0) > 0 && (status.sourceFileCount || 0) > 0;
         state.knowledgeProcessing = activeJobs.length > 0;
         state.knowledgeWaitingConfirm = waitConfirmJobs.length > 0;
         if ((status.articleCount || 0) === 0 || (status.sourceFileCount || 0) === 0) {
             canAsk = false;
-            askButton.disabled = true;
+            syncAskComposerState();
             hint.textContent = "当前还没有可用资料，请先去“工作台”上传文档并等待处理完成。";
             renderReadinessCard();
             syncAskFaqOpenState();
             return;
         }
         canAsk = true;
-        askButton.disabled = false;
+        syncAskComposerState();
         if (waitConfirmJobs.length > 0) {
             hint.textContent = "当前有资料包等待人工确认归并方式，部分最新资料可能尚未入库。";
             renderReadinessCard();
@@ -252,6 +260,26 @@
         hint.textContent = "知识库已经准备就绪，可以直接提问。";
         renderReadinessCard();
         syncAskFaqOpenState();
+    }
+
+    function setAskSubmitting(submitting) {
+        state.isSubmitting = !!submitting;
+        syncAskComposerState();
+    }
+
+    function syncAskComposerState() {
+        const askButton = document.getElementById("submit-question");
+        const clearButton = document.getElementById("clear-question");
+        const questionInput = document.getElementById("ask-question");
+        if (askButton) {
+            askButton.disabled = state.isSubmitting || !canAsk;
+        }
+        if (clearButton) {
+            clearButton.disabled = !!state.isSubmitting;
+        }
+        if (questionInput) {
+            questionInput.disabled = !!state.isSubmitting;
+        }
     }
 
     function handleAskHelpActionClick(event) {
@@ -431,7 +459,7 @@
                 || answerOutcome === "PARTIAL_ANSWER") {
             return true;
         }
-        if (generationMode === "FALLBACK" || modelExecutionStatus === "FAILED") {
+        if (generationMode === "FALLBACK" || modelExecutionStatus === "FAILED" || modelExecutionStatus === "DEGRADED") {
             return true;
         }
         if (containsWeakAnswerMarker(answer)) {
@@ -630,7 +658,7 @@
 
     function buildSearchSnippetMap(searchItems) {
         const map = new Map();
-        (searchItems || []).forEach(function (item) {
+        deduplicateSourceItems(searchItems || []).forEach(function (item) {
             const key = buildSourceIdentity(item);
             if (!map.has(key)) {
                 map.set(key, trimSnippet(item.content || "暂无片段"));
@@ -640,7 +668,7 @@
     }
 
     function buildPrimarySourceCards(responseSources, searchMap) {
-        return (responseSources || []).map(function (item, index) {
+        return deduplicateSourceItems(responseSources || []).map(function (item, index) {
             const key = buildSourceIdentity(item);
             return renderSourceCard({
                 title: item.title || item.conceptId || "未命名来源",
@@ -654,10 +682,10 @@
     }
 
     function buildSecondarySourceCards(searchItems, responseSources) {
-        const primaryKeys = new Set((responseSources || []).map(function (item) {
+        const primaryKeys = new Set(deduplicateSourceItems(responseSources || []).map(function (item) {
             return buildSourceIdentity(item);
         }));
-        return (searchItems || []).filter(function (item) {
+        return deduplicateSourceItems(searchItems || []).filter(function (item) {
             return !primaryKeys.has(buildSourceIdentity(item));
         }).map(function (item, index) {
             return renderSourceCard({
@@ -695,21 +723,93 @@
                 + "</article>";
     }
 
+    function deduplicateSourceItems(items) {
+        const seenKeys = new Set();
+        return (items || []).filter(function (item) {
+            const key = buildSourceIdentity(item);
+            if (seenKeys.has(key)) {
+                return false;
+            }
+            seenKeys.add(key);
+            return true;
+        });
+    }
+
     function buildSourceIdentity(item) {
         const title = item && item.title ? item.title : "";
         const conceptId = item && item.conceptId ? item.conceptId : "";
         const paths = Array.isArray(item && item.sourcePaths ? item.sourcePaths : [])
-                ? item.sourcePaths.join("|")
+                ? item.sourcePaths.map(function (path) {
+                    return String(path || "").trim().replaceAll("\\\\", "/");
+                }).sort().join("|")
                 : "";
         return title + "::" + conceptId + "::" + paths;
     }
 
     function trimSnippet(content) {
-        const normalized = String(content || "").trim();
+        const normalized = sanitizeSnippetContent(content);
         if (normalized.length <= 180) {
             return normalized || "暂无片段";
         }
         return normalized.substring(0, 180) + "...";
+    }
+
+    function sanitizeSnippetContent(content) {
+        const original = String(content || "").replaceAll("\r\n", "\n").trim();
+        if (!original) {
+            return "";
+        }
+        let normalized = stripFrontMatter(original);
+        normalized = stripMetadataPrelude(normalized).trim();
+        normalized = normalized.replace(/\n{3,}/g, "\n\n").trim();
+        return normalized || original;
+    }
+
+    function stripFrontMatter(content) {
+        if (!content.startsWith("---")) {
+            return content;
+        }
+        const match = content.match(/^---\s*\n[\s\S]*?\n---\s*\n?/);
+        if (!match) {
+            return content;
+        }
+        return content.substring(match[0].length).trim();
+    }
+
+    function stripMetadataPrelude(content) {
+        const metadataPrefixes = [
+            "title:",
+            "summary:",
+            "referential_keywords:",
+            "sources:",
+            "depends_on:",
+            "related:",
+            "confidence:",
+            "compiled_at:",
+            "review_status:"
+        ];
+        const lines = String(content || "").split("\n");
+        const keptLines = [];
+        let skippingPrelude = true;
+        lines.forEach(function (line) {
+            const trimmed = line.trim();
+            if (!skippingPrelude) {
+                keptLines.push(line);
+                return;
+            }
+            if (!trimmed) {
+                return;
+            }
+            const isMetadataLine = metadataPrefixes.some(function (prefix) {
+                return trimmed.startsWith(prefix);
+            }) || trimmed.startsWith("- \"");
+            if (isMetadataLine) {
+                return;
+            }
+            skippingPrelude = false;
+            keptLines.push(line);
+        });
+        return keptLines.join("\n");
     }
 
     function renderTagGroup(items) {
@@ -809,6 +909,11 @@
             FAILED: {
                 label: "模型失败已降级",
                 note: "模型执行没有拿到稳定结果，系统已经降级为兜底答案，请谨慎使用。",
+                tone: "warning"
+            },
+            DEGRADED: {
+                label: "模型已返回但结果被降级",
+                note: "模型本身有返回内容，但主链没有拿到可复用的稳定输出，系统改用了兜底答案。",
                 tone: "warning"
             }
         };
@@ -1047,5 +1152,21 @@
                 .replaceAll(">", "&gt;")
                 .replaceAll("\"", "&quot;")
                 .replaceAll("'", "&#39;");
+    }
+
+    if (typeof globalThis !== "undefined" && globalThis.__LATTICE_ADMIN_TEST__) {
+        globalThis.__LATTICE_ADMIN_TEST__.ask = {
+            uniqueSourceCount: uniqueSourceCount,
+            buildSecondarySourceCards: buildSecondarySourceCards,
+            trimSnippet: trimSnippet,
+            sanitizeSnippetContent: sanitizeSnippetContent,
+            setCanAsk: function (value) {
+                canAsk = !!value;
+                syncAskComposerState();
+            },
+            setSubmitting: function (value) {
+                setAskSubmitting(value);
+            }
+        };
     }
 })();
