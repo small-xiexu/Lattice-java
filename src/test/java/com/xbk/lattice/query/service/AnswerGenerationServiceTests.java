@@ -530,6 +530,95 @@ class AnswerGenerationServiceTests {
     }
 
     /**
+     * 验证模型返回单段非 JSON 目标答案时，会按问题锚点复用并补 citation，而不是降级 fallback。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldReuseUnstructuredMilestoneAnswerWithAutoCitation() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient(
+                "到2027年，完成重点场景标准体系建设并发布30项以上关键标准；到2030年，形成协同完善的标准体系和持续迭代机制。"
+        );
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "标准体系建设指南里，到2027年和到2030年的阶段要求分别是什么？",
+                List.of(
+                        new QueryArticleHit(
+                                QueryEvidenceType.ARTICLE,
+                                1L,
+                                "stage-target-guide",
+                                "stage-target-guide",
+                                "标准体系建设指南",
+                                """
+                                到2027年，完成重点场景标准体系建设并发布30项以上关键标准。
+                                到2030年，形成协同完善的标准体系和持续迭代机制。
+                                """,
+                                "{\"description\":\"阶段要求\"}",
+                                List.of("standard-guide.pdf"),
+                                4.0D
+                        ),
+                        new QueryArticleHit(
+                                QueryEvidenceType.SOURCE,
+                                1L,
+                                null,
+                                "standard-guide.pdf#0",
+                                "standard-guide.pdf",
+                                """
+                                到2027年，完成重点场景标准体系建设并发布30项以上关键标准。
+                                到2030年，形成协同完善的标准体系和持续迭代机制。
+                                """,
+                                "{\"filePath\":\"standard-guide.pdf\"}",
+                                List.of("standard-guide.pdf"),
+                                3.0D
+                        )
+                )
+        );
+
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.LLM);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SUCCESS);
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("到2027年");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("到2030年");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("[[stage-target-guide]]");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotStartWith("# 查询回答");
+    }
+
+    /**
+     * 验证主体已覆盖问题锚点时，会移除模型追加的未问量化缺口尾注。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldRemoveUnrequestedNumericCaveatWhenMilestoneAnswerIsCovered() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                {
+                  "answerMarkdown":"| 时间节点 | 目标 |\\n|---|---|\\n| 到2027年 | 完成重点场景标准体系建设。 [→ standard-guide.pdf] |\\n| 到2030年 | 形成协同完善的标准体系和持续迭代机制。 [→ standard-guide.pdf] |\\n\\n以上为当前可核验原文中的目标表述；关于到2027年是否另有100项以上要求，当前证据不足，暂无法确认。",
+                  "answerOutcome":"PARTIAL_ANSWER",
+                  "answerCacheable":false
+                }
+                """);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "标准体系建设指南里，到2027年和到2030年的阶段要求分别是什么？",
+                buildStageTargetEvidence()
+        );
+
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.LLM);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SUCCESS);
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("到2027年");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("到2030年");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("100项");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("证据不足");
+    }
+
+    /**
      * 验证 TRANS-JOB 买一赠一维护题 fallback 会组合补偿与买一赠一链路证据。
      */
     @Test
@@ -1615,6 +1704,69 @@ class AnswerGenerationServiceTests {
     }
 
     /**
+     * 验证发给 answer LLM 的证据会脱敏常见密钥类赋值，避免业务配置原样进入模型上下文。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldMaskSecretAssignmentsInAnswerPromptEvidence() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                {
+                  "answerMarkdown":"- external.service.apiKey 当前为 `<masked>` [→ ops/config.md]",
+                  "answerOutcome":"SUCCESS",
+                  "answerCacheable":true
+                }
+                """);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "external.service.apiKey 当前配置是什么？",
+                List.of(new QueryArticleHit(
+                        QueryEvidenceType.SOURCE,
+                        "ops/config.md#0",
+                        "ops/config.md",
+                        "external.service.apiKey: plain-api-key-123456\nexternal.service.timeout: 3s",
+                        "{\"apiKey\":\"json-secret-123456\",\"filePath\":\"ops/config.md\"}",
+                        List.of("ops/config.md"),
+                        2.0D
+                ))
+        );
+
+        assertThat(recordingLlmClient.getLastUserPrompt()).contains("external.service.apiKey: <masked>");
+        assertThat(recordingLlmClient.getLastUserPrompt()).contains("\"apiKey\":\"<masked>\"");
+        assertThat(recordingLlmClient.getLastUserPrompt()).doesNotContain("plain-api-key-123456");
+        assertThat(recordingLlmClient.getLastUserPrompt()).doesNotContain("json-secret-123456");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("<masked>");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("plain-api-key-123456");
+    }
+
+    /**
+     * 验证 deterministic fallback 也会脱敏密钥类配置值。
+     */
+    @Test
+    void shouldMaskSecretAssignmentsInFallbackAnswer() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "external.service.apiKey 当前配置是什么？",
+                List.of(new QueryArticleHit(
+                        QueryEvidenceType.SOURCE,
+                        "ops/config.md#0",
+                        "ops/config.md",
+                        "external.service.apiKey: plain-api-key-123456\nexternal.service.timeout: 3s",
+                        "{\"filePath\":\"ops/config.md\"}",
+                        List.of("ops/config.md"),
+                        2.0D
+                ))
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("external.service.apiKey: <masked>");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("plain-api-key-123456");
+    }
+
+    /**
      * 验证 flow 类 fallback 会优先选择真正的主链路句，而不是 README 导读句。
      */
     @Test
@@ -2144,6 +2296,44 @@ class AnswerGenerationServiceTests {
                 List.of("order-api-fields.xlsx"),
                 4.0D
         ));
+    }
+
+    /**
+     * 构造通用阶段目标证据。
+     *
+     * @return 阶段目标证据
+     */
+    private List<QueryArticleHit> buildStageTargetEvidence() {
+        return List.of(
+                new QueryArticleHit(
+                        QueryEvidenceType.ARTICLE,
+                        1L,
+                        "stage-target-guide",
+                        "stage-target-guide",
+                        "标准体系建设指南",
+                        """
+                        到2027年，完成重点场景标准体系建设并发布30项以上关键标准。
+                        到2030年，形成协同完善的标准体系和持续迭代机制。
+                        """,
+                        "{\"description\":\"阶段要求\"}",
+                        List.of("standard-guide.pdf"),
+                        4.0D
+                ),
+                new QueryArticleHit(
+                        QueryEvidenceType.SOURCE,
+                        1L,
+                        null,
+                        "standard-guide.pdf#0",
+                        "standard-guide.pdf",
+                        """
+                        到2027年，完成重点场景标准体系建设并发布30项以上关键标准。
+                        到2030年，形成协同完善的标准体系和持续迭代机制。
+                        """,
+                        "{\"filePath\":\"standard-guide.pdf\"}",
+                        List.of("standard-guide.pdf"),
+                        3.0D
+                )
+        );
     }
 
     /**

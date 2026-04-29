@@ -7,7 +7,9 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Source Chunk FTS 检索服务
@@ -19,6 +21,10 @@ import java.util.List;
 @Service
 @Profile("jdbc")
 public class SourceChunkFtsSearchService {
+
+    private static final int NEIGHBOR_CHUNK_RADIUS = 1;
+
+    private static final int MAX_EXTRA_CONTEXT_CHUNKS = 5;
 
     private final SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository;
 
@@ -68,14 +74,134 @@ public class SourceChunkFtsSearchService {
         List<LexicalSearchRecord> records = sourceFileChunkJdbcRepository.searchLexical(
                 question,
                 queryTokens,
-                limit,
+                safeLimit(limit),
                 tsConfig
         );
+        List<LexicalSearchRecord> expandedRecords = expandNeighborRecords(records, safeLimit(limit));
         List<QueryArticleHit> hits = new ArrayList<QueryArticleHit>();
-        for (LexicalSearchRecord record : records) {
+        for (LexicalSearchRecord record : expandedRecords) {
             hits.add(toQueryArticleHit(record));
         }
         return hits;
+    }
+
+    /**
+     * 为 source chunk 命中补充邻近 chunk，避免表格或长段落跨 chunk 时证据被截断。
+     *
+     * @param records 原始命中
+     * @param requestedLimit 原始请求数量
+     * @return 补充上下文后的命中
+     */
+    private List<LexicalSearchRecord> expandNeighborRecords(List<LexicalSearchRecord> records, int requestedLimit) {
+        if (records == null || records.isEmpty()) {
+            return List.of();
+        }
+        int expandedLimit = expandedLimit(requestedLimit);
+        List<LexicalSearchRecord> expandedRecords = new ArrayList<LexicalSearchRecord>();
+        Set<String> seenKeys = new LinkedHashSet<String>();
+        for (LexicalSearchRecord record : records) {
+            addDistinctRecord(expandedRecords, seenKeys, record);
+        }
+        for (LexicalSearchRecord record : records) {
+            if (expandedRecords.size() >= expandedLimit) {
+                break;
+            }
+            String filePath = resolveFilePath(record);
+            Integer chunkIndex = record.getChunkIndex();
+            if (filePath.isBlank() || chunkIndex == null) {
+                continue;
+            }
+            int remainingLimit = expandedLimit - expandedRecords.size();
+            List<LexicalSearchRecord> neighborRecords = sourceFileChunkJdbcRepository.findNeighborChunks(
+                    filePath,
+                    chunkIndex.intValue(),
+                    NEIGHBOR_CHUNK_RADIUS,
+                    remainingLimit
+            );
+            for (LexicalSearchRecord neighborRecord : neighborRecords) {
+                addDistinctRecord(expandedRecords, seenKeys, neighborRecord);
+                if (expandedRecords.size() >= expandedLimit) {
+                    break;
+                }
+            }
+        }
+        return expandedRecords;
+    }
+
+    /**
+     * 计算补充上下文后的安全上限。
+     *
+     * @param requestedLimit 原始请求数量
+     * @return 扩展上限
+     */
+    private int expandedLimit(int requestedLimit) {
+        int safeRequestedLimit = safeLimit(requestedLimit);
+        int doubleLimit = safeRequestedLimit * 2;
+        int cappedLimit = safeRequestedLimit + MAX_EXTRA_CONTEXT_CHUNKS;
+        return Math.max(safeRequestedLimit, Math.min(doubleLimit, cappedLimit));
+    }
+
+    /**
+     * 去重追加检索记录。
+     *
+     * @param records 目标记录
+     * @param seenKeys 已见记录键
+     * @param record 待追加记录
+     */
+    private void addDistinctRecord(
+            List<LexicalSearchRecord> records,
+            Set<String> seenKeys,
+            LexicalSearchRecord record
+    ) {
+        if (record == null) {
+            return;
+        }
+        String recordKey = recordKey(record);
+        if (seenKeys.add(recordKey)) {
+            records.add(record);
+        }
+    }
+
+    /**
+     * 构建记录去重键。
+     *
+     * @param record 检索记录
+     * @return 去重键
+     */
+    private String recordKey(LexicalSearchRecord record) {
+        if (record.getItemKey() != null && !record.getItemKey().isBlank()) {
+            return record.getItemKey();
+        }
+        String filePath = resolveFilePath(record);
+        Integer chunkIndex = record.getChunkIndex();
+        return filePath + "#" + (chunkIndex == null ? "" : chunkIndex);
+    }
+
+    /**
+     * 解析源文件路径。
+     *
+     * @param record 检索记录
+     * @return 文件路径
+     */
+    private String resolveFilePath(LexicalSearchRecord record) {
+        if (record.getConceptId() != null && !record.getConceptId().isBlank()) {
+            return record.getConceptId();
+        }
+        if (record.getSourcePaths() != null && !record.getSourcePaths().isEmpty()) {
+            String sourcePath = record.getSourcePaths().get(0);
+            return sourcePath == null ? "" : sourcePath;
+        }
+        return "";
+    }
+
+    /**
+     * 返回安全检索数量。
+     *
+     * @param limit 原始数量
+     * @return 安全数量
+     */
+    private int safeLimit(int limit) {
+        return limit <= 0 ? 5 : limit;
     }
 
     /**

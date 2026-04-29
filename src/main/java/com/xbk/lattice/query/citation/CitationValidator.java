@@ -387,7 +387,24 @@ public class CitationValidator {
                 tokens.add(part);
             }
         }
+        appendEmbeddedNumericTokens(tokens, content);
         return tokens;
+    }
+
+    /**
+     * 补充嵌在中文单位或连续文本里的数字事实。
+     *
+     * @param tokens token 集合
+     * @param content 原始内容
+     */
+    private void appendEmbeddedNumericTokens(Set<String> tokens, String content) {
+        Matcher matcher = NUMERIC_LITERAL_PATTERN.matcher(content);
+        while (matcher.find()) {
+            String numericToken = normalizeToken(matcher.group(1));
+            if (!numericToken.isBlank()) {
+                tokens.add(numericToken);
+            }
+        }
     }
 
     private String normalizeToken(String literal) {

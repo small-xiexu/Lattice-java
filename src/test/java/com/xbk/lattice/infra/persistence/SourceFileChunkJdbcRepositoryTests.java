@@ -101,4 +101,69 @@ class SourceFileChunkJdbcRepositoryTests {
         assertThat(hits.get(0).getContent()).contains("retry interval");
         assertThat(hits.get(0).getConceptId()).isEqualTo("payment/order.md");
     }
+
+    /**
+     * 验证结构化字段值命中会优先于普通正文命中，避免表格行被相同 case 的步骤正文挤下去。
+     */
+    @Test
+    void shouldPreferStructuredAssignmentMatchWhenSearchingSourceChunks() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_source_chunk_test.source_file_chunks");
+        sourceFileChunkJdbcRepository.replaceChunks(
+                "scenarios.xlsx",
+                List.of(
+                        new SourceFileChunkRecord(
+                                "scenarios.xlsx",
+                                0,
+                                "case 100814 raw step text without row fields",
+                                true
+                        ),
+                        new SourceFileChunkRecord(
+                                "scenarios.xlsx",
+                                1,
+                                "- sheet=场景用例; row=3; case_num=100814; name=SVC; expected=退款成功",
+                                true
+                        )
+                )
+        );
+
+        List<LexicalSearchRecord> hits = sourceFileChunkJdbcRepository.searchLexical(
+                "case 100814",
+                List.of("case", "100814"),
+                5,
+                "simple"
+        );
+
+        assertThat(hits).isNotEmpty();
+        assertThat(hits.get(0).getItemKey()).isEqualTo("scenarios.xlsx#1");
+        assertThat(hits.get(0).getContent()).contains("expected=退款成功");
+    }
+
+    /**
+     * 验证可按文件路径与 chunk 序号查询邻近分块。
+     */
+    @Test
+    void shouldFindNeighborChunksByFilePathAndIndex() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_source_chunk_test.source_file_chunks");
+        sourceFileChunkJdbcRepository.replaceChunks(
+                "manual.pdf",
+                List.of(
+                        new SourceFileChunkRecord("manual.pdf", 0, "intro", true),
+                        new SourceFileChunkRecord("manual.pdf", 1, "table header", true),
+                        new SourceFileChunkRecord("manual.pdf", 2, "table row detail", true),
+                        new SourceFileChunkRecord("manual.pdf", 3, "appendix", true)
+                )
+        );
+
+        List<LexicalSearchRecord> neighbors = sourceFileChunkJdbcRepository.findNeighborChunks(
+                "manual.pdf",
+                1,
+                1,
+                5
+        );
+
+        assertThat(neighbors).extracting(LexicalSearchRecord::getItemKey)
+                .containsExactly("manual.pdf#0", "manual.pdf#2");
+        assertThat(neighbors).extracting(LexicalSearchRecord::getContent)
+                .containsExactly("intro", "table row detail");
+    }
 }

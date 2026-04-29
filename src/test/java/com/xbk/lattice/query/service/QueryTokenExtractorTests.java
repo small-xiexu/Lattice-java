@@ -42,4 +42,25 @@ class QueryTokenExtractorTests {
                 "payment.retry.maxattempts"
         );
     }
+
+    /**
+     * 验证单数字序号可被保留，用于表格中的 step_index、row 等结构化字段匹配。
+     */
+    @Test
+    void shouldExtractSingleNumberTokensForStructuredTableQuestions() {
+        List<String> tokens = QueryTokenExtractor.extract("case 100997 第9步校验什么");
+
+        assertThat(tokens).contains("100997", "9");
+    }
+
+    /**
+     * 验证接口路径会作为完整 token 保留，支撑业务接口表精准召回。
+     */
+    @Test
+    void shouldExtractApiPathTokensForEndpointQuestions() {
+        List<String> tokens = QueryTokenExtractor.extract("DPFM 的 /api/v2/fulfillment/request/add 接口做什么");
+
+        assertThat(tokens).contains("/api/v2/fulfillment/request/add");
+        assertThat(tokens).contains("api", "v2", "fulfillment", "request", "add");
+    }
 }

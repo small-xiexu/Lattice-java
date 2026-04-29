@@ -269,6 +269,49 @@ public class SourceFileChunkJdbcRepository {
     }
 
     /**
+     * 查询同一源文件中指定 chunk 的邻近分块。
+     *
+     * @param filePath 文件路径
+     * @param chunkIndex 当前 chunk 序号
+     * @param radius 邻近半径
+     * @param limit 返回数量
+     * @return 邻近分块记录
+     */
+    public List<LexicalSearchRecord> findNeighborChunks(String filePath, int chunkIndex, int radius, int limit) {
+        if (jdbcTemplate == null || jdbcTemplate.getDataSource() == null || !hasText(filePath) || radius <= 0) {
+            return List.of();
+        }
+
+        int startIndex = Math.max(0, chunkIndex - radius);
+        int endIndex = chunkIndex + radius;
+        String sql = """
+                select sfc.source_file_id,
+                       sfc.file_path,
+                       sfc.chunk_index,
+                       sfc.chunk_text,
+                       sfc.is_verbatim,
+                       (1.0 / (1 + abs(sfc.chunk_index - ?))) as score
+                from source_file_chunks sfc
+                where sfc.file_path = ?
+                  and sfc.chunk_index between ? and ?
+                  and sfc.chunk_index <> ?
+                order by abs(sfc.chunk_index - ?), sfc.chunk_index asc
+                limit ?
+                """;
+        return jdbcTemplate.query(
+                sql,
+                this::mapLexicalSearchRecord,
+                Integer.valueOf(chunkIndex),
+                filePath,
+                Integer.valueOf(startIndex),
+                Integer.valueOf(endIndex),
+                Integer.valueOf(chunkIndex),
+                Integer.valueOf(chunkIndex),
+                Integer.valueOf(safeLimit(limit))
+        );
+    }
+
+    /**
      * 映射单条分块记录。
      *
      * @param resultSet 结果集
@@ -336,6 +379,10 @@ public class SourceFileChunkJdbcRepository {
                         .append(weights.get(index).doubleValue())
                         .append(" else 0 end\n");
                 parameters.add(pattern);
+            }
+            if (shouldScoreStructuredAssignment(queryToken)) {
+                sqlBuilder.append(" + case when lower(sfc.chunk_text) like ? then 4.0 else 0 end\n");
+                parameters.add(structuredAssignmentPattern(queryToken));
             }
         }
     }
@@ -410,6 +457,38 @@ public class SourceFileChunkJdbcRepository {
      */
     private String likePattern(String queryToken) {
         return "%" + queryToken + "%";
+    }
+
+    /**
+     * 判断 token 是否适合做结构化字段值加权。
+     *
+     * @param queryToken 查询 token
+     * @return 是否适合加权
+     */
+    private boolean shouldScoreStructuredAssignment(String queryToken) {
+        if (!hasText(queryToken)) {
+            return false;
+        }
+        if (queryToken.length() < 2 && !Character.isDigit(queryToken.charAt(0))) {
+            return false;
+        }
+        for (int index = 0; index < queryToken.length(); index++) {
+            char ch = queryToken.charAt(index);
+            if (!Character.isLetterOrDigit(ch) && ch != '_' && ch != '-' && ch != '.') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 构建结构化字段值匹配模式。
+     *
+     * @param queryToken 查询 token
+     * @return LIKE 模式
+     */
+    private String structuredAssignmentPattern(String queryToken) {
+        return "%=" + queryToken + "%";
     }
 
     /**

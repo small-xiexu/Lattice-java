@@ -42,7 +42,8 @@ public final class ArticleMarkdownSupport {
         if (markdownContent == null || markdownContent.isBlank()) {
             return ParsedFrontmatter.empty();
         }
-        Matcher matcher = FRONTMATTER_PATTERN.matcher(markdownContent.trim());
+        String normalizedContent = normalizeGeneratedMarkdown(markdownContent);
+        Matcher matcher = FRONTMATTER_PATTERN.matcher(normalizedContent.trim());
         if (!matcher.find()) {
             return ParsedFrontmatter.empty();
         }
@@ -79,9 +80,10 @@ public final class ArticleMarkdownSupport {
         if (markdownContent == null || markdownContent.isBlank()) {
             return markdownContent;
         }
-        Matcher matcher = FRONTMATTER_PATTERN.matcher(markdownContent.trim());
+        String normalizedContent = normalizeGeneratedMarkdown(markdownContent);
+        Matcher matcher = FRONTMATTER_PATTERN.matcher(normalizedContent.trim());
         if (!matcher.matches()) {
-            return markdownContent;
+            return normalizedContent;
         }
         String frontmatter = matcher.group(1);
         String body = matcher.group(2);
@@ -113,9 +115,10 @@ public final class ArticleMarkdownSupport {
         if (markdownContent == null || markdownContent.isBlank()) {
             return markdownContent;
         }
-        Matcher matcher = FRONTMATTER_PATTERN.matcher(markdownContent.trim());
+        String normalizedContent = normalizeGeneratedMarkdown(markdownContent);
+        Matcher matcher = FRONTMATTER_PATTERN.matcher(normalizedContent.trim());
         if (!matcher.matches()) {
-            return markdownContent;
+            return normalizedContent;
         }
         String frontmatter = matcher.group(1);
         String body = matcher.group(2);
@@ -139,12 +142,44 @@ public final class ArticleMarkdownSupport {
         if (markdownContent == null || markdownContent.isBlank()) {
             return "";
         }
-        Matcher matcher = FRONTMATTER_PATTERN.matcher(markdownContent.trim());
+        String normalizedContent = normalizeGeneratedMarkdown(markdownContent);
+        Matcher matcher = FRONTMATTER_PATTERN.matcher(normalizedContent.trim());
         if (!matcher.matches()) {
-            return markdownContent.trim();
+            return normalizedContent.trim();
         }
         String body = matcher.group(2);
         return body == null ? "" : body.strip();
+    }
+
+    /**
+     * 归一模型生成的 Markdown 文章边界。
+     *
+     * @param markdownContent Markdown 内容
+     * @return 去除外围说明后的 Markdown 内容
+     */
+    public static String normalizeGeneratedMarkdown(String markdownContent) {
+        if (markdownContent == null || markdownContent.isBlank()) {
+            return "";
+        }
+        String normalizedContent = normalizeLineEndings(markdownContent).trim();
+        String unwrappedContent = unwrapCodeFence(normalizedContent);
+        String extractedContent = extractFromFirstValidFrontmatter(unwrappedContent);
+        if (extractedContent != null) {
+            return extractedContent;
+        }
+        extractedContent = extractFromFirstValidFrontmatter(normalizedContent);
+        if (extractedContent != null) {
+            return extractedContent;
+        }
+        extractedContent = extractFromFirstTopLevelHeading(unwrappedContent);
+        if (extractedContent != null) {
+            return extractedContent;
+        }
+        extractedContent = extractFromFirstTopLevelHeading(normalizedContent);
+        if (extractedContent != null) {
+            return extractedContent;
+        }
+        return normalizedContent;
     }
 
     /**
@@ -163,7 +198,8 @@ public final class ArticleMarkdownSupport {
         if (articleRecord == null) {
             return null;
         }
-        ParsedFrontmatter parsedFrontmatter = parse(markdownContent);
+        String normalizedMarkdownContent = normalizeGeneratedMarkdown(markdownContent);
+        ParsedFrontmatter parsedFrontmatter = parse(normalizedMarkdownContent);
         if (!parsedFrontmatter.isPresent()) {
             String normalizedReviewStatus = fallbackReviewStatus;
             if (normalizedReviewStatus == null || normalizedReviewStatus.isBlank()) {
@@ -171,7 +207,7 @@ public final class ArticleMarkdownSupport {
             }
             return articleRecord.copy(
                     articleRecord.getTitle(),
-                    markdownContent,
+                    normalizedMarkdownContent,
                     articleRecord.getLifecycle(),
                     articleRecord.getCompiledAt(),
                     articleRecord.getSourcePaths(),
@@ -222,7 +258,7 @@ public final class ArticleMarkdownSupport {
                 : parsedFrontmatter.getCompiledAt();
         return articleRecord.copy(
                 normalizedTitle,
-                markdownContent,
+                normalizedMarkdownContent,
                 articleRecord.getLifecycle(),
                 normalizedCompiledAt,
                 normalizedSourcePaths,
@@ -258,6 +294,174 @@ public final class ArticleMarkdownSupport {
         catch (Exception ignored) {
             return Map.of();
         }
+    }
+
+    /**
+     * 从文本中提取第一个合法 frontmatter 开始的文章。
+     *
+     * @param value 原始文本
+     * @return 文章 Markdown；未找到时返回 null
+     */
+    private static String extractFromFirstValidFrontmatter(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        List<String> lines = splitLines(value);
+        for (int index = 0; index < lines.size(); index++) {
+            if (!"---".equals(lines.get(index).trim())) {
+                continue;
+            }
+            List<String> candidateLines = lines.subList(index, lines.size());
+            String candidate = String.join("\n", candidateLines).trim();
+            candidate = trimTrailingCodeFence(candidate);
+            if (hasArticleFrontmatter(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 从第一个顶级标题开始提取 Markdown 正文。
+     *
+     * @param value 原始文本
+     * @return Markdown 正文；未找到时返回 null
+     */
+    private static String extractFromFirstTopLevelHeading(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        List<String> lines = splitLines(value);
+        for (int index = 0; index < lines.size(); index++) {
+            String line = lines.get(index).trim();
+            if (!line.startsWith("# ") || line.startsWith("## ")) {
+                continue;
+            }
+            if (!isPreambleLikelyModelMetadata(lines.subList(0, index))) {
+                return null;
+            }
+            String candidate = String.join("\n", lines.subList(index, lines.size())).trim();
+            candidate = trimTrailingCodeFence(candidate);
+            return candidate.isBlank() ? null : candidate;
+        }
+        return null;
+    }
+
+    /**
+     * 判断标题前内容是否更像模型元说明而不是文章正文。
+     *
+     * @param preambleLines 标题前文本行
+     * @return 可安全剥离时返回 true
+     */
+    private static boolean isPreambleLikelyModelMetadata(List<String> preambleLines) {
+        if (preambleLines == null || preambleLines.isEmpty()) {
+            return false;
+        }
+        int nonBlankCount = 0;
+        int characterCount = 0;
+        for (String preambleLine : preambleLines) {
+            String trimmedLine = preambleLine == null ? "" : preambleLine.trim();
+            if (trimmedLine.isBlank() || "---".equals(trimmedLine) || trimmedLine.startsWith("```")) {
+                continue;
+            }
+            if (trimmedLine.startsWith("#")) {
+                return false;
+            }
+            nonBlankCount++;
+            characterCount += trimmedLine.length();
+        }
+        return nonBlankCount > 0 && characterCount <= 1200;
+    }
+
+    /**
+     * 判断文本是否以可识别文章 frontmatter 开始。
+     *
+     * @param value 候选 Markdown
+     * @return 是文章 frontmatter 时返回 true
+     */
+    private static boolean hasArticleFrontmatter(String value) {
+        Matcher matcher = FRONTMATTER_PATTERN.matcher(value.trim());
+        if (!matcher.matches()) {
+            return false;
+        }
+        String frontmatter = matcher.group(1);
+        if (containsDelimiterLine(frontmatter)) {
+            return false;
+        }
+        Map<String, Object> values = parseFrontmatterValues(frontmatter);
+        return values.containsKey("title")
+                || values.containsKey("summary")
+                || values.containsKey("sources")
+                || values.containsKey("source_paths")
+                || values.containsKey("review_status");
+    }
+
+    /**
+     * 判断 frontmatter 候选块内部是否含有分隔符行。
+     *
+     * @param frontmatter frontmatter 候选文本
+     * @return 含有分隔符时返回 true
+     */
+    private static boolean containsDelimiterLine(String frontmatter) {
+        for (String line : splitLines(frontmatter)) {
+            if ("---".equals(line.trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 去除包裹完整 Markdown 的代码围栏。
+     *
+     * @param value 原始文本
+     * @return 去除外层围栏后的文本
+     */
+    private static String unwrapCodeFence(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        List<String> lines = splitLines(value.trim());
+        if (lines.size() < 2) {
+            return value.trim();
+        }
+        String firstLine = lines.get(0).trim();
+        String lastLine = lines.get(lines.size() - 1).trim();
+        if (!firstLine.startsWith("```") || !"```".equals(lastLine)) {
+            return value.trim();
+        }
+        return String.join("\n", lines.subList(1, lines.size() - 1)).trim();
+    }
+
+    /**
+     * 去除提取文章末尾残留的代码围栏结束符。
+     *
+     * @param value 原始文本
+     * @return 去除末尾围栏后的文本
+     */
+    private static String trimTrailingCodeFence(String value) {
+        if (value == null || value.isBlank()) {
+            return value;
+        }
+        List<String> lines = splitLines(value.trim());
+        int lastIndex = lines.size() - 1;
+        while (lastIndex >= 0 && lines.get(lastIndex).trim().isBlank()) {
+            lastIndex--;
+        }
+        if (lastIndex >= 0 && "```".equals(lines.get(lastIndex).trim())) {
+            return String.join("\n", lines.subList(0, lastIndex)).trim();
+        }
+        return value.trim();
+    }
+
+    /**
+     * 归一换行符。
+     *
+     * @param value 原始文本
+     * @return 使用 LF 的文本
+     */
+    private static String normalizeLineEndings(String value) {
+        return value.replace("\r\n", "\n").replace('\r', '\n');
     }
 
     private static List<String> resolveSourcePaths(Map<String, Object> values) {
@@ -398,7 +602,7 @@ public final class ArticleMarkdownSupport {
         if (value == null || value.isBlank()) {
             return List.of();
         }
-        String normalizedValue = value.replace("\r\n", "\n").replace('\r', '\n');
+        String normalizedValue = normalizeLineEndings(value);
         List<String> lines = new ArrayList<String>();
         for (String line : normalizedValue.split("\n", -1)) {
             lines.add(line);

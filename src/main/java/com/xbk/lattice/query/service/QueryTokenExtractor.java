@@ -19,7 +19,11 @@ public final class QueryTokenExtractor {
 
     private static final Pattern ASCII_TOKEN_PATTERN = Pattern.compile("[A-Za-z0-9=_-]{2,}");
 
+    private static final Pattern NUMBER_TOKEN_PATTERN = Pattern.compile("(?<![A-Za-z0-9])\\d+(?![A-Za-z0-9])");
+
     private static final Pattern PATH_TOKEN_PATTERN = Pattern.compile("[A-Za-z0-9_./-]+\\.[A-Za-z0-9_./-]+");
+
+    private static final Pattern URL_PATH_TOKEN_PATTERN = Pattern.compile("/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+");
 
     private static final Pattern CONFIG_KEY_PATTERN = Pattern.compile("[A-Za-z][A-Za-z0-9_-]*(?:\\.[A-Za-z0-9_-]+)+");
 
@@ -52,6 +56,10 @@ public final class QueryTokenExtractor {
         while (asciiMatcher.find()) {
             tokens.add(asciiMatcher.group());
         }
+        Matcher numberMatcher = NUMBER_TOKEN_PATTERN.matcher(normalizedQuestion);
+        while (numberMatcher.find()) {
+            tokens.add(numberMatcher.group());
+        }
         Matcher hanMatcher = HAN_TEXT_PATTERN.matcher(question);
         while (hanMatcher.find()) {
             appendChineseTokens(tokens, hanMatcher.group());
@@ -69,6 +77,10 @@ public final class QueryTokenExtractor {
         Matcher pathMatcher = PATH_TOKEN_PATTERN.matcher(question);
         while (pathMatcher.find()) {
             tokens.add(pathMatcher.group().toLowerCase(Locale.ROOT));
+        }
+        Matcher urlPathMatcher = URL_PATH_TOKEN_PATTERN.matcher(question);
+        while (urlPathMatcher.find()) {
+            tokens.add(urlPathMatcher.group().toLowerCase(Locale.ROOT));
         }
         Matcher configMatcher = CONFIG_KEY_PATTERN.matcher(question);
         while (configMatcher.find()) {

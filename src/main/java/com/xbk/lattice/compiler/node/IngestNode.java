@@ -236,7 +236,7 @@ public class IngestNode {
             if (parsedRawSource == null) {
                 return null;
             }
-            String trimmedContent = trimContent(parsedRawSource.getContent());
+            String trimmedContent = trimContent(parsedRawSource.getContent(), parsedRawSource.getFormat());
             if (trimmedContent == null || trimmedContent.isBlank()) {
                 return null;
             }
@@ -269,9 +269,9 @@ public class IngestNode {
     private RawSource readTextSource(Path sourceDir, Path path) {
         try {
             String content = Files.readString(path, StandardCharsets.UTF_8);
-            String trimmedContent = trimContent(content);
             String relativePath = normalizePath(sourceDir.relativize(path));
             String format = extractFormat(path.getFileName().toString());
+            String trimmedContent = trimContent(content, format);
             long fileSize = Files.size(path);
             return RawSource.extracted(relativePath, trimmedContent, format, fileSize, "{}", false, relativePath);
         }
@@ -299,7 +299,7 @@ public class IngestNode {
             long fileSize = Files.size(path);
             return RawSource.extracted(
                     relativePath,
-                    trimContent(extractionResult.getContent()),
+                    trimContent(extractionResult.getContent(), "pdf"),
                     "pdf",
                     fileSize,
                     extractionResult.getMetadataJson(),
@@ -332,7 +332,7 @@ public class IngestNode {
             String format = extractFormat(path.getFileName().toString());
             return RawSource.extracted(
                     relativePath,
-                    trimContent(extractionResult.getContent()),
+                    trimContent(extractionResult.getContent(), format),
                     format,
                     fileSize,
                     extractionResult.getMetadataJson(),
@@ -364,7 +364,7 @@ public class IngestNode {
             long fileSize = Files.size(path);
             return RawSource.extracted(
                     relativePath,
-                    trimContent(extractionResult.getContent()),
+                    trimContent(extractionResult.getContent(), "docx"),
                     "docx",
                     fileSize,
                     extractionResult.getMetadataJson(),
@@ -396,7 +396,7 @@ public class IngestNode {
             long fileSize = Files.size(path);
             return RawSource.extracted(
                     relativePath,
-                    trimContent(extractionResult.getContent()),
+                    trimContent(extractionResult.getContent(), "doc"),
                     "doc",
                     fileSize,
                     extractionResult.getMetadataJson(),
@@ -428,7 +428,7 @@ public class IngestNode {
             long fileSize = Files.size(path);
             return RawSource.extracted(
                     relativePath,
-                    trimContent(extractionResult.getContent()),
+                    trimContent(extractionResult.getContent(), "pptx"),
                     "pptx",
                     fileSize,
                     extractionResult.getMetadataJson(),
@@ -467,14 +467,28 @@ public class IngestNode {
      * 按配置截断文件内容。
      *
      * @param content 原始内容
+     * @param format 文件格式
      * @return 截断后的内容
      */
-    private String trimContent(String content) {
+    private String trimContent(String content, String format) {
+        if (shouldPreserveFullExtractedContent(format)) {
+            return content;
+        }
         int maxChars = compilerProperties.getIngestMaxChars();
         if (maxChars <= 0 || content.length() <= maxChars) {
             return content;
         }
         return content.substring(0, maxChars);
+    }
+
+    /**
+     * 判断是否应保留完整抽取文本。
+     *
+     * @param format 文件格式
+     * @return 是否保留完整文本
+     */
+    private boolean shouldPreserveFullExtractedContent(String format) {
+        return "xlsx".equals(format) || "xls".equals(format);
     }
 
     /**

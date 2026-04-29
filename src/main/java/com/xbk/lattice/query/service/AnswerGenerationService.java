@@ -18,9 +18,11 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -139,19 +141,19 @@ public class AnswerGenerationService {
         if (!matchedLines.isEmpty()) {
             answerBuilder.append("：").append(String.join("；", matchedLines));
             answerBuilder.append(" ").append(resolveCitationLiteral(articleHit));
-            return answerBuilder.toString();
+            return SensitiveTextMasker.mask(answerBuilder.toString());
         }
 
         String description = extractDescription(articleHit.getMetadataJson());
         if (!description.isEmpty()) {
             answerBuilder.append("：").append(description);
             answerBuilder.append(" ").append(resolveCitationLiteral(articleHit));
-            return answerBuilder.toString();
+            return SensitiveTextMasker.mask(answerBuilder.toString());
         }
 
         answerBuilder.append("：").append(articleHit.getContent());
         answerBuilder.append(" ").append(resolveCitationLiteral(articleHit));
-        return answerBuilder.toString();
+        return SensitiveTextMasker.mask(answerBuilder.toString());
     }
 
     /**
@@ -302,7 +304,7 @@ public class AnswerGenerationService {
                     return legacyMarkdownPayload;
                 }
                 if (canReuseLegacyMarkdownAnswer(llmAnswer)) {
-                    return QueryAnswerPayload.fallback(llmAnswer.trim());
+                    return QueryAnswerPayload.fallback(SensitiveTextMasker.mask(llmAnswer.trim()));
                 }
             }
             catch (RuntimeException ex) {
@@ -528,7 +530,7 @@ public class AnswerGenerationService {
         if (answerOutcome != AnswerOutcome.SUCCESS) {
             answerCacheable = false;
         }
-        return QueryAnswerPayload.llm(answerMarkdown.trim(), answerOutcome, answerCacheable);
+        return QueryAnswerPayload.llm(SensitiveTextMasker.mask(answerMarkdown.trim()), answerOutcome, answerCacheable);
     }
 
     /**
@@ -861,7 +863,8 @@ public class AnswerGenerationService {
         List<String> keptParagraphs = new ArrayList<String>();
         boolean removed = false;
         for (String rawParagraph : rawParagraphs) {
-            if (isUnsupportedDetailCaveatParagraph(rawParagraph)) {
+            if (isUnsupportedDetailCaveatParagraph(rawParagraph)
+                    || isUnrequestedAnchorCaveatParagraph(rawParagraph, question, answerMarkdown)) {
                 removed = true;
                 continue;
             }
@@ -875,6 +878,47 @@ public class AnswerGenerationService {
             return answerMarkdown;
         }
         return candidate;
+    }
+
+    /**
+     * 判断段落是否是未被问题询问的额外锚点缺口说明。
+     *
+     * @param paragraph 候选段落
+     * @param question 用户问题
+     * @param answerMarkdown 完整答案
+     * @return 是额外缺口说明返回 true
+     */
+    private boolean isUnrequestedAnchorCaveatParagraph(String paragraph, String question, String answerMarkdown) {
+        if (!hasUnsupportedEvidenceSignal(paragraph)) {
+            return false;
+        }
+        List<String> questionAnchors = extractReusableQuestionAnchors(question);
+        if (questionAnchors.isEmpty()) {
+            return false;
+        }
+        List<String> paragraphAnchors = extractReusableQuestionAnchors(paragraph);
+        if (!containsAnchorOutsideQuestion(paragraphAnchors, questionAnchors)) {
+            return false;
+        }
+        String candidateAnswer = answerMarkdown.replace(paragraph, "").trim();
+        return coversRequestedQuestionAnchors(candidateAnswer, question)
+                || countEnumerationFactLines(candidateAnswer) >= 2;
+    }
+
+    /**
+     * 判断候选锚点中是否存在问题未点名的额外锚点。
+     *
+     * @param candidateAnchors 候选段落锚点
+     * @param questionAnchors 问题锚点
+     * @return 存在返回 true
+     */
+    private boolean containsAnchorOutsideQuestion(List<String> candidateAnchors, List<String> questionAnchors) {
+        for (String candidateAnchor : candidateAnchors) {
+            if (!questionAnchors.contains(candidateAnchor)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean looksLikeAnsweredScopeQuestion(String question) {
@@ -899,16 +943,7 @@ public class AnswerGenerationService {
             return false;
         }
         String normalizedParagraph = lowerCase(stripEmbeddedCitationLiterals(paragraph));
-        boolean hasUnsupportedSignal = normalizedParagraph.contains("未提供")
-                || normalizedParagraph.contains("没有提供")
-                || normalizedParagraph.contains("未给出")
-                || normalizedParagraph.contains("未覆盖")
-                || normalizedParagraph.contains("证据不足")
-                || normalizedParagraph.contains("当前证据不足")
-                || normalizedParagraph.contains("暂无法确认")
-                || normalizedParagraph.contains("无法从当前证据确认")
-                || normalizedParagraph.contains("无法基于当前材料确认");
-        if (!hasUnsupportedSignal) {
+        if (!hasUnsupportedEvidenceSignal(normalizedParagraph)) {
             return false;
         }
         return normalizedParagraph.contains("以上证据")
@@ -930,6 +965,25 @@ public class AnswerGenerationService {
                 || normalizedParagraph.contains("请求/响应参数")
                 || normalizedParagraph.contains("请求参数")
                 || normalizedParagraph.contains("响应参数");
+    }
+
+    /**
+     * 判断段落是否包含证据不足类信号。
+     *
+     * @param paragraph 候选段落
+     * @return 包含返回 true
+     */
+    private boolean hasUnsupportedEvidenceSignal(String paragraph) {
+        String normalizedParagraph = lowerCase(stripEmbeddedCitationLiterals(paragraph));
+        return normalizedParagraph.contains("未提供")
+                || normalizedParagraph.contains("没有提供")
+                || normalizedParagraph.contains("未给出")
+                || normalizedParagraph.contains("未覆盖")
+                || normalizedParagraph.contains("证据不足")
+                || normalizedParagraph.contains("当前证据不足")
+                || normalizedParagraph.contains("暂无法确认")
+                || normalizedParagraph.contains("无法从当前证据确认")
+                || normalizedParagraph.contains("无法基于当前材料确认");
     }
 
     /**
@@ -1625,7 +1679,7 @@ public class AnswerGenerationService {
         }
         List<QueryArticleHit> fallbackHits = selectFallbackEvidenceHits(question, queryArticleHits);
         AnswerOutcome answerOutcome = inferFallbackEvidenceOutcome(question, fallbackHits);
-        return QueryAnswerPayload.llm(normalizedMarkdown.trim(), answerOutcome, false);
+        return QueryAnswerPayload.llm(SensitiveTextMasker.mask(normalizedMarkdown.trim()), answerOutcome, false);
     }
 
     /**
@@ -1648,13 +1702,132 @@ public class AnswerGenerationService {
                     && countEnumerationFactLines(normalizedPayload) >= 1;
         }
         if (looksLikeEnumerationQuestion(question)) {
-            return countEnumerationFactLines(normalizedPayload) >= 2;
+            return countEnumerationFactLines(normalizedPayload) >= 2
+                    || coversRequestedQuestionAnchors(normalizedPayload, question);
         }
         if (looksLikeFlowQuestion(question)) {
             return containsFlowSignal(normalizedPayload);
         }
         if (looksLikeStatusQuestion(question)) {
             return containsStatusSignal(lowerCase(normalizedPayload));
+        }
+        return false;
+    }
+
+    /**
+     * 判断非结构化答案是否覆盖了问题中明确点名的可复用锚点。
+     *
+     * @param markdown 模型 Markdown
+     * @param question 用户问题
+     * @return 覆盖返回 true
+     */
+    private boolean coversRequestedQuestionAnchors(String markdown, String question) {
+        List<String> reusableAnchors = extractReusableQuestionAnchors(question);
+        if (reusableAnchors.size() < 2) {
+            return false;
+        }
+        String normalizedMarkdown = lowerCase(stripEmbeddedCitationLiterals(markdown));
+        int matchedAnchorCount = countMatchedReusableAnchors(normalizedMarkdown, reusableAnchors);
+        if (matchedAnchorCount < reusableAnchors.size()) {
+            return false;
+        }
+        int anchoredFactUnitCount = countAnchoredFactUnits(normalizedMarkdown, reusableAnchors);
+        if (anchoredFactUnitCount >= Math.min(2, reusableAnchors.size())) {
+            return true;
+        }
+        return anchoredFactUnitCount == 1 && normalizedMarkdown.length() >= 40;
+    }
+
+    /**
+     * 从问题中提取适合做答案覆盖校验的通用锚点。
+     *
+     * @param question 用户问题
+     * @return 去重后的锚点
+     */
+    private List<String> extractReusableQuestionAnchors(String question) {
+        Set<String> reusableAnchors = new LinkedHashSet<String>();
+        for (String rawToken : QueryTokenExtractor.extract(question)) {
+            String normalizedToken = lowerCase(rawToken);
+            if (isReusableQuestionAnchor(normalizedToken)) {
+                reusableAnchors.add(normalizedToken);
+            }
+        }
+        return new ArrayList<String>(reusableAnchors);
+    }
+
+    /**
+     * 判断 token 是否适合作为自由文本答案的覆盖锚点。
+     *
+     * @param token 待判断 token
+     * @return 适合返回 true
+     */
+    private boolean isReusableQuestionAnchor(String token) {
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+        if (token.matches("\\d{2,}(?:\\.\\d+)?%?")) {
+            return true;
+        }
+        if (!containsHanText(token) && token.matches("[a-z][a-z0-9_.=-]{3,}")) {
+            return true;
+        }
+        return token.matches("[a-z0-9_.=-]*[_.=-][a-z0-9_.=-]*");
+    }
+
+    /**
+     * 统计答案中命中的问题锚点数量。
+     *
+     * @param normalizedMarkdown 已归一化答案
+     * @param reusableAnchors 问题锚点
+     * @return 命中数量
+     */
+    private int countMatchedReusableAnchors(String normalizedMarkdown, List<String> reusableAnchors) {
+        int matchedAnchorCount = 0;
+        for (String reusableAnchor : reusableAnchors) {
+            if (normalizedMarkdown.contains(reusableAnchor)) {
+                matchedAnchorCount++;
+            }
+        }
+        return matchedAnchorCount;
+    }
+
+    /**
+     * 统计包含问题锚点的事实单元数量。
+     *
+     * @param normalizedMarkdown 已归一化答案
+     * @param reusableAnchors 问题锚点
+     * @return 事实单元数量
+     */
+    private int countAnchoredFactUnits(String normalizedMarkdown, List<String> reusableAnchors) {
+        if (normalizedMarkdown == null || normalizedMarkdown.isBlank()) {
+            return 0;
+        }
+        int factUnitCount = 0;
+        String[] segments = normalizedMarkdown.split("\\R|[。；;]+");
+        for (String rawSegment : segments) {
+            String normalizedSegment = normalizeFallbackLineCandidate(rawSegment);
+            if (normalizedSegment.length() < 8) {
+                continue;
+            }
+            if (containsAnyReusableAnchor(lowerCase(normalizedSegment), reusableAnchors)) {
+                factUnitCount++;
+            }
+        }
+        return factUnitCount;
+    }
+
+    /**
+     * 判断文本片段是否包含任一问题锚点。
+     *
+     * @param normalizedSegment 已归一化片段
+     * @param reusableAnchors 问题锚点
+     * @return 包含返回 true
+     */
+    private boolean containsAnyReusableAnchor(String normalizedSegment, List<String> reusableAnchors) {
+        for (String reusableAnchor : reusableAnchors) {
+            if (normalizedSegment.contains(reusableAnchor)) {
+                return true;
+            }
         }
         return false;
     }
@@ -1931,7 +2104,7 @@ public class AnswerGenerationService {
     ) {
         List<QueryArticleHit> fallbackHits = selectFallbackEvidenceHits(question, queryArticleHits);
         return new QueryAnswerPayload(
-                buildFallbackMarkdown(question, queryArticleHits),
+                SensitiveTextMasker.mask(buildFallbackMarkdown(question, queryArticleHits)),
                 resolveFallbackAnswerOutcome(question, fallbackHits, preferredOutcome),
                 generationMode,
                 modelExecutionStatus,
@@ -2178,7 +2351,7 @@ public class AnswerGenerationService {
             promptBuilder.append("  sources: ").append(String.join(", ", queryArticleHit.getSourcePaths())).append("\n");
             promptBuilder.append("  citation: ").append(resolveCitationLiteral(queryArticleHit)).append("\n");
             promptBuilder.append("  content: ").append(sanitizeEvidenceContentForPrompt(queryArticleHit.getContent())).append("\n");
-            promptBuilder.append("  metadata: ").append(queryArticleHit.getMetadataJson()).append("\n");
+            promptBuilder.append("  metadata: ").append(SensitiveTextMasker.mask(queryArticleHit.getMetadataJson())).append("\n");
         }
         promptBuilder.append("\n");
     }
@@ -2239,10 +2412,10 @@ public class AnswerGenerationService {
         markdownBuilder.append("## 问题").append("\n");
         markdownBuilder.append(question.trim()).append("\n\n");
         markdownBuilder.append("## 修订结论").append("\n");
-        markdownBuilder.append("- ").append(correction == null ? "" : correction.trim()).append("\n\n");
+        markdownBuilder.append("- ").append(SensitiveTextMasker.mask(correction == null ? "" : correction.trim())).append("\n\n");
         markdownBuilder.append("## 修订说明").append("\n");
         markdownBuilder.append("- 原答案摘要：").append(extractEvidenceSnippet(currentAnswer)).append("\n");
-        markdownBuilder.append("- 纠正输入：").append(correction == null ? "" : correction.trim()).append("\n\n");
+        markdownBuilder.append("- 纠正输入：").append(SensitiveTextMasker.mask(correction == null ? "" : correction.trim())).append("\n\n");
         appendFallbackSection(markdownBuilder, "用户反馈证据", groupedHits.get(QueryEvidenceType.CONTRIBUTION), queryTokens);
         appendFallbackSection(markdownBuilder, "文章证据", groupedHits.get(QueryEvidenceType.ARTICLE), queryTokens);
         appendFallbackSection(markdownBuilder, "图谱证据", groupedHits.get(QueryEvidenceType.GRAPH), queryTokens);
@@ -2273,7 +2446,7 @@ public class AnswerGenerationService {
                 markdownBuilder.append(" (").append(String.join(", ", queryArticleHit.getSourcePaths())).append(")");
             }
             markdownBuilder.append("：")
-                    .append(selectFallbackEvidenceSnippet(queryArticleHit, queryTokens))
+                    .append(SensitiveTextMasker.mask(selectFallbackEvidenceSnippet(queryArticleHit, queryTokens)))
                     .append(" ")
                     .append(resolveCitationLiteral(queryArticleHit))
                     .append("\n");
@@ -2302,7 +2475,7 @@ public class AnswerGenerationService {
             return;
         }
         for (String conclusionLine : conclusionLines) {
-            markdownBuilder.append("- ").append(conclusionLine).append("\n");
+            markdownBuilder.append("- ").append(SensitiveTextMasker.mask(conclusionLine)).append("\n");
         }
         markdownBuilder.append("\n");
     }
@@ -2339,7 +2512,7 @@ public class AnswerGenerationService {
                 markdownBuilder.append(" (").append(String.join(", ", fallbackHit.getSourcePaths())).append(")");
             }
             markdownBuilder.append("：")
-                    .append(snippet)
+                    .append(SensitiveTextMasker.mask(snippet))
                     .append(" ")
                     .append(resolveCitationLiteral(fallbackHit))
                     .append("\n");
@@ -5170,9 +5343,9 @@ public class AnswerGenerationService {
         if (normalizedLine == null || normalizedLine.isBlank()) {
             return false;
         }
-        int equalsIndex = normalizedLine.indexOf(" = ");
-        if (equalsIndex > 0) {
-            return looksLikeConfigFactKey(normalizedLine.substring(0, equalsIndex).trim());
+        int assignmentDelimiterIndex = structuredAssignmentDelimiterIndex(normalizedLine);
+        if (assignmentDelimiterIndex > 0) {
+            return looksLikeConfigFactKey(normalizedLine.substring(0, assignmentDelimiterIndex).trim());
         }
         if (!looksLikeStructuredFactQuestion(question)) {
             return false;
@@ -5597,7 +5770,7 @@ public class AnswerGenerationService {
             }
             keptLines.add(rawLine);
         }
-        return String.join("\n", keptLines).trim();
+        return SensitiveTextMasker.mask(String.join("\n", keptLines).trim());
     }
 
     /**
@@ -5678,12 +5851,12 @@ public class AnswerGenerationService {
             return "";
         }
         if (normalizedLine.startsWith("|") && normalizedLine.endsWith("|")) {
-            return normalizeMarkdownTableRow(normalizedLine);
+            return SensitiveTextMasker.mask(normalizeMarkdownTableRow(normalizedLine));
         }
         if (lowerCaseLine.startsWith("summary:")
                 || lowerCaseLine.startsWith("description:")
                 || lowerCaseLine.startsWith("content:")) {
-            return extractFallbackFieldValue(normalizedLine);
+            return SensitiveTextMasker.mask(extractFallbackFieldValue(normalizedLine));
         }
         if (lowerCaseLine.startsWith("<h1")
                 || lowerCaseLine.startsWith("<h2")
@@ -5707,7 +5880,7 @@ public class AnswerGenerationService {
                 || lowerCaseLine.startsWith("lifecycle:")) {
             return "";
         }
-        return normalizedLine;
+        return SensitiveTextMasker.mask(normalizedLine);
     }
 
     /**
@@ -5875,11 +6048,11 @@ public class AnswerGenerationService {
         if (normalizedLine == null || normalizedLine.isBlank()) {
             return false;
         }
-        int equalsIndex = normalizedLine.indexOf(" = ");
-        if (equalsIndex <= 0) {
+        int assignmentDelimiterIndex = structuredAssignmentDelimiterIndex(normalizedLine);
+        if (assignmentDelimiterIndex <= 0) {
             return false;
         }
-        String assignmentKey = normalizedLine.substring(0, equalsIndex).trim();
+        String assignmentKey = normalizedLine.substring(0, assignmentDelimiterIndex).trim();
         if (assignmentKey.isBlank()) {
             return false;
         }
@@ -5887,6 +6060,27 @@ public class AnswerGenerationService {
             return true;
         }
         return assignmentKey.matches("[A-Za-z0-9._-]+");
+    }
+
+    /**
+     * 查找结构化赋值分隔符位置。
+     *
+     * @param normalizedLine 归一化候选句
+     * @return 分隔符位置；不存在返回 -1
+     */
+    private int structuredAssignmentDelimiterIndex(String normalizedLine) {
+        if (normalizedLine == null || normalizedLine.isBlank()) {
+            return -1;
+        }
+        int equalsIndex = normalizedLine.indexOf(" = ");
+        int colonIndex = normalizedLine.indexOf(": ");
+        if (equalsIndex < 0) {
+            return colonIndex;
+        }
+        if (colonIndex < 0) {
+            return equalsIndex;
+        }
+        return Math.min(equalsIndex, colonIndex);
     }
 
     /**

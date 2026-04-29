@@ -1,5 +1,31 @@
 (function () {
     const RUN_POLLING_STATUSES = ["MATCHING", "MATERIALIZING", "COMPILE_QUEUED", "QUEUED", "RUNNING"];
+    const PROCESSING_TASK_LIST_LIMIT = 50;
+    const PROCESSING_TASK_POLL_INTERVAL_MS = 3000;
+    const PROCESSING_TASK_RETRY_INTERVAL_MS = 6000;
+    const COMPILE_STEP_LABELS = Object.freeze({
+        INITIALIZE_JOB: "初始化任务",
+        INGEST_SOURCES: "读取资料文件",
+        PERSIST_SOURCE_FILES: "登记资料文件",
+        PERSIST_SOURCE_FILE_CHUNKS: "切分原始资料",
+        EXTRACT_AST_GRAPH: "提取代码结构图谱",
+        GROUP_SOURCES: "整理资料分组",
+        SPLIT_BATCHES: "拆分分析批次",
+        ANALYZE_BATCHES: "分析知识点",
+        MERGE_CONCEPTS: "合并概念",
+        ENHANCE_EXISTING_ARTICLES: "补强已有文章",
+        COMPILE_NEW_ARTICLES: "生成文章草稿",
+        REVIEW_ARTICLES: "审查文章草稿",
+        FIX_REVIEW_ISSUES: "修复审查问题",
+        PERSIST_ARTICLES: "写入知识库",
+        REBUILD_ARTICLE_CHUNKS: "重建知识切片",
+        REFRESH_VECTOR_INDEX: "刷新向量索引",
+        REBUILD_ARTICLE_VECTORS: "刷新文章向量",
+        REBUILD_SOURCE_VECTORS: "刷新资料向量",
+        GENERATE_SYNTHESIS_ARTIFACTS: "生成知识库综合产物",
+        CAPTURE_REPO_SNAPSHOT: "记录仓库快照",
+        FINALIZE_JOB: "完成收口"
+    });
     const UPLOAD_SUPPORTED_EXTENSIONS = Object.freeze(new Set([
         "doc", "docx", "pptx", "pdf", "xlsx", "xls", "csv",
         "md", "markdown", "txt", "json", "html", "xml",
@@ -29,6 +55,10 @@
 
     let pageNoticeTimer = null;
     let runPollingTimer = null;
+    let processingTaskPollingTimer = null;
+    let processingTaskPollingInFlight = false;
+    let processingTaskAutoRefreshActive = false;
+    let processingTaskLastRefreshedAt = null;
 
     document.addEventListener("DOMContentLoaded", function () {
         bindEvents();
@@ -55,6 +85,7 @@
         bindIfPresent("create-server-source", "click", createServerSourceAndSync);
         bindIfPresent("sync-selected-source", "click", syncSelectedSource);
         bindIfPresent("rebuild-chunks", "click", rebuildChunks);
+        bindProcessingTaskAutoRefreshEvents();
         document.addEventListener("click", handleKnowledgeHelpActionClick);
     }
 
@@ -64,6 +95,32 @@
             return;
         }
         element.addEventListener(eventName, handler);
+    }
+
+    function bindProcessingTaskAutoRefreshEvents() {
+        document.addEventListener("visibilitychange", handleProcessingTaskVisibilityChange);
+        if (window && typeof window.addEventListener === "function") {
+            window.addEventListener("focus", handleProcessingTaskWindowFocus);
+        }
+    }
+
+    function handleProcessingTaskVisibilityChange() {
+        if (isDocumentHidden()) {
+            clearProcessingTaskPollingTimer();
+            if (processingTaskAutoRefreshActive) {
+                renderProcessingTaskRefreshStatus("paused");
+            }
+            return;
+        }
+        if (processingTaskAutoRefreshActive || hasActiveProcessingTasks(state.recentRuns)) {
+            loadProcessingTasks();
+        }
+    }
+
+    function handleProcessingTaskWindowFocus() {
+        if (!isDocumentHidden() && (processingTaskAutoRefreshActive || hasActiveProcessingTasks(state.recentRuns))) {
+            loadProcessingTasks();
+        }
     }
 
     function bindUploadFilePicker() {
@@ -644,19 +701,103 @@
     }
 
     async function loadProcessingTasks() {
+        clearProcessingTaskPollingTimer();
+        if (processingTaskPollingInFlight) {
+            renderProcessingTaskRefreshStatus("loading");
+            return;
+        }
+        processingTaskPollingInFlight = true;
+        renderProcessingTaskRefreshStatus("loading");
         try {
-            const response = await fetchJson("/api/v1/admin/processing-tasks?limit=10");
+            const response = await fetchJson("/api/v1/admin/processing-tasks?limit=" + PROCESSING_TASK_LIST_LIMIT);
             const items = response && response.items ? response.items : [];
             state.recentRunSummary = response && response.summary ? response.summary : null;
             state.recentRuns = items;
+            processingTaskLastRefreshedAt = new Date();
             renderRecentRunOverview(state.recentRunSummary, items);
             renderRecentRunBoard(items);
             renderKnowledgeHelpSystem();
+            updateProcessingTaskAutoRefresh(items);
         }
         catch (error) {
             state.recentRunSummary = null;
+            renderProcessingTaskRefreshStatus("error");
+            if (processingTaskAutoRefreshActive && !isDocumentHidden()) {
+                scheduleProcessingTaskPolling(PROCESSING_TASK_RETRY_INTERVAL_MS);
+            }
             showError("加载当前处理任务失败", error);
         }
+        finally {
+            processingTaskPollingInFlight = false;
+        }
+    }
+
+    function updateProcessingTaskAutoRefresh(items) {
+        const hasActiveTasks = hasActiveProcessingTasks(items);
+        processingTaskAutoRefreshActive = hasActiveTasks;
+        if (!hasActiveTasks) {
+            stopProcessingTaskPolling();
+            renderProcessingTaskRefreshStatus("idle");
+            return;
+        }
+        if (isDocumentHidden()) {
+            clearProcessingTaskPollingTimer();
+            renderProcessingTaskRefreshStatus("paused");
+            return;
+        }
+        renderProcessingTaskRefreshStatus("active");
+        scheduleProcessingTaskPolling(PROCESSING_TASK_POLL_INTERVAL_MS);
+    }
+
+    function hasActiveProcessingTasks(items) {
+        return Array.isArray(items) && items.some(isActiveProcessingTask);
+    }
+
+    function isActiveProcessingTask(item) {
+        return RUN_POLLING_STATUSES.indexOf(resolveRunDisplayStatus(item)) >= 0;
+    }
+
+    function scheduleProcessingTaskPolling(delayMs) {
+        clearProcessingTaskPollingTimer();
+        processingTaskPollingTimer = window.setTimeout(function () {
+            processingTaskPollingTimer = null;
+            loadProcessingTasks();
+        }, delayMs);
+    }
+
+    function stopProcessingTaskPolling() {
+        clearProcessingTaskPollingTimer();
+        processingTaskAutoRefreshActive = false;
+    }
+
+    function clearProcessingTaskPollingTimer() {
+        if (processingTaskPollingTimer) {
+            window.clearTimeout(processingTaskPollingTimer);
+            processingTaskPollingTimer = null;
+        }
+    }
+
+    function isDocumentHidden() {
+        return typeof document.hidden === "boolean" && document.hidden;
+    }
+
+    function renderProcessingTaskRefreshStatus(status) {
+        const element = document.getElementById("processing-task-refresh-status");
+        if (!element) {
+            return;
+        }
+        const refreshedAt = processingTaskLastRefreshedAt
+                ? " · 上次 " + formatRefreshTime(processingTaskLastRefreshedAt)
+                : "";
+        const labels = {
+            loading: "正在刷新",
+            active: "自动刷新中" + refreshedAt,
+            paused: "后台已暂停" + refreshedAt,
+            idle: processingTaskLastRefreshedAt ? "上次刷新 " + formatRefreshTime(processingTaskLastRefreshedAt) : "",
+            error: "刷新失败" + refreshedAt
+        };
+        element.textContent = labels[status] || "";
+        element.dataset.status = status || "";
     }
 
     async function loadArticles() {
@@ -953,6 +1094,7 @@
 
     function startRunPolling(runId) {
         stopRunPolling();
+        clearProcessingTaskPollingTimer();
         state.activeRunId = runId;
         runPollingTimer = window.setTimeout(function () {
             pollRunStatus(runId);
@@ -1726,8 +1868,7 @@
             return;
         }
         const visibleItems = items.slice()
-                .sort(compareRunsByRequestedAtDesc)
-                .slice(0, 6);
+                .sort(compareRunsByRequestedAtDesc);
         container.innerHTML = visibleItems.map(function (item) {
             return renderRecentRunCard(item);
         }).join("");
@@ -2189,27 +2330,7 @@
     }
 
     function getCompileStepLabel(step) {
-        const labels = {
-            INITIALIZE_JOB: "初始化任务",
-            INGEST_SOURCES: "读取资料文件",
-            PERSIST_SOURCE_FILES: "登记资料文件",
-            PERSIST_SOURCE_FILE_CHUNKS: "切分原始资料",
-            GROUP_SOURCES: "整理资料分组",
-            SPLIT_BATCHES: "拆分分析批次",
-            ANALYZE_BATCHES: "分析知识点",
-            MERGE_CONCEPTS: "合并概念",
-            ENHANCE_EXISTING_ARTICLES: "补强已有文章",
-            COMPILE_NEW_ARTICLES: "生成文章草稿",
-            REVIEW_ARTICLES: "审查文章草稿",
-            FIX_REVIEW_ISSUES: "修复审查问题",
-            PERSIST_ARTICLES: "写入知识库",
-            REBUILD_ARTICLE_CHUNKS: "重建知识切片",
-            REBUILD_ARTICLE_VECTORS: "刷新文章向量",
-            REBUILD_SOURCE_VECTORS: "刷新资料向量",
-            CAPTURE_REPO_SNAPSHOT: "记录仓库快照",
-            FINALIZE_JOB: "完成收口"
-        };
-        return labels[normalizeStatus(step)] || String(step || "").replaceAll("_", " ");
+        return COMPILE_STEP_LABELS[normalizeStatus(step)] || "执行编译步骤";
     }
 
     function resolveRunStepIndex(item) {
@@ -2219,6 +2340,7 @@
             INGEST_SOURCES: 1,
             PERSIST_SOURCE_FILES: 1,
             PERSIST_SOURCE_FILE_CHUNKS: 1,
+            EXTRACT_AST_GRAPH: 1,
             GROUP_SOURCES: 1,
             SPLIT_BATCHES: 1,
             ANALYZE_BATCHES: 1,
@@ -2229,8 +2351,10 @@
             FIX_REVIEW_ISSUES: 2,
             PERSIST_ARTICLES: 2,
             REBUILD_ARTICLE_CHUNKS: 3,
+            REFRESH_VECTOR_INDEX: 3,
             REBUILD_ARTICLE_VECTORS: 3,
             REBUILD_SOURCE_VECTORS: 3,
+            GENERATE_SYNTHESIS_ARTIFACTS: 3,
             CAPTURE_REPO_SNAPSHOT: 3,
             FINALIZE_JOB: 3
         };
@@ -3319,6 +3443,18 @@
             day: "2-digit",
             hour: "2-digit",
             minute: "2-digit"
+        });
+    }
+
+    function formatRefreshTime(value) {
+        const date = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return "刚刚";
+        }
+        return date.toLocaleTimeString("zh-CN", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit"
         });
     }
 

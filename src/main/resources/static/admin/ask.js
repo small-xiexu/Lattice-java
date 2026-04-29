@@ -34,7 +34,19 @@
         document.getElementById("refresh-qa-status").addEventListener("click", refreshReadiness);
         document.getElementById("submit-question").addEventListener("click", submitQuestion);
         document.getElementById("clear-question").addEventListener("click", clearQuestion);
+        document.getElementById("ask-question").addEventListener("keydown", handleQuestionShortcut);
         document.addEventListener("click", handleAskHelpActionClick);
+    }
+
+    function handleQuestionShortcut(event) {
+        if (event.key !== "Enter" || event.isComposing || event.repeat) {
+            return;
+        }
+        if (!event.metaKey && !event.ctrlKey) {
+            return;
+        }
+        event.preventDefault();
+        submitQuestion();
     }
 
     function bootstrapQuestionFromUrl() {

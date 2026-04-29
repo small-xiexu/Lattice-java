@@ -833,6 +833,36 @@ a {
     align-items: flex-start;
 }
 
+.processing-refresh-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.processing-refresh-status {
+    min-height: 20px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+
+.processing-refresh-status[data-status="active"] {
+    color: var(--success);
+}
+
+.processing-refresh-status[data-status="paused"],
+.processing-refresh-status[data-status="loading"] {
+    color: var(--muted-strong);
+}
+
+.processing-refresh-status[data-status="error"] {
+    color: var(--danger);
+}
+
 .panel-title-row h2,
 .panel-title-row h3,
 .list-header h3,
@@ -2090,6 +2120,10 @@ button.list-item {
     line-height: 1.35;
 }
 
+.source-card .meta-row + h4 {
+    margin-top: 8px;
+}
+
 .item-summary,
 .source-snippet {
     margin: 0;
@@ -2351,6 +2385,22 @@ button.list-item {
 .detail-section-grid > div {
     display: grid;
     gap: 10px;
+    min-width: 0;
+}
+
+.detail-section-grid .tag-list {
+    min-width: 0;
+    align-items: flex-start;
+}
+
+.detail-section-grid .tag-list .pill {
+    max-width: 100%;
+    justify-content: flex-start;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.45;
 }
 
 .detail-meta-grid {
@@ -2612,6 +2662,13 @@ button.list-item {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 14px;
+    align-content: start;
+    max-height: clamp(560px, 62vh, 980px);
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 2px 6px 8px 2px;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
 }
 
 .run-spotlight-card {
@@ -2914,6 +2971,21 @@ button.list-item {
 
 .source-section .source-grid {
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.source-card .tag-list {
+    min-width: 0;
+    align-items: flex-start;
+}
+
+.source-card .tag-list .pill {
+    max-width: 100%;
+    justify-content: flex-start;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.45;
 }
 
 .source-card-primary {
@@ -5039,6 +5111,7 @@ input[type="file"]::file-selector-button:hover {
 
     .run-board {
         grid-template-columns: 1fr;
+        max-height: 70vh;
     }
 
     .run-progress-strip {

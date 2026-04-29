@@ -128,6 +128,29 @@ class CitationValidatorTests {
         assertThat(result.getReason()).isEqualTo("source_near_complete_overlap_verified");
     }
 
+    /**
+     * 验证中文单位里的数字事实也能和证据侧数字匹配。
+     */
+    @Test
+    void shouldVerifyNumericFactsEmbeddedInChineseText() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository()
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[→ standard-guide.pdf]",
+                CitationSourceType.SOURCE_FILE,
+                "standard-guide.pdf",
+                "到2030年，标准数量超过300项",
+                "到2030年，标准数量超过300项 [→ standard-guide.pdf]"
+        ));
+
+        assertThat(result.isVerified()).isTrue();
+        assertThat(result.getReason()).isIn("source_direct_line_match_verified", "source_rule_overlap_verified");
+    }
+
     @Test
     void shouldSkipClaimWithoutHardFactLiterals() {
         CitationValidator citationValidator = new CitationValidator(
@@ -312,6 +335,22 @@ class CitationValidatorTests {
                         "{}",
                         false,
                         "src/main/java/payment/RoutePlanner.java"
+                ));
+            }
+            if ("standard-guide.pdf".equals(filePath)) {
+                return Optional.of(new SourceFileRecord(
+                        103L,
+                        1L,
+                        "standard-guide.pdf",
+                        "standard-guide.pdf",
+                        null,
+                        "PDF",
+                        "PDF",
+                        512L,
+                        "到2027年，标准体系基本建立。到2030年，标准数量超过300项，形成持续迭代机制。",
+                        "{}",
+                        false,
+                        "standard-guide.pdf"
                 ));
             }
             return Optional.empty();

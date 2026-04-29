@@ -488,7 +488,7 @@ public class CompileArticleNode {
      * @return 更新后的 Markdown
      */
     public String replaceReviewStatus(String markdownContent, String reviewStatus) {
-        return markdownContent.replaceFirst("review_status:\\s*\\w+", "review_status: " + reviewStatus);
+        return ArticleMarkdownSupport.normalizeReviewStatus(markdownContent, reviewStatus);
     }
 
     /**

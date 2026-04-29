@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>邪修智库｜工作台</title>
-    <link rel="stylesheet" href="/admin/admin.css?v=20260428-detail-focus-2">
+    <link rel="stylesheet" href="/admin/admin.css?v=20260429-article-detail-wrap-1">
 </head>
 <body>
 <div class="app-shell">
@@ -268,7 +268,10 @@
                                     <h2>当前处理任务</h2>
                                     <p>先看整体运行概况，再看每条任务的编译态、当前步骤、当前进度、最近推进时间和原因摘要。这样上传、Git、目录同步和直接编译都不会混成一串难读的列表。</p>
                                 </div>
-                                <button id="refresh-jobs" class="ghost-btn" type="button">刷新记录</button>
+                                <div class="processing-refresh-actions">
+                                    <span id="processing-task-refresh-status" class="processing-refresh-status" aria-live="polite"></span>
+                                    <button id="refresh-jobs" class="ghost-btn" type="button">刷新记录</button>
+                                </div>
                             </div>
                             <div id="recent-run-overview" class="metric-grid compact top-gap"></div>
                             <div id="job-list" class="run-board top-gap"></div>
@@ -496,6 +499,6 @@
     </div>
  </div>
 <script src="/admin/admin-tabs.js?v=20260419-tabs-1"></script>
-<script src="/admin/management.js?v=20260428-source-console-19"></script>
+<script src="/admin/management.js?v=20260429-processing-scroll-1"></script>
 </body>
 </html>

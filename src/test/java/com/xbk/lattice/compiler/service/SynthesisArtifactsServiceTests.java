@@ -8,8 +8,8 @@ import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -40,7 +40,7 @@ class SynthesisArtifactsServiceTests {
         assertThat(synthesisArtifactStore.records).hasSize(4);
         assertThat(synthesisArtifactStore.records)
                 .extracting(SynthesisArtifactRecord::getArtifactType)
-                .containsExactly("index", "timeline", "tradeoffs", "gaps");
+                .containsExactlyInAnyOrder("index", "timeline", "tradeoffs", "gaps");
         assertThat(synthesisArtifactStore.records)
                 .extracting(SynthesisArtifactRecord::getContent)
                 .allMatch(content -> content.equals("generated-content"));
@@ -249,7 +249,7 @@ class SynthesisArtifactsServiceTests {
 
     private static class FakeSynthesisArtifactStore implements SynthesisArtifactStore {
 
-        private final List<SynthesisArtifactRecord> records = new ArrayList<SynthesisArtifactRecord>();
+        private final List<SynthesisArtifactRecord> records = new CopyOnWriteArrayList<SynthesisArtifactRecord>();
 
         @Override
         public void save(SynthesisArtifactRecord synthesisArtifactRecord) {

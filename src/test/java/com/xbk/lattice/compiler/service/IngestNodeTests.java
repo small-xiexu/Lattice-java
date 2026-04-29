@@ -71,6 +71,36 @@ class IngestNodeTests {
     }
 
     /**
+     * 验证 Excel 表格保留完整抽取文本，避免尾部用例行在入库前被截断。
+     *
+     * @param tempDir 临时目录
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldPreserveFullExcelContentForTableRowRetrieval(@TempDir Path tempDir) throws IOException {
+        Path docsDir = Files.createDirectories(tempDir.resolve("docs"));
+        Path excelPath = docsDir.resolve("large-cases.xlsx");
+        writeLargeWorkbook(excelPath);
+
+        CompilerProperties properties = new CompilerProperties();
+        properties.setIngestMaxChars(80);
+
+        IngestNode ingestNode = new IngestNode(properties);
+        List<RawSource> rawSources = ingestNode.ingest(tempDir);
+
+        assertThat(rawSources).hasSize(1);
+        RawSource excelSource = rawSources.get(0);
+        assertThat(excelSource.getFormat()).isEqualTo("xlsx");
+        assertThat(excelSource.getContent().length()).isGreaterThan(80);
+        assertThat(excelSource.getContent()).contains("case-100997");
+        assertThat(excelSource.getContent()).contains("sheet=Steps; row=42");
+        assertThat(excelSource.getContent()).contains("step_index=9");
+        assertThat(excelSource.getContent()).contains("name=10张券异常解锁");
+        assertThat(excelSource.getContent()).contains("expected=9张券全部正常解锁");
+        assertThat(excelSource.getContent()).contains("asset_lock(9张券应全部解锁)");
+    }
+
+    /**
      * 验证命中跳过规则的目录和文件不会被采集。
      *
      * @param tempDir 临时目录
@@ -204,6 +234,9 @@ class IngestNodeTests {
         assertThat(excelSource.getContent()).contains("=== Sheet: Codes ===");
         assertThat(excelSource.getContent()).contains("businessSubTypeCode,meaning");
         assertThat(excelSource.getContent()).contains("1210,refund");
+        assertThat(excelSource.getContent()).contains("sheet=Codes; row=2");
+        assertThat(excelSource.getContent()).contains("businessSubTypeCode=1210");
+        assertThat(excelSource.getContent()).contains("meaning=refund");
         assertThat(excelSource.getContent()).contains("=== Sheet: Settings ===");
         assertThat(wordSource.getRelativePath()).isEqualTo("docs/brief.docx");
         assertThat(wordSource.getMetadataJson()).contains("paragraphCount");
@@ -267,6 +300,41 @@ class IngestNodeTests {
             settingsRow.createCell(0).setCellValue("retry");
             settingsRow.createCell(1).setCellValue("3");
 
+            try (OutputStream outputStream = Files.newOutputStream(excelPath)) {
+                workbook.write(outputStream);
+            }
+        }
+    }
+
+    /**
+     * 写入包含尾部哨兵行的大 Excel 测试文件。
+     *
+     * @param excelPath Excel 路径
+     * @throws IOException IO 异常
+     */
+    private void writeLargeWorkbook(Path excelPath) throws IOException {
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("Steps");
+            Row header = sheet.createRow(0);
+            header.createCell(0).setCellValue("case_num");
+            header.createCell(1).setCellValue("step_index");
+            header.createCell(2).setCellValue("step_name");
+            header.createCell(3).setCellValue("name");
+            header.createCell(4).setCellValue("expected");
+            for (int rowIndex = 1; rowIndex <= 40; rowIndex++) {
+                Row row = sheet.createRow(rowIndex);
+                row.createCell(0).setCellValue("case-" + rowIndex);
+                row.createCell(1).setCellValue(rowIndex);
+                row.createCell(2).setCellValue("ordinary step " + rowIndex + " with enough text to exceed trim limit");
+                row.createCell(3).setCellValue("ordinary scenario " + rowIndex);
+                row.createCell(4).setCellValue("ordinary expected " + rowIndex);
+            }
+            Row sentinel = sheet.createRow(41);
+            sentinel.createCell(0).setCellValue("case-100997");
+            sentinel.createCell(1).setCellValue(9);
+            sentinel.createCell(2).setCellValue("asset_lock(9张券应全部解锁)");
+            sentinel.createCell(3).setCellValue("10张券异常解锁");
+            sentinel.createCell(4).setCellValue("9张券全部正常解锁");
             try (OutputStream outputStream = Files.newOutputStream(excelPath)) {
                 workbook.write(outputStream);
             }

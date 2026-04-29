@@ -8,6 +8,8 @@ import org.apache.pdfbox.text.PDFTextStripper;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -22,6 +24,10 @@ public class PdfTextExtractor {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
+    private final PaginatedTextCleaner paginatedTextCleaner = new PaginatedTextCleaner();
+
+    private final PdfPositionedTextTableExtractor tableExtractor = new PdfPositionedTextTableExtractor();
+
     /**
      * 抽取 PDF 文本。
      *
@@ -32,26 +38,41 @@ public class PdfTextExtractor {
     public SourceExtractionResult extract(Path pdfPath) throws IOException {
         try (PDDocument document = Loader.loadPDF(pdfPath.toFile())) {
             PDFTextStripper textStripper = new PDFTextStripper();
-            StringBuilder contentBuilder = new StringBuilder();
+            textStripper.setSortByPosition(true);
+            List<String> pageTexts = new ArrayList<String>();
+            List<String> pageTableTexts = tableExtractor.extractPageTables(document);
             int pageCount = document.getNumberOfPages();
             for (int pageIndex = 1; pageIndex <= pageCount; pageIndex++) {
                 textStripper.setStartPage(pageIndex);
                 textStripper.setEndPage(pageIndex);
-                String pageText = textStripper.getText(document).trim();
-                if (pageText.isEmpty()) {
-                    continue;
-                }
-                if (contentBuilder.length() > 0) {
-                    contentBuilder.append("\n\n");
-                }
-                contentBuilder.append("=== Page: ").append(pageIndex).append(" ===").append("\n");
-                contentBuilder.append(pageText);
+                String rawPageText = textStripper.getText(document).trim();
+                String pageTableText = pageTableTexts.get(pageIndex - 1);
+                String pageText = combinePageText(rawPageText, pageTableText);
+                pageTexts.add(pageText);
             }
-            if (contentBuilder.length() == 0) {
+            String content = paginatedTextCleaner.cleanAndJoin(pageTexts);
+            if (content.isBlank()) {
                 return null;
             }
-            return new SourceExtractionResult(contentBuilder.toString(), buildMetadataJson(pageCount), true);
+            return new SourceExtractionResult(content, buildMetadataJson(pageCount), true);
         }
+    }
+
+    /**
+     * 合并普通文本与坐标表格补充文本。
+     *
+     * @param rawPageText 普通文本
+     * @param pageTableText 坐标表格补充文本
+     * @return 合并后的单页文本
+     */
+    private String combinePageText(String rawPageText, String pageTableText) {
+        if (pageTableText == null || pageTableText.isBlank()) {
+            return rawPageText == null ? "" : rawPageText;
+        }
+        if (rawPageText == null || rawPageText.isBlank()) {
+            return pageTableText.trim();
+        }
+        return rawPageText.trim() + "\n\n" + pageTableText.trim();
     }
 
     /**
