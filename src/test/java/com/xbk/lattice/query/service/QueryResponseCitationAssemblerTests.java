@@ -1,7 +1,15 @@
 package com.xbk.lattice.query.service;
 
 import com.xbk.lattice.api.query.QueryArticleResponse;
+import com.xbk.lattice.api.query.QueryCitationMarkerResponse;
 import com.xbk.lattice.api.query.QuerySourceResponse;
+import com.xbk.lattice.query.citation.Citation;
+import com.xbk.lattice.query.citation.CitationCheckReport;
+import com.xbk.lattice.query.citation.CitationCheckService;
+import com.xbk.lattice.query.citation.CitationExtractor;
+import com.xbk.lattice.query.citation.CitationSourceType;
+import com.xbk.lattice.query.citation.CitationValidationResult;
+import com.xbk.lattice.query.citation.CitationValidationStatus;
 import com.xbk.lattice.query.evidence.domain.AnswerProjection;
 import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import com.xbk.lattice.query.evidence.domain.ProjectionCitationFormat;
@@ -20,6 +28,222 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author xiexu
  */
 class QueryResponseCitationAssemblerTests {
+
+    /**
+     * 验证 citation marker 会把同一处连续引用合并成一个圆点语义，并保留资料明细。
+     */
+    @Test
+    void shouldBuildCitationMarkersForInlineCitationGroup() {
+        QueryArticleHit articleHit = new QueryArticleHit(
+                11L,
+                "payment-routing",
+                "payment-routing",
+                "Payment Routing",
+                "RoutePlanner 暴露了 /payments 路径",
+                "{\"description\":\"payment routing\"}",
+                List.of("src/main/java/payment/RoutePlanner.java"),
+                10.0D
+        );
+        QueryArticleHit sourceHit = new QueryArticleHit(
+                QueryEvidenceType.SOURCE,
+                null,
+                null,
+                "src/main/java/payment/RoutePlanner.java",
+                "RoutePlanner.java",
+                "RoutePlanner 暴露了 /payments 路径",
+                "{\"filePath\":\"src/main/java/payment/RoutePlanner.java\"}",
+                List.of("src/main/java/payment/RoutePlanner.java"),
+                9.5D
+        );
+        String answer = "RoutePlanner 暴露了 /payments 路径 [[payment-routing]][→ src/main/java/payment/RoutePlanner.java]";
+        AnswerProjectionBundle answerProjectionBundle = new AnswerProjectionBundle(
+                answer,
+                List.of(
+                        new AnswerProjection(
+                                1,
+                                "query-top-k:ARTICLE:payment-routing",
+                                ProjectionCitationFormat.ARTICLE,
+                                "[[payment-routing]]",
+                                "payment-routing",
+                                ProjectionStatus.ACTIVE,
+                                0,
+                                null
+                        ),
+                        new AnswerProjection(
+                                2,
+                                "query-top-k:SOURCE_FILE:src/main/java/payment/RoutePlanner.java",
+                                ProjectionCitationFormat.SOURCE_FILE,
+                                "[→ src/main/java/payment/RoutePlanner.java]",
+                                "src/main/java/payment/RoutePlanner.java",
+                                ProjectionStatus.ACTIVE,
+                                0,
+                                null
+                        )
+                )
+        );
+        CitationCheckReport citationCheckReport = new CitationCheckService(
+                new CitationExtractor(),
+                new FixedCitationValidator()
+        ).check(answer, answerProjectionBundle);
+
+        List<QueryCitationMarkerResponse> markers = QueryResponseCitationAssembler.toCitationMarkerResponses(
+                citationCheckReport,
+                answerProjectionBundle,
+                List.of(articleHit, sourceHit)
+        );
+
+        assertThat(markers).hasSize(1);
+        assertThat(markers.get(0).getCitationLiteral())
+                .isEqualTo("[[payment-routing]][→ src/main/java/payment/RoutePlanner.java]");
+        assertThat(markers.get(0).getSourceCount()).isEqualTo(2);
+        assertThat(markers.get(0).getSources()).hasSize(2);
+        assertThat(markers.get(0).getSources()).extracting(source -> source.getSourceType())
+                .containsExactly("ARTICLE", "SOURCE_FILE");
+        assertThat(markers.get(0).getSources().get(1).getTitle())
+                .isEqualTo("src/main/java/payment/RoutePlanner.java");
+    }
+
+    /**
+     * 验证 citation marker 会用原文中带行号的 SOURCE_FILE 引用作为替换范围。
+     */
+    @Test
+    void shouldBuildCitationMarkerLiteralWithLineScopedSourceCitation() {
+        QueryArticleHit articleHit = new QueryArticleHit(
+                11L,
+                "payment-routing",
+                "payment-routing",
+                "Payment Routing",
+                "RoutePlanner 暴露了 /payments 路径",
+                "{\"description\":\"payment routing\"}",
+                List.of("src/main/java/payment/RoutePlanner.java"),
+                10.0D
+        );
+        QueryArticleHit sourceHit = new QueryArticleHit(
+                QueryEvidenceType.SOURCE,
+                null,
+                null,
+                "src/main/java/payment/RoutePlanner.java",
+                "RoutePlanner.java",
+                "RoutePlanner 暴露了 /payments 路径",
+                "{\"filePath\":\"src/main/java/payment/RoutePlanner.java\"}",
+                List.of("src/main/java/payment/RoutePlanner.java"),
+                9.5D
+        );
+        String answer = "RoutePlanner 暴露了 /payments 路径 [[payment-routing]]"
+                + " [→ src/main/java/payment/RoutePlanner.java, lines 12-24]";
+        AnswerProjectionBundle answerProjectionBundle = new AnswerProjectionBundle(
+                answer,
+                List.of(
+                        new AnswerProjection(
+                                1,
+                                "query-top-k:ARTICLE:payment-routing",
+                                ProjectionCitationFormat.ARTICLE,
+                                "[[payment-routing]]",
+                                "payment-routing",
+                                ProjectionStatus.ACTIVE,
+                                0,
+                                null
+                        ),
+                        new AnswerProjection(
+                                2,
+                                "query-top-k:SOURCE_FILE:src/main/java/payment/RoutePlanner.java",
+                                ProjectionCitationFormat.SOURCE_FILE,
+                                "[→ src/main/java/payment/RoutePlanner.java]",
+                                "src/main/java/payment/RoutePlanner.java",
+                                ProjectionStatus.ACTIVE,
+                                0,
+                                null
+                        )
+                )
+        );
+        CitationCheckReport citationCheckReport = new CitationCheckService(
+                new CitationExtractor(),
+                new FixedCitationValidator()
+        ).check(answer, answerProjectionBundle);
+
+        List<QueryCitationMarkerResponse> markers = QueryResponseCitationAssembler.toCitationMarkerResponses(
+                citationCheckReport,
+                answerProjectionBundle,
+                List.of(articleHit, sourceHit)
+        );
+
+        assertThat(markers).hasSize(1);
+        assertThat(markers.get(0).getCitationLiteral())
+                .isEqualTo("[[payment-routing]] [→ src/main/java/payment/RoutePlanner.java, lines 12-24]");
+        assertThat(markers.get(0).getCitationLiterals())
+                .containsExactly("[[payment-routing]]", "[→ src/main/java/payment/RoutePlanner.java]");
+    }
+
+    /**
+     * 验证 citation marker 会把章节说明也纳入完整替换范围，避免正文残留原始引用尾巴。
+     */
+    @Test
+    void shouldBuildCitationMarkerLiteralWithSourceSectionSuffix() {
+        QueryArticleHit articleHit = new QueryArticleHit(
+                11L,
+                "fc-fulfillment-digital",
+                "fc-fulfillment-digital",
+                "FC 履约中台",
+                "FC 是履约中台系统",
+                "{\"description\":\"fc fulfillment\"}",
+                List.of("卡券三期-迁移方案.md"),
+                10.0D
+        );
+        QueryArticleHit sourceHit = new QueryArticleHit(
+                QueryEvidenceType.SOURCE,
+                null,
+                null,
+                "卡券三期-迁移方案.md",
+                "卡券三期-迁移方案.md",
+                "FC 是履约中台系统",
+                "{\"filePath\":\"卡券三期-迁移方案.md\"}",
+                List.of("卡券三期-迁移方案.md"),
+                9.5D
+        );
+        String answer = "FC 是履约中台 [[fc-fulfillment-digital]]"
+                + "[→ 卡券三期-迁移方案.md, 1.1 业务背景]";
+        AnswerProjectionBundle answerProjectionBundle = new AnswerProjectionBundle(
+                answer,
+                List.of(
+                        new AnswerProjection(
+                                1,
+                                "query-top-k:ARTICLE:fc-fulfillment-digital",
+                                ProjectionCitationFormat.ARTICLE,
+                                "[[fc-fulfillment-digital]]",
+                                "fc-fulfillment-digital",
+                                ProjectionStatus.ACTIVE,
+                                0,
+                                null
+                        ),
+                        new AnswerProjection(
+                                2,
+                                "query-top-k:SOURCE_FILE:卡券三期-迁移方案.md",
+                                ProjectionCitationFormat.SOURCE_FILE,
+                                "[→ 卡券三期-迁移方案.md]",
+                                "卡券三期-迁移方案.md",
+                                ProjectionStatus.ACTIVE,
+                                0,
+                                null
+                        )
+                )
+        );
+        CitationCheckReport citationCheckReport = new CitationCheckService(
+                new CitationExtractor(),
+                new FixedCitationValidator()
+        ).check(answer, answerProjectionBundle);
+
+        List<QueryCitationMarkerResponse> markers = QueryResponseCitationAssembler.toCitationMarkerResponses(
+                citationCheckReport,
+                answerProjectionBundle,
+                List.of(articleHit, sourceHit)
+        );
+
+        assertThat(markers).hasSize(1);
+        assertThat(markers.get(0).getCitationLiteral())
+                .isEqualTo("[[fc-fulfillment-digital]][→ 卡券三期-迁移方案.md, 1.1 业务背景]");
+        assertThat(markers.get(0).getCitationLiterals())
+                .containsExactly("[[fc-fulfillment-digital]]", "[→ 卡券三期-迁移方案.md]");
+    }
 
     /**
      * 验证同一 article 同时出现 ARTICLE 与 SOURCE_FILE projection 时，只保留 article 级来源。
@@ -299,5 +523,45 @@ class QueryResponseCitationAssemblerTests {
         assertThat(sourceResponses.get(0).getArticleKey()).isEqualTo("legacy-default--readme");
         assertThat(sourceResponses.get(0).getSourcePaths()).containsExactly("README.md");
         assertThat(sourceResponses.get(0).getDerivation()).isEqualTo("TOP_K");
+    }
+
+    private static class FixedCitationValidator extends com.xbk.lattice.query.citation.CitationValidator {
+
+        /**
+         * 创建固定结果 citation 校验器。
+         */
+        private FixedCitationValidator() {
+            super(null, null);
+        }
+
+        /**
+         * 返回固定 citation 校验结果。
+         *
+         * @param citation 引用
+         * @return 校验结果
+         */
+        @Override
+        public CitationValidationResult validate(Citation citation) {
+            if (citation.getSourceType() == CitationSourceType.SOURCE_FILE) {
+                return new CitationValidationResult(
+                        citation.getTargetKey(),
+                        citation.getSourceType(),
+                        CitationValidationStatus.SKIPPED,
+                        0.0D,
+                        "source_file_skip",
+                        citation.getContextWindow(),
+                        citation.getOrdinal()
+                );
+            }
+            return new CitationValidationResult(
+                    citation.getTargetKey(),
+                    citation.getSourceType(),
+                    CitationValidationStatus.VERIFIED,
+                    0.8D,
+                    "rule_overlap_verified",
+                    citation.getContextWindow(),
+                    citation.getOrdinal()
+            );
+        }
     }
 }

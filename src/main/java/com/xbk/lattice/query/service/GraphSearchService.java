@@ -232,6 +232,7 @@ public class GraphSearchService {
                 title,
                 groundingPack.getFactsBlock(),
                 metadataJson,
+                null,
                 groundingPack.getSourcePaths(),
                 groundingPack.getScore()
         );

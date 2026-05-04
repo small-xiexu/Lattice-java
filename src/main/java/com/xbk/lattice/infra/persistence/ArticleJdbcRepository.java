@@ -79,7 +79,8 @@ public class ArticleJdbcRepository {
                     review_status = excluded.review_status,
                     search_text = excluded.search_text,
                     search_tsv = excluded.search_tsv,
-                    refkey_text = excluded.refkey_text
+                    refkey_text = excluded.refkey_text,
+                    updated_at = CURRENT_TIMESTAMP
                 """;
         jdbcTemplate.update(connection -> {
             Array sourcePathsArray = connection.createArrayOf(
@@ -133,12 +134,12 @@ public class ArticleJdbcRepository {
      */
     public Optional<ArticleRecord> findByConceptId(String conceptId) {
         String sql = """
-                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
+                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at, created_at, updated_at,
                        source_paths, metadata_json, summary, referential_keywords, depends_on,
                        related, confidence, review_status
                 from articles
                 where concept_id = ?
-                order by compiled_at desc, article_key asc
+                order by updated_at desc, article_key asc
                 limit 1
                 """;
         List<ArticleRecord> articleRecords = jdbcTemplate.query(sql, this::mapArticleRecord, conceptId);
@@ -156,7 +157,7 @@ public class ArticleJdbcRepository {
      */
     public Optional<ArticleRecord> findByArticleKey(String articleKey) {
         String sql = """
-                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
+                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at, created_at, updated_at,
                        source_paths, metadata_json, summary, referential_keywords, depends_on,
                        related, confidence, review_status
                 from articles
@@ -178,7 +179,7 @@ public class ArticleJdbcRepository {
      */
     public Optional<ArticleRecord> findBySourceIdAndConceptId(Long sourceId, String conceptId) {
         String sql = """
-                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
+                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at, created_at, updated_at,
                        source_paths, metadata_json, summary, referential_keywords, depends_on,
                        related, confidence, review_status
                 from articles
@@ -211,7 +212,8 @@ public class ArticleJdbcRepository {
                             'summary', ?,
                             'marked_at', to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
                         ))
-                )
+                ),
+                    updated_at = CURRENT_TIMESTAMP
                 where concept_id = ?
         """;
         jdbcTemplate.update(sql, fromConceptId, correctionSummary, conceptId);
@@ -269,7 +271,7 @@ public class ArticleJdbcRepository {
      */
     public List<ArticleRecord> findWithUpstreamCorrections(String fromConceptId) {
         String sql = """
-                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
+                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at, created_at, updated_at,
                        source_paths, metadata_json, summary, referential_keywords, depends_on,
                        related, confidence, review_status
                 from articles
@@ -294,7 +296,7 @@ public class ArticleJdbcRepository {
             return List.of();
         }
         String sql = """
-                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
+                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at, created_at, updated_at,
                        source_paths, metadata_json, summary, referential_keywords, depends_on,
                        related, confidence, review_status
                 from articles
@@ -328,7 +330,8 @@ public class ArticleJdbcRepository {
                         from jsonb_array_elements(coalesce(metadata_json::jsonb->'upstream_corrections', '[]'::jsonb)) as elem
                         where elem->>'from' <> ?
                     )
-                )
+                ),
+                    updated_at = CURRENT_TIMESTAMP
                 where concept_id = ?
         """;
         jdbcTemplate.update(sql, fromConceptId, downstreamConceptId);
@@ -377,11 +380,11 @@ public class ArticleJdbcRepository {
      */
     public List<ArticleRecord> findAll() {
         String sql = """
-                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
+                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at, created_at, updated_at,
                        source_paths, metadata_json, summary, referential_keywords, depends_on,
                        related, confidence, review_status
                 from articles
-                order by source_id asc nulls first, compiled_at desc, article_key asc
+                order by source_id asc nulls first, updated_at desc, article_key asc
                 """;
         return jdbcTemplate.query(sql, this::mapArticleRecord);
     }
@@ -420,7 +423,9 @@ public class ArticleJdbcRepository {
                 readTextArray(resultSet, "depends_on"),
                 readTextArray(resultSet, "related"),
                 resultSet.getString("confidence"),
-                resultSet.getString("review_status")
+                resultSet.getString("review_status"),
+                resultSet.getObject("created_at", OffsetDateTime.class),
+                resultSet.getObject("updated_at", OffsetDateTime.class)
         );
     }
 

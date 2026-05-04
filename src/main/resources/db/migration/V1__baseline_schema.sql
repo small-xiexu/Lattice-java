@@ -1543,7 +1543,7 @@ BEGIN
                 embedding_dimensions INTEGER NOT NULL,
                 index_version VARCHAR(64) NOT NULL,
                 content_hash VARCHAR(64) NOT NULL,
-                embedding %s(1536) NOT NULL,
+                embedding %s(2000) NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             )',
             vector_type_name
@@ -1563,7 +1563,7 @@ BEGIN
                 chunk_index INTEGER NOT NULL,
                 model_profile_id BIGINT NOT NULL REFERENCES llm_model_profiles (id),
                 content_hash VARCHAR(64) NOT NULL,
-                embedding %s(1536) NOT NULL,
+                embedding %s(2000) NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             )',
             vector_type_name
@@ -1578,7 +1578,7 @@ BEGIN
                 model_profile_id BIGINT NOT NULL REFERENCES llm_model_profiles (id),
                 embedding_dimensions INTEGER NOT NULL,
                 content_hash VARCHAR(64) NOT NULL,
-                embedding %s(1536) NOT NULL,
+                embedding %s(2000) NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             )',
             vector_type_name

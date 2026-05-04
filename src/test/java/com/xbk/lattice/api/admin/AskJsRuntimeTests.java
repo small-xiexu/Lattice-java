@@ -129,6 +129,86 @@ class AskJsRuntimeTests {
                 ], []);
                 assert(cards.length === 2, "secondary source cards should deduplicate identical sources");
 
+                const exactLookupFallbackMeta = ask.getFallbackReasonMeta("DETERMINISTIC_EXACT_LOOKUP_PREFERRED");
+                assert(exactLookupFallbackMeta.note.includes("精确查值"),
+                    "fallback reason meta should explain deterministic exact lookup fallback");
+                const invalidOutputFallbackMeta = ask.getFallbackReasonMeta("LLM_OUTPUT_INVALID");
+                assert(invalidOutputFallbackMeta.note.includes("输出格式"),
+                    "fallback reason meta should explain invalid structured output fallback");
+
+                const renderedAnswer = ask.renderMarkdownLite(
+                    "RoutePlanner 暴露了 /payments 路径 [[payment-routing]][→ src/main/java/payment/RoutePlanner.java]",
+                    [
+                        {
+                            markerOrdinal: 1,
+                            markerId: "citation-marker-1",
+                            citationLiteral: "[[payment-routing]][→ src/main/java/payment/RoutePlanner.java]",
+                            citationLiterals: [
+                                "[[payment-routing]]",
+                                "[→ src/main/java/payment/RoutePlanner.java]"
+                            ],
+                            sourceCount: 2,
+                            sources: [
+                                {
+                                    sourceType: "ARTICLE",
+                                    title: "Payment Routing",
+                                    sourcePaths: ["src/main/java/payment/RoutePlanner.java"],
+                                    matchedExcerpt: "RoutePlanner 暴露了 /payments 路径",
+                                    validationStatus: "VERIFIED"
+                                },
+                                {
+                                    sourceType: "SOURCE_FILE",
+                                    title: "RoutePlanner.java",
+                                    sourcePaths: ["src/main/java/payment/RoutePlanner.java"],
+                                    matchedExcerpt: "RoutePlanner 暴露了 /payments 路径",
+                                    validationStatus: "SKIPPED"
+                                }
+                            ]
+                        }
+                    ]
+                );
+                assert(renderedAnswer.includes("citation-marker-count"), "answer should render citation marker count");
+                assert(renderedAnswer.includes(">2<"), "citation marker count should show cited source count");
+                assert(renderedAnswer.includes("Payment Routing"), "citation popover should include source title");
+                assert(renderedAnswer.includes("这处引用 · 2 份资料"), "citation popover should show source count");
+                assert(!renderedAnswer.includes("[[payment-routing]]"),
+                    "answer should hide raw article citation literal when marker metadata exists");
+
+                const renderedSourceSectionAnswer = ask.renderMarkdownLite(
+                    "FC 是履约中台 [[fc-fulfillment-digital]][→ 卡券三期-迁移方案.md, 1.1 业务背景]",
+                    [
+                        {
+                            markerOrdinal: 1,
+                            markerId: "citation-marker-1",
+                            citationLiteral: "[[fc-fulfillment-digital]][→ 卡券三期-迁移方案.md, 1.1 业务背景]",
+                            citationLiterals: [
+                                "[[fc-fulfillment-digital]]",
+                                "[→ 卡券三期-迁移方案.md]"
+                            ],
+                            sourceCount: 1,
+                            sources: [
+                                {
+                                    sourceType: "ARTICLE",
+                                    title: "卡券三期-迁移方案.md",
+                                    sourcePaths: ["卡券三期-迁移方案.md"],
+                                    matchedExcerpt: "FC 是履约中台系统",
+                                    validationStatus: "VERIFIED"
+                                }
+                            ]
+                        }
+                    ]
+                );
+                assert(renderedSourceSectionAnswer.includes("citation-marker-count"),
+                    "section-scoped citation should render marker count");
+                assert(!renderedSourceSectionAnswer.includes("[[fc-fulfillment-digital]]"),
+                    "section-scoped answer should hide raw article literal");
+                assert(!renderedSourceSectionAnswer.includes("1.1 业务背景"),
+                    "section-scoped answer should hide source section suffix from body");
+                assert(ask.shouldAlignCitationPopoverRight({left: 900}, 1000),
+                    "citation popover should align right near viewport edge");
+                assert(!ask.shouldAlignCitationPopoverRight({left: 120}, 1000),
+                    "citation popover should keep default placement when there is enough room");
+
                 ask.setCanAsk(true);
                 ask.setSubmitting(true);
                 assert(elements["submit-question"].disabled === true,

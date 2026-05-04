@@ -73,6 +73,7 @@ public class FtsSearchService {
                        a.title,
                        a.content,
                        a.metadata_json::text as metadata_json,
+                       a.review_status,
                        a.source_paths,
                        ts_rank_cd(a.search_tsv, query.tsq) as score
                 from articles a
@@ -106,6 +107,7 @@ public class FtsSearchService {
                 resultSet.getString("title"),
                 resultSet.getString("content"),
                 resultSet.getString("metadata_json"),
+                resultSet.getString("review_status"),
                 readSourcePaths(resultSet),
                 resultSet.getDouble("score")
         );

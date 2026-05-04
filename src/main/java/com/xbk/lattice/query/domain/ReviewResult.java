@@ -73,7 +73,7 @@ public class ReviewResult {
      * @return 审查结果
      */
     public static ReviewResult parseFailed() {
-        return new ReviewResult(true, ReviewStatus.PARSE_FAILED, List.of());
+        return new ReviewResult(false, ReviewStatus.PARSE_FAILED, List.of());
     }
 
     /**
@@ -82,7 +82,7 @@ public class ReviewResult {
      * @return 审查结果
      */
     public static ReviewResult timeoutFallback() {
-        return new ReviewResult(true, ReviewStatus.TIMEOUT_FALLBACK, List.of());
+        return new ReviewResult(false, ReviewStatus.TIMEOUT_FALLBACK, List.of());
     }
 
     /**

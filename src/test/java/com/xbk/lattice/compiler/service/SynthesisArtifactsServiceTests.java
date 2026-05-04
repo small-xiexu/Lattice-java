@@ -62,8 +62,9 @@ class SynthesisArtifactsServiceTests {
         ));
 
         assertThat(synthesisArtifactStore.records).hasSize(4);
-        assertThat(synthesisArtifactStore.records.get(0).getContent()).contains("# Knowledge Base Index");
-        assertThat(synthesisArtifactStore.records.get(0).getContent()).contains("Payment Timeout");
+        SynthesisArtifactRecord indexRecord = findRecord(synthesisArtifactStore.records, "index");
+        assertThat(indexRecord.getContent()).contains("# Knowledge Base Index");
+        assertThat(indexRecord.getContent()).contains("Payment Timeout");
     }
 
     /**
@@ -92,6 +93,22 @@ class SynthesisArtifactsServiceTests {
         assertThat(synthesisArtifactStore.records).hasSize(4);
         assertThat(llmGateway.getScopedInvocations()).isEqualTo(4);
         assertThat(llmGateway.getBootstrapInvocations()).isZero();
+    }
+
+    /**
+     * 按产物类型查找保存记录。
+     *
+     * @param records 保存记录列表
+     * @param artifactType 产物类型
+     * @return 匹配的保存记录
+     */
+    private SynthesisArtifactRecord findRecord(List<SynthesisArtifactRecord> records, String artifactType) {
+        for (SynthesisArtifactRecord record : records) {
+            if (artifactType.equals(record.getArtifactType())) {
+                return record;
+            }
+        }
+        throw new AssertionError("missing artifact record: " + artifactType);
     }
 
     private LlmGateway createLlmGateway(String compileResponse) {

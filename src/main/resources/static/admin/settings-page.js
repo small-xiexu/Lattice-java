@@ -2318,9 +2318,7 @@
                 || action === "open-settings-parse"
                 || action === "open-settings-sources") {
             const tabName = action.replace("open-", "");
-            if (window.AdminTabs && typeof window.AdminTabs.activate === "function") {
-                window.AdminTabs.activate("admin-console", tabName);
-            }
+            activateSettingsTab(tabName, {scroll: true});
             return;
         }
         if (action === "scroll-settings-overview") {
@@ -2329,6 +2327,13 @@
                 target.scrollIntoView({behavior: "smooth", block: "start"});
             }
         }
+    }
+
+    function activateSettingsTab(tabName, options) {
+        if (!window.AdminTabs || typeof window.AdminTabs.activate !== "function") {
+            return;
+        }
+        window.AdminTabs.activate("admin-console", tabName, options);
     }
 
     function updateSettingsHelpState(patch) {
@@ -2567,6 +2572,7 @@
             getBindingSceneLabel: getBindingSceneLabel,
             getBindingRoleLabel: getBindingRoleLabel,
             getBindingRoleSummary: getBindingRoleSummary,
+            activateSettingsTab: activateSettingsTab,
             getBindingRoleOptions: function (scene) {
                 return LLM_BINDING_ROLE_OPTIONS[scene] || [];
             }

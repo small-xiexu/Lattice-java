@@ -135,9 +135,9 @@ public class QuerySearchProperties {
 
         private Long embeddingModelProfileId;
 
-        private String embeddingModel = "text-embedding-3-small";
+        private String embeddingModel = "embedding-3";
 
-        private int expectedDimensions = 1536;
+        private int expectedDimensions = 2000;
 
         /**
          * 获取是否启用向量检索。

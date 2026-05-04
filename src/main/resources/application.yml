@@ -73,6 +73,61 @@ lattice:
       reviewer-output-price-per-1k-tokens: ${LATTICE_LLM_REVIEWER_OUTPUT_PRICE_PER_1K:0.015000}
   compiler:
     ingest-max-chars: ${LATTICE_COMPILER_INGEST_MAX_CHARS:65536}
+    document-topics:
+      enabled: ${LATTICE_COMPILER_DOCUMENT_TOPICS_ENABLED:true}
+      long-document-min-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_LONG_DOCUMENT_MIN_CHARS:12000}
+      medium-document-min-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MEDIUM_DOCUMENT_MIN_CHARS:6000}
+      min-headings-for-medium-document: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MIN_HEADINGS_FOR_MEDIUM_DOCUMENT:5}
+      min-topic-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MIN_TOPIC_CHARS:700}
+      max-topic-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MAX_TOPIC_CHARS:22000}
+      max-snippet-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MAX_SNIPPET_CHARS:2400}
+      max-section-lines: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MAX_SECTION_LINES:80}
+      max-line-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MAX_LINE_CHARS:280}
+      min-heading-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MIN_HEADING_CHARS:2}
+      max-heading-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MAX_HEADING_CHARS:90}
+      max-layout-heading-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MAX_LAYOUT_HEADING_CHARS:42}
+      min-layout-heading-letters: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MIN_LAYOUT_HEADING_LETTERS:2}
+      nearby-heading-line-distance: ${LATTICE_COMPILER_DOCUMENT_TOPICS_NEARBY_HEADING_LINE_DISTANCE:2}
+      child-heading-max-level: ${LATTICE_COMPILER_DOCUMENT_TOPICS_CHILD_HEADING_MAX_LEVEL:3}
+      page-marker-pattern: '^===\s*Page:\s*(\d+)\s*===$'
+      heading-boundary-pattern: '^[：:\-—\s]+|[：:\-—\s]+$'
+      ignored-line-prefixes:
+        - 'table_row:'
+        - '==='
+      heading-terminal-punctuations:
+        - '。'
+        - '；'
+        - ';'
+        - '，'
+        - ','
+      body-terminal-punctuations:
+        - '。'
+        - '.'
+      heading-patterns:
+        - name: markdown
+          pattern: '^(#{1,6})\s+(.+?)\s*$'
+          title-group: 2
+          fixed-level: 1
+          level-group: 1
+          level-strategy: markdown-prefix-length
+        - name: numeric
+          pattern: '^(\d+(?:\.\d+){0,4})[、.．\s]+(.+?)\s*$'
+          title-group: 2
+          fixed-level: 1
+          level-group: 1
+          level-strategy: numeric-depth
+        - name: chinese-numeric
+          pattern: '^([一二三四五六七八九十百]+)[、.．]\s*(.+?)\s*$'
+          title-group: 2
+          fixed-level: 1
+          level-group: 1
+          level-strategy: fixed
+        - name: parenthesized-chinese-numeric
+          pattern: '^[（(]([一二三四五六七八九十百]+)[）)]\s*(.+?)\s*$'
+          title-group: 2
+          fixed-level: 2
+          level-group: 1
+          level-strategy: fixed
     orchestration:
       default-mode: ${LATTICE_COMPILER_ORCHESTRATION_DEFAULT_MODE:state_graph}
     working-set:
@@ -110,8 +165,8 @@ lattice:
         fallback-ts-config: ${LATTICE_QUERY_SEARCH_FTS_FALLBACK:simple}
       vector:
         enabled: ${LATTICE_QUERY_SEARCH_VECTOR_ENABLED:true}
-        embedding-model: ${LATTICE_QUERY_SEARCH_VECTOR_MODEL:text-embedding-3-small}
-        expected-dimensions: ${LATTICE_QUERY_SEARCH_VECTOR_DIMENSIONS:1536}
+        embedding-model: ${LATTICE_QUERY_SEARCH_VECTOR_MODEL:embedding-3}
+        expected-dimensions: ${LATTICE_QUERY_SEARCH_VECTOR_DIMENSIONS:2000}
   source:
     admin:
       staging-root-dir: ${LATTICE_SOURCE_ADMIN_STAGING_ROOT_DIR:${java.io.tmpdir}/lattice-source-sync}

@@ -1,35 +1,30 @@
 (function () {
-    const RUN_POLLING_STATUSES = ["MATCHING", "MATERIALIZING", "COMPILE_QUEUED", "QUEUED", "RUNNING"];
     const PROCESSING_TASK_LIST_LIMIT = 50;
     const PROCESSING_TASK_POLL_INTERVAL_MS = 3000;
     const PROCESSING_TASK_RETRY_INTERVAL_MS = 6000;
-    const COMPILE_STEP_LABELS = Object.freeze({
-        INITIALIZE_JOB: "初始化任务",
-        INGEST_SOURCES: "读取资料文件",
-        PERSIST_SOURCE_FILES: "登记资料文件",
-        PERSIST_SOURCE_FILE_CHUNKS: "切分原始资料",
-        EXTRACT_AST_GRAPH: "提取代码结构图谱",
-        GROUP_SOURCES: "整理资料分组",
-        SPLIT_BATCHES: "拆分分析批次",
-        ANALYZE_BATCHES: "分析知识点",
-        MERGE_CONCEPTS: "合并概念",
-        ENHANCE_EXISTING_ARTICLES: "补强已有文章",
-        COMPILE_NEW_ARTICLES: "生成文章草稿",
-        REVIEW_ARTICLES: "审查文章草稿",
-        FIX_REVIEW_ISSUES: "修复审查问题",
-        PERSIST_ARTICLES: "写入知识库",
-        REBUILD_ARTICLE_CHUNKS: "重建知识切片",
-        REFRESH_VECTOR_INDEX: "刷新向量索引",
-        REBUILD_ARTICLE_VECTORS: "刷新文章向量",
-        REBUILD_SOURCE_VECTORS: "刷新资料向量",
-        GENERATE_SYNTHESIS_ARTIFACTS: "生成知识库综合产物",
-        CAPTURE_REPO_SNAPSHOT: "记录仓库快照",
-        FINALIZE_JOB: "完成收口"
-    });
     const UPLOAD_SUPPORTED_EXTENSIONS = Object.freeze(new Set([
         "doc", "docx", "pptx", "pdf", "xlsx", "xls", "csv",
         "md", "markdown", "txt", "json", "html", "xml",
         "yml", "yaml", "properties", "js", "css", "java", "sh", "py"
+    ]));
+    const RUN_REASON_SUMMARY_DISPLAY_STATUSES = Object.freeze(new Set([
+        "FAILED",
+        "STALLED",
+        "WAIT_CONFIRM",
+        "SKIPPED_NO_CHANGE",
+        "QUEUED",
+        "PENDING"
+    ]));
+    const RUN_BOARD_FOCUS_STATUSES = Object.freeze(new Set([
+        "RUNNING",
+        "QUEUED",
+        "MATCHING",
+        "MATERIALIZING",
+        "COMPILE_QUEUED",
+        "PENDING",
+        "FAILED",
+        "STALLED",
+        "WAIT_CONFIRM"
     ]));
 
     const state = {
@@ -37,6 +32,8 @@
         selectedArticleSourceId: null,
         selectedSourceId: null,
         selectedSourceRunKey: null,
+        selectedSourceRunMode: "auto",
+        latestSourceRunKey: null,
         selectedSourceFilePath: null,
         overview: null,
         health: null,
@@ -71,7 +68,9 @@
         bindIfPresent("refresh-summary", "click", refreshSummary);
         bindIfPresent("refresh-health", "click", refreshHealth);
         bindIfPresent("scroll-workbench-top", "click", scrollToWorkbenchTop);
-        bindIfPresent("refresh-jobs", "click", loadProcessingTasks);
+        bindIfPresent("refresh-jobs", "click", function () {
+            loadProcessingTasks({background: false});
+        });
         bindIfPresent("refresh-sources", "click", loadSources);
         bindIfPresent("search-articles", "click", loadArticles);
         bindIfPresent("article-source-filter", "change", loadArticles);
@@ -113,13 +112,13 @@
             return;
         }
         if (processingTaskAutoRefreshActive || hasActiveProcessingTasks(state.recentRuns)) {
-            loadProcessingTasks();
+            loadProcessingTasks({background: true});
         }
     }
 
     function handleProcessingTaskWindowFocus() {
         if (!isDocumentHidden() && (processingTaskAutoRefreshActive || hasActiveProcessingTasks(state.recentRuns))) {
-            loadProcessingTasks();
+            loadProcessingTasks({background: true});
         }
     }
 
@@ -534,11 +533,11 @@
         return value.toFixed(digits) + " " + units[index];
     }
 
-    function activateKnowledgeTab(tabName) {
+    function activateKnowledgeTab(tabName, options) {
         if (!window.AdminTabs || typeof window.AdminTabs.activate !== "function") {
             return;
         }
-        window.AdminTabs.activate("knowledge-console", tabName);
+        window.AdminTabs.activate("knowledge-console", tabName, options);
     }
 
     function scrollToWorkbenchTop() {
@@ -599,7 +598,7 @@
         await loadSources();
         await Promise.all([
             loadSourceCredentials(),
-            loadProcessingTasks(),
+            loadProcessingTasks({background: false}),
             loadArticles()
         ]);
         applyGitAccessMode(resolveGitAccessMode());
@@ -686,6 +685,11 @@
             return;
         }
         try {
+            if (state.selectedSourceId !== sourceId) {
+                state.selectedSourceRunMode = "auto";
+                state.selectedSourceRunKey = null;
+                state.latestSourceRunKey = null;
+            }
             state.selectedSourceId = sourceId;
             const results = await Promise.all([
                 fetchJson("/api/v1/admin/sources/" + encodeURIComponent(sourceId)),
@@ -700,21 +704,26 @@
         }
     }
 
-    async function loadProcessingTasks() {
+    async function loadProcessingTasks(options) {
+        const backgroundRefresh = Boolean(options && options.background);
         clearProcessingTaskPollingTimer();
         if (processingTaskPollingInFlight) {
-            renderProcessingTaskRefreshStatus("loading");
+            if (!backgroundRefresh || !processingTaskLastRefreshedAt) {
+                renderProcessingTaskRefreshStatus("loading");
+            }
             return;
         }
         processingTaskPollingInFlight = true;
-        renderProcessingTaskRefreshStatus("loading");
+        if (!backgroundRefresh || !processingTaskLastRefreshedAt) {
+            renderProcessingTaskRefreshStatus("loading");
+        }
         try {
             const response = await fetchJson("/api/v1/admin/processing-tasks?limit=" + PROCESSING_TASK_LIST_LIMIT);
             const items = response && response.items ? response.items : [];
             state.recentRunSummary = response && response.summary ? response.summary : null;
             state.recentRuns = items;
             processingTaskLastRefreshedAt = new Date();
-            renderRecentRunOverview(state.recentRunSummary, items);
+            renderRecentRunOverview(state.recentRunSummary);
             renderRecentRunBoard(items);
             renderKnowledgeHelpSystem();
             updateProcessingTaskAutoRefresh(items);
@@ -754,14 +763,14 @@
     }
 
     function isActiveProcessingTask(item) {
-        return RUN_POLLING_STATUSES.indexOf(resolveRunDisplayStatus(item)) >= 0;
+        return Boolean(item && item.processingActive);
     }
 
     function scheduleProcessingTaskPolling(delayMs) {
         clearProcessingTaskPollingTimer();
         processingTaskPollingTimer = window.setTimeout(function () {
             processingTaskPollingTimer = null;
-            loadProcessingTasks();
+            loadProcessingTasks({background: true});
         }, delayMs);
     }
 
@@ -1021,6 +1030,11 @@
             setStatus("请先选择一个资料源", "warning");
             return;
         }
+        const selectedSource = findSourceById(state.sources, state.selectedSourceId);
+        if (isUploadSource(selectedSource)) {
+            setStatus("上传型资料源不支持再次同步，请重新上传或使用重建知识切片入口", "warning");
+            return;
+        }
         try {
             const run = await requestSourceSync(state.selectedSourceId);
             activateKnowledgeTab("knowledge-runs");
@@ -1033,6 +1047,12 @@
 
     async function requestSourceSync(sourceId) {
         return fetchJson("/api/v1/admin/sources/" + encodeURIComponent(sourceId) + "/sync", {
+            method: "POST"
+        });
+    }
+
+    async function requestSourceRunRetry(runId) {
+        return fetchJson("/api/v1/admin/source-runs/" + encodeURIComponent(runId) + "/retry", {
             method: "POST"
         });
     }
@@ -1079,17 +1099,17 @@
         }
         state.activeRunId = run.runId;
         await refreshPage();
-        if (isPollingStatus(run.status)) {
+        if (Boolean(run.processingActive)) {
             setStatus(submittedMessage + "，页面会自动刷新结果。", "info", false);
             startRunPolling(run.runId);
             return;
         }
-        if (normalizeStatus(run.status) === "WAIT_CONFIRM") {
+        if (Boolean(run.requiresManualAction)) {
             activateKnowledgeTab("knowledge-runs");
-            setStatus("资料包需要人工确认归并方式，请在“当前处理任务”卡片中处理。", "warning", true);
+            setStatus(String(run.completionNotice || "资料包需要人工确认归并方式，请在“当前处理任务”卡片中处理。"), "warning", true);
             return;
         }
-        setStatus(buildRunCompletionMessage(run), resolveRunNoticeTone(run), run.status === "FAILED");
+        setStatus(buildRunCompletionMessage(run), resolveRunNoticeTone(run), resolveRunDisplayStatus(run) === "FAILED");
     }
 
     function startRunPolling(runId) {
@@ -1112,17 +1132,17 @@
         try {
             const run = await fetchJson("/api/v1/admin/source-runs/" + encodeURIComponent(runId));
             await refreshPage();
-            if (isPollingStatus(run.status)) {
+            if (Boolean(run.processingActive)) {
                 startRunPolling(runId);
                 return;
             }
             stopRunPolling();
-            if (normalizeStatus(run.status) === "WAIT_CONFIRM") {
+            if (Boolean(run.requiresManualAction)) {
                 activateKnowledgeTab("knowledge-runs");
-                setStatus("资料包需要人工确认归并方式，请在“当前处理任务”卡片中处理。", "warning", true);
+                setStatus(String(run.completionNotice || "资料包需要人工确认归并方式，请在“当前处理任务”卡片中处理。"), "warning", true);
                 return;
             }
-            setStatus(buildRunCompletionMessage(run), resolveRunNoticeTone(run), normalizeStatus(run.status) === "FAILED");
+            setStatus(buildRunCompletionMessage(run), resolveRunNoticeTone(run), resolveRunDisplayStatus(run) === "FAILED");
         }
         catch (error) {
             stopRunPolling();
@@ -1174,7 +1194,7 @@
         }
         const action = trigger.dataset.knowledgeHelpAction;
         if (action === "knowledge-upload" || action === "knowledge-runs" || action === "knowledge-articles") {
-            activateKnowledgeTab(action);
+            activateKnowledgeTab(action, {scroll: true});
             return;
         }
         if (action === "knowledge-status" || action === "workbench-top") {
@@ -1197,6 +1217,11 @@
     }
 
     function deriveKnowledgeHelpState() {
+        const summary = state.recentRunSummary || {};
+        const backendHelpState = summary && typeof summary.helpState === "object" ? summary.helpState : null;
+        if (backendHelpState) {
+            return backendHelpState;
+        }
         const status = state.overview && state.overview.status ? state.overview.status : null;
         if (!status) {
             return {
@@ -1207,77 +1232,6 @@
                     {label: "回到首屏状态", action: "workbench-top", className: "secondary-btn"}
                 ],
                 faqKey: "first-steps"
-            };
-        }
-
-        const runs = Array.isArray(state.recentRuns) ? state.recentRuns.slice().sort(compareRunsByRequestedAtDesc) : [];
-        const stalledRun = runs.find(function (item) {
-            return resolveRunDisplayStatus(item) === "STALLED";
-        });
-        if (stalledRun) {
-            return {
-                tone: "danger",
-                title: "有一批资料疑似卡住了",
-                description: buildKnowledgeHelpDescription(
-                        "当前处理任务已经长时间没有推进，先看当前步骤、最近心跳和原因摘要，再决定是否重新同步资料源。",
-                        buildRunReasonSummary(stalledRun)
-                ),
-                actions: [
-                    {label: "查看当前处理任务", action: "knowledge-runs", className: "primary-btn"},
-                    {label: "回资料导入", action: "knowledge-upload", className: "ghost-btn"}
-                ],
-                faqKey: "upload-delay"
-            };
-        }
-
-        const failedRun = runs.find(function (item) {
-            return resolveRunDisplayStatus(item) === "FAILED" || normalizeStatus(item.status) === "FAILED";
-        });
-        if (failedRun) {
-            return {
-                tone: "danger",
-                title: "最近一次入库失败了",
-                description: buildKnowledgeHelpDescription(
-                        "先看当前处理任务里的原因摘要，再判断是资料格式、解析方式、网络链路还是模型上游异常。",
-                        buildRunReasonSummary(failedRun)
-                ),
-                actions: [
-                    {label: "查看当前处理任务", action: "knowledge-runs", className: "primary-btn"},
-                    {label: "回资料导入", action: "knowledge-upload", className: "ghost-btn"}
-                ],
-                faqKey: "upload-delay"
-            };
-        }
-
-        const waitConfirmRun = runs.find(function (item) {
-            return normalizeStatus(item.status) === "WAIT_CONFIRM";
-        });
-        if (waitConfirmRun) {
-            return {
-                tone: "warning",
-                title: "有一批资料还在等待人工确认",
-                description: "系统已经接收到资料，但还不能自动判断是新建还是合并。先去当前处理任务处理确认，再决定是否继续提问。",
-                actions: [
-                    {label: "去当前处理任务", action: "knowledge-runs", className: "primary-btn"},
-                    {label: "看已入库内容", action: "knowledge-articles", className: "ghost-btn"}
-                ],
-                faqKey: "upload-delay"
-            };
-        }
-
-        const activeRun = runs.find(function (item) {
-            return isPollingStatus(item.status);
-        });
-        if (activeRun) {
-            return {
-                tone: "warning",
-                title: "资料正在处理中",
-                description: "上传成功不等于已经进入可问答状态。先看当前处理任务确认当前阶段，等处理完成后再判断问答结果是否正常。",
-                actions: [
-                    {label: "查看当前处理任务", action: "knowledge-runs", className: "primary-btn"},
-                    {label: "去已入库内容", action: "knowledge-articles", className: "ghost-btn"}
-                ],
-                faqKey: "upload-delay"
             };
         }
 
@@ -1300,7 +1254,7 @@
             return {
                 tone: "warning",
                 title: "资料已经处理过，但还没有进入可问答状态",
-                description: "先去已入库内容搜索标题、摘要或概念词，确认内容是否真的沉淀。如果这里仍为空，说明还需要继续排查同步或解析问题。",
+                description: "请先查看已入库内容；如果这里仍为空，再回到当前处理任务查看后端返回的状态与原因摘要。",
                 actions: [
                     {label: "去已入库内容", action: "knowledge-articles", className: "primary-btn"},
                     {label: "回资料导入", action: "knowledge-upload", className: "ghost-btn"}
@@ -1312,21 +1266,13 @@
         return {
             tone: "success",
             title: "知识库已经可以使用",
-            description: "资料已经进入知识库，现在可以去知识问答直接提问；如果结果不准，再回到这里核对已入库内容和当前处理任务。",
+            description: "资料已经进入知识库。现在可以直接提问；如果结果不准，再回到这里核对已入库内容和当前处理任务。",
             actions: [
                 {label: "去知识问答", action: "go-ask", className: "primary-btn"},
                 {label: "去已入库内容", action: "knowledge-articles", className: "ghost-btn"}
             ],
             faqKey: "cannot-answer"
         };
-    }
-
-    function buildKnowledgeHelpDescription(primary, appendix) {
-        const compactAppendix = String(appendix || "").trim();
-        if (!compactAppendix) {
-            return primary;
-        }
-        return primary + " 最近错误：" + compactHealthMessage(compactAppendix);
     }
 
     function renderKnowledgeHelpCard(helpState) {
@@ -1509,8 +1455,22 @@
             source.lastSyncAt ? "最近同步：" + formatDateTime(source.lastSyncAt) : "最近同步：未执行"
         ].join(" | ");
         document.getElementById("source-detail-config").textContent = prettyJson(source.configJson);
+        updateSourceSyncButton(source);
         renderSourceRunList(state.sourceRuns);
         renderSourceFileList(state.sourceFiles);
+    }
+
+    function updateSourceSyncButton(source) {
+        const syncButton = document.getElementById("sync-selected-source");
+        if (!syncButton) {
+            return;
+        }
+        const uploadSource = isUploadSource(source);
+        syncButton.hidden = uploadSource;
+        syncButton.disabled = uploadSource;
+        syncButton.title = uploadSource
+                ? "上传型资料源不支持再次同步，请重新上传或使用重建知识切片入口"
+                : "";
     }
 
     function renderSourceRunList(runs) {
@@ -1518,6 +1478,8 @@
         const detail = document.getElementById("source-run-detail");
         if (!runs || runs.length === 0) {
             state.selectedSourceRunKey = null;
+            state.selectedSourceRunMode = "auto";
+            state.latestSourceRunKey = null;
             if (container) {
                 container.innerHTML = "<div class='detail-compact-empty'><p class='item-summary'>当前资料源还没有同步历史。</p></div>";
             }
@@ -1530,20 +1492,45 @@
         const visibleItems = runs.slice()
                 .sort(compareRunsByRequestedAtDesc)
                 .slice(0, 8);
-        if (!containsSourceRun(visibleItems, state.selectedSourceRunKey)) {
-            state.selectedSourceRunKey = resolveSourceRunKey(visibleItems[0]);
+        const latestRunKey = resolveSourceRunKey(visibleItems[0]);
+        if (shouldFollowLatestSourceRun(visibleItems, latestRunKey)) {
+            state.selectedSourceRunKey = latestRunKey;
+            state.selectedSourceRunMode = "auto";
         }
+        else if (!containsSourceRun(visibleItems, state.selectedSourceRunKey)) {
+            state.selectedSourceRunKey = resolveSourceRunKey(visibleItems[0]);
+            state.selectedSourceRunMode = "auto";
+        }
+        state.latestSourceRunKey = latestRunKey;
         container.innerHTML = visibleItems.map(function (item) {
             return renderSourceRunListItem(item, state.selectedSourceRunKey === resolveSourceRunKey(item));
         }).join("");
         container.querySelectorAll("[data-source-run-key]").forEach(function (button) {
             button.addEventListener("click", function () {
                 state.selectedSourceRunKey = button.dataset.sourceRunKey;
+                state.selectedSourceRunMode = "manual";
                 renderSourceRunList(state.sourceRuns);
+                focusSourceRunDetail();
             });
         });
         const selectedRun = findSourceRunByKey(visibleItems, state.selectedSourceRunKey);
         renderSourceRunDetail(selectedRun);
+    }
+
+    function shouldFollowLatestSourceRun(visibleItems, latestRunKey) {
+        if (!visibleItems || visibleItems.length === 0) {
+            return true;
+        }
+        if (!state.selectedSourceRunKey) {
+            return true;
+        }
+        if (state.selectedSourceRunMode !== "manual") {
+            return true;
+        }
+        if (!state.latestSourceRunKey) {
+            return false;
+        }
+        return latestRunKey !== state.latestSourceRunKey;
     }
 
     function renderSourceRunListItem(item, active) {
@@ -1586,7 +1573,18 @@
         bindRunActions(container);
     }
 
+    function focusSourceRunDetail() {
+        const detail = document.getElementById("source-run-detail");
+        if (!detail || detail.hidden || typeof detail.scrollIntoView !== "function") {
+            return;
+        }
+        detail.scrollIntoView({behavior: "smooth", block: "nearest"});
+    }
+
     function buildSourceRunDetailCard(item, stageInfo) {
+        const detailedProgress = shouldRenderDetailedHistoryProgress(item, stageInfo)
+                ? buildRunProgressStrip(item, stageInfo)
+                : "";
         const fileSummary = buildRunFileSummary(item);
         return "<div class='detail-focus-header'>"
                 + "<div>"
@@ -1605,7 +1603,7 @@
                 + "<span class='surface-chip'>当前阶段：" + escapeHtml(stageInfo.label) + "</span>"
                 + "<span class='surface-chip'>下一步：" + escapeHtml(stageInfo.nextStep) + "</span>"
                 + "</div>"
-                + buildRunProgressStrip(item, stageInfo)
+                + detailedProgress
                 + buildRunRuntimeSnapshot(item)
                 + buildRunFailurePanel(item)
                 + buildRunActions(item);
@@ -1749,7 +1747,7 @@
         document.getElementById("article-detail-meta").textContent = [
             buildArticleAvailabilitySummary(detail),
             buildArticleSourceMeta(detail),
-            detail.compiledAt ? "入库时间：" + formatDateTime(detail.compiledAt) : ""
+            detail.updatedAt ? "入库时间：" + formatDateTime(detail.updatedAt) : ""
         ].filter(Boolean).join(" | ");
         document.getElementById("article-detail-summary").textContent = resolveArticleSummary(detail);
         document.getElementById("article-primary-source").textContent = buildPrimarySourceSummary(detail);
@@ -1770,6 +1768,8 @@
         state.sourceRuns = [];
         state.sourceFiles = [];
         state.selectedSourceRunKey = null;
+        state.selectedSourceRunMode = "auto";
+        state.latestSourceRunKey = null;
         state.selectedSourceFilePath = null;
         document.getElementById("source-detail-title").textContent = "请选择一个资料源";
         document.getElementById("source-detail-meta").textContent = "";
@@ -1796,66 +1796,13 @@
         document.getElementById("article-technical-info").innerHTML = "";
     }
 
-    function renderRecentRunOverview(summary, items) {
+    function renderRecentRunOverview(summary) {
         const container = document.getElementById("recent-run-overview");
         if (!container) {
             return;
         }
-        const effectiveItems = items || [];
-        const fallbackRunningCount = effectiveItems.filter(function (item) {
-            return resolveRunDisplayStatus(item) === "RUNNING";
-        }).length;
-        const fallbackWaitingCount = effectiveItems.filter(function (item) {
-            return normalizeStatus(item.status) === "WAIT_CONFIRM";
-        }).length;
-        const fallbackStalledCount = effectiveItems.filter(function (item) {
-            return resolveRunDisplayStatus(item) === "STALLED";
-        }).length;
-        const fallbackSuccessCount = effectiveItems.filter(function (item) {
-            const normalized = resolveRunDisplayStatus(item);
-            return normalized === "SUCCEEDED" || normalized === "SKIPPED_NO_CHANGE";
-        }).length;
-        const fallbackFailedCount = effectiveItems.filter(function (item) {
-            return resolveRunDisplayStatus(item) === "FAILED" || normalizeStatus(item.status) === "FAILED";
-        }).length;
-        const runningCount = Number(summary && summary.runningCount != null ? summary.runningCount : fallbackRunningCount);
-        const waitingCount = Number(summary && summary.waitingCount != null ? summary.waitingCount : fallbackWaitingCount);
-        const stalledCount = Number(summary && summary.stalledCount != null ? summary.stalledCount : fallbackStalledCount);
-        const successCount = Number(summary && summary.succeededCount != null ? summary.succeededCount : fallbackSuccessCount);
-        const failedCount = Number(summary && summary.failedCount != null ? summary.failedCount : fallbackFailedCount);
-        const cards = [
-            {
-                label: "运行中",
-                value: runningCount,
-                note: runningCount > 0 ? "系统仍在持续推进这些任务" : "当前没有正在推进的资料处理任务",
-                tone: runningCount > 0 ? "warning" : ""
-            },
-            {
-                label: "待确认",
-                value: waitingCount,
-                note: waitingCount > 0 ? "需要人工判断新建还是合并" : "当前没有需要人工确认的任务",
-                tone: waitingCount > 0 ? "warning" : "success"
-            },
-            {
-                label: "疑似卡住",
-                value: stalledCount,
-                note: stalledCount > 0 ? "建议查看最近推进时间并重新同步" : "当前没有疑似卡住的任务",
-                tone: stalledCount > 0 ? "danger" : "success"
-            },
-            {
-                label: "已完成",
-                value: successCount,
-                note: successCount > 0 ? "最近已经成功处理并收口" : "最近还没有成功完成的任务",
-                tone: successCount > 0 ? "success" : ""
-            },
-            {
-                label: "失败",
-                value: failedCount,
-                note: failedCount > 0 ? "建议打开下方卡片查看错误信息" : "最近没有失败任务",
-                tone: failedCount > 0 ? "danger" : "success"
-            }
-        ];
-        container.innerHTML = cards.map(renderMetricCard).join("");
+        const cardsFromBackend = Array.isArray(summary && summary.cards) ? summary.cards : [];
+        updateContainerMarkup(container, cardsFromBackend.map(renderMetricCard).join(""), "soft-refresh-panel");
     }
 
     function renderRecentRunBoard(items) {
@@ -1864,21 +1811,100 @@
             return;
         }
         if (!items || items.length === 0) {
-            container.innerHTML = "<div class='job-card'><p class='item-summary'>暂时没有处理记录</p></div>";
+            updateContainerMarkup(
+                    container,
+                    "<div class='job-card'><p class='item-summary'>当前没有需要关注的处理任务。资料源的完整同步记录可以在下方“资料源与文件”里查看。</p></div>",
+                    "soft-refresh-panel"
+            );
+            bindRunActions(container);
             return;
         }
         const visibleItems = items.slice()
                 .sort(compareRunsByRequestedAtDesc);
-        container.innerHTML = visibleItems.map(function (item) {
-            return renderRecentRunCard(item);
-        }).join("");
+        let boardItems = visibleItems.filter(shouldRenderRunAsBoardFocus);
+        if (boardItems.length === 0) {
+            const latestCompletionItem = visibleItems.find(shouldRenderRunAsCompletionNotice);
+            if (latestCompletionItem) {
+                boardItems = [latestCompletionItem];
+            }
+        }
+        const recentCompletionItems = visibleItems.filter(function (item) {
+            return !shouldRenderRunAsBoardFocus(item) && shouldRenderRunAsCompletionNotice(item);
+        }).filter(function (item) {
+            return !boardItems.some(function (boardItem) {
+                return resolveProcessingTaskKey(boardItem) === resolveProcessingTaskKey(item);
+            });
+        }).slice(0, 3);
+        const orderedItems = boardItems.concat(recentCompletionItems);
+        if (orderedItems.length === 0) {
+            updateContainerMarkup(
+                    container,
+                    "<div class='job-card'><p class='item-summary'>当前没有需要关注的处理任务。已完成记录归档在下方“资料源与文件”的同步历史中。</p></div>",
+                    "soft-refresh-panel"
+            );
+            bindRunActions(container);
+            return;
+        }
+        reconcileRecentRunCollection(container, orderedItems, renderRecentRunBoardItem);
         bindRunActions(container);
+    }
+
+    function renderRecentRunBoardItem(item) {
+        if (shouldRenderRunAsBoardFocus(item) || shouldPromoteCompletionRunAsBoardFocus(item)) {
+            return renderRecentRunCard(item);
+        }
+        return renderRecentRunCompletionNotice(item);
+    }
+
+    function shouldPromoteCompletionRunAsBoardFocus(item) {
+        if (!item) {
+            return false;
+        }
+        if (!shouldRenderRunAsCompletionNotice(item)) {
+            return false;
+        }
+        if (!Array.isArray(state.recentRuns)) {
+            return false;
+        }
+        for (let index = 0; index < state.recentRuns.length; index++) {
+            if (shouldRenderRunAsBoardFocus(state.recentRuns[index])) {
+                return false;
+            }
+        }
+        const latestCompletionItem = state.recentRuns.slice()
+                .sort(compareRunsByRequestedAtDesc)
+                .find(shouldRenderRunAsCompletionNotice);
+        return Boolean(latestCompletionItem)
+                && resolveProcessingTaskKey(latestCompletionItem) === resolveProcessingTaskKey(item);
+    }
+
+    function shouldRenderRunAsBoardFocus(item) {
+        if (!item) {
+            return false;
+        }
+        if (item.processingActive || item.requiresManualAction) {
+            return true;
+        }
+        const displayStatus = resolveRunDisplayStatus(item);
+        const baseStatus = normalizeStatus(item.status);
+        return RUN_BOARD_FOCUS_STATUSES.has(displayStatus)
+                || RUN_BOARD_FOCUS_STATUSES.has(baseStatus);
+    }
+
+    function shouldRenderRunAsCompletionNotice(item) {
+        const displayStatus = resolveRunDisplayStatus(item);
+        const baseStatus = normalizeStatus(item && item.status);
+        return displayStatus === "SUCCEEDED"
+                || displayStatus === "SKIPPED_NO_CHANGE"
+                || baseStatus === "SUCCEEDED"
+                || baseStatus === "SKIPPED_NO_CHANGE";
     }
 
     function renderRecentRunCard(item) {
         const stageInfo = getRunStageInfo(item);
         const toneClass = "run-tone-" + stageInfo.tone;
-        return "<article class='run-spotlight-card " + toneClass + "'>"
+        return "<article class='run-spotlight-card " + toneClass + "' data-processing-task-key='"
+                + escapeHtml(resolveProcessingTaskKey(item)) + "'>"
                 + "<div class='run-spotlight-header'>"
                 + "<div class='meta-row'>"
                 + renderBadge(item.sourceType || "UPLOAD")
@@ -1904,173 +1930,276 @@
                 + "</article>";
     }
 
+    function renderRecentRunCompletionNotice(item) {
+        const stageInfo = getRunStageInfo(item);
+        return "<article class='run-completion-notice' data-processing-task-key='"
+                + escapeHtml(resolveProcessingTaskKey(item)) + "'>"
+                + "<div class='run-completion-main'>"
+                + "<div class='meta-row'>"
+                + renderBadge(item.sourceType || "UPLOAD")
+                + renderBadge(resolveRunDisplayStatus(item) || item.status)
+                + renderTaskModeBadge(item)
+                + "</div>"
+                + "<h3 class='run-completion-title'>" + escapeHtml(getRunTitle(item)) + "</h3>"
+                + "<p class='run-completion-copy'>" + escapeHtml(getRunSummary(item)) + "</p>"
+                + "</div>"
+                + "<div class='run-completion-side'>"
+                + "<span class='run-spotlight-time'>完成 "
+                + escapeHtml(formatDateTime(resolveRunUpdatedAt(item)))
+                + "</span>"
+                + "<span class='surface-chip'>完整记录在资料源同步历史</span>"
+                + "</div>"
+                + "</article>";
+    }
+
+    function reconcileRecentRunCollection(container, items, renderCard) {
+        const existingCards = new Map();
+        Array.from(container.children).forEach(function (child) {
+            if (!(child instanceof HTMLElement)) {
+                return;
+            }
+            const taskKey = child.dataset.processingTaskKey;
+            if (taskKey) {
+                existingCards.set(taskKey, child);
+            }
+        });
+        const hadExistingCards = existingCards.size > 0;
+        const nextTaskKeys = new Set();
+        items.forEach(function (item) {
+            const taskKey = resolveProcessingTaskKey(item);
+            const markup = renderCard(item);
+            const signature = buildRenderSignature(markup);
+            let card = existingCards.get(taskKey);
+            const shouldReplaceCard = !card || card.dataset.renderSignature !== signature;
+            if (shouldReplaceCard) {
+                const nextCard = createElementFromMarkup(markup);
+                if (!nextCard) {
+                    return;
+                }
+                nextCard.dataset.renderSignature = signature;
+                if (card && card.parentNode === container) {
+                    card.replaceWith(nextCard);
+                }
+                card = nextCard;
+                existingCards.set(taskKey, card);
+                if (hadExistingCards) {
+                    triggerSoftRefreshAnimation(card, "soft-refresh-card");
+                }
+            }
+            nextTaskKeys.add(taskKey);
+            container.appendChild(card);
+        });
+        Array.from(container.children).forEach(function (child) {
+            if (!(child instanceof HTMLElement)) {
+                return;
+            }
+            const taskKey = child.dataset.processingTaskKey;
+            if (!taskKey || !nextTaskKeys.has(taskKey)) {
+                child.remove();
+            }
+        });
+        container.dataset.renderSignature = items.map(function (item) {
+            return resolveProcessingTaskKey(item);
+        }).join("|");
+    }
+
+    function updateContainerMarkup(container, markup, animationClass) {
+        const resolvedMarkup = markup || "";
+        const nextSignature = buildRenderSignature(resolvedMarkup);
+        if (container.dataset.renderSignature === nextSignature) {
+            return false;
+        }
+        const hadContent = container.childElementCount > 0 || Boolean(container.textContent && container.textContent.trim());
+        container.innerHTML = resolvedMarkup;
+        container.dataset.renderSignature = nextSignature;
+        if (animationClass && hadContent && resolvedMarkup) {
+            triggerSoftRefreshAnimation(container, animationClass);
+        }
+        return true;
+    }
+
+    function createElementFromMarkup(markup) {
+        const template = document.createElement("template");
+        template.innerHTML = String(markup || "").trim();
+        return template.content.firstElementChild;
+    }
+
+    function buildRenderSignature(value) {
+        const markup = String(value || "");
+        let hash = 0;
+        for (let index = 0; index < markup.length; index++) {
+            hash = ((hash << 5) - hash) + markup.charCodeAt(index);
+            hash |= 0;
+        }
+        return String(markup.length) + ":" + String(hash);
+    }
+
+    function triggerSoftRefreshAnimation(element, className) {
+        if (!element || !className) {
+            return;
+        }
+        element.classList.remove(className);
+        void element.offsetWidth;
+        element.classList.add(className);
+        element.addEventListener("animationend", function handleAnimationEnd() {
+            element.classList.remove(className);
+            element.removeEventListener("animationend", handleAnimationEnd);
+        });
+    }
+
     function buildRunProgressStrip(item, stageInfo) {
-        const steps = item && item.taskType === "STANDALONE_COMPILE"
-                ? ["任务提交", "排队执行", "编译处理中", "完成收口"]
-                : ["资料接收", "自动识别", "物化编译", "完成收口"];
-        const normalized = resolveRunDisplayStatus(item);
-        return "<div class='run-progress-strip'>"
-                + steps.map(function (stepLabel, index) {
-                    let stepClass = "pending";
-                    if (normalized === "SUCCEEDED" || normalized === "SKIPPED_NO_CHANGE") {
-                        stepClass = "completed";
-                    }
-                    else if (index < stageInfo.stepIndex) {
-                        stepClass = "completed";
-                    }
-                    else if (index === stageInfo.stepIndex) {
-                        stepClass = stageInfo.tone === "danger"
-                                ? "failed"
-                                : stageInfo.tone === "warning"
-                                ? "warning"
-                                : "active";
-                    }
+        const progressSteps = Array.isArray(item && item.progressSteps) ? item.progressSteps : [];
+        if (progressSteps.length === 0) {
+            return "";
+        }
+        return "<div class='run-progress-strip run-progress-strip-detailed'>"
+                + progressSteps.map(function (step, index) {
+                    const stepStatus = normalizeStatus(step && step.status);
+                    const stepDetail = cleanRunProgressDetail(step && step.detail);
+                    const stepClass = stepStatus === "COMPLETED"
+                            ? "completed"
+                            : stepStatus === "FAILED"
+                            ? "failed"
+                            : stepStatus === "ACTIVE"
+                            ? stageInfo.tone === "danger"
+                                    ? "failed"
+                                    : stageInfo.tone === "warning"
+                                    ? "warning"
+                                    : "active"
+                            : "pending";
                     return "<div class='run-progress-step " + stepClass + "'>"
                             + "<span class='run-progress-order'>" + escapeHtml(String(index + 1)) + "</span>"
-                            + "<span class='run-progress-label'>" + escapeHtml(stepLabel) + "</span>"
+                            + "<div class='run-progress-copy'>"
+                            + "<span class='run-progress-label'>" + escapeHtml(step.label || step.key || ("步骤 " + String(index + 1))) + "</span>"
+                            + (stepDetail ? "<span class='run-progress-detail'>" + escapeHtml(stepDetail) + "</span>" : "")
+                            + "</div>"
                             + "</div>";
                 }).join("")
                 + "</div>";
     }
 
+    function cleanRunProgressDetail(detail) {
+        return String(detail || "").replace(/^细分状态[：:]\s*/, "");
+    }
+
     function getRunStageInfo(item) {
-        const normalized = resolveRunDisplayStatus(item);
-        if (normalized === "MATCHING") {
-            return {label: "自动识别中", nextStep: "判断新建、更新还是追加", stepIndex: 1, tone: "warning"};
-        }
-        if (normalized === "WAIT_CONFIRM") {
-            return {label: "等待人工确认", nextStep: "选择新建或合并方式", stepIndex: 1, tone: "warning"};
-        }
-        if (normalized === "MATERIALIZING") {
-            return {label: "资料物化中", nextStep: "复制目录或拉取仓库内容", stepIndex: 2, tone: "warning"};
-        }
-        if (normalized === "COMPILE_QUEUED") {
-            return {label: "等待编译", nextStep: "排队进入知识编译任务", stepIndex: 2, tone: "warning"};
-        }
-        if (normalized === "RUNNING") {
-            return {
-                label: resolveRunStepLabel(item),
-                nextStep: "继续等待当前步骤推进",
-                stepIndex: resolveRunStepIndex(item),
-                tone: "warning"
-            };
-        }
-        if (normalized === "STALLED") {
-            return {
-                label: "疑似卡住",
-                nextStep: "查看最近推进时间并重新同步资料源",
-                stepIndex: resolveRunStepIndex(item),
-                tone: "danger"
-            };
-        }
-        if (normalized === "SUCCEEDED") {
-            return {label: "处理完成", nextStep: "可以查看已入库内容或继续问答", stepIndex: 3, tone: "success"};
-        }
-        if (normalized === "SKIPPED_NO_CHANGE") {
-            return {label: "无变化跳过", nextStep: "本次无需重新编译", stepIndex: 3, tone: "success"};
-        }
-        if (normalized === "FAILED") {
-            return {
-                label: "处理失败",
-                nextStep: item.sourceId ? "检查原因摘要后重新同步资料源" : "检查资料并重新提交",
-                stepIndex: resolveRunStepIndex(item),
-                tone: "danger"
-            };
-        }
-        if (normalized === "QUEUED") {
-            return {label: "等待开始", nextStep: "准备进入自动识别", stepIndex: 0, tone: "warning"};
-        }
-        return {label: getBadgeLabel(item.status), nextStep: "等待系统继续处理", stepIndex: 0, tone: "warning"};
+        const displayStatusLabel = String(item && item.displayStatusLabel || "").trim();
+        const nextStepHint = String(item && item.nextStepHint || "").trim();
+        return {
+            label: displayStatusLabel || getBadgeLabel(resolveRunDisplayStatus(item) || (item && item.status)),
+            nextStep: nextStepHint || "等待系统继续处理",
+            tone: String(item && item.displayTone || "").trim() || "warning"
+        };
     }
 
     function buildRunOperationalNote(item) {
-        const parts = [];
-        if (item.resolverDecision) {
-            parts.push("决策：" + getBadgeLabel(item.resolverDecision));
+        if (item && item.operationalNote) {
+            return String(item.operationalNote);
         }
-        if (item.syncAction) {
-            parts.push("动作：" + getBadgeLabel(item.syncAction));
-        }
-        if (resolveRunDisplayStatus(item)) {
-            parts.push("运行态：" + getBadgeLabel(resolveRunDisplayStatus(item)));
-        }
-        if (item.compileCurrentStep) {
-            parts.push("步骤：" + resolveRunStepLabel(item));
-        }
-        if (item.compileErrorCode) {
-            parts.push("错误码：" + item.compileErrorCode);
-        }
-        if (resolveRunLastProgressAt(item)) {
-            parts.push("最近推进 " + formatDateTime(resolveRunLastProgressAt(item)));
-        }
-        return parts.length > 0 ? parts.join(" · ") : "系统正在继续处理这条同步任务";
+        return "系统正在继续处理当前任务";
     }
 
     function bindRunActions(container) {
-        container.querySelectorAll("[data-confirm-run]").forEach(function (button) {
-            button.addEventListener("click", function () {
+        if (!container || container.dataset.actionDelegated === "true") {
+            return;
+        }
+        container.dataset.actionDelegated = "true";
+        container.addEventListener("click", async function (event) {
+            const target = event.target;
+            if (!(target instanceof Element)) {
+                return;
+            }
+            const confirmButton = target.closest("[data-confirm-run]");
+            if (confirmButton && container.contains(confirmButton)) {
                 confirmRun(
-                        parseOptionalInteger(button.dataset.confirmRun),
-                        button.dataset.confirmDecision,
-                        parseOptionalInteger(button.dataset.confirmSourceId)
+                        parseOptionalInteger(confirmButton.dataset.runId || confirmButton.dataset.confirmRun),
+                        confirmButton.dataset.confirmDecision,
+                        parseOptionalInteger(confirmButton.dataset.confirmSourceId)
                 );
-            });
-        });
-        container.querySelectorAll("[data-resync-source]").forEach(function (button) {
-            button.addEventListener("click", async function () {
-                const sourceId = parseOptionalInteger(button.dataset.resyncSource);
-                if (sourceId == null) {
-                    return;
-                }
-                const confirmed = window.confirm("将重新同步资料源 " + sourceId + "，确认继续吗？");
-                if (!confirmed) {
-                    return;
-                }
-                try {
-                    const run = await requestSourceSync(sourceId);
-                    activateKnowledgeTab("knowledge-runs");
-                    await handleSubmittedRun(run, "已重新提交资料源同步");
-                }
-                catch (error) {
-                    showError("重新同步资料源失败", error);
-                }
-            });
+                return;
+            }
+            const resyncButton = target.closest("[data-resync-source]");
+            if (!resyncButton || !container.contains(resyncButton)) {
+                return;
+            }
+            const runId = parseOptionalInteger(resyncButton.dataset.runId || resyncButton.dataset.resyncRun);
+            const sourceId = parseOptionalInteger(resyncButton.dataset.resyncSource);
+            const uploadRetry = resyncButton.dataset.uploadRetry === "true";
+            if (uploadRetry && runId == null) {
+                return;
+            }
+            if (!uploadRetry && sourceId == null) {
+                return;
+            }
+            const confirmed = window.confirm(
+                    uploadRetry
+                            ? "将重试当前上传任务，确认继续吗？"
+                            : "将重新同步资料源 " + sourceId + "，确认继续吗？"
+            );
+            if (!confirmed) {
+                return;
+            }
+            try {
+                const run = uploadRetry
+                        ? await requestSourceRunRetry(runId)
+                        : await requestSourceSync(sourceId);
+                activateKnowledgeTab("knowledge-runs");
+                await handleSubmittedRun(run, uploadRetry ? "已重新提交当前上传任务" : "已重新提交资料源同步");
+            }
+            catch (error) {
+                showError(uploadRetry ? "重试当前上传任务失败" : "重新同步资料源失败", error);
+            }
         });
     }
 
+    function resolveProcessingTaskKey(item) {
+        if (item && item.taskId) {
+            return String(item.taskId);
+        }
+        if (item && item.compileJobId) {
+            return "compile-job:" + String(item.compileJobId);
+        }
+        return resolveSourceRunKey(item);
+    }
+
     function buildRunActions(item) {
-        const buttons = [];
-        if (normalizeStatus(item.status) === "WAIT_CONFIRM") {
-            buttons.push(
-                    "<button class='ghost-btn' data-confirm-run='" + escapeHtml(String(item.runId))
-                            + "' data-confirm-decision='NEW_SOURCE' type='button'>确认为新资料源</button>"
-            );
-            if (item.matchedSourceId) {
-                buttons.push(
-                        "<button class='secondary-btn' data-confirm-run='" + escapeHtml(String(item.runId))
-                                + "' data-confirm-decision='EXISTING_SOURCE_APPEND' data-confirm-source-id='"
-                                + escapeHtml(String(item.matchedSourceId))
-                                + "' type='button'>追加到候选资料源</button>"
-                );
-                buttons.push(
-                        "<button class='ghost-btn' data-confirm-run='" + escapeHtml(String(item.runId))
-                                + "' data-confirm-decision='EXISTING_SOURCE_UPDATE' data-confirm-source-id='"
-                                + escapeHtml(String(item.matchedSourceId))
-                                + "' type='button'>按更新覆盖候选资料源</button>"
-                );
-            }
-        }
-        if (shouldShowResyncAction(item)) {
-            buttons.push(
-                    "<button class='" + escapeHtml(resolveRunActionButtonClass(item))
-                            + "' data-resync-source='" + escapeHtml(String(item.sourceId))
-                            + "' type='button'>" + escapeHtml(resolveRunActionLabel(item)) + "</button>"
-            );
-        }
+        const actionItems = Array.isArray(item && item.actions) ? item.actions : [];
+        const buttons = actionItems.map(function (action) {
+            return renderStructuredRunAction(action);
+        }).filter(Boolean);
         if (buttons.length === 0) {
             return "";
         }
         return "<div class='card-actions'>" + buttons.join("") + "</div>";
+    }
+
+    function renderStructuredRunAction(action) {
+        if (!action || typeof action !== "object") {
+            return "";
+        }
+        const actionKey = String(action.actionKey || "").trim().toUpperCase();
+        const label = String(action.label || "").trim();
+        const buttonClass = String(action.buttonClass || "ghost-btn").trim() || "ghost-btn";
+        if (!actionKey || !label) {
+            return "";
+        }
+        if (actionKey.indexOf("CONFIRM_") === 0) {
+            return "<button class='" + escapeHtml(buttonClass)
+                    + "' data-confirm-run='" + escapeHtml(String(action.runId || ""))
+                    + "' data-run-id='" + escapeHtml(String(action.runId || ""))
+                    + "' data-confirm-decision='" + escapeHtml(String(action.decision || ""))
+                    + "' data-confirm-source-id='" + escapeHtml(String(action.decisionSourceId || ""))
+                    + "' type='button'>" + escapeHtml(label) + "</button>";
+        }
+        if (actionKey === "RESYNC_SOURCE" || actionKey === "RETRY_UPLOAD") {
+            return "<button class='" + escapeHtml(buttonClass)
+                    + "' data-resync-source='" + escapeHtml(String(action.sourceId || ""))
+                    + "' data-run-id='" + escapeHtml(String(action.runId || ""))
+                    + "' data-resync-run='" + escapeHtml(String(action.runId || ""))
+                    + "' data-upload-retry='" + escapeHtml(String(Boolean(action.uploadRetry)))
+                    + "' type='button'>" + escapeHtml(label) + "</button>";
+        }
+        return "";
     }
 
     function highlightSource(sourceId) {
@@ -2178,17 +2307,15 @@
     }
 
     function getRunTitle(item) {
+        const fileSummary = buildRunFileSummary(item);
+        if (fileSummary) {
+            return fileSummary;
+        }
         if (item && item.title) {
             return item.title;
         }
-        if (item.sourceName) {
+        if (item && item.sourceName) {
             return item.sourceName;
-        }
-        if (item.sourceNames && item.sourceNames.length > 0) {
-            if (item.sourceNames.length === 1) {
-                return item.sourceNames[0];
-            }
-            return item.sourceNames[0] + " 等 " + String(item.sourceNames.length) + " 个文件";
         }
         return item && item.runId ? "资料处理任务 #" + String(item.runId) : "资料处理任务";
     }
@@ -2274,6 +2401,10 @@
                 : "";
     }
 
+    function resolveRunTimelineAt(item) {
+        return resolveRunLastProgressAt(item) || resolveRunUpdatedAt(item) || "";
+    }
+
     function renderDerivedStatusBadge(item) {
         const derivedStatus = resolveRunDisplayStatus(item);
         if (!derivedStatus || derivedStatus === normalizeStatus(item && item.status)) {
@@ -2296,13 +2427,9 @@
     }
 
     function resolveRunDisplayStatus(item) {
-        const derivedStatus = normalizeStatus(item && item.compileDerivedStatus);
-        if (derivedStatus) {
-            return derivedStatus;
-        }
-        const compileStatus = normalizeStatus(item && item.compileJobStatus);
-        if (compileStatus) {
-            return compileStatus;
+        const displayStatus = normalizeStatus(item && item.displayStatus);
+        if (displayStatus) {
+            return displayStatus;
         }
         return normalizeStatus(item && item.status);
     }
@@ -2312,92 +2439,11 @@
     }
 
     function resolveRunStepLabel(item) {
-        const currentStep = normalizeStatus(item && item.compileCurrentStep);
-        if (currentStep) {
-            return getCompileStepLabel(currentStep);
-        }
-        const displayStatus = resolveRunDisplayStatus(item);
-        if (displayStatus === "RUNNING") {
-            return "编译入库中";
-        }
-        if (displayStatus === "COMPILE_QUEUED") {
-            return "等待编译";
-        }
-        if (displayStatus === "WAIT_CONFIRM") {
-            return "等待人工确认";
-        }
-        return getBadgeLabel(displayStatus || (item && item.status));
-    }
-
-    function getCompileStepLabel(step) {
-        return COMPILE_STEP_LABELS[normalizeStatus(step)] || "执行编译步骤";
-    }
-
-    function resolveRunStepIndex(item) {
-        const currentStep = normalizeStatus(item && item.compileCurrentStep);
-        const stageByStep = {
-            INITIALIZE_JOB: 0,
-            INGEST_SOURCES: 1,
-            PERSIST_SOURCE_FILES: 1,
-            PERSIST_SOURCE_FILE_CHUNKS: 1,
-            EXTRACT_AST_GRAPH: 1,
-            GROUP_SOURCES: 1,
-            SPLIT_BATCHES: 1,
-            ANALYZE_BATCHES: 1,
-            MERGE_CONCEPTS: 1,
-            ENHANCE_EXISTING_ARTICLES: 2,
-            COMPILE_NEW_ARTICLES: 2,
-            REVIEW_ARTICLES: 2,
-            FIX_REVIEW_ISSUES: 2,
-            PERSIST_ARTICLES: 2,
-            REBUILD_ARTICLE_CHUNKS: 3,
-            REFRESH_VECTOR_INDEX: 3,
-            REBUILD_ARTICLE_VECTORS: 3,
-            REBUILD_SOURCE_VECTORS: 3,
-            GENERATE_SYNTHESIS_ARTIFACTS: 3,
-            CAPTURE_REPO_SNAPSHOT: 3,
-            FINALIZE_JOB: 3
-        };
-        if (currentStep && Object.prototype.hasOwnProperty.call(stageByStep, currentStep)) {
-            return stageByStep[currentStep];
-        }
-        const displayStatus = resolveRunDisplayStatus(item);
-        if (displayStatus === "MATCHING" || displayStatus === "WAIT_CONFIRM") {
-            return 1;
-        }
-        if (displayStatus === "MATERIALIZING" || displayStatus === "COMPILE_QUEUED"
-                || displayStatus === "RUNNING" || displayStatus === "STALLED"
-                || displayStatus === "FAILED") {
-            return item && item.compileJobId ? 2 : 1;
-        }
-        if (displayStatus === "SUCCEEDED" || displayStatus === "SKIPPED_NO_CHANGE") {
-            return 3;
-        }
-        return 0;
+        return item && item.currentStepLabel ? String(item.currentStepLabel) : "暂无";
     }
 
     function resolveRunProgressText(item) {
-        const current = Number(item && item.compileProgressCurrent);
-        const total = Number(item && item.compileProgressTotal);
-        const progressMessage = compactDisplayMessage(item && item.compileProgressMessage);
-        if (Number.isFinite(total) && total > 0 && Number.isFinite(current) && current > 0) {
-            return String(current) + " / " + String(total)
-                    + (progressMessage ? " · " + progressMessage : "");
-        }
-        if (progressMessage) {
-            return progressMessage;
-        }
-        const displayStatus = resolveRunDisplayStatus(item);
-        if (displayStatus === "WAIT_CONFIRM") {
-            return "等待人工确认";
-        }
-        if (displayStatus === "COMPILE_QUEUED") {
-            return "等待后台 worker 领取";
-        }
-        if (displayStatus === "SKIPPED_NO_CHANGE") {
-            return "无需重新编译";
-        }
-        return "等待下一步刷新";
+        return item && item.progressText ? String(item.progressText) : "等待下一步刷新";
     }
 
     function resolveRunLastProgressAt(item) {
@@ -2407,54 +2453,69 @@
     }
 
     function buildRunReasonSummary(item) {
-        const displayStatus = resolveRunDisplayStatus(item);
-        const errorCode = resolveRunErrorCode(item);
-        if (displayStatus === "WAIT_CONFIRM") {
-            return item && item.message
-                    ? compactDisplayMessage(item.message)
-                    : "系统无法自动判断该资料包应新建还是合并，需要人工确认。";
-        }
-        if (displayStatus === "SKIPPED_NO_CHANGE") {
-            return "资料包与最近一次成功快照一致，本次跳过重新编译。";
-        }
-        if (errorCode) {
-            return resolveErrorCodeSummary(errorCode);
-        }
-        if (displayStatus === "STALLED") {
-            return "任务长时间没有新的心跳或进度更新，建议重新同步资料源。";
-        }
-        if (displayStatus === "FAILED") {
-            const message = item && item.errorMessage ? compactDisplayMessage(item.errorMessage) : "";
-            return message || "任务处理失败，请检查资料源配置、网络链路或上传内容。";
-        }
-        if (displayStatus === "RUNNING") {
-            return compactDisplayMessage(item && item.compileProgressMessage) || "系统仍在推进当前编译步骤。";
-        }
-        if (displayStatus === "COMPILE_QUEUED") {
-            return "识别与物化已完成，正在等待编译任务开始执行。";
-        }
-        if (displayStatus === "SUCCEEDED") {
-            return compactDisplayMessage(item && item.message) || "资料已经完成解析并写入知识库。";
-        }
-        return compactDisplayMessage(item && item.message) || "同步状态已更新。";
+        return item && item.reasonSummary ? String(item.reasonSummary) : "暂无";
     }
 
-    function resolveErrorCodeSummary(errorCode) {
-        const labels = {
-            COMPILE_STALE_TIMEOUT: "任务长时间没有心跳，系统已按超时失败自动收口。",
-            COMPILE_IO_ERROR: "编译读取资料失败，请先检查目录、文件内容或访问权限。",
-            COMPILE_EXECUTION_FAILED: "编译过程中出现异常，请结合当前步骤后重新同步资料源。",
-            COMPILE_TOTAL_BUDGET_EXCEEDED: "本次编译已触达系统保护阈值，任务被主动终止。",
-            LLM_REQUEST_TIMEOUT: "模型调用超时，系统没有在预期时间内拿到上游响应。",
-            LLM_UPSTREAM_5XX: "模型上游服务返回 5xx 异常，建议稍后重新同步。",
-            LLM_RETRY_EXHAUSTED: "模型调用多次重试后仍失败，本次任务已停止继续放大等待。",
-            LLM_TRANSPORT_ERROR: "模型请求链路异常，请检查网络、网关或代理配置。",
-            LLM_RETRYABLE_HTTP_ERROR: "模型上游暂时拒绝请求，可稍后重新同步。",
-            LLM_HTTP_ERROR: "模型上游返回了非预期 HTTP 状态，请检查模型路由配置。",
-            LLM_TRANSIENT_AI_ERROR: "模型调用出现瞬时异常，本次任务未能稳定恢复。",
-            LLM_CALL_FAILED: "模型调用失败，请重新同步后再观察。"
-        };
-        return labels[normalizeStatus(errorCode)] || "系统返回了稳定错误码，请结合当前步骤继续排查。";
+    function resolveRunReasonSummaryText(item) {
+        return item && item.reasonSummary ? String(item.reasonSummary).trim() : "";
+    }
+
+    function shouldRenderRunReasonSummary(item) {
+        const reasonSummary = resolveRunReasonSummaryText(item);
+        if (!reasonSummary || isPlaceholderRunReasonSummary(reasonSummary)) {
+            return false;
+        }
+        if (!shouldExposeRunReasonByStatus(item)) {
+            return false;
+        }
+        return !isRunReasonSummaryDuplicated(item, reasonSummary);
+    }
+
+    function shouldExposeRunReasonByStatus(item) {
+        const displayStatus = resolveRunDisplayStatus(item);
+        const baseStatus = normalizeStatus(item && item.status);
+        return RUN_REASON_SUMMARY_DISPLAY_STATUSES.has(displayStatus)
+                || RUN_REASON_SUMMARY_DISPLAY_STATUSES.has(baseStatus);
+    }
+
+    function isPlaceholderRunReasonSummary(reasonSummary) {
+        const normalizedReason = normalizeRunMessageForComparison(reasonSummary);
+        return normalizedReason === ""
+                || normalizedReason === "暂无"
+                || normalizedReason === "无"
+                || normalizedReason === "暂无原因"
+                || normalizedReason === "无原因";
+    }
+
+    function isRunReasonSummaryDuplicated(item, reasonSummary) {
+        const normalizedReason = normalizeRunMessageForComparison(reasonSummary);
+        if (!normalizedReason) {
+            return true;
+        }
+        const comparableMessages = [
+            resolveRunProgressText(item),
+            resolveRunStepLabel(item),
+            item && item.message,
+            item && item.compileProgressMessage,
+            item && item.currentStepLabel
+        ];
+        return comparableMessages.some(function (message) {
+            const normalizedMessage = normalizeRunMessageForComparison(message);
+            if (!normalizedMessage) {
+                return false;
+            }
+            return normalizedMessage === normalizedReason
+                    || normalizedMessage.includes(normalizedReason)
+                    || normalizedReason.includes(normalizedMessage);
+        });
+    }
+
+    function normalizeRunMessageForComparison(message) {
+        return String(message || "")
+                .trim()
+                .replace(/^\d+\s*\/\s*\d+\s*[·:：\-]\s*/, "")
+                .replace(/[，,。.\s:：·\-_/\\]+/g, "")
+                .toLowerCase();
     }
 
     function compactDisplayMessage(message) {
@@ -2466,16 +2527,21 @@
     }
 
     function buildRunRuntimeSnapshot(item) {
+        const reasonSummary = shouldRenderRunReasonSummary(item)
+                ? resolveRunReasonSummaryText(item)
+                : "";
         return "<div class='run-runtime-summary'>"
                 + "<div class='run-runtime-inline-list'>"
                 + buildRunRuntimeBadge("编译态", getBadgeLabel(resolveRunDisplayStatus(item) || item.status))
                 + buildRunRuntimeBadge("当前步骤", resolveRunStepLabel(item))
                 + buildRunRuntimeBadge("当前进度", resolveRunProgressText(item))
                 + "</div>"
-                + "<div class='run-runtime-reason'>"
+                + (reasonSummary
+                ? "<div class='run-runtime-reason'>"
                 + "<span class='run-runtime-label'>原因摘要</span>"
-                + "<strong class='run-runtime-value'>" + escapeHtml(buildRunReasonSummary(item) || "暂无") + "</strong>"
+                + "<strong class='run-runtime-value'>" + escapeHtml(reasonSummary) + "</strong>"
                 + "</div>"
+                : "")
                 + "</div>";
     }
 
@@ -2500,7 +2566,7 @@
             return "";
         }
         const errorCode = resolveRunErrorCode(item);
-        return "<div class='job-error'><strong>失败收口</strong><p>"
+        return "<div class='job-error'><strong>处理失败</strong><p>"
                 + escapeHtml(buildRunReasonSummary(item))
                 + "</p>"
                 + (errorCode
@@ -2509,108 +2575,61 @@
                 + "</div>";
     }
 
-    function shouldShowResyncAction(item) {
-        if (item && item.taskType === "STANDALONE_COMPILE") {
-            return false;
-        }
-        const sourceId = parseOptionalInteger(item && item.sourceId);
-        if (sourceId == null) {
-            return false;
-        }
+    function shouldRenderDetailedHistoryProgress(item, stageInfo) {
         const displayStatus = resolveRunDisplayStatus(item);
-        return displayStatus === "FAILED"
-                || displayStatus === "STALLED"
-                || displayStatus === "SUCCEEDED"
-                || displayStatus === "SKIPPED_NO_CHANGE";
+        if (displayStatus === "WAIT_CONFIRM" || displayStatus === "FAILED" || displayStatus === "STALLED") {
+            return true;
+        }
+        if (item && item.processingActive) {
+            return true;
+        }
+        return stageInfo && stageInfo.tone === "warning";
     }
 
-    function resolveRunActionLabel(item) {
-        const displayStatus = resolveRunDisplayStatus(item);
-        if (displayStatus === "FAILED" || displayStatus === "STALLED") {
-            return "重新同步当前资料源";
+    function findPrimaryActiveProcessingTask() {
+        if (!Array.isArray(state.recentRuns)) {
+            return null;
         }
-        return "再次同步当前资料源";
-    }
-
-    function resolveRunActionButtonClass(item) {
-        const displayStatus = resolveRunDisplayStatus(item);
-        return displayStatus === "FAILED" || displayStatus === "STALLED"
-                ? "secondary-btn"
-                : "ghost-btn";
+        for (let index = 0; index < state.recentRuns.length; index++) {
+            const item = state.recentRuns[index];
+            if (item && item.processingActive) {
+                return item;
+            }
+        }
+        return null;
     }
 
     function getRunSummary(item) {
-        const normalized = resolveRunDisplayStatus(item);
-        if (normalized === "WAIT_CONFIRM") {
-            return buildRunReasonSummary(item);
+        const reasonSummary = String(item && item.reasonSummary || "").trim();
+        if (reasonSummary) {
+            return reasonSummary;
         }
-        if (normalized === "SKIPPED_NO_CHANGE") {
-            return "资料内容与最近一次成功快照一致，本次跳过编译。";
-        }
-        if (normalized === "STALLED") {
-            return "当前任务疑似卡住，先看最近推进时间和原因摘要，再决定是否重新同步。";
-        }
-        if (normalized === "FAILED") {
-            return buildRunReasonSummary(item);
-        }
-        if (normalized === "SUCCEEDED") {
-            return item.message || "同步成功，资料已经完成解析并写入知识库。";
-        }
-        if (normalized === "COMPILE_QUEUED") {
-            return "识别与物化已完成，正在等待编译任务执行。";
-        }
-        if (normalized === "RUNNING") {
-            return compactDisplayMessage(item && item.compileProgressMessage) || "编译任务执行中，入库完成后页面会自动刷新。";
-        }
-        if (normalized === "MATERIALIZING") {
-            return "正在拉取 Git / 复制服务器目录并准备标准化源文件。";
-        }
-        if (normalized === "MATCHING") {
-            return "正在做资料包特征提取、规则召回和自动归并判断。";
-        }
-        return item.message || "同步状态已更新。";
+        const message = String(item && item.message || "").trim();
+        return message || "同步状态已更新。";
     }
 
     function getRunMetaLine(item) {
         return [
             item.sourceType ? "类型：" + getBadgeLabel(item.sourceType) : "",
-            item.resolverDecision ? "决策：" + getBadgeLabel(item.resolverDecision) : "",
-            item.syncAction ? "动作：" + getBadgeLabel(item.syncAction) : "",
             resolveRunDisplayStatus(item) ? "运行态：" + getBadgeLabel(resolveRunDisplayStatus(item)) : "",
             item.requestedAt ? "提交于 " + formatDateTime(item.requestedAt) : ""
         ].filter(Boolean).join(" · ");
     }
 
     function buildRunCompletionMessage(run) {
-        const normalized = resolveRunDisplayStatus(run) || normalizeStatus(run.status);
-        if (normalized === "SKIPPED_NO_CHANGE") {
-            return getRunTitle(run) + " 已检查完成，本次没有发现变化。";
+        const completionNotice = String(run && run.completionNotice || "").trim();
+        if (completionNotice) {
+            return getRunTitle(run) + "：" + completionNotice;
         }
-        if (normalized === "WAIT_CONFIRM") {
-            return getRunTitle(run) + " 需要人工确认归并方式。";
-        }
-        if (normalized === "STALLED") {
-            return getRunTitle(run) + " 长时间没有推进，建议查看当前步骤后重新同步资料源。";
-        }
-        if (normalized === "FAILED") {
-            return getRunTitle(run) + " 处理失败：" + buildRunReasonSummary(run);
+        const reasonSummary = String(run && run.reasonSummary || "").trim();
+        if (reasonSummary) {
+            return getRunTitle(run) + "：" + reasonSummary;
         }
         return getRunTitle(run) + " 已处理完成，并已更新页面状态。";
     }
 
     function resolveRunNoticeTone(run) {
-        const normalized = resolveRunDisplayStatus(run) || normalizeStatus(run.status);
-        if (normalized === "FAILED" || normalized === "WAIT_CONFIRM" || normalized === "STALLED") {
-            return "warning";
-        }
-        if (normalized === "SKIPPED_NO_CHANGE") {
-            return "info";
-        }
-        return "success";
-    }
-
-    function isPollingStatus(status) {
-        return RUN_POLLING_STATUSES.indexOf(normalizeStatus(status)) >= 0;
+        return String(run && run.noticeTone || "").trim() || "success";
     }
 
     function compareRunsByRequestedAtDesc(left, right) {
@@ -2933,6 +2952,22 @@
         return items.some(function (item) {
             return item.id === sourceId;
         });
+    }
+
+    function findSourceById(items, sourceId) {
+        if (!Array.isArray(items)) {
+            return null;
+        }
+        for (let index = 0; index < items.length; index++) {
+            if (items[index] && items[index].id === sourceId) {
+                return items[index];
+            }
+        }
+        return null;
+    }
+
+    function isUploadSource(source) {
+        return Boolean(source && String(source.sourceType || "").trim().toUpperCase() === "UPLOAD");
     }
 
     function containsArticle(items, articleId, sourceId) {
@@ -3388,14 +3423,14 @@
             NEEDS_HUMAN_REVIEW: "需人工复核",
             SUCCEEDED: "成功",
             FAILED: "失败",
-            STALLED: "疑似卡住",
-            RUNNING: "编译中",
+            STALLED: "失败",
+            RUNNING: "进行中",
             QUEUED: "排队中",
             MATCHING: "识别中",
-            MATERIALIZING: "物化中",
-            COMPILE_QUEUED: "待编译",
+            MATERIALIZING: "整理中",
+            COMPILE_QUEUED: "待处理",
             WAIT_CONFIRM: "待确认",
-            SKIPPED_NO_CHANGE: "无变化跳过",
+            SKIPPED_NO_CHANGE: "已完成",
             DIRECT_COMPILE: "直接编译",
             CONFIRMED: "已确认",
             NEW_SOURCE: "新建资料源",
@@ -3476,15 +3511,21 @@
     }
 
     if (typeof globalThis !== "undefined" && globalThis.__LATTICE_ADMIN_TEST__) {
+        globalThis.__LATTICE_ADMIN_TEST_STATE__ = state;
         globalThis.__LATTICE_ADMIN_TEST__.runs = {
             resolveRunDisplayStatus: resolveRunDisplayStatus,
             resolveRunStepLabel: resolveRunStepLabel,
             resolveRunProgressText: resolveRunProgressText,
+            buildRunProgressStrip: buildRunProgressStrip,
             buildRunReasonSummary: buildRunReasonSummary,
+            shouldRenderRunReasonSummary: shouldRenderRunReasonSummary,
             buildRunRuntimeSnapshot: buildRunRuntimeSnapshot,
+            shouldRenderRunAsBoardFocus: shouldRenderRunAsBoardFocus,
+            shouldPromoteCompletionRunAsBoardFocus: shouldPromoteCompletionRunAsBoardFocus,
+            shouldRenderRunAsCompletionNotice: shouldRenderRunAsCompletionNotice,
+            renderRecentRunBoardItem: renderRecentRunBoardItem,
             renderSourceRunListItem: renderSourceRunListItem,
             buildSourceRunDetailCard: buildSourceRunDetailCard,
-            shouldShowResyncAction: shouldShowResyncAction,
             sanitizeDisplayMessage: sanitizeDisplayMessage,
             resolveHttpErrorDisplayMessage: resolveHttpErrorDisplayMessage
         };
@@ -3492,7 +3533,10 @@
             renderSourceFileListItem: renderSourceFileListItem,
             buildSourceFileDetailCard: buildSourceFileDetailCard,
             resolveSourceRunKey: resolveSourceRunKey,
-            resolveSourceFileKey: resolveSourceFileKey
+            resolveSourceFileKey: resolveSourceFileKey,
+            isUploadSource: isUploadSource,
+            focusSourceRunDetail: focusSourceRunDetail,
+            shouldFollowLatestSourceRun: shouldFollowLatestSourceRun
         };
         globalThis.__LATTICE_ADMIN_TEST__.article = {
             resolveArticleDisplayTitle: resolveArticleDisplayTitle,
@@ -3503,6 +3547,7 @@
             buildArticleTraceabilityNote: buildArticleTraceabilityNote,
             collectArticleSourceTypes: collectArticleSourceTypes,
             getPrimaryArticleSourcePath: getPrimaryArticleSourcePath,
+            renderArticleDetail: renderArticleDetail,
             resolveSourceTypeLabel: resolveSourceTypeLabel,
             buildSourceGranularityNote: buildSourceGranularityNote,
             buildFileLevelTraceExplanation: buildFileLevelTraceExplanation

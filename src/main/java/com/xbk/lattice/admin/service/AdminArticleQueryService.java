@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -90,7 +91,7 @@ public class AdminArticleQueryService {
             matchedArticles.add(articleRecord);
         }
         matchedArticles.sort(Comparator
-                .comparing(ArticleRecord::getCompiledAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                .comparing(AdminArticleQueryService::resolveStoredAt, Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(ArticleRecord::getConceptId, Comparator.nullsLast(String::compareToIgnoreCase)));
         return matchedArticles;
     }
@@ -213,5 +214,18 @@ public class AdminArticleQueryService {
             return null;
         }
         return trimmedValue.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 解析文章最近存表时间。
+     *
+     * @param articleRecord 文章记录
+     * @return 最近存表时间
+     */
+    private static OffsetDateTime resolveStoredAt(ArticleRecord articleRecord) {
+        if (articleRecord.getUpdatedAt() != null) {
+            return articleRecord.getUpdatedAt();
+        }
+        return articleRecord.getCompiledAt();
     }
 }

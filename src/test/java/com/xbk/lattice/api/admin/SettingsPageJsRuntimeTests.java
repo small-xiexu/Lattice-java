@@ -50,6 +50,7 @@ class SettingsPageJsRuntimeTests {
                 const vm = require("vm");
 
                 const source = fs.readFileSync(process.argv[2], "utf8");
+                const adminTabsCalls = [];
                 const sandbox = {
                     console: console,
                     URLSearchParams: URLSearchParams,
@@ -58,7 +59,12 @@ class SettingsPageJsRuntimeTests {
                     window: {
                         setTimeout: function () { return 0; },
                         clearTimeout: function () {},
-                        location: { search: "" }
+                        location: { search: "" },
+                        AdminTabs: {
+                            activate: function (groupName, tabName, options) {
+                                adminTabsCalls.push({ groupName, tabName, options });
+                            }
+                        }
                     },
                     document: {
                         addEventListener: function () {},
@@ -98,6 +104,15 @@ class SettingsPageJsRuntimeTests {
                     "synthesizer role should expose localized summary");
                 assert(settingsPage.getBindingRoleOptions("deep_research").length === 4,
                     "deep research scene should expose four role options");
+                settingsPage.activateSettingsTab("settings-parse", { scroll: true });
+                assert(adminTabsCalls.length === 1,
+                    "settings page should delegate tab activation to AdminTabs");
+                assert(adminTabsCalls[0].groupName === "admin-console",
+                    "settings page should activate the admin console tab group");
+                assert(adminTabsCalls[0].tabName === "settings-parse",
+                    "settings page should activate the requested tab");
+                assert(adminTabsCalls[0].options && adminTabsCalls[0].options.scroll === true,
+                    "settings page should preserve the scroll option when activating tabs");
 
                 console.log("settings-page-js-runtime-tests:ok");
                 """;

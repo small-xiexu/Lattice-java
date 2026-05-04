@@ -196,6 +196,13 @@ public class ArticleCompileSupport {
                     total,
                     buildCompileDraftProgressMessage(index + 1, total, mergedConcept)
             );
+            touchProgress(
+                    scopeId,
+                    "compile_new_articles",
+                    index + 1,
+                    total,
+                    "正在调用 Writer 生成草稿：" + mergedConcept.getConceptId()
+            );
             WriterResult writerResult = writerAgent.write(new WriterTask(
                     mergedConcept,
                     sourceDir,
@@ -204,6 +211,13 @@ public class ArticleCompileSupport {
                     scopeId,
                     scene
             ));
+            touchProgress(
+                    scopeId,
+                    "compile_new_articles",
+                    index + 1,
+                    total,
+                    "Writer 草稿生成完成：" + mergedConcept.getConceptId()
+            );
             ArticleRecord writerArticleRecord = writerResult.getArticleRecord();
             if (writerArticleRecord != null) {
                 draftArticles.add(writerArticleRecord);

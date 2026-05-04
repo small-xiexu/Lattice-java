@@ -5,11 +5,15 @@
         });
     }
 
+    function findPanelByTabName(panels, tabName) {
+        return panels.find(function (panel) {
+            return panel.dataset.tabPanel === tabName;
+        }) || null;
+    }
+
     function ensureTabSemantics(root, triggers, panels) {
         triggers.forEach(function (trigger, index) {
-            const panel = panels.find(function (entry) {
-                return entry.dataset.tabPanel === trigger.dataset.tabTrigger;
-            });
+            const panel = findPanelByTabName(panels, trigger.dataset.tabTrigger);
             const triggerId = trigger.id || root.dataset.tabGroup + "-tab-" + index;
             const panelId = panel && panel.id ? panel.id : root.dataset.tabGroup + "-panel-" + index;
             trigger.id = triggerId;
@@ -21,6 +25,38 @@
                 panel.setAttribute("role", panel.getAttribute("role") || "tabpanel");
                 panel.setAttribute("aria-labelledby", triggerId);
             }
+        });
+    }
+
+    function resolveScrollTarget(panel, options) {
+        if (!panel) {
+            return null;
+        }
+        const scrollTargetId = options && options.scrollTargetId ? String(options.scrollTargetId).trim() : "";
+        if (!scrollTargetId || typeof document === "undefined" || typeof document.getElementById !== "function") {
+            return panel;
+        }
+        return document.getElementById(scrollTargetId) || panel;
+    }
+
+    function scrollToActivatedPanel(panel, options) {
+        if (!panel || !options || options.scroll !== true) {
+            return;
+        }
+        const target = resolveScrollTarget(panel, options);
+        if (!target || typeof target.scrollIntoView !== "function") {
+            return;
+        }
+        const requestFrame = typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
+                ? window.requestAnimationFrame.bind(window)
+                : function (callback) {
+                    callback();
+                };
+        requestFrame(function () {
+            target.scrollIntoView({
+                behavior: options.scrollBehavior === "auto" ? "auto" : "smooth",
+                block: options.scrollBlock || "start"
+            });
         });
     }
 
@@ -47,10 +83,11 @@
         const triggers = findOwnedElements(root, "[data-tab-trigger]");
         const panels = findOwnedElements(root, "[data-tab-panel]");
         if (triggers.length === 0 || panels.length === 0) {
-            return;
+            return null;
         }
         ensureTabSemantics(root, triggers, panels);
         const nextTab = tabName || triggers[0].dataset.tabTrigger;
+        const activePanel = findPanelByTabName(panels, nextTab);
         triggers.forEach(function (trigger) {
             const active = trigger.dataset.tabTrigger === nextTab;
             trigger.classList.toggle("active", active);
@@ -66,6 +103,8 @@
         if (!options || options.syncUrl !== false) {
             syncUrlState(root, nextTab);
         }
+        scrollToActivatedPanel(activePanel, options);
+        return activePanel;
     }
 
     function resolveInitialTab(root, triggers) {
@@ -99,7 +138,10 @@
         ensureTabSemantics(root, triggers, panels);
         triggers.forEach(function (trigger) {
             trigger.addEventListener("click", function () {
-                activateGroup(root, trigger.dataset.tabTrigger);
+                activateGroup(root, trigger.dataset.tabTrigger, {
+                    scroll: trigger.dataset.tabScroll === "true",
+                    scrollTargetId: trigger.dataset.tabScrollTarget
+                });
             });
             trigger.addEventListener("keydown", function (event) {
                 const currentIndex = triggers.indexOf(trigger);
@@ -133,7 +175,10 @@
         });
         findOwnedElements(root, "[data-tab-open]").forEach(function (trigger) {
             trigger.addEventListener("click", function () {
-                activateGroup(root, trigger.dataset.tabOpen);
+                activateGroup(root, trigger.dataset.tabOpen, {
+                    scroll: trigger.dataset.tabScroll !== "false",
+                    scrollTargetId: trigger.dataset.tabScrollTarget
+                });
             });
         });
         const requestedTab = resolveInitialTab(root, triggers);
@@ -148,14 +193,14 @@
     });
 
     window.AdminTabs = {
-        activate: function (groupName, tabName) {
+        activate: function (groupName, tabName, options) {
             const root = Array.from(document.querySelectorAll("[data-tab-group]")).find(function (entry) {
                 return entry.dataset.tabGroup === groupName;
             });
             if (!root) {
                 return;
             }
-            activateGroup(root, tabName);
+            activateGroup(root, tabName, options);
         }
     };
 })(window);

@@ -22,7 +22,7 @@ class DeepResearchRouterTests {
         DeepResearchRouter deepResearchRouter = new DeepResearchRouter();
 
         QueryRequest queryRequest = new QueryRequest();
-        queryRequest.setQuestion("IAG 集成步骤成功后会返回什么状态？");
+        queryRequest.setQuestion("某个接入流程成功后会返回什么状态？");
 
         assertThat(deepResearchRouter.shouldRoute(queryRequest)).isFalse();
     }
@@ -35,7 +35,7 @@ class DeepResearchRouterTests {
         DeepResearchRouter deepResearchRouter = new DeepResearchRouter();
 
         QueryRequest queryRequest = new QueryRequest();
-        queryRequest.setQuestion("买一赠一有哪些渠道？旧版和 V2 有什么区别？");
+        queryRequest.setQuestion("这个模块有哪些接入方式？旧版和 V2 有什么区别？");
 
         assertThat(deepResearchRouter.shouldRoute(queryRequest)).isFalse();
     }
@@ -48,7 +48,7 @@ class DeepResearchRouterTests {
         DeepResearchRouter deepResearchRouter = new DeepResearchRouter();
 
         QueryRequest queryRequest = new QueryRequest();
-        queryRequest.setQuestion("IAG 集成步骤成功后会返回什么状态？");
+        queryRequest.setQuestion("某个接入流程成功后会返回什么状态？");
         queryRequest.setForceDeep(true);
 
         assertThat(deepResearchRouter.shouldRoute(queryRequest)).isTrue();

@@ -1,10 +1,16 @@
 package com.xbk.lattice.admin.service;
 
+import com.xbk.lattice.api.admin.AdminKnowledgeHelpActionResponse;
+import com.xbk.lattice.api.admin.AdminKnowledgeHelpStateResponse;
+import com.xbk.lattice.api.admin.AdminProcessingTaskSummaryCardResponse;
 import com.xbk.lattice.api.admin.AdminProcessingTaskItemResponse;
 import com.xbk.lattice.api.admin.AdminProcessingTaskListResponse;
 import com.xbk.lattice.api.admin.AdminProcessingTaskSummaryResponse;
+import com.xbk.lattice.api.admin.AdminProcessingTaskActionResponse;
 import com.xbk.lattice.compiler.service.CompileJobDerivedStatusResolver;
 import com.xbk.lattice.compiler.service.CompileJobService;
+import com.xbk.lattice.governance.StatusService;
+import com.xbk.lattice.governance.StatusSnapshot;
 import com.xbk.lattice.infra.persistence.CompileJobRecord;
 import com.xbk.lattice.source.domain.KnowledgeSource;
 import com.xbk.lattice.source.domain.SourceSyncRunDetail;
@@ -14,13 +20,16 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.InvalidPathException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
+import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * 工作台当前处理任务聚合服务。
@@ -33,10 +42,6 @@ import java.util.Locale;
 @Profile("jdbc")
 public class AdminProcessingTaskService {
 
-    private static final String TASK_TYPE_SOURCE_SYNC = "SOURCE_SYNC";
-
-    private static final String TASK_TYPE_STANDALONE_COMPILE = "STANDALONE_COMPILE";
-
     private final SourceUploadService sourceUploadService;
 
     private final CompileJobService compileJobService;
@@ -45,6 +50,12 @@ public class AdminProcessingTaskService {
 
     private final SourceService sourceService;
 
+    private final AdminUploadWorkspaceService adminUploadWorkspaceService;
+
+    private final AdminProcessingTaskPresentationResolver presentationResolver;
+
+    private final StatusService statusService;
+
     /**
      * 创建工作台当前处理任务聚合服务。
      *
@@ -52,17 +63,26 @@ public class AdminProcessingTaskService {
      * @param compileJobService 编译作业服务
      * @param compileJobDerivedStatusResolver 编译作业派生状态解析器
      * @param sourceService 资料源服务
+     * @param adminUploadWorkspaceService 上传工作目录服务
+     * @param presentationResolver 当前处理任务展示解析器
+     * @param statusService 状态服务
      */
     public AdminProcessingTaskService(
             SourceUploadService sourceUploadService,
             CompileJobService compileJobService,
             CompileJobDerivedStatusResolver compileJobDerivedStatusResolver,
-            SourceService sourceService
+            SourceService sourceService,
+            AdminUploadWorkspaceService adminUploadWorkspaceService,
+            AdminProcessingTaskPresentationResolver presentationResolver,
+            StatusService statusService
     ) {
         this.sourceUploadService = sourceUploadService;
         this.compileJobService = compileJobService;
         this.compileJobDerivedStatusResolver = compileJobDerivedStatusResolver;
         this.sourceService = sourceService;
+        this.adminUploadWorkspaceService = adminUploadWorkspaceService;
+        this.presentationResolver = presentationResolver;
+        this.statusService = statusService;
     }
 
     /**
@@ -74,7 +94,9 @@ public class AdminProcessingTaskService {
     public AdminProcessingTaskListResponse listProcessingTasks(int limit) {
         int resolvedLimit = Math.max(limit, 1);
         List<AdminProcessingTaskItemResponse> mergedItems = new ArrayList<AdminProcessingTaskItemResponse>();
-        List<SourceSyncRunDetail> recentRuns = sourceUploadService.listRecentRunDetails(resolvedLimit);
+        List<SourceSyncRunDetail> recentRuns = collapseCurrentSourceRuns(
+                sourceUploadService.listRecentRunDetails(resolvedLimit)
+        );
         for (SourceSyncRunDetail recentRun : recentRuns) {
             mergedItems.add(toSourceSyncTask(recentRun));
         }
@@ -89,6 +111,33 @@ public class AdminProcessingTaskService {
     }
 
     /**
+     * 收敛当前处理任务视图中的资料源同步记录。
+     *
+     * 职责：同一资料源只保留最新一条同步 run，旧终态记录仍留在资料源同步历史中查看
+     *
+     * @param recentRuns 最近同步运行详情
+     * @return 收敛后的同步运行详情
+     */
+    private List<SourceSyncRunDetail> collapseCurrentSourceRuns(List<SourceSyncRunDetail> recentRuns) {
+        if (recentRuns == null || recentRuns.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<SourceSyncRunDetail> collapsedRuns = new ArrayList<SourceSyncRunDetail>();
+        Set<Long> seenSourceIds = new LinkedHashSet<Long>();
+        for (SourceSyncRunDetail recentRun : recentRuns) {
+            Long sourceId = recentRun.getSourceId();
+            if (sourceId == null) {
+                collapsedRuns.add(recentRun);
+                continue;
+            }
+            if (seenSourceIds.add(sourceId)) {
+                collapsedRuns.add(recentRun);
+            }
+        }
+        return collapsedRuns;
+    }
+
+    /**
      * 将同步运行详情映射为统一任务。
      *
      * @param runDetail 同步运行详情
@@ -97,10 +146,27 @@ public class AdminProcessingTaskService {
     private AdminProcessingTaskItemResponse toSourceSyncTask(SourceSyncRunDetail runDetail) {
         String title = buildSourceSyncTitle(runDetail);
         List<String> sourceNames = safeList(runDetail.getSourceNames());
-        List<String> actions = resolveSourceSyncActions(runDetail);
+        List<AdminProcessingTaskActionResponse> actions = resolveSourceSyncActions(runDetail);
+        String displayStatus = presentationResolver.resolveDisplayStatus(
+                runDetail.getCompileDerivedStatus(),
+                runDetail.getCompileJobStatus(),
+                runDetail.getStatus()
+        );
+        AdminProcessingTaskPresentation presentation = presentationResolver.resolve(
+                AdminProcessingTaskPresentationResolver.TASK_TYPE_SOURCE_SYNC,
+                displayStatus,
+                runDetail.getCompileCurrentStep(),
+                runDetail.getCompileProgressCurrent(),
+                runDetail.getCompileProgressTotal(),
+                runDetail.getCompileProgressMessage(),
+                runDetail.getCompileErrorCode(),
+                runDetail.getMessage(),
+                runDetail.getErrorMessage(),
+                runDetail.getSourceId()
+        );
         return new AdminProcessingTaskItemResponse(
                 "source-run:" + String.valueOf(runDetail.getRunId()),
-                TASK_TYPE_SOURCE_SYNC,
+                AdminProcessingTaskPresentationResolver.TASK_TYPE_SOURCE_SYNC,
                 title,
                 runDetail.getRunId(),
                 runDetail.getSourceId(),
@@ -126,6 +192,19 @@ public class AdminProcessingTaskService {
                 runDetail.getErrorMessage(),
                 sourceNames,
                 actions,
+                presentation.getDisplayStatus(),
+                presentation.getDisplayStatusLabel(),
+                presentation.getCurrentStepLabel(),
+                presentation.getNextStepHint(),
+                presentation.getProgressText(),
+                presentation.getReasonSummary(),
+                presentation.getOperationalNote(),
+                presentation.getProgressSteps(),
+                presentation.getDisplayTone(),
+                presentation.isProcessingActive(),
+                presentation.isRequiresManualAction(),
+                presentation.getNoticeTone(),
+                presentation.getCompletionNotice(),
                 runDetail.getEvidenceJson(),
                 runDetail.getRequestedAt(),
                 runDetail.getUpdatedAt(),
@@ -142,7 +221,9 @@ public class AdminProcessingTaskService {
      */
     private AdminProcessingTaskItemResponse toStandaloneCompileTask(CompileJobRecord compileJobRecord) {
         KnowledgeSource source = resolveVisibleSource(compileJobRecord);
-        String title = buildStandaloneCompileTitle(compileJobRecord, source);
+        List<String> uploadRelativeFileNames =
+                adminUploadWorkspaceService.listRelativeFileNames(compileJobRecord.getSourceDir());
+        String title = buildStandaloneCompileTitle(compileJobRecord, source, uploadRelativeFileNames);
         String sourceName = source == null ? null : source.getName();
         Long sourceId = source == null ? null : source.getId();
         String sourceType = source == null ? "DIRECT_COMPILE" : source.getSourceType();
@@ -150,9 +231,21 @@ public class AdminProcessingTaskService {
         String derivedStatus = compileJobDerivedStatusResolver.resolve(compileJobRecord);
         String message = buildStandaloneCompileMessage(compileJobRecord, derivedStatus);
         OffsetDateTime updatedAt = resolveStandaloneUpdatedAt(compileJobRecord);
+        AdminProcessingTaskPresentation presentation = presentationResolver.resolve(
+                AdminProcessingTaskPresentationResolver.TASK_TYPE_STANDALONE_COMPILE,
+                derivedStatus,
+                compileJobRecord.getCurrentStep(),
+                Integer.valueOf(compileJobRecord.getProgressCurrent()),
+                Integer.valueOf(compileJobRecord.getProgressTotal()),
+                compileJobRecord.getProgressMessage(),
+                compileJobRecord.getErrorCode(),
+                message,
+                compileJobRecord.getErrorMessage(),
+                sourceId
+        );
         return new AdminProcessingTaskItemResponse(
                 "compile-job:" + compileJobRecord.getJobId(),
-                TASK_TYPE_STANDALONE_COMPILE,
+                AdminProcessingTaskPresentationResolver.TASK_TYPE_STANDALONE_COMPILE,
                 title,
                 null,
                 sourceId,
@@ -178,6 +271,19 @@ public class AdminProcessingTaskService {
                 compileJobRecord.getErrorMessage(),
                 sourceNames,
                 Collections.emptyList(),
+                presentation.getDisplayStatus(),
+                presentation.getDisplayStatusLabel(),
+                presentation.getCurrentStepLabel(),
+                presentation.getNextStepHint(),
+                presentation.getProgressText(),
+                presentation.getReasonSummary(),
+                presentation.getOperationalNote(),
+                presentation.getProgressSteps(),
+                presentation.getDisplayTone(),
+                presentation.isProcessingActive(),
+                presentation.isRequiresManualAction(),
+                presentation.getNoticeTone(),
+                presentation.getCompletionNotice(),
                 null,
                 formatTime(compileJobRecord.getRequestedAt()),
                 formatTime(updatedAt),
@@ -193,23 +299,20 @@ public class AdminProcessingTaskService {
      * @return 汇总响应
      */
     private AdminProcessingTaskSummaryResponse buildSummary(List<AdminProcessingTaskItemResponse> items) {
+        StatusSnapshot statusSnapshot = statusService.snapshot();
         int runningCount = 0;
         int waitingCount = 0;
-        int stalledCount = 0;
         int succeededCount = 0;
         int failedCount = 0;
         for (AdminProcessingTaskItemResponse item : items) {
             String displayStatus = resolveDisplayStatus(item);
-            if ("WAIT_CONFIRM".equals(displayStatus)) {
+            if (AdminProcessingTaskDisplayStatus.WAIT_CONFIRM.matches(displayStatus)) {
                 waitingCount++;
             }
-            else if ("STALLED".equals(displayStatus)) {
-                stalledCount++;
-            }
-            else if ("SUCCEEDED".equals(displayStatus) || "SKIPPED_NO_CHANGE".equals(displayStatus)) {
+            else if (AdminProcessingTaskDisplayStatus.isSucceeded(displayStatus)) {
                 succeededCount++;
             }
-            else if ("FAILED".equals(displayStatus)) {
+            else if (AdminProcessingTaskDisplayStatus.isFailed(displayStatus)) {
                 failedCount++;
             }
             else if (isRunningLike(displayStatus)) {
@@ -219,9 +322,172 @@ public class AdminProcessingTaskService {
         return new AdminProcessingTaskSummaryResponse(
                 runningCount,
                 waitingCount,
-                stalledCount,
+                0,
                 succeededCount,
-                failedCount
+                failedCount,
+                buildSummaryCards(runningCount, waitingCount, 0, succeededCount, failedCount),
+                buildHelpState(statusSnapshot, runningCount, waitingCount, 0, succeededCount, failedCount)
+        );
+    }
+
+    /**
+     * 构建顶部概览卡片。
+     *
+     * @param runningCount 运行中数量
+     * @param waitingCount 待确认数量
+     * @param stalledCount 疑似卡住数量
+     * @param succeededCount 已完成数量
+     * @param failedCount 失败数量
+     * @return 概览卡片
+     */
+    private List<AdminProcessingTaskSummaryCardResponse> buildSummaryCards(
+            int runningCount,
+            int waitingCount,
+            int stalledCount,
+            int succeededCount,
+            int failedCount
+    ) {
+        List<AdminProcessingTaskSummaryCardResponse> cards = new ArrayList<AdminProcessingTaskSummaryCardResponse>();
+        cards.add(new AdminProcessingTaskSummaryCardResponse(
+                "运行中",
+                runningCount,
+                runningCount > 0 ? "系统仍在持续推进这些任务" : "当前没有正在推进的资料处理任务",
+                runningCount > 0 ? "warning" : ""
+        ));
+        cards.add(new AdminProcessingTaskSummaryCardResponse(
+                "待确认",
+                waitingCount,
+                waitingCount > 0 ? "请打开下方任务查看后端给出的确认动作" : "当前没有需要人工确认的任务",
+                waitingCount > 0 ? "warning" : "success"
+        ));
+        cards.add(new AdminProcessingTaskSummaryCardResponse(
+                "已完成",
+                succeededCount,
+                succeededCount > 0 ? "最近已经成功处理并写入知识库" : "最近还没有成功完成的任务",
+                succeededCount > 0 ? "success" : ""
+        ));
+        cards.add(new AdminProcessingTaskSummaryCardResponse(
+                "失败",
+                failedCount,
+                failedCount > 0 ? "建议打开下方卡片查看错误信息" : "最近没有失败任务",
+                failedCount > 0 ? "danger" : "success"
+        ));
+        return cards;
+    }
+
+    /**
+     * 构建帮助卡状态。
+     *
+     * @param runningCount 运行中数量
+     * @param waitingCount 待确认数量
+     * @param stalledCount 疑似卡住数量
+     * @param succeededCount 已完成数量
+     * @param failedCount 失败数量
+     * @return 帮助卡状态
+     */
+    private AdminKnowledgeHelpStateResponse buildHelpState(
+            StatusSnapshot statusSnapshot,
+            int runningCount,
+            int waitingCount,
+            int stalledCount,
+            int succeededCount,
+            int failedCount
+    ) {
+        int articleCount = statusSnapshot == null ? 0 : statusSnapshot.getArticleCount();
+        int sourceFileCount = statusSnapshot == null ? 0 : statusSnapshot.getSourceFileCount();
+        if (stalledCount > 0) {
+            return new AdminKnowledgeHelpStateResponse(
+                    "danger",
+                    "有一批资料疑似卡住了",
+                    "先去当前处理任务查看后端返回的当前步骤、原因摘要和可执行动作。",
+                    "upload-delay",
+                    List.of(
+                            new AdminKnowledgeHelpActionResponse("查看当前处理任务", "knowledge-runs", "primary-btn"),
+                            new AdminKnowledgeHelpActionResponse("回资料导入", "knowledge-upload", "ghost-btn")
+                    )
+            );
+        }
+        if (failedCount > 0) {
+            return new AdminKnowledgeHelpStateResponse(
+                    "danger",
+                    "最近一次入库失败了",
+                    "先去当前处理任务查看后端返回的失败摘要、当前步骤和下一步建议。",
+                    "upload-delay",
+                    List.of(
+                            new AdminKnowledgeHelpActionResponse("查看当前处理任务", "knowledge-runs", "primary-btn"),
+                            new AdminKnowledgeHelpActionResponse("回资料导入", "knowledge-upload", "ghost-btn")
+                    )
+            );
+        }
+        if (waitingCount > 0) {
+            return new AdminKnowledgeHelpStateResponse(
+                    "warning",
+                    "有一批资料还在等待人工确认",
+                    "请去当前处理任务查看后端返回的待确认项和可执行动作。",
+                    "upload-delay",
+                    List.of(
+                            new AdminKnowledgeHelpActionResponse("去当前处理任务", "knowledge-runs", "primary-btn"),
+                            new AdminKnowledgeHelpActionResponse("看已入库内容", "knowledge-articles", "ghost-btn")
+                    )
+            );
+        }
+        if (runningCount > 0) {
+            return new AdminKnowledgeHelpStateResponse(
+                    "warning",
+                    "这批资料还在处理中",
+                    "当前处理任务已经展示后端返回的真实步骤、进度与原因摘要，先去那里继续观察。",
+                    "upload-delay",
+                    List.of(
+                            new AdminKnowledgeHelpActionResponse("去当前处理任务", "knowledge-runs", "primary-btn"),
+                            new AdminKnowledgeHelpActionResponse("看已入库内容", "knowledge-articles", "ghost-btn")
+                    )
+            );
+        }
+        if (articleCount <= 0 && sourceFileCount <= 0) {
+            return new AdminKnowledgeHelpStateResponse(
+                    "info",
+                    "当前还没有可用资料",
+                    "先上传一批文件或接入 Git 仓库。只有资料真正入库后，知识问答页才会稳定返回结果。",
+                    "first-steps",
+                    List.of(
+                            new AdminKnowledgeHelpActionResponse("上传资料", "knowledge-upload", "primary-btn"),
+                            new AdminKnowledgeHelpActionResponse("回到首屏状态", "workbench-top", "ghost-btn")
+                    )
+            );
+        }
+        if (sourceFileCount > 0 && articleCount <= 0) {
+            return new AdminKnowledgeHelpStateResponse(
+                    "warning",
+                    "资料已经处理过，但还没有进入可问答状态",
+                    "请先查看已入库内容；如果这里仍为空，再回到当前处理任务查看后端返回的状态与原因摘要。",
+                    "cannot-answer",
+                    List.of(
+                            new AdminKnowledgeHelpActionResponse("去已入库内容", "knowledge-articles", "primary-btn"),
+                            new AdminKnowledgeHelpActionResponse("回资料导入", "knowledge-upload", "ghost-btn")
+                    )
+            );
+        }
+        if (succeededCount > 0) {
+            return new AdminKnowledgeHelpStateResponse(
+                    "success",
+                    "知识库已经可以使用",
+                    "资料已经进入知识库。现在可以直接提问；如果结果不准，再回到这里核对已入库内容和当前处理任务。",
+                    "cannot-answer",
+                    List.of(
+                            new AdminKnowledgeHelpActionResponse("去知识问答", "go-ask", "primary-btn"),
+                            new AdminKnowledgeHelpActionResponse("去已入库内容", "knowledge-articles", "ghost-btn")
+                    )
+            );
+        }
+        return new AdminKnowledgeHelpStateResponse(
+                "success",
+                "知识库已经可以使用",
+                "资料已经进入知识库。现在可以直接提问；如果结果不准，再回到这里核对已入库内容和当前处理任务。",
+                "cannot-answer",
+                List.of(
+                        new AdminKnowledgeHelpActionResponse("去知识问答", "go-ask", "primary-btn"),
+                        new AdminKnowledgeHelpActionResponse("去已入库内容", "knowledge-articles", "ghost-btn")
+                )
         );
     }
 
@@ -246,15 +512,13 @@ public class AdminProcessingTaskService {
      * @return 任务标题
      */
     private String buildSourceSyncTitle(SourceSyncRunDetail runDetail) {
+        List<String> sourceNames = safeList(runDetail.getSourceNames());
+        String sourceFileTitle = buildFileTitle(sourceNames);
+        if (sourceFileTitle != null) {
+            return sourceFileTitle;
+        }
         if (runDetail.getSourceName() != null && !runDetail.getSourceName().isBlank()) {
             return runDetail.getSourceName();
-        }
-        List<String> sourceNames = safeList(runDetail.getSourceNames());
-        if (!sourceNames.isEmpty()) {
-            if (sourceNames.size() == 1) {
-                return sourceNames.get(0);
-            }
-            return sourceNames.get(0) + " 等 " + String.valueOf(sourceNames.size()) + " 个文件";
         }
         return "资料处理任务 #" + String.valueOf(runDetail.getRunId());
     }
@@ -264,18 +528,31 @@ public class AdminProcessingTaskService {
      *
      * @param compileJobRecord 编译作业记录
      * @param source 可见资料源
+     * @param uploadRelativeFileNames 上传工作目录里的相对文件名
      * @return 任务标题
      */
-    private String buildStandaloneCompileTitle(CompileJobRecord compileJobRecord, KnowledgeSource source) {
+    private String buildStandaloneCompileTitle(
+            CompileJobRecord compileJobRecord,
+            KnowledgeSource source,
+            List<String> uploadRelativeFileNames
+    ) {
+        String uploadTitle = buildFileTitle(uploadRelativeFileNames);
+        if (uploadTitle != null) {
+            return uploadTitle;
+        }
         if (source != null && source.getName() != null && !source.getName().isBlank()) {
             return source.getName();
         }
         String sourceDir = compileJobRecord.getSourceDir();
         if (sourceDir == null || sourceDir.isBlank()) {
-            return "编译任务 #" + compileJobRecord.getJobId();
+            return "处理任务 #" + compileJobRecord.getJobId();
         }
         try {
             Path sourcePath = Path.of(sourceDir);
+            String sourceDirectoryTitle = buildFileTitle(listRelativeFileNames(sourcePath));
+            if (sourceDirectoryTitle != null) {
+                return sourceDirectoryTitle;
+            }
             Path fileName = sourcePath.getFileName();
             if (fileName != null && !fileName.toString().isBlank()) {
                 return fileName.toString();
@@ -285,6 +562,80 @@ public class AdminProcessingTaskService {
             return sourceDir;
         }
         return sourceDir;
+    }
+
+    /**
+     * 读取普通目录下的相对文件名。
+     *
+     * @param sourcePath 资料目录
+     * @return 相对文件名列表
+     */
+    private List<String> listRelativeFileNames(Path sourcePath) {
+        if (!Files.isDirectory(sourcePath)) {
+            return Collections.emptyList();
+        }
+        List<String> relativeFileNames = new ArrayList<String>();
+        try (Stream<Path> pathStream = Files.walk(sourcePath)) {
+            pathStream
+                    .filter(Files::isRegularFile)
+                    .forEach(path -> relativeFileNames.add(sourcePath.relativize(path).toString().replace("\\", "/")));
+        }
+        catch (Exception exception) {
+            return Collections.emptyList();
+        }
+        relativeFileNames.sort(Comparator.naturalOrder());
+        return relativeFileNames;
+    }
+
+    /**
+     * 构建来源文件标题。
+     *
+     * @param sourceNames 来源文件名
+     * @return 文件优先标题
+     */
+    private String buildFileTitle(List<String> sourceNames) {
+        List<String> fileNames = normalizeSourceFileNames(sourceNames);
+        if (fileNames.isEmpty()) {
+            return null;
+        }
+        if (fileNames.size() == 1) {
+            return fileNames.get(0);
+        }
+        return fileNames.get(0) + " 等 " + String.valueOf(fileNames.size()) + " 个文件";
+    }
+
+    /**
+     * 规范化来源文件名。
+     *
+     * @param sourceNames 来源文件名
+     * @return 去重后的末级文件名
+     */
+    private List<String> normalizeSourceFileNames(List<String> sourceNames) {
+        Set<String> fileNames = new LinkedHashSet<String>();
+        for (String sourceName : safeList(sourceNames)) {
+            if (sourceName == null || sourceName.isBlank()) {
+                continue;
+            }
+            String fileName = extractLeafName(sourceName.trim());
+            if (!fileName.isBlank()) {
+                fileNames.add(fileName);
+            }
+        }
+        return new ArrayList<String>(fileNames);
+    }
+
+    /**
+     * 提取路径末级名称。
+     *
+     * @param relativeFileName 相对文件名
+     * @return 末级名称
+     */
+    private String extractLeafName(String relativeFileName) {
+        int slashIndex = relativeFileName.lastIndexOf('/');
+        if (slashIndex >= 0 && slashIndex + 1 < relativeFileName.length()) {
+            return relativeFileName.substring(slashIndex + 1);
+        }
+        return relativeFileName;
     }
 
     /**
@@ -311,26 +662,26 @@ public class AdminProcessingTaskService {
      */
     private String buildStandaloneCompileMessage(CompileJobRecord compileJobRecord, String derivedStatus) {
         String normalizedStatus = normalizeStatus(derivedStatus);
-        if ("FAILED".equals(normalizedStatus)) {
-            return "编译失败";
+        if (AdminProcessingTaskDisplayStatus.FAILED.matches(normalizedStatus)) {
+            return "处理失败";
         }
-        if ("SUCCEEDED".equals(normalizedStatus)) {
-            return "编译成功，资料已完成入库";
+        if (AdminProcessingTaskDisplayStatus.SUCCEEDED.matches(normalizedStatus)) {
+            return "处理成功，资料已写入知识库";
         }
-        if ("STALLED".equals(normalizedStatus)) {
-            return "编译任务长时间没有新的推进";
+        if (AdminProcessingTaskDisplayStatus.STALLED.matches(normalizedStatus)) {
+            return "任务长时间没有新的推进";
         }
-        if ("RUNNING".equals(normalizedStatus)) {
+        if (AdminProcessingTaskDisplayStatus.RUNNING.matches(normalizedStatus)) {
             String progressMessage = compileJobRecord.getProgressMessage();
             if (progressMessage != null && !progressMessage.isBlank()) {
                 return progressMessage;
             }
-            return "编译任务执行中，页面会持续刷新当前进度";
+            return "任务执行中，页面会持续刷新当前进度";
         }
-        if ("QUEUED".equals(normalizedStatus)) {
-            return "已提交编译任务，等待后台执行";
+        if (AdminProcessingTaskDisplayStatus.QUEUED.matches(normalizedStatus)) {
+            return "已提交处理任务，等待后台执行";
         }
-        return "编译状态已更新";
+        return "任务状态已更新";
     }
 
     /**
@@ -358,22 +709,58 @@ public class AdminProcessingTaskService {
      * @param runDetail 同步运行详情
      * @return 可用动作编码列表
      */
-    private List<String> resolveSourceSyncActions(SourceSyncRunDetail runDetail) {
-        List<String> actions = new ArrayList<String>();
+    private List<AdminProcessingTaskActionResponse> resolveSourceSyncActions(SourceSyncRunDetail runDetail) {
+        List<AdminProcessingTaskActionResponse> actions = new ArrayList<AdminProcessingTaskActionResponse>();
         String displayStatus = resolveDisplayStatus(runDetail);
-        if ("WAIT_CONFIRM".equals(displayStatus)) {
-            actions.add("CONFIRM_NEW_SOURCE");
+        if (AdminProcessingTaskDisplayStatus.WAIT_CONFIRM.matches(displayStatus)) {
+            actions.add(new AdminProcessingTaskActionResponse(
+                    "CONFIRM_NEW_SOURCE",
+                    "确认为新资料源",
+                    "ghost-btn",
+                    runDetail.getRunId(),
+                    runDetail.getSourceId(),
+                    "NEW_SOURCE",
+                    null,
+                    false
+            ));
             if (runDetail.getMatchedSourceId() != null) {
-                actions.add("CONFIRM_APPEND_SOURCE");
-                actions.add("CONFIRM_UPDATE_SOURCE");
+                actions.add(new AdminProcessingTaskActionResponse(
+                        "CONFIRM_APPEND_SOURCE",
+                        "追加到候选资料源",
+                        "secondary-btn",
+                        runDetail.getRunId(),
+                        runDetail.getSourceId(),
+                        "EXISTING_SOURCE_APPEND",
+                        runDetail.getMatchedSourceId(),
+                        false
+                ));
+                actions.add(new AdminProcessingTaskActionResponse(
+                        "CONFIRM_UPDATE_SOURCE",
+                        "按更新覆盖候选资料源",
+                        "ghost-btn",
+                        runDetail.getRunId(),
+                        runDetail.getSourceId(),
+                        "EXISTING_SOURCE_UPDATE",
+                        runDetail.getMatchedSourceId(),
+                        false
+                ));
             }
         }
         if (runDetail.getSourceId() != null
-                && ("FAILED".equals(displayStatus)
-                || "STALLED".equals(displayStatus)
-                || "SUCCEEDED".equals(displayStatus)
-                || "SKIPPED_NO_CHANGE".equals(displayStatus))) {
-            actions.add("RESYNC_SOURCE");
+                && !"UPLOAD".equalsIgnoreCase(runDetail.getSourceType())
+                && (AdminProcessingTaskDisplayStatus.isFailed(displayStatus)
+                || AdminProcessingTaskDisplayStatus.isSucceeded(displayStatus))) {
+            boolean failed = AdminProcessingTaskDisplayStatus.isFailed(displayStatus);
+            actions.add(new AdminProcessingTaskActionResponse(
+                    "RESYNC_SOURCE",
+                    failed ? "重新同步当前资料源" : "再次同步当前资料源",
+                    failed ? "secondary-btn" : "ghost-btn",
+                    runDetail.getRunId(),
+                    runDetail.getSourceId(),
+                    null,
+                    null,
+                    false
+            ));
         }
         return actions;
     }
@@ -406,15 +793,11 @@ public class AdminProcessingTaskService {
      * @return 展示状态
      */
     private String resolveDisplayStatus(AdminProcessingTaskItemResponse item) {
-        String derivedStatus = normalizeStatus(item.getCompileDerivedStatus());
-        if (derivedStatus != null) {
-            return derivedStatus;
-        }
-        String compileStatus = normalizeStatus(item.getCompileJobStatus());
-        if (compileStatus != null) {
-            return compileStatus;
-        }
-        return normalizeStatus(item.getStatus());
+        return presentationResolver.resolveDisplayStatus(
+                item.getCompileDerivedStatus(),
+                item.getCompileJobStatus(),
+                item.getStatus()
+        );
     }
 
     /**
@@ -424,15 +807,11 @@ public class AdminProcessingTaskService {
      * @return 展示状态
      */
     private String resolveDisplayStatus(SourceSyncRunDetail runDetail) {
-        String derivedStatus = normalizeStatus(runDetail.getCompileDerivedStatus());
-        if (derivedStatus != null) {
-            return derivedStatus;
-        }
-        String compileStatus = normalizeStatus(runDetail.getCompileJobStatus());
-        if (compileStatus != null) {
-            return compileStatus;
-        }
-        return normalizeStatus(runDetail.getStatus());
+        return presentationResolver.resolveDisplayStatus(
+                runDetail.getCompileDerivedStatus(),
+                runDetail.getCompileJobStatus(),
+                runDetail.getStatus()
+        );
     }
 
     /**
@@ -442,11 +821,7 @@ public class AdminProcessingTaskService {
      * @return 是否运行中
      */
     private boolean isRunningLike(String displayStatus) {
-        return "QUEUED".equals(displayStatus)
-                || "MATCHING".equals(displayStatus)
-                || "MATERIALIZING".equals(displayStatus)
-                || "COMPILE_QUEUED".equals(displayStatus)
-                || "RUNNING".equals(displayStatus);
+        return AdminProcessingTaskDisplayStatus.isRunningLike(displayStatus);
     }
 
     /**
@@ -456,10 +831,7 @@ public class AdminProcessingTaskService {
      * @return 规范化结果
      */
     private String normalizeStatus(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim().toUpperCase(Locale.ROOT);
+        return presentationResolver.normalizeStatus(value);
     }
 
     /**

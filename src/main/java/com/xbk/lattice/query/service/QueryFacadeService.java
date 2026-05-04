@@ -25,11 +25,19 @@ import java.util.UUID;
 @Profile("jdbc")
 public class QueryFacadeService {
 
+    private static final int DEEP_RESEARCH_PREFLIGHT_LIMIT = 6;
+
+    private static final int DEEP_RESEARCH_MIN_RELEVANT_HITS = 2;
+
+    private static final int DEEP_RESEARCH_STRONG_TOP_HIT_SCORE = 10;
+
     private final QueryGraphOrchestrator queryGraphOrchestrator;
 
     private final DeepResearchOrchestrator deepResearchOrchestrator;
 
     private final DeepResearchRouter deepResearchRouter;
+
+    private final KnowledgeSearchService knowledgeSearchService;
 
     private final OperationalQueryStatusService operationalQueryStatusService;
 
@@ -43,6 +51,7 @@ public class QueryFacadeService {
      * @param queryGraphOrchestrator 问答图编排器
      * @param deepResearchOrchestrator Deep Research 编排器
      * @param deepResearchRouter Deep Research 路由器
+     * @param knowledgeSearchService 知识检索服务
      * @param operationalQueryStatusService 运行态问答状态服务
      * @param pendingQueryManager PendingQuery 管理器
      */
@@ -51,6 +60,7 @@ public class QueryFacadeService {
             QueryGraphOrchestrator queryGraphOrchestrator,
             DeepResearchOrchestrator deepResearchOrchestrator,
             DeepResearchRouter deepResearchRouter,
+            KnowledgeSearchService knowledgeSearchService,
             OperationalQueryStatusService operationalQueryStatusService,
             PendingQueryManager pendingQueryManager,
             StructuredEventLogger structuredEventLogger
@@ -58,6 +68,7 @@ public class QueryFacadeService {
         this.queryGraphOrchestrator = queryGraphOrchestrator;
         this.deepResearchOrchestrator = deepResearchOrchestrator;
         this.deepResearchRouter = deepResearchRouter;
+        this.knowledgeSearchService = knowledgeSearchService;
         this.operationalQueryStatusService = operationalQueryStatusService;
         this.pendingQueryManager = pendingQueryManager;
         this.structuredEventLogger = structuredEventLogger;
@@ -114,13 +125,63 @@ public class QueryFacadeService {
         if (operationalQueryResponse != null) {
             return operationalQueryResponse;
         }
-        if (queryRequest != null
-                && deepResearchOrchestrator != null
-                && deepResearchRouter != null
-                && deepResearchRouter.shouldRoute(queryRequest)) {
+        if (shouldEscalateToDeepResearch(queryRequest)) {
             return deepResearchOrchestrator.execute(queryRequest, queryId);
         }
         return queryGraphOrchestrator.execute(question, queryId);
+    }
+
+    /**
+     * 判断当前请求是否应该升级到 Deep Research。
+     *
+     * <p>普通问答仍作为默认入口；只有当问题具备深研特征，且首轮检索证据不足时，
+     * 才升级到 Deep Research。这样可以避免仅凭“为什么/影响”等关键词过早切走主链。</p>
+     *
+     * @param queryRequest 查询请求
+     * @return 是否升级到 Deep Research
+     */
+    private boolean shouldEscalateToDeepResearch(QueryRequest queryRequest) {
+        if (queryRequest == null
+                || deepResearchOrchestrator == null
+                || deepResearchRouter == null
+                || !deepResearchRouter.shouldRoute(queryRequest)) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(queryRequest.getForceDeep())) {
+            return true;
+        }
+        if (knowledgeSearchService == null) {
+            return true;
+        }
+        String question = queryRequest.getQuestion();
+        if (question == null || question.isBlank()) {
+            return false;
+        }
+        try {
+            List<QueryArticleHit> preflightHits = knowledgeSearchService.search(question, DEEP_RESEARCH_PREFLIGHT_LIMIT);
+            return !hasSufficientDirectEvidence(question, preflightHits);
+        }
+        catch (RuntimeException exception) {
+            return true;
+        }
+    }
+
+    /**
+     * 判断首轮检索证据是否已经足以先走普通问答。
+     *
+     * @param question 用户问题
+     * @param preflightHits 首轮检索命中
+     * @return 足以先走普通问答返回 true
+     */
+    private boolean hasSufficientDirectEvidence(String question, List<QueryArticleHit> preflightHits) {
+        List<QueryArticleHit> relevantHits = QueryEvidenceRelevanceSupport.filterRelevantHits(question, preflightHits);
+        if (relevantHits.size() >= DEEP_RESEARCH_MIN_RELEVANT_HITS) {
+            return true;
+        }
+        if (relevantHits.isEmpty()) {
+            return false;
+        }
+        return QueryEvidenceRelevanceSupport.score(question, relevantHits.get(0)) >= DEEP_RESEARCH_STRONG_TOP_HIT_SCORE;
     }
 
     /**
@@ -142,7 +203,9 @@ public class QueryFacadeService {
                 baseResponse.getGenerationMode(),
                 baseResponse.getModelExecutionStatus(),
                 baseResponse.getCitationCheck(),
-                baseResponse.getDeepResearch()
+                baseResponse.getDeepResearch(),
+                baseResponse.getFallbackReason(),
+                baseResponse.getCitationMarkers()
         );
     }
 
@@ -196,6 +259,7 @@ public class QueryFacadeService {
         fields.put("answerOutcome", queryResponse.getAnswerOutcome());
         fields.put("generationMode", queryResponse.getGenerationMode());
         fields.put("modelExecutionStatus", queryResponse.getModelExecutionStatus());
+        fields.put("fallbackReason", queryResponse.getFallbackReason());
         fields.put("sourceCount", queryResponse.getSources() == null ? 0 : queryResponse.getSources().size());
         fields.put("articleCount", queryResponse.getArticles() == null ? 0 : queryResponse.getArticles().size());
         if (throwable != null) {

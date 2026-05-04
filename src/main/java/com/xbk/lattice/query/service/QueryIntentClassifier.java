@@ -27,6 +27,9 @@ public class QueryIntentClassifier {
             return QueryIntent.GENERAL;
         }
         String normalizedQuestion = question.toLowerCase(Locale.ROOT);
+        if (looksLikeExactLookupQuestion(normalizedQuestion)) {
+            return QueryIntent.CONFIGURATION;
+        }
         if (looksLikeArchitectureQuestion(normalizedQuestion)) {
             return QueryIntent.ARCHITECTURE;
         }
@@ -43,6 +46,33 @@ public class QueryIntentClassifier {
             return QueryIntent.TROUBLESHOOTING;
         }
         return QueryIntent.GENERAL;
+    }
+
+    /**
+     * 判断问题是否更像精确查值/精确结论题。
+     *
+     * @param normalizedQuestion 归一化问题
+     * @return 精确查值题返回 true
+     */
+    private boolean looksLikeExactLookupQuestion(String normalizedQuestion) {
+        return containsAny(
+                normalizedQuestion,
+                "命中数",
+                "接口路径",
+                "路径是什么",
+                "哪个接口",
+                "对应哪个接口",
+                "第几批",
+                "哪一批",
+                "分别是什么",
+                "分别是多少",
+                "结论是什么",
+                "状态是什么",
+                "是否生效",
+                "是否启用",
+                "是否一致",
+                "关键差异"
+        );
     }
 
     /**
@@ -64,10 +94,8 @@ public class QueryIntentClassifier {
                 "为什么要",
                 "优缺点",
                 "对比",
-                "消息队列",
-                "同步调用",
-                "异步",
-                "解耦"
+                "同步",
+                "异步"
         );
     }
 

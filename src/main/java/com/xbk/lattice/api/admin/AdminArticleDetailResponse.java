@@ -25,6 +25,10 @@ public class AdminArticleDetailResponse {
 
     private final String compiledAt;
 
+    private final String createdAt;
+
+    private final String updatedAt;
+
     private final String summary;
 
     private final String reviewStatus;
@@ -55,6 +59,8 @@ public class AdminArticleDetailResponse {
      * @param content 正文
      * @param lifecycle 生命周期
      * @param compiledAt 编译时间
+     * @param createdAt 首次入库时间
+     * @param updatedAt 最近入库时间
      * @param summary 摘要
      * @param reviewStatus 审查状态
      * @param confidence 置信度
@@ -74,6 +80,8 @@ public class AdminArticleDetailResponse {
             String content,
             String lifecycle,
             String compiledAt,
+            String createdAt,
+            String updatedAt,
             String summary,
             String reviewStatus,
             String confidence,
@@ -92,6 +100,8 @@ public class AdminArticleDetailResponse {
         this.content = content;
         this.lifecycle = lifecycle;
         this.compiledAt = compiledAt;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
         this.summary = summary;
         this.reviewStatus = reviewStatus;
         this.confidence = confidence;
@@ -165,6 +175,24 @@ public class AdminArticleDetailResponse {
      */
     public String getCompiledAt() {
         return compiledAt;
+    }
+
+    /**
+     * 获取首次入库时间。
+     *
+     * @return 首次入库时间
+     */
+    public String getCreatedAt() {
+        return createdAt;
+    }
+
+    /**
+     * 获取最近入库时间。
+     *
+     * @return 最近入库时间
+     */
+    public String getUpdatedAt() {
+        return updatedAt;
     }
 
     /**

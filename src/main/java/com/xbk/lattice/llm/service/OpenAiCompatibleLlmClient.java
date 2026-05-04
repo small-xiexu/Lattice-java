@@ -83,11 +83,41 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             Integer timeoutSeconds,
             String extraOptionsJson
     ) {
+        this(restClientBuilder, objectMapper, baseUrl, apiKey, modelName, temperature, maxTokens, timeoutSeconds, extraOptionsJson, new LlmEndpointUrlResolver());
+    }
+
+    /**
+     * 创建 OpenAI 兼容客户端。
+     *
+     * @param restClientBuilder RestClient 构建器
+     * @param objectMapper Jackson 对象映射器
+     * @param baseUrl 基础地址
+     * @param apiKey API Key
+     * @param modelName 模型名称
+     * @param temperature 温度参数
+     * @param maxTokens 最大输出 token
+     * @param timeoutSeconds 超时秒数
+     * @param extraOptionsJson 扩展参数 JSON
+     * @param endpointUrlResolver 端点地址解析器
+     */
+    public OpenAiCompatibleLlmClient(
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper,
+            String baseUrl,
+            String apiKey,
+            String modelName,
+            Double temperature,
+            Integer maxTokens,
+            Integer timeoutSeconds,
+            String extraOptionsJson,
+            LlmEndpointUrlResolver endpointUrlResolver
+    ) {
         int resolvedTimeoutSeconds = resolveTimeout(timeoutSeconds);
         JdkClientHttpRequestFactory requestFactory = createRequestFactory(resolvedTimeoutSeconds);
+        String resolvedBaseUrl = endpointUrlResolver.resolveChatBaseUrl(baseUrl);
         RestClient.Builder clientBuilder = restClientBuilder.clone()
                 .requestFactory(requestFactory)
-                .baseUrl(baseUrl)
+                .baseUrl(resolvedBaseUrl)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
         if (StringUtils.hasText(apiKey)) {
             clientBuilder.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey);
@@ -98,7 +128,7 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         this.temperature = temperature;
         this.maxTokens = maxTokens;
         this.extraOptionsJson = extraOptionsJson;
-        this.completionPath = resolveCompletionPath(baseUrl);
+        this.completionPath = endpointUrlResolver.resolveChatCompletionPath(baseUrl);
     }
 
     /**
@@ -298,13 +328,6 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         }
         int nonCjkChars = text.length() - cjkChars;
         return (int) Math.ceil(cjkChars * 1.5D + nonCjkChars * 0.4D);
-    }
-
-    private String resolveCompletionPath(String baseUrl) {
-        if (baseUrl != null && baseUrl.endsWith("/v1")) {
-            return "/chat/completions";
-        }
-        return "/v1/chat/completions";
     }
 
     private int resolveTimeout(Integer timeoutSeconds) {

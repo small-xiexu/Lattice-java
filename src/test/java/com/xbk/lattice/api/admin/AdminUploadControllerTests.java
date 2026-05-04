@@ -116,6 +116,17 @@ class AdminUploadControllerTests {
                 .andExpect(jsonPath("$.sourceId").value(sourceId))
                 .andExpect(jsonPath("$.compileJobStatus").value("SUCCEEDED"))
                 .andExpect(jsonPath("$.compileDerivedStatus").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.displayStatus").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.displayStatusLabel").value("已完成"))
+                .andExpect(jsonPath("$.currentStepLabel").value("写入知识库"))
+                .andExpect(jsonPath("$.displayTone").value("success"))
+                .andExpect(jsonPath("$.processingActive").value(false))
+                .andExpect(jsonPath("$.requiresManualAction").value(false))
+                .andExpect(jsonPath("$.noticeTone").value("success"))
+                .andExpect(jsonPath("$.completionNotice").value("处理成功，资料已写入知识库"))
+                .andExpect(jsonPath("$.progressSteps[0].label").value("资料接收"))
+                .andExpect(jsonPath("$.actions").isArray())
+                .andExpect(jsonPath("$.actions").isEmpty())
                 .andExpect(jsonPath("$.compileCurrentStep").value("finalize_job"))
                 .andExpect(jsonPath("$.compileProgressCurrent").value(1))
                 .andExpect(jsonPath("$.compileProgressTotal").value(1))
@@ -325,6 +336,11 @@ class AdminUploadControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("RUNNING"))
                 .andExpect(jsonPath("$.compileDerivedStatus").value("RUNNING"))
+                .andExpect(jsonPath("$.displayStatus").value("RUNNING"))
+                .andExpect(jsonPath("$.currentStepLabel").value("内容生成"))
+                .andExpect(jsonPath("$.progressSteps[1].key").value("COMPILE_NEW_ARTICLES"))
+                .andExpect(jsonPath("$.progressSteps[1].label").value("内容生成"))
+                .andExpect(jsonPath("$.progressSteps[1].status").value("ACTIVE"))
                 .andExpect(jsonPath("$.compileCurrentStep").value("compile_new_articles"))
                 .andExpect(jsonPath("$.compileProgressCurrent").value(1))
                 .andExpect(jsonPath("$.compileProgressTotal").value(3))
@@ -358,6 +374,64 @@ class AdminUploadControllerTests {
                 .andExpect(jsonPath("$.compileProgressCurrent").value(1))
                 .andExpect(jsonPath("$.compileProgressTotal").value(1))
                 .andExpect(jsonPath("$.compileProgressMessage").value("正在修复审查问题（1/1）：payment-timeout"));
+    }
+
+    /**
+     * 验证上传型资料在 compile 失败后可直接重试当前上传，而无需重新上传文件。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldRetryFailedUploadRunWithoutReuploadingFiles() throws Exception {
+        resetTables();
+        MockMultipartFile sourceFile = new MockMultipartFile(
+                "files",
+                "payments/readme.md",
+                MediaType.TEXT_PLAIN_VALUE,
+                """
+                        # Payments Docs
+
+                        retry=3
+                        """.getBytes(StandardCharsets.UTF_8)
+        );
+
+        String responseBody = mockMvc.perform(multipart("/api/v1/admin/uploads").file(sourceFile))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPILE_QUEUED"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        Long runId = readLong(responseBody, "runId");
+        String compileJobId = jdbcTemplate.queryForObject(
+                "select compile_job_id from lattice_phase_e_upload_test.source_sync_runs where id = ?",
+                String.class,
+                runId
+        );
+        compileJobJdbcRepository.markFailed(
+                compileJobId,
+                "COMPILE_STALE_TIMEOUT",
+                "compile job heartbeat expired and lease timed out",
+                OffsetDateTime.now()
+        );
+
+        mockMvc.perform(get("/api/v1/admin/source-runs/" + runId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.compileJobStatus").value("FAILED"));
+
+        mockMvc.perform(post("/api/v1/admin/source-runs/" + runId + "/retry"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPILE_QUEUED"))
+                .andExpect(jsonPath("$.compileJobId").value(compileJobId))
+                .andExpect(jsonPath("$.compileJobStatus").value("QUEUED"))
+                .andExpect(jsonPath("$.errorMessage").isEmpty());
+
+        compileJobService.processNextQueuedJob();
+
+        mockMvc.perform(get("/api/v1/admin/source-runs/" + runId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.compileJobStatus").value("SUCCEEDED"));
     }
 
     /**

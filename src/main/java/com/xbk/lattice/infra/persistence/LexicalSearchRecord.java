@@ -23,6 +23,8 @@ public class LexicalSearchRecord {
 
     private final String metadataJson;
 
+    private final String reviewStatus;
+
     private final List<String> sourcePaths;
 
     private final Integer chunkIndex;
@@ -57,12 +59,44 @@ public class LexicalSearchRecord {
             Boolean verbatim,
             double score
     ) {
+        this(sourceId, itemKey, conceptId, title, content, metadataJson, null, sourcePaths, chunkIndex, verbatim, score);
+    }
+
+    /**
+     * 创建 Lexical 检索命中记录。
+     *
+     * @param sourceId 资料源主键
+     * @param itemKey 命中对象唯一键
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param content 内容
+     * @param metadataJson 元数据 JSON
+     * @param reviewStatus 审查状态
+     * @param sourcePaths 来源路径
+     * @param chunkIndex 分块序号
+     * @param verbatim 是否逐字内容
+     * @param score 检索分数
+     */
+    public LexicalSearchRecord(
+            Long sourceId,
+            String itemKey,
+            String conceptId,
+            String title,
+            String content,
+            String metadataJson,
+            String reviewStatus,
+            List<String> sourcePaths,
+            Integer chunkIndex,
+            Boolean verbatim,
+            double score
+    ) {
         this.sourceId = sourceId;
         this.itemKey = itemKey;
         this.conceptId = conceptId;
         this.title = title;
         this.content = content;
         this.metadataJson = metadataJson;
+        this.reviewStatus = reviewStatus;
         this.sourcePaths = sourcePaths;
         this.chunkIndex = chunkIndex;
         this.verbatim = verbatim;
@@ -121,6 +155,15 @@ public class LexicalSearchRecord {
      */
     public String getMetadataJson() {
         return metadataJson;
+    }
+
+    /**
+     * 获取文章审查状态。
+     *
+     * @return 审查状态
+     */
+    public String getReviewStatus() {
+        return reviewStatus;
     }
 
     /**

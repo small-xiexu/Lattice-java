@@ -109,20 +109,13 @@ public final class QueryEvidenceRelevanceSupport {
         }
         boolean flowQuestion = looksLikeFlowQuestion(question);
         boolean capabilityQuestion = looksLikeCapabilityQuestion(question);
-        boolean operationalMaintenanceQuestion = looksLikeOperationalMaintenanceQuestion(question);
         List<String> highSignalTokens = extractHighSignalTokens(question);
         if (highSignalTokens.isEmpty() && !flowQuestion) {
             return relevantHits;
         }
         boolean capabilityTopicQuestion = capabilityQuestion && containsCapabilityTopic(highSignalTokens);
         List<String> entityLikeTokens = extractEntityLikeTokens(highSignalTokens);
-        List<String> operationalAnchorTokens = extractOperationalAnchorTokens(highSignalTokens);
         for (QueryArticleHit queryArticleHit : queryArticleHits) {
-            if (operationalMaintenanceQuestion
-                    && !operationalAnchorTokens.isEmpty()
-                    && !matchesAnyToken(queryArticleHit, operationalAnchorTokens)) {
-                continue;
-            }
             if (flowQuestion
                     && containsFlowSignal(queryArticleHit)
                     && shouldAcceptFlowSignalHit(queryArticleHit, highSignalTokens, entityLikeTokens)) {
@@ -279,52 +272,6 @@ public final class QueryEvidenceRelevanceSupport {
         return entityLikeTokens;
     }
 
-    /**
-     * 提取运维补偿类问题中的强领域锚点。
-     *
-     * @param highSignalTokens 高信号 token
-     * @return 强领域锚点
-     */
-    private static List<String> extractOperationalAnchorTokens(List<String> highSignalTokens) {
-        List<String> anchorTokens = new ArrayList<String>();
-        if (highSignalTokens == null) {
-            return anchorTokens;
-        }
-        for (String highSignalToken : highSignalTokens) {
-            String normalizedToken = normalize(highSignalToken);
-            if (normalizedToken.contains("trans")
-                    || normalizedToken.contains("xxljob")
-                    || normalizedToken.contains("job")
-                    || normalizedToken.contains("bogo")
-                    || normalizedToken.contains("买一赠一")
-                    || normalizedToken.contains("补偿")) {
-                anchorTokens.add(highSignalToken);
-            }
-        }
-        return anchorTokens;
-    }
-
-    /**
-     * 判断命中是否匹配任一领域锚点。
-     *
-     * @param queryArticleHit 查询命中
-     * @param anchorTokens 领域锚点
-     * @return 任一锚点命中返回 true
-     */
-    private static boolean matchesAnyToken(QueryArticleHit queryArticleHit, List<String> anchorTokens) {
-        if (queryArticleHit == null || anchorTokens == null || anchorTokens.isEmpty()) {
-            return false;
-        }
-        for (String anchorToken : anchorTokens) {
-            if (matchesStructuredField(queryArticleHit, anchorToken)
-                    || matchesTitleOrDescription(queryArticleHit, anchorToken)
-                    || matchesContent(queryArticleHit, anchorToken)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private static boolean matchesStructuredField(QueryArticleHit queryArticleHit, String token) {
         if (queryArticleHit == null || token == null || token.isBlank()) {
             return false;
@@ -389,24 +336,6 @@ public final class QueryEvidenceRelevanceSupport {
                 || normalizedQuestion.contains("怎么跑")
                 || normalizedQuestion.contains("怎么走")
                 || normalizedQuestion.contains("运行路径");
-    }
-
-    /**
-     * 判断是否为运维补偿类动作问题。
-     *
-     * @param question 用户问题
-     * @return 运维补偿动作题返回 true
-     */
-    private static boolean looksLikeOperationalMaintenanceQuestion(String question) {
-        String normalizedQuestion = normalize(question);
-        boolean hasOperationalAnchor = normalizedQuestion.contains("trans-job")
-                || normalizedQuestion.contains("xxljob")
-                || normalizedQuestion.contains("补偿");
-        boolean asksMaintenanceAction = normalizedQuestion.contains("维护")
-                || normalizedQuestion.contains("动作")
-                || normalizedQuestion.contains("执行")
-                || normalizedQuestion.contains("任务");
-        return hasOperationalAnchor && asksMaintenanceAction;
     }
 
     private static boolean looksLikeCapabilityQuestion(String question) {
@@ -495,18 +424,15 @@ public final class QueryEvidenceRelevanceSupport {
         }
         String normalizedValue = normalize(value);
         return value.contains("->")
+                || (value.contains("`") && (normalizedValue.contains("主链") || normalizedValue.contains("正式")))
                 || normalizedValue.contains("主链路")
                 || normalizedValue.contains("链路")
                 || normalizedValue.contains("流程")
-                || normalizedValue.contains("source sync")
-                || normalizedValue.contains("compile graph")
-                || normalizedValue.contains("query graph")
-                || normalizedValue.contains("pending_queries")
-                || normalizedValue.contains("contributions")
-                || normalizedValue.contains("资料先进入")
-                || normalizedValue.contains("再进入编译层")
-                || normalizedValue.contains("提交问题")
-                || normalizedValue.contains("启动问答链路");
+                || normalizedValue.contains("步骤")
+                || normalizedValue.contains("阶段")
+                || normalizedValue.contains("进入")
+                || normalizedValue.contains("提交")
+                || normalizedValue.contains("启动");
     }
 
     private static boolean containsCapabilitySignal(QueryArticleHit queryArticleHit) {

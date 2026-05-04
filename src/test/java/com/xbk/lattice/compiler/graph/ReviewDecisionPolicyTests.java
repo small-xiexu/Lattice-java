@@ -75,10 +75,10 @@ class ReviewDecisionPolicyTests {
     }
 
     /**
-     * 验证自动修复耗尽后，低于人工复核阈值的审查问题会直接按通过状态收口。
+     * 验证自动修复耗尽后，只要仍有审查问题，就必须进入 needs_human_review，而不是直接伪装成通过。
      */
     @Test
-    void shouldAcceptArticleWhenRemainingIssuesAreBelowHumanReviewThreshold() {
+    void shouldSendArticleToHumanReviewWhenIssuesRemainAfterFixRoundsExhausted() {
         CompileGraphState state = new CompileGraphState();
         state.setAutoFixEnabled(true);
         state.setFixAttemptCount(1);
@@ -92,10 +92,36 @@ class ReviewDecisionPolicyTests {
                 ))))
         );
 
-        assertThat(reviewPartition.getAccepted()).hasSize(1);
-        assertThat(reviewPartition.getAccepted().get(0).getArticle().getConceptId()).isEqualTo("accepted-after-fix");
-        assertThat(reviewPartition.getAccepted().get(0).getReviewStatus()).isEqualTo("passed");
-        assertThat(reviewPartition.getNeedsHumanReview()).isEmpty();
+        assertThat(reviewPartition.getAccepted()).isEmpty();
+        assertThat(reviewPartition.getNeedsHumanReview()).hasSize(1);
+        assertThat(reviewPartition.getNeedsHumanReview().get(0).getArticle().getConceptId())
+                .isEqualTo("accepted-after-fix");
+        assertThat(reviewPartition.getNeedsHumanReview().get(0).getReviewStatus())
+                .isEqualTo("needs_human_review");
+    }
+
+    /**
+     * 验证低严重度但仍有结构化缺失问题时，也不会再被直接伪装成 passed。
+     */
+    @Test
+    void shouldNotAcceptArticleWhenLowSeverityIssuesStillExist() {
+        CompileGraphState state = new CompileGraphState();
+        state.setAutoFixEnabled(false);
+        state.setFixAttemptCount(0);
+        state.setMaxFixRounds(0);
+        state.setHumanReviewSeverityThreshold("HIGH");
+
+        ReviewPartition reviewPartition = reviewDecisionPolicy.partition(
+                state,
+                List.of(createEnvelope("needs-human-review-low", ReviewResult.issuesFound(List.of(
+                        new ReviewIssue("LOW", "STRUCTURED_GAP", "清单项仍不完整")
+                ))))
+        );
+
+        assertThat(reviewPartition.getAccepted()).isEmpty();
+        assertThat(reviewPartition.getNeedsHumanReview()).hasSize(1);
+        assertThat(reviewPartition.getNeedsHumanReview().get(0).getArticle().getConceptId())
+                .isEqualTo("needs-human-review-low");
     }
 
     private ArticleReviewEnvelope createEnvelope(String conceptId, ReviewResult reviewResult) {

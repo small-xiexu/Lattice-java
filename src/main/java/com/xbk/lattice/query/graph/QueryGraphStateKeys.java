@@ -99,6 +99,8 @@ public final class QueryGraphStateKeys {
 
     public static final String MODEL_EXECUTION_STATUS = "modelExecutionStatus";
 
+    public static final String FALLBACK_REASON = "fallbackReason";
+
     public static final String ANSWER_CACHEABLE = "answerCacheable";
 
     public static final String REWRITE_ATTEMPT_COUNT = "rewriteAttemptCount";

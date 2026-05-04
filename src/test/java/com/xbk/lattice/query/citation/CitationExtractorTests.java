@@ -101,14 +101,14 @@ class CitationExtractorTests {
         CitationExtractor citationExtractor = new CitationExtractor();
 
         List<ClaimSegment> claimSegments = citationExtractor.extractClaims("""
-                IAG 是统一身份验证服务。它主要完成身份验证请求接收与令牌返回： [[legacy-default--iag集成指南]]
+                接入网关是统一身份验证服务。它主要完成身份验证请求接收与令牌返回： [[identity-guide]]
                 """);
 
         assertThat(claimSegments).hasSize(2);
         assertThat(claimSegments.get(0).getCitations()).extracting(Citation::getLiteral)
-                .containsExactly("[[legacy-default--iag集成指南]]");
+                .containsExactly("[[identity-guide]]");
         assertThat(claimSegments.get(1).getCitations()).extracting(Citation::getLiteral)
-                .containsExactly("[[legacy-default--iag集成指南]]");
+                .containsExactly("[[identity-guide]]");
     }
 
     /**

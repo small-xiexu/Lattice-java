@@ -6,7 +6,7 @@
     <title>邪修智库｜系统配置</title>
     <link rel="stylesheet" href="/admin/admin.css?v=20260423-admin-align-4">
 </head>
-<body>
+<body class="settings-page">
 <div class="app-shell">
     <div class="app-window">
         <aside class="sidebar">
@@ -78,9 +78,9 @@
                             </div>
                         </div>
                         <div class="sub-tabs top-gap" role="tablist" aria-label="系统配置二级标签">
-                            <button id="settings-tab-llm" class="tab-btn active" type="button" role="tab" aria-selected="true" data-tab-trigger="settings-llm">模型与向量</button>
-                            <button id="settings-tab-parse" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="settings-parse">OCR / 文档识别</button>
-                            <button id="settings-tab-sources" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="settings-sources">高级维护</button>
+                            <button id="settings-tab-llm" class="tab-btn active" type="button" role="tab" aria-selected="true" data-tab-trigger="settings-llm" data-tab-scroll="true">模型与向量</button>
+                            <button id="settings-tab-parse" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="settings-parse" data-tab-scroll="true">OCR / 文档识别</button>
+                            <button id="settings-tab-sources" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="settings-sources" data-tab-scroll="true">高级维护</button>
                         </div>
                     </section>
 
@@ -98,7 +98,7 @@
                                 <p>先准备可用的对话模型和 embedding 模型，再根据页面提示判断当前维度是否兼容、是否必须重建。普通使用者如果只是想导资料和提问，不需要从这里开始。</p>
                             </div>
 
-                            <div class="compile-layout settings-sources-layout top-gap">
+                            <div class="compile-layout settings-sources-layout settings-llm-setup-grid top-gap">
                                 <div class="sub-panel">
                                     <h3>连接</h3>
                                     <div class="form-grid top-gap">
@@ -156,7 +156,7 @@
                                         </label>
                                         <label>
                                             <span>Embedding 维度</span>
-                                            <input id="llm-model-expected-dimensions" type="text" placeholder="1536">
+                                            <input id="llm-model-expected-dimensions" type="text" placeholder="2000">
                                         </label>
                                         <label class="checkbox-row">
                                             <input id="llm-model-enabled" type="checkbox" checked>
@@ -659,8 +659,8 @@
         </div>
     </div>
 </div>
-<script src="/admin/admin-tabs.js?v=20260419-tabs-1"></script>
+<script src="/admin/admin-tabs.js?v=20260430-tabs-scroll-1"></script>
 <script src="/admin/settings.js?v=20260420-settings-3"></script>
-<script src="/admin/settings-page.js?v=20260428-deep-research-1"></script>
+<script src="/admin/settings-page.js?v=20260430-settings-scroll-1"></script>
 </body>
 </html>

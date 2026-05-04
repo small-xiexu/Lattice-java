@@ -505,6 +505,29 @@ public class CompileJobJdbcRepository {
     }
 
     /**
+     * 回收指定 worker 持有的运行中作业，重置为排队态，避免实例退出后长时间滞留 RUNNING。
+     *
+     * @param workerId worker 标识
+     * @return 被回收的作业数
+     */
+    public int requeueRunningJobsOwnedByWorker(String workerId) {
+        return jdbcTemplate.update(
+                """
+                        update compile_jobs
+                        set status = 'QUEUED',
+                            worker_id = null,
+                            running_expires_at = null,
+                            last_heartbeat_at = null,
+                            error_code = null,
+                            error_message = null
+                        where status = 'RUNNING'
+                          and worker_id = ?
+                        """,
+                workerId
+        );
+    }
+
+    /**
      * 查询已过期的运行中作业。
      *
      * @param now 当前时间

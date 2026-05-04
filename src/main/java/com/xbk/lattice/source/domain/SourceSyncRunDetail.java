@@ -1,5 +1,7 @@
 package com.xbk.lattice.source.domain;
 
+import com.xbk.lattice.api.admin.AdminProcessingTaskStepResponse;
+
 import java.util.List;
 
 /**
@@ -57,6 +59,34 @@ public class SourceSyncRunDetail {
 
     private final List<String> sourceNames;
 
+    private final List<com.xbk.lattice.api.admin.AdminProcessingTaskActionResponse> actions;
+
+    private final String displayStatus;
+
+    private final String displayStatusLabel;
+
+    private final String currentStepLabel;
+
+    private final String nextStepHint;
+
+    private final String progressText;
+
+    private final String reasonSummary;
+
+    private final String operationalNote;
+
+    private final List<AdminProcessingTaskStepResponse> progressSteps;
+
+    private final String displayTone;
+
+    private final boolean processingActive;
+
+    private final boolean requiresManualAction;
+
+    private final String noticeTone;
+
+    private final String completionNotice;
+
     private final String evidenceJson;
 
     private final String requestedAt;
@@ -93,6 +123,20 @@ public class SourceSyncRunDetail {
      * @param message 提示信息
      * @param errorMessage 错误信息
      * @param sourceNames 来源文件名
+     * @param actions 可用动作
+     * @param displayStatus 展示状态
+     * @param displayStatusLabel 展示状态文案
+     * @param currentStepLabel 当前步骤文案
+     * @param nextStepHint 下一步提示
+     * @param progressText 当前进度文案
+     * @param reasonSummary 原因摘要
+     * @param operationalNote 任务线索
+     * @param progressSteps 完整步骤链
+     * @param displayTone 展示色调
+     * @param processingActive 是否仍需轮询
+     * @param requiresManualAction 是否需要人工处理
+     * @param noticeTone 通知语气
+     * @param completionNotice 完成提示
      * @param evidenceJson 证据 JSON
      * @param requestedAt 请求时间
      * @param updatedAt 更新时间
@@ -123,6 +167,20 @@ public class SourceSyncRunDetail {
             String message,
             String errorMessage,
             List<String> sourceNames,
+            List<com.xbk.lattice.api.admin.AdminProcessingTaskActionResponse> actions,
+            String displayStatus,
+            String displayStatusLabel,
+            String currentStepLabel,
+            String nextStepHint,
+            String progressText,
+            String reasonSummary,
+            String operationalNote,
+            List<AdminProcessingTaskStepResponse> progressSteps,
+            String displayTone,
+            boolean processingActive,
+            boolean requiresManualAction,
+            String noticeTone,
+            String completionNotice,
             String evidenceJson,
             String requestedAt,
             String updatedAt,
@@ -152,6 +210,20 @@ public class SourceSyncRunDetail {
         this.message = message;
         this.errorMessage = errorMessage;
         this.sourceNames = sourceNames;
+        this.actions = actions;
+        this.displayStatus = displayStatus;
+        this.displayStatusLabel = displayStatusLabel;
+        this.currentStepLabel = currentStepLabel;
+        this.nextStepHint = nextStepHint;
+        this.progressText = progressText;
+        this.reasonSummary = reasonSummary;
+        this.operationalNote = operationalNote;
+        this.progressSteps = progressSteps;
+        this.displayTone = displayTone;
+        this.processingActive = processingActive;
+        this.requiresManualAction = requiresManualAction;
+        this.noticeTone = noticeTone;
+        this.completionNotice = completionNotice;
         this.evidenceJson = evidenceJson;
         this.requestedAt = requestedAt;
         this.updatedAt = updatedAt;
@@ -249,6 +321,62 @@ public class SourceSyncRunDetail {
 
     public List<String> getSourceNames() {
         return sourceNames;
+    }
+
+    public List<com.xbk.lattice.api.admin.AdminProcessingTaskActionResponse> getActions() {
+        return actions;
+    }
+
+    public String getDisplayStatus() {
+        return displayStatus;
+    }
+
+    public String getDisplayStatusLabel() {
+        return displayStatusLabel;
+    }
+
+    public String getCurrentStepLabel() {
+        return currentStepLabel;
+    }
+
+    public String getNextStepHint() {
+        return nextStepHint;
+    }
+
+    public String getProgressText() {
+        return progressText;
+    }
+
+    public String getReasonSummary() {
+        return reasonSummary;
+    }
+
+    public String getOperationalNote() {
+        return operationalNote;
+    }
+
+    public List<AdminProcessingTaskStepResponse> getProgressSteps() {
+        return progressSteps;
+    }
+
+    public String getDisplayTone() {
+        return displayTone;
+    }
+
+    public boolean isProcessingActive() {
+        return processingActive;
+    }
+
+    public boolean isRequiresManualAction() {
+        return requiresManualAction;
+    }
+
+    public String getNoticeTone() {
+        return noticeTone;
+    }
+
+    public String getCompletionNotice() {
+        return completionNotice;
     }
 
     public String getEvidenceJson() {

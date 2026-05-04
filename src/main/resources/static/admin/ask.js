@@ -14,6 +14,7 @@
         lastAnswerOutcome: "",
         lastGenerationMode: "",
         lastModelExecutionStatus: "",
+        lastFallbackReason: "",
         lastReviewStatus: "",
         lastQueryId: "",
         lastSupportSourceCount: 0,
@@ -123,6 +124,7 @@
             state.lastAnswerOutcome = queryResponse.answerOutcome || "";
             state.lastGenerationMode = queryResponse.generationMode || "";
             state.lastModelExecutionStatus = queryResponse.modelExecutionStatus || "";
+            state.lastFallbackReason = queryResponse.fallbackReason || "";
             state.lastReviewStatus = queryResponse.reviewStatus || "";
             state.lastQueryId = queryResponse.queryId || "";
             state.lastAnswerHasCitation = hasAskCitations(searchItems, responseSources);
@@ -143,6 +145,7 @@
             state.lastAnswerOutcome = "";
             state.lastGenerationMode = "";
             state.lastModelExecutionStatus = "";
+            state.lastFallbackReason = "";
             state.lastReviewStatus = "";
             state.lastQueryId = "";
             state.lastAnswerHasCitation = false;
@@ -167,6 +170,7 @@
         state.lastAnswerOutcome = "";
         state.lastGenerationMode = "";
         state.lastModelExecutionStatus = "";
+        state.lastFallbackReason = "";
         state.lastReviewStatus = "";
         state.lastQueryId = "";
         state.lastAnswerHasCitation = false;
@@ -532,13 +536,18 @@
             container.innerHTML = "<p>本次没有返回可展示的回答。</p>";
             return;
         }
-        container.innerHTML = renderMarkdownLite(answer);
+        container.innerHTML = renderMarkdownLite(answer, result && result.citationMarkers, result && result.sources);
+        bindCitationPopoverPlacement(container);
     }
 
     function renderAnswerMetrics(result, searchItems, responseSources) {
         const answerMeta = getAnswerOutcomeMeta(result && result.answerOutcome);
         const generationMeta = getGenerationModeMeta(result && result.generationMode);
-        const modelExecutionMeta = getModelExecutionStatusMeta(result && result.modelExecutionStatus, result && result.generationMode);
+        const modelExecutionMeta = getModelExecutionStatusMeta(
+                result && result.modelExecutionStatus,
+                result && result.generationMode,
+                result && result.fallbackReason
+        );
         const reviewMeta = getReviewStatusMeta(result && result.reviewStatus);
         const citationCount = uniqueSourceCount(searchItems, responseSources);
         const metrics = [
@@ -902,9 +911,10 @@
         };
     }
 
-    function getModelExecutionStatusMeta(value, generationMode) {
+    function getModelExecutionStatusMeta(value, generationMode, fallbackReason) {
         const normalized = normalizeStatusValue(value);
         const normalizedGenerationMode = normalizeStatusValue(generationMode);
+        const fallbackMeta = getFallbackReasonMeta(fallbackReason);
         const mapping = {
             SUCCESS: {
                 label: "模型执行成功",
@@ -920,12 +930,12 @@
             },
             FAILED: {
                 label: "模型失败已降级",
-                note: "模型执行没有拿到稳定结果，系统已经降级为兜底答案，请谨慎使用。",
+                note: fallbackMeta.note || "模型执行没有拿到稳定结果，系统已经降级为兜底答案，请谨慎使用。",
                 tone: "warning"
             },
             DEGRADED: {
                 label: "模型已返回但结果被降级",
-                note: "模型本身有返回内容，但主链没有拿到可复用的稳定输出，系统改用了兜底答案。",
+                note: fallbackMeta.note || "模型本身有返回内容，但主链没有拿到可复用的稳定输出，系统改用了兜底答案。",
                 tone: "warning"
             }
         };
@@ -933,6 +943,40 @@
             label: normalized ? normalized : "未标注",
             note: normalized ? "当前返回了 modelExecutionStatus，但还没有专门的人话说明。" : "这次没有返回额外的模型执行状态。",
             tone: normalized ? "warning" : "info"
+        };
+    }
+
+    function getFallbackReasonMeta(value) {
+        const normalized = normalizeStatusValue(value);
+        const mapping = {
+            LLM_CALL_FAILED: {
+                label: "模型调用失败",
+                note: "模型调用过程直接失败，系统回退到了基于证据的兜底答案。"
+            },
+            LLM_OUTPUT_INVALID: {
+                label: "模型输出不合格",
+                note: "模型有返回内容，但输出格式或引用不符合主链要求，系统改用了兜底答案。"
+            },
+            LLM_UNSTRUCTURED_FALLBACK: {
+                label: "模型返回了非结构化结果",
+                note: "模型返回了自由文本，但主链没有拿到稳定结构化结果，因此改用了兜底答案。"
+            },
+            REWRITE_FAILED: {
+                label: "重写阶段失败",
+                note: "审查后的重写阶段没有拿到稳定结果，系统回退到了基于证据的兜底答案。"
+            },
+            DETERMINISTIC_EXACT_LOOKUP_PREFERRED: {
+                label: "精确查值优先走确定性答案",
+                note: "这次属于精确查值问题，更适合直接按证据查值，系统主动选择了更稳的确定性答案。"
+            },
+            CITATION_QUALITY_INSUFFICIENT: {
+                label: "引用质量不足",
+                note: "模型答案的引用质量不够稳定，系统改用了带更稳引用的兜底答案。"
+            }
+        };
+        return mapping[normalized] || {
+            label: normalized || "",
+            note: normalized ? "当前返回了 fallbackReason，但还没有专门的人话说明。" : ""
         };
     }
 
@@ -998,18 +1042,19 @@
         return labels[normalized] || value || "-";
     }
 
-    function renderMarkdownLite(markdown) {
+    function renderMarkdownLite(markdown, citationMarkers, fallbackSources) {
         const lines = String(markdown || "").replace(/\r/g, "").split("\n");
         const parts = [];
         let paragraphBuffer = [];
         let listItems = [];
         let listTag = "";
+        const citationRenderContext = buildCitationRenderContext(citationMarkers || [], fallbackSources || []);
 
         function flushParagraph() {
             if (paragraphBuffer.length === 0) {
                 return;
             }
-            parts.push("<p>" + formatInlineMarkdown(paragraphBuffer.join(" ")) + "</p>");
+            parts.push("<p>" + formatInlineMarkdown(paragraphBuffer.join(" "), citationRenderContext) + "</p>");
             paragraphBuffer = [];
         }
 
@@ -1035,7 +1080,7 @@
                 flushParagraph();
                 flushList();
                 const level = Math.min(headingMatch[1].length + 1, 4);
-                parts.push("<h" + level + ">" + formatInlineMarkdown(headingMatch[2]) + "</h" + level + ">");
+                parts.push("<h" + level + ">" + formatInlineMarkdown(headingMatch[2], citationRenderContext) + "</h" + level + ">");
                 return;
             }
             const bulletMatch = trimmed.match(/^[-*]\s+(.*)$/);
@@ -1045,7 +1090,7 @@
                     flushList();
                 }
                 listTag = "ul";
-                listItems.push("<li>" + formatInlineMarkdown(bulletMatch[1]) + "</li>");
+                listItems.push("<li>" + formatInlineMarkdown(bulletMatch[1], citationRenderContext) + "</li>");
                 return;
             }
             const orderedMatch = trimmed.match(/^\d+\.\s+(.*)$/);
@@ -1055,13 +1100,13 @@
                     flushList();
                 }
                 listTag = "ol";
-                listItems.push("<li>" + formatInlineMarkdown(orderedMatch[1]) + "</li>");
+                listItems.push("<li>" + formatInlineMarkdown(orderedMatch[1], citationRenderContext) + "</li>");
                 return;
             }
             if (trimmed.startsWith(">")) {
                 flushParagraph();
                 flushList();
-                parts.push("<blockquote><p>" + formatInlineMarkdown(trimmed.replace(/^>\s?/, "")) + "</p></blockquote>");
+                parts.push("<blockquote><p>" + formatInlineMarkdown(trimmed.replace(/^>\s?/, ""), citationRenderContext) + "</p></blockquote>");
                 return;
             }
             if (listItems.length > 0) {
@@ -1074,10 +1119,329 @@
         return parts.join("") || "<p>本次没有返回可展示的回答。</p>";
     }
 
-    function formatInlineMarkdown(value) {
-        return escapeHtml(value)
+    function buildCitationRenderContext(citationMarkers, fallbackSources) {
+        const markers = [];
+        (citationMarkers || []).forEach(function (marker, index) {
+            const normalizedMarker = normalizeCitationMarker(marker, index, fallbackSources || []);
+            if (!normalizedMarker || normalizedMarker.replacementLiterals.length === 0) {
+                return;
+            }
+            markers.push(normalizedMarker);
+        });
+        return {markers: markers};
+    }
+
+    function normalizeCitationMarker(marker, index, fallbackSources) {
+        if (!marker) {
+            return null;
+        }
+        const literals = Array.isArray(marker.citationLiterals)
+                ? marker.citationLiterals
+                        .map(function (item) { return String(item || "").trim(); })
+                        .filter(Boolean)
+                : [];
+        const groupLiteral = String(marker.citationLiteral || "").trim();
+        const joinedLiteral = literals.join("");
+        const spacedLiteral = literals.join(" ");
+        const replacementLiterals = uniqueNonBlankValues([
+            groupLiteral,
+            joinedLiteral,
+            spacedLiteral
+        ].concat(literals)).sort(function (first, second) {
+            return second.length - first.length;
+        });
+        if (replacementLiterals.length === 0) {
+            return null;
+        }
+        const sources = Array.isArray(marker.sources) && marker.sources.length > 0
+                ? marker.sources
+                : (Array.isArray(fallbackSources) ? fallbackSources : []);
+        const sourceCount = Number(marker.sourceCount || sources.length || 0);
+        return {
+            markerId: String(marker.markerId || ("citation-marker-" + (index + 1))),
+            markerOrdinal: Number(marker.markerOrdinal || index + 1),
+            replacementLiterals: replacementLiterals,
+            citationLiterals: literals,
+            sourceCount: sourceCount,
+            sources: sources,
+            claimText: String(marker.claimText || "")
+        };
+    }
+
+    function formatInlineMarkdown(value, citationRenderContext) {
+        const citationPlaceholders = [];
+        const withCitationPlaceholders = replaceCitationMarkersWithPlaceholders(
+                String(value || ""),
+                citationRenderContext,
+                citationPlaceholders
+        );
+        return escapeHtml(withCitationPlaceholders)
                 .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-                .replace(/`([^`]+)`/g, "<code>$1</code>");
+                .replace(/`([^`]+)`/g, "<code>$1</code>")
+                .replace(/@@CITATION_MARKER_(\d+)@@/g, function (match, index) {
+                    return citationPlaceholders[Number(index)] || "";
+                });
+    }
+
+    function replaceCitationMarkersWithPlaceholders(value, citationRenderContext, citationPlaceholders) {
+        let renderedValue = String(value || "");
+        const markers = citationRenderContext && Array.isArray(citationRenderContext.markers)
+                ? citationRenderContext.markers
+                : [];
+        markers.forEach(function (marker) {
+            const placeholder = "@@CITATION_MARKER_" + citationPlaceholders.length + "@@";
+            const replacedValue = replaceSingleCitationMarker(renderedValue, marker, placeholder);
+            if (replacedValue === renderedValue) {
+                return;
+            }
+            citationPlaceholders.push(renderCitationMarker(marker));
+            renderedValue = replacedValue;
+        });
+        return stripRawCitationLiterals(renderedValue);
+    }
+
+    function replaceSingleCitationMarker(value, marker, placeholder) {
+        const replacementLiterals = marker && Array.isArray(marker.replacementLiterals)
+                ? marker.replacementLiterals
+                : [];
+        for (let index = 0; index < replacementLiterals.length; index++) {
+            const literal = replacementLiterals[index];
+            const literalIndex = value.indexOf(literal);
+            if (literalIndex < 0) {
+                continue;
+            }
+            return replaceRange(value, literalIndex, literalIndex + literal.length, placeholder);
+        }
+        const citationRange = findCitationGroupRange(value, marker && marker.citationLiterals);
+        if (!citationRange) {
+            return value;
+        }
+        return replaceRange(value, citationRange.start, citationRange.end, placeholder);
+    }
+
+    function findCitationGroupRange(value, citationLiterals) {
+        const literals = Array.isArray(citationLiterals)
+                ? citationLiterals.filter(Boolean)
+                : [];
+        if (literals.length === 0) {
+            return null;
+        }
+        let groupStart = -1;
+        let groupEnd = -1;
+        let searchFrom = 0;
+        for (let index = 0; index < literals.length; index++) {
+            const literalRange = findCitationLiteralRange(value, literals[index], searchFrom);
+            if (!literalRange) {
+                return null;
+            }
+            if (groupStart < 0) {
+                groupStart = literalRange.start;
+            }
+            groupEnd = literalRange.end;
+            searchFrom = groupEnd;
+        }
+        if (groupStart < 0 || groupEnd < groupStart) {
+            return null;
+        }
+        return {start: groupStart, end: groupEnd};
+    }
+
+    function findCitationLiteralRange(value, citationLiteral, searchFrom) {
+        const literal = String(citationLiteral || "");
+        const exactIndex = value.indexOf(literal, Math.max(0, searchFrom || 0));
+        if (exactIndex >= 0) {
+            return {start: exactIndex, end: exactIndex + literal.length};
+        }
+        if (!isSourceCitationLiteral(literal)) {
+            return null;
+        }
+        return findSourceCitationLiteralRange(value, literal, searchFrom);
+    }
+
+    function findSourceCitationLiteralRange(value, citationLiteral, searchFrom) {
+        const targetKey = normalizeCitationSourceTarget(citationLiteral);
+        if (!targetKey) {
+            return null;
+        }
+        const sourcePattern = /(?:\[\[→\s*([^\],]+)(?:,[^\]]+)?]]|\[→\s*([^\],]+)(?:,[^\]]+)?])/g;
+        sourcePattern.lastIndex = Math.max(0, searchFrom || 0);
+        let match = sourcePattern.exec(value);
+        while (match) {
+            const rawTarget = match[1] || match[2] || "";
+            if (normalizeCitationSourceTarget(rawTarget) === targetKey) {
+                return {start: match.index, end: match.index + match[0].length};
+            }
+            match = sourcePattern.exec(value);
+        }
+        return null;
+    }
+
+    function isSourceCitationLiteral(citationLiteral) {
+        const literal = String(citationLiteral || "").trim();
+        return literal.startsWith("[→") || literal.startsWith("[[→");
+    }
+
+    function normalizeCitationSourceTarget(value) {
+        let normalized = String(value || "").trim();
+        while (normalized.startsWith("[") && normalized.endsWith("]")) {
+            normalized = normalized.substring(1, normalized.length - 1).trim();
+        }
+        if (normalized.startsWith("→")) {
+            normalized = normalized.substring(1).trim();
+        }
+        const commaIndex = normalized.indexOf(",");
+        if (commaIndex > 0) {
+            normalized = normalized.substring(0, commaIndex).trim();
+        }
+        const lineRangeMatch = normalized.match(/^(.+?):(?:L)?\d+(?:-(?:L)?\d+)?$/);
+        return lineRangeMatch ? lineRangeMatch[1].trim() : normalized;
+    }
+
+    function stripRawCitationLiterals(value) {
+        return String(value || "")
+                .replace(/\[\[→\s*[^\]\n]+]]/g, "")
+                .replace(/\[\[(?!→\s*)[^\]\n]+]]/g, "")
+                .replace(/\[→\s*[^\]\n]+]/g, "")
+                .replace(/[ \t]+([，。；：,.!?])/g, "$1")
+                .replace(/[ \t]{2,}/g, " ")
+                .trim();
+    }
+
+    function replaceRange(value, start, end, replacement) {
+        return value.substring(0, start) + replacement + value.substring(end);
+    }
+
+    function uniqueNonBlankValues(values) {
+        const seen = new Set();
+        const uniqueValues = [];
+        (values || []).forEach(function (value) {
+            const normalized = String(value || "").trim();
+            if (!normalized || seen.has(normalized)) {
+                return;
+            }
+            seen.add(normalized);
+            uniqueValues.push(normalized);
+        });
+        return uniqueValues;
+    }
+
+    function renderCitationMarker(marker) {
+        const sourceCount = Math.max(Number(marker.sourceCount || 0), marker.sources.length, 1);
+        const label = String(sourceCount);
+        return "<span class='citation-marker' tabindex='0' role='button' aria-label='查看这处引用，共 "
+                + escapeHtml(label)
+                + " 份资料'>"
+                + "<span class='citation-marker-count'>" + escapeHtml(label) + "</span>"
+                + renderCitationPopover(marker)
+                + "</span>";
+    }
+
+    function renderCitationPopover(marker) {
+        const title = "这处引用 · "
+                + Math.max(Number(marker.sourceCount || 0), marker.sources.length, 1)
+                + " 份资料";
+        const sourceItems = marker.sources.length > 0
+                ? marker.sources.map(function (source, index) {
+                    return renderCitationPopoverSource(source, index, marker);
+                }).join("")
+                : "<div class='citation-popover-empty'>暂无可展示的资料明细</div>";
+        return "<span class='citation-popover' role='tooltip'>"
+                + "<span class='citation-popover-title'>" + escapeHtml(title) + "</span>"
+                + sourceItems
+                + "</span>";
+    }
+
+    function renderCitationPopoverSource(source, index, marker) {
+        const title = source.title || source.articleKey || source.conceptId || source.targetKey || "未命名资料";
+        const sourceType = getCitationSourceTypeLabel(source.sourceType || "SOURCE");
+        const paths = Array.isArray(source.sourcePaths) ? source.sourcePaths.filter(Boolean) : [];
+        const pathText = paths.length > 0 ? paths.join("，") : (source.targetKey || "");
+        const rawExcerpt = String(source.matchedExcerpt || "").trim();
+        const excerpt = rawExcerpt ? trimSnippet(rawExcerpt) : trimSnippet(marker && marker.claimText ? marker.claimText : "");
+        const status = getCitationValidationStatusLabel(source.validationStatus || "");
+        return "<span class='citation-popover-source'>"
+                + "<span class='citation-popover-source-head'>"
+                + "<span class='citation-popover-source-index'>" + escapeHtml(String(index + 1)) + "</span>"
+                + "<span class='citation-popover-source-title'>" + escapeHtml(title) + "</span>"
+                + "<span class='citation-popover-source-type'>" + escapeHtml(sourceType) + "</span>"
+                + "</span>"
+                + (pathText ? "<span class='citation-popover-path'>" + escapeHtml(pathText) + "</span>" : "")
+                + (excerpt ? "<span class='citation-popover-excerpt'>" + escapeHtml(excerpt) + "</span>" : "")
+                + (status ? "<span class='citation-popover-status'>" + escapeHtml(status) + "</span>" : "")
+                + "</span>";
+    }
+
+    function getCitationSourceTypeLabel(value) {
+        const normalized = normalizeStatusValue(value);
+        const labels = {
+            ARTICLE: "知识文章",
+            SOURCE_FILE: "源文件",
+            SOURCE: "资料来源",
+            GRAPH: "图谱证据",
+            CONTRIBUTION: "人工补充"
+        };
+        return labels[normalized] || value || "资料来源";
+    }
+
+    function getCitationValidationStatusLabel(value) {
+        const normalized = normalizeStatusValue(value);
+        const labels = {
+            VERIFIED: "已核验",
+            SKIPPED: "已收录",
+            DEMOTED: "已降级"
+        };
+        return labels[normalized] || "";
+    }
+
+    function bindCitationPopoverPlacement(container) {
+        if (!container || typeof container.querySelectorAll !== "function") {
+            return;
+        }
+        container.querySelectorAll(".citation-marker").forEach(function (marker) {
+            marker.addEventListener("mouseenter", function () {
+                syncCitationPopoverPlacement(marker);
+            });
+            marker.addEventListener("focusin", function () {
+                syncCitationPopoverPlacement(marker);
+            });
+        });
+    }
+
+    function syncCitationPopoverPlacement(marker) {
+        if (!marker || typeof marker.getBoundingClientRect !== "function" || !marker.classList) {
+            return;
+        }
+        const viewportWidth = resolveViewportWidth();
+        if (viewportWidth <= 0) {
+            return;
+        }
+        const markerRect = marker.getBoundingClientRect();
+        marker.classList.toggle(
+                "citation-marker-align-right",
+                shouldAlignCitationPopoverRight(markerRect, viewportWidth)
+        );
+    }
+
+    function shouldAlignCitationPopoverRight(markerRect, viewportWidth) {
+        const width = Number(viewportWidth || 0);
+        if (!markerRect || width <= 0) {
+            return false;
+        }
+        const markerLeft = Number(markerRect.left || 0);
+        const estimatedPopoverWidth = Math.min(460, Math.floor(width * 0.86));
+        return markerLeft + estimatedPopoverWidth > width - 16;
+    }
+
+    function resolveViewportWidth() {
+        if (typeof window !== "undefined" && Number(window.innerWidth || 0) > 0) {
+            return Number(window.innerWidth);
+        }
+        if (typeof document !== "undefined"
+                && document.documentElement
+                && Number(document.documentElement.clientWidth || 0) > 0) {
+            return Number(document.documentElement.clientWidth);
+        }
+        return 0;
     }
 
     async function fetchJson(url, options) {
@@ -1170,8 +1534,12 @@
         globalThis.__LATTICE_ADMIN_TEST__.ask = {
             uniqueSourceCount: uniqueSourceCount,
             buildSecondarySourceCards: buildSecondarySourceCards,
+            buildCitationRenderContext: buildCitationRenderContext,
+            renderMarkdownLite: renderMarkdownLite,
+            shouldAlignCitationPopoverRight: shouldAlignCitationPopoverRight,
             trimSnippet: trimSnippet,
             sanitizeSnippetContent: sanitizeSnippetContent,
+            getFallbackReasonMeta: getFallbackReasonMeta,
             setCanAsk: function (value) {
                 canAsk = !!value;
                 syncAskComposerState();

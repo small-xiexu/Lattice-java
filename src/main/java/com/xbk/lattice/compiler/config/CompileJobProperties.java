@@ -22,9 +22,9 @@ public class CompileJobProperties {
 
     private long heartbeatIntervalSeconds = 15L;
 
-    private long leaseDurationSeconds = 90L;
+    private long leaseDurationSeconds = 300L;
 
-    private long stalledThresholdSeconds = 180L;
+    private long stalledThresholdSeconds = 600L;
 
     private String uploadRootDir = System.getProperty("java.io.tmpdir") + "/lattice-admin-uploads";
 

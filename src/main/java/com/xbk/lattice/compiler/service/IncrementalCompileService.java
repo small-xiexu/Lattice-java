@@ -301,7 +301,7 @@ public class IncrementalCompileService {
                 compilerProperties,
                 new FileRankingService(compilerProperties)
         );
-        this.analyzeNode = new AnalyzeNode(llmGateway);
+        this.analyzeNode = new AnalyzeNode(llmGateway, null, compilerProperties);
         this.crossGroupMergeNode = new CrossGroupMergeNode();
         this.compileArticleNode = new CompileArticleNode(
                 llmGateway,

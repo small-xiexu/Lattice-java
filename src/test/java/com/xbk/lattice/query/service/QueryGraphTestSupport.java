@@ -117,7 +117,7 @@ final class QueryGraphTestSupport {
             QueryGraphOrchestrator queryGraphOrchestrator,
             PendingQueryManager pendingQueryManager
     ) {
-        return new QueryFacadeService(queryGraphOrchestrator, null, null, null, pendingQueryManager, null);
+        return new QueryFacadeService(queryGraphOrchestrator, null, null, null, null, pendingQueryManager, null);
     }
 
     /**

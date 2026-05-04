@@ -45,6 +45,7 @@ public class ChunkToArticleAggregator {
                         chunkHit.getTitle(),
                         chunkHit.getChunkText(),
                         chunkHit.getMetadataJson(),
+                        chunkHit.getReviewStatus(),
                         chunkHit.getSourcePaths(),
                         chunkHit.getScore()
                 ))

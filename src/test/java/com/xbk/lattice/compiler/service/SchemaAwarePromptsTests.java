@@ -71,6 +71,21 @@ class SchemaAwarePromptsTests {
     }
 
     /**
+     * 验证基础 compile prompt 已明确禁止把证据不足的异常场景补写成事实。
+     */
+    @Test
+    void baseCompilePromptShouldForbidSpeculativeAbnormalCaseCompletion() {
+        assertThat(LatticePrompts.SYSTEM_COMPILE_ARTICLE)
+                .contains("do NOT write a full expected result section from analogy")
+                .contains("prefer omission plus evidence-gap disclosure over speculative completion");
+        assertThat(LatticePrompts.SYSTEM_REVIEW)
+                .contains("CHECK 5 — Speculative Abnormal Scenarios")
+                .contains("flag this as a HIGH issue and require rewrite toward evidence-gap disclosure");
+        assertThat(LatticePrompts.SYSTEM_REVIEW_FIX)
+                .contains("源材料未直接给出结论/当前仅有上下文证据");
+    }
+
+    /**
      * 验证 AnalyzeNode 会使用 schema-aware analyze prompt。
      */
     @Test
@@ -153,6 +168,78 @@ class SchemaAwarePromptsTests {
         assertThat(llmClient.getLastSystemPrompt()).contains("Write summaries in a compliance-first style.");
     }
 
+    /**
+     * 验证 CompileArticleNode 会优先把结构化章节和 sourceRef 对应章节喂给 Writer。
+     */
+    @Test
+    void compileArticleNodeShouldPreferStructuredSectionsInUserPrompt() {
+        PromptCapturingLlmClient llmClient = new PromptCapturingLlmClient("""
+                ---
+                title: "Service Overview"
+                summary: "desc"
+                referential_keywords: []
+                sources: ["docs/migration.md"]
+                depends_on: []
+                related: []
+                confidence: medium
+                compiled_at: "2026-04-16T11:00:00+08:00"
+                review_status: pending
+                ---
+
+                # Service Overview
+                """);
+        CompileArticleNode compileArticleNode = new CompileArticleNode(
+                new LlmGateway(
+                        llmClient,
+                        llmClient,
+                        new NoopRedisKeyValueStore(),
+                        createLlmProperties()
+                ),
+                new FixedSourceFileJdbcRepository(new SourceFileRecord(
+                        "docs/migration.md",
+                        "summary",
+                        "md",
+                        700L,
+                        """
+                                # 总览
+                                这里是文档开头概述。
+                                ## 3. 服务影响总览表
+                                | 服务 | 角色变化 |
+                                | --- | --- |
+                                | dpfm-callback-service | 新增 MQ 消费者 |
+                                ## 4. 其他章节
+                                其他信息
+                                """,
+                        "{}",
+                        false,
+                        "docs/migration.md"
+                )),
+                new DocumentSectionSelector(),
+                null,
+                null,
+                new SchemaAwarePrompts(new CompilerProperties())
+        );
+
+        compileArticleNode.compile(new MergedConcept(
+                "service-overview",
+                "Service Overview",
+                "desc",
+                List.of("docs/migration.md"),
+                List.of("dpfm-callback-service"),
+                List.of(new com.xbk.lattice.compiler.domain.ConceptSection(
+                        "3. 服务影响总览表",
+                        List.of("| 服务 | 角色变化 |", "| dpfm-callback-service | 新增 MQ 消费者 |"),
+                        List.of("docs/migration.md#3. 服务影响总览表")
+                ))
+        ), null);
+
+        assertThat(llmClient.getLastUserPrompt()).contains("Structured concept sections (highest priority evidence):");
+        assertThat(llmClient.getLastUserPrompt()).contains("=== Section: 3. 服务影响总览表 ===");
+        assertThat(llmClient.getLastUserPrompt()).contains("docs/migration.md#3. 服务影响总览表");
+        assertThat(llmClient.getLastUserPrompt()).contains("## 3. 服务影响总览表");
+        assertThat(llmClient.getLastUserPrompt()).doesNotContain("## 4. 其他章节");
+    }
+
     private LlmProperties createLlmProperties() {
         LlmProperties llmProperties = new LlmProperties();
         llmProperties.setCompileModel("openai");
@@ -181,6 +268,27 @@ class SchemaAwarePromptsTests {
 
         private String getLastSystemPrompt() {
             return lastSystemPrompt;
+        }
+    }
+
+    private static final class PromptCapturingLlmClient implements LlmClient {
+
+        private final String response;
+
+        private String lastUserPrompt;
+
+        private PromptCapturingLlmClient(String response) {
+            this.response = response;
+        }
+
+        @Override
+        public LlmCallResult call(String systemPrompt, String userPrompt) {
+            this.lastUserPrompt = userPrompt;
+            return new LlmCallResult(response, 120, 40);
+        }
+
+        private String getLastUserPrompt() {
+            return lastUserPrompt;
         }
     }
 

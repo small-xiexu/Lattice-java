@@ -199,6 +199,30 @@ class CompileJobLeaseManagerIntegrationTests {
     }
 
     /**
+     * 验证 lease manager 销毁时，会把当前 worker 持有的运行中作业回收到 QUEUED，避免实例重启后长时间悬挂。
+     */
+    @Test
+    void shouldRequeueRunningJobsOwnedByWorkerOnDestroy() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice_ws2_compile_job_lease_test.compile_jobs CASCADE");
+        compileJobJdbcRepository.save(buildQueuedRecord("job-lease-requeue"));
+        OffsetDateTime startedAt = OffsetDateTime.now();
+        boolean claimed = compileJobJdbcRepository.markRunning(
+                "job-lease-requeue",
+                compileJobProperties.getWorkerId(),
+                startedAt,
+                startedAt.plusSeconds(30)
+        );
+        assertThat(claimed).isTrue();
+
+        compileJobLeaseManager.destroy();
+
+        CompileJobRecord queuedRecord = compileJobJdbcRepository.findByJobId("job-lease-requeue").orElseThrow();
+        assertThat(queuedRecord.getStatus()).isEqualTo("QUEUED");
+        assertThat(queuedRecord.getWorkerId()).isNull();
+        assertThat(queuedRecord.getRunningExpiresAt()).isNull();
+    }
+
+    /**
      * 构造最小排队作业记录。
      *
      * @param jobId 作业标识

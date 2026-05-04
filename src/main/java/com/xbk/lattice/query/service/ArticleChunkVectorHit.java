@@ -25,6 +25,8 @@ public class ArticleChunkVectorHit {
 
     private final String metadataJson;
 
+    private final String reviewStatus;
+
     private final List<String> sourcePaths;
 
     private final int chunkIndex;
@@ -57,7 +59,36 @@ public class ArticleChunkVectorHit {
             String chunkText,
             double score
     ) {
-        this(articleId, null, null, conceptId, title, content, metadataJson, sourcePaths, chunkIndex, chunkText, score);
+        this(articleId, conceptId, title, content, metadataJson, null, sourcePaths, chunkIndex, chunkText, score);
+    }
+
+    /**
+     * 创建分块向量命中。
+     *
+     * @param articleId 文章主键
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param content 正文
+     * @param metadataJson 元数据
+     * @param reviewStatus 审查状态
+     * @param sourcePaths 来源路径
+     * @param chunkIndex 分块序号
+     * @param chunkText 分块文本
+     * @param score 评分
+     */
+    public ArticleChunkVectorHit(
+            Long articleId,
+            String conceptId,
+            String title,
+            String content,
+            String metadataJson,
+            String reviewStatus,
+            List<String> sourcePaths,
+            int chunkIndex,
+            String chunkText,
+            double score
+    ) {
+        this(articleId, null, null, conceptId, title, content, metadataJson, reviewStatus, sourcePaths, chunkIndex, chunkText, score);
     }
 
     /**
@@ -83,6 +114,7 @@ public class ArticleChunkVectorHit {
             String title,
             String content,
             String metadataJson,
+            String reviewStatus,
             List<String> sourcePaths,
             int chunkIndex,
             String chunkText,
@@ -95,6 +127,7 @@ public class ArticleChunkVectorHit {
         this.title = title;
         this.content = content;
         this.metadataJson = metadataJson;
+        this.reviewStatus = reviewStatus;
         this.sourcePaths = sourcePaths;
         this.chunkIndex = chunkIndex;
         this.chunkText = chunkText;
@@ -127,6 +160,10 @@ public class ArticleChunkVectorHit {
 
     public String getMetadataJson() {
         return metadataJson;
+    }
+
+    public String getReviewStatus() {
+        return reviewStatus;
     }
 
     public List<String> getSourcePaths() {

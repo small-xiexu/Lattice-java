@@ -50,6 +50,8 @@ public class LlmModelProbeService {
 
     private final EmbeddingClientFactory embeddingClientFactory;
 
+    private final LlmEndpointUrlResolver llmEndpointUrlResolver;
+
     /**
      * 创建 LLM 模型探测服务。
      *
@@ -59,6 +61,7 @@ public class LlmModelProbeService {
      * @param llmSecretCryptoService 密钥解密服务
      * @param anthropicConnectionProperties Anthropic 连接配置
      * @param embeddingClientFactory Embedding 客户端工厂
+     * @param llmEndpointUrlResolver 端点地址解析器
      */
     public LlmModelProbeService(
             RestClient.Builder restClientBuilder,
@@ -66,7 +69,8 @@ public class LlmModelProbeService {
             LlmConfigAdminService llmConfigAdminService,
             LlmSecretCryptoService llmSecretCryptoService,
             AnthropicConnectionProperties anthropicConnectionProperties,
-            EmbeddingClientFactory embeddingClientFactory
+            EmbeddingClientFactory embeddingClientFactory,
+            LlmEndpointUrlResolver llmEndpointUrlResolver
     ) {
         this.restClientBuilder = restClientBuilder;
         this.objectMapper = objectMapper;
@@ -74,6 +78,7 @@ public class LlmModelProbeService {
         this.llmSecretCryptoService = llmSecretCryptoService;
         this.anthropicConnectionProperties = anthropicConnectionProperties;
         this.embeddingClientFactory = embeddingClientFactory;
+        this.llmEndpointUrlResolver = llmEndpointUrlResolver;
     }
 
     /**
@@ -231,7 +236,7 @@ public class LlmModelProbeService {
             result = new AnthropicMessageApiLlmClient(
                     restClientBuilder,
                     objectMapper,
-                    resolvedConfig.baseUrl,
+                    llmEndpointUrlResolver.resolveAnthropicMessagesBaseUrl(resolvedConfig.baseUrl),
                     resolvedConfig.apiKey,
                     anthropicConnectionProperties.getVersion(),
                     anthropicConnectionProperties.getBetaVersion(),

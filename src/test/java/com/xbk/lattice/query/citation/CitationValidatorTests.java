@@ -117,11 +117,11 @@ class CitationValidatorTests {
 
         CitationValidationResult result = citationValidator.validate(new Citation(
                 0,
-                "[→ SWIP网关中各支付渠道交易报文字段定义.xlsx]",
+                "[→ gateway-field-definitions.xlsx]",
                 CitationSourceType.SOURCE_FILE,
-                "SWIP网关中各支付渠道交易报文字段定义.xlsx",
-                "资和信 SVC 卡支持 01/02/04/51/52/61/62/99",
-                "资和信 SVC 卡支持 01/02/04/51/52/61/62/99 [→ SWIP网关中各支付渠道交易报文字段定义.xlsx]"
+                "gateway-field-definitions.xlsx",
+                "会员卡渠道支持 01/02/04/51/52/61/62/99",
+                "会员卡渠道支持 01/02/04/51/52/61/62/99 [→ gateway-field-definitions.xlsx]"
         ));
 
         assertThat(result.isVerified()).isTrue();
@@ -297,23 +297,23 @@ class CitationValidatorTests {
 
         @Override
         public Optional<SourceFileRecord> findByPath(String filePath) {
-            if ("SWIP网关中各支付渠道交易报文字段定义.xlsx".equals(filePath)) {
+            if ("gateway-field-definitions.xlsx".equals(filePath)) {
                 return Optional.of(new SourceFileRecord(
                         102L,
                         1L,
-                        "SWIP网关中各支付渠道交易报文字段定义.xlsx",
-                        "SWIP网关中各支付渠道交易报文字段定义.xlsx",
+                        "gateway-field-definitions.xlsx",
+                        "gateway-field-definitions.xlsx",
                         null,
                         "XLSX",
                         "XLSX",
                         256L,
                         """
                         渠道,transactionType
-                        资和信 SVC 卡,01 02 04 51 52 61 62
+                        会员卡渠道,01 02 04 51 52 61 62
                         """,
                         "{}",
                         false,
-                        "SWIP网关中各支付渠道交易报文字段定义.xlsx"
+                        "gateway-field-definitions.xlsx"
                 ));
             }
             if ("src/main/java/payment/RoutePlanner.java".equals(filePath)) {

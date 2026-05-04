@@ -93,6 +93,7 @@ public class ArticleChunkFtsSearchService {
                 record.getTitle(),
                 record.getContent(),
                 enrichMetadata(record),
+                record.getReviewStatus(),
                 record.getSourcePaths(),
                 record.getScore()
         );

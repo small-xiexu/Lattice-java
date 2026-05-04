@@ -181,6 +181,7 @@ public class QueryGraphLifecycleListener implements GraphLifecycleListener {
         fields.put("answerOutcome", queryGraphState.getAnswerOutcome());
         fields.put("generationMode", queryGraphState.getGenerationMode());
         fields.put("modelExecutionStatus", queryGraphState.getModelExecutionStatus());
+        fields.put("fallbackReason", queryGraphState.getFallbackReason());
         if (throwable != null) {
             fields.put("error", throwable.getMessage());
             structuredEventLogger.error(eventName, fields, throwable);

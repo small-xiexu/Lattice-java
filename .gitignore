@@ -54,3 +54,4 @@ build/
 ### Local Temp Outputs ###
 tmp/
 test-results/
+.codex/run/

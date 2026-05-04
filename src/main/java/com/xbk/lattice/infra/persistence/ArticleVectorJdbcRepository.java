@@ -24,6 +24,8 @@ import java.util.Optional;
 @Profile("jdbc")
 public class ArticleVectorJdbcRepository {
 
+    private static final int HNSW_MAX_DIMENSIONS = 2000;
+
     private static final String ANN_INDEX_NAME_HNSW = "idx_article_vector_index_embedding_hnsw";
 
     private static final String ANN_INDEX_NAME_IVFFLAT = "idx_article_vector_index_embedding_ivfflat";
@@ -165,7 +167,7 @@ public class ArticleVectorJdbcRepository {
         if (jdbcTemplate == null) {
             return;
         }
-        String annIndexMethod = resolvePreferredAnnIndexMethod();
+        String annIndexMethod = resolveCompatibleAnnIndexMethod();
         if (annIndexMethod.isBlank()) {
             return;
         }
@@ -313,6 +315,7 @@ public class ArticleVectorJdbcRepository {
                                a.title,
                                a.content,
                                a.metadata_json::text as metadata_json,
+                               a.review_status,
                                a.source_paths,
                                1 - (v.embedding %s cast(? as %s)) as score
                         from article_vector_index v
@@ -364,6 +367,7 @@ public class ArticleVectorJdbcRepository {
                 resultSet.getString("title"),
                 resultSet.getString("content"),
                 resultSet.getString("metadata_json"),
+                resultSet.getString("review_status"),
                 readSourcePaths(resultSet),
                 resultSet.getDouble("score")
         );
@@ -470,6 +474,50 @@ public class ArticleVectorJdbcRepository {
         }
         return methods.get(0);
     }
+
+    /**
+     * 解析当前维度下可兼容的 ANN 索引实现。
+     *
+     * <p>pgvector 当前 ANN 索引在高维场景下存在维度上限，
+     * 当 embedding 列超过上限时直接跳过 ANN 索引创建，避免重建阶段失败。</p>
+     *
+     * @return 可兼容的索引实现名
+     */
+    private String resolveCompatibleAnnIndexMethod() {
+        String preferredMethod = resolvePreferredAnnIndexMethod();
+        if (!"hnsw".equals(preferredMethod)) {
+            return preferredMethod;
+        }
+
+        Integer embeddingDimensions = findEmbeddingColumnDimensions();
+        if (embeddingDimensions == null || embeddingDimensions.intValue() <= HNSW_MAX_DIMENSIONS) {
+            return preferredMethod;
+        }
+        return "";
+    }
+
+    /**
+     * 返回当前 embedding 列维度。
+     *
+     * @return embedding 列维度
+     */
+    private Integer findEmbeddingColumnDimensions() {
+        String embeddingColumnType = findEmbeddingColumnType().orElse("");
+        if (embeddingColumnType.isBlank()) {
+            return null;
+        }
+        int startIndex = embeddingColumnType.lastIndexOf("vector(");
+        if (startIndex < 0) {
+            return null;
+        }
+        int dimensionsStartIndex = startIndex + "vector(".length();
+        int dimensionsEndIndex = embeddingColumnType.indexOf(')', dimensionsStartIndex);
+        if (dimensionsEndIndex < 0) {
+            return null;
+        }
+        return Integer.valueOf(embeddingColumnType.substring(dimensionsStartIndex, dimensionsEndIndex));
+    }
+
 
     /**
      * 解析向量索引使用的 opclass。

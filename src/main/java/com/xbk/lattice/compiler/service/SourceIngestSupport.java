@@ -92,7 +92,7 @@ public class SourceIngestSupport {
                 compilerProperties,
                 new FileRankingService(compilerProperties)
         );
-        this.analyzeNode = new AnalyzeNode();
+        this.analyzeNode = new AnalyzeNode(null, null, compilerProperties);
         this.crossGroupMergeNode = new CrossGroupMergeNode();
         this.sourceFileJdbcRepository = sourceFileJdbcRepository;
         this.sourceFileChunkJdbcRepository = sourceFileChunkJdbcRepository;

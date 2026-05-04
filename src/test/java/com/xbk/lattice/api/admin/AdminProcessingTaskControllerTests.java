@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.OffsetDateTime;
+import java.util.Objects;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -138,23 +139,64 @@ class AdminProcessingTaskControllerTests {
 
         assertThat(rootNode.path("summary").path("runningCount").asInt()).isEqualTo(2);
         assertThat(rootNode.path("items").size()).isEqualTo(2);
+        assertThat(rootNode.path("summary").path("cards").size()).isEqualTo(4);
 
         JsonNode sourceSyncTask = findTaskByType(rootNode.path("items"), "SOURCE_SYNC");
         assertThat(sourceSyncTask).isNotNull();
+        assertThat(sourceSyncTask.path("title").asText()).isEqualTo("readme.md");
         assertThat(sourceSyncTask.path("runId").asLong()).isEqualTo(runId.longValue());
         assertThat(sourceSyncTask.path("compileJobId").asText()).isEqualTo(linkedCompileJobId);
         assertThat(sourceSyncTask.path("compileCurrentStep").asText()).isEqualTo("review_articles");
         assertThat(sourceSyncTask.path("compileProgressCurrent").asInt()).isEqualTo(2);
+        assertThat(sourceSyncTask.path("displayStatus").asText()).isEqualTo("RUNNING");
+        assertThat(sourceSyncTask.path("displayStatusLabel").asText()).isEqualTo("进行中");
+        assertThat(sourceSyncTask.path("currentStepLabel").asText()).isEqualTo("质量检查");
+        assertThat(sourceSyncTask.path("progressText").asText()).contains("2 / 3");
+        assertThat(sourceSyncTask.path("reasonSummary").asText()).contains("正在审查文章");
+        assertThat(sourceSyncTask.path("operationalNote").asText()).contains("当前步骤");
+        assertThat(sourceSyncTask.path("displayTone").asText()).isEqualTo("warning");
+        assertThat(sourceSyncTask.path("processingActive").asBoolean()).isTrue();
+        assertThat(sourceSyncTask.path("requiresManualAction").asBoolean()).isFalse();
+        assertThat(sourceSyncTask.path("noticeTone").asText()).isEqualTo("success");
+        assertThat(sourceSyncTask.path("completionNotice").asText()).contains("正在审查文章");
+        assertThat(sourceSyncTask.path("progressSteps").isArray()).isTrue();
+        assertThat(sourceSyncTask.path("progressSteps").size()).isEqualTo(4);
+        assertThat(sourceSyncTask.path("progressSteps").get(0).path("label").asText()).isEqualTo("资料接收");
+        assertThat(sourceSyncTask.path("progressSteps").get(1).path("label").asText()).isEqualTo("内容生成");
+        assertThat(sourceSyncTask.path("progressSteps").get(2).path("label").asText()).isEqualTo("质量检查");
+        assertThat(sourceSyncTask.path("progressSteps").get(3).path("label").asText()).isEqualTo("写入知识库");
+        assertThat(sourceSyncTask.path("progressSteps").get(1).path("key").asText()).isEqualTo("COMPILE_NEW_ARTICLES");
+        assertThat(sourceSyncTask.path("progressSteps").get(2).path("key").asText()).isEqualTo("REVIEW_ARTICLES");
+        assertThat(sourceSyncTask.path("progressSteps").get(2).path("status").asText()).isEqualTo("ACTIVE");
+        assertThat(sourceSyncTask.path("progressSteps").get(2).path("detail").asText()).isEqualTo("正在审查文章草稿");
+        assertThat(sourceSyncTask.path("progressSteps").get(2).path("detail").asText()).doesNotContain("细分状态");
+        assertThat(sourceSyncTask.path("actions").isArray()).isTrue();
 
         JsonNode standaloneTask = findTaskByType(rootNode.path("items"), "STANDALONE_COMPILE");
         assertThat(standaloneTask).isNotNull();
         assertThat(standaloneTask.path("runId").isNull()).isTrue();
         assertThat(standaloneTask.path("compileJobId").asText()).isEqualTo(standaloneJobId);
         assertThat(standaloneTask.path("sourceType").asText()).isEqualTo("DIRECT_COMPILE");
-        assertThat(standaloneTask.path("title").asText()).isEqualTo("docs");
+        assertThat(standaloneTask.path("title").asText()).isEqualTo("overview.md");
         assertThat(standaloneTask.path("compileCurrentStep").asText()).isEqualTo("fix_review_issues");
         assertThat(standaloneTask.path("compileProgressCurrent").asInt()).isEqualTo(6);
         assertThat(standaloneTask.path("compileProgressTotal").asInt()).isEqualTo(7);
+        assertThat(standaloneTask.path("displayStatus").asText()).isEqualTo("RUNNING");
+        assertThat(standaloneTask.path("displayStatusLabel").asText()).isEqualTo("进行中");
+        assertThat(standaloneTask.path("currentStepLabel").asText()).isEqualTo("质量检查");
+        assertThat(standaloneTask.path("operationalNote").asText()).contains("当前步骤");
+        assertThat(standaloneTask.path("displayTone").asText()).isEqualTo("warning");
+        assertThat(standaloneTask.path("processingActive").asBoolean()).isTrue();
+        assertThat(standaloneTask.path("progressSteps").isArray()).isTrue();
+        assertThat(standaloneTask.path("progressSteps").size()).isEqualTo(4);
+        assertThat(standaloneTask.path("progressSteps").get(0).path("label").asText()).isEqualTo("资料接收");
+        assertThat(standaloneTask.path("progressSteps").get(1).path("label").asText()).isEqualTo("内容生成");
+        assertThat(standaloneTask.path("progressSteps").get(2).path("label").asText()).isEqualTo("质量检查");
+        assertThat(standaloneTask.path("progressSteps").get(3).path("label").asText()).isEqualTo("写入知识库");
+        assertThat(standaloneTask.path("progressSteps").get(2).path("detail").asText()).isEqualTo("正在修复审查问题");
+        assertThat(standaloneTask.path("progressSteps").get(2).path("detail").asText()).doesNotContain("细分状态");
+        assertThat(rootNode.path("summary").path("helpState").path("title").asText()).isNotBlank();
+        assertThat(rootNode.path("summary").path("cards").isArray()).isTrue();
     }
 
     /**
@@ -202,11 +244,61 @@ class AdminProcessingTaskControllerTests {
                 .getContentAsString(StandardCharsets.UTF_8);
         JsonNode rootNode = OBJECT_MAPPER.readTree(responseBody);
 
-        assertThat(rootNode.path("summary").path("stalledCount").asInt()).isEqualTo(1);
+        assertThat(rootNode.path("summary").path("stalledCount").asInt()).isEqualTo(0);
+        assertThat(rootNode.path("summary").path("failedCount").asInt()).isEqualTo(1);
         JsonNode stalledTask = findTaskByType(rootNode.path("items"), "STANDALONE_COMPILE");
         assertThat(stalledTask).isNotNull();
+        assertThat(stalledTask.path("displayStatus").asText()).isEqualTo("STALLED");
+        assertThat(stalledTask.path("displayStatusLabel").asText()).isEqualTo("失败");
         assertThat(stalledTask.path("compileDerivedStatus").asText()).isEqualTo("STALLED");
         assertThat(stalledTask.path("compileCurrentStep").asText()).isEqualTo("fix_review_issues");
+        assertThat(stalledTask.path("progressSteps").get(2).path("status").asText()).isEqualTo("FAILED");
+    }
+
+    /**
+     * 验证当前处理任务看板对同一资料源只保留最新一条同步记录。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldOnlyKeepLatestSourceRunPerSourceInProcessingTasks() throws Exception {
+        resetTables();
+        Long sourceId = createUploadSource("srkit-svc-fc-dpfm", "卡券三期-迁移方案.md");
+        insertSourceSyncRun(
+                sourceId,
+                "FAILED",
+                "2026-05-04T00:05:54.828323Z",
+                "2026-05-04T00:16:25.588161Z",
+                "处理失败",
+                "compile job heartbeat expired and lease timed out"
+        );
+        insertSourceSyncRun(
+                sourceId,
+                "SUCCEEDED",
+                "2026-05-04T01:38:33.848574Z",
+                "2026-05-04T02:10:10.834603Z",
+                "处理成功，资料已写入知识库",
+                null
+        );
+
+        String responseBody = mockMvc.perform(get("/api/v1/admin/processing-tasks?limit=20"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        JsonNode rootNode = OBJECT_MAPPER.readTree(responseBody);
+
+        JsonNode items = rootNode.path("items");
+        assertThat(items.isArray()).isTrue();
+        assertThat(items).hasSize(1);
+
+        JsonNode latestTask = items.get(0);
+        assertThat(latestTask.path("sourceId").asLong()).isEqualTo(sourceId.longValue());
+        assertThat(latestTask.path("status").asText()).isEqualTo("SUCCEEDED");
+        assertThat(latestTask.path("displayStatus").asText()).isEqualTo("SUCCEEDED");
+        assertThat(latestTask.path("requestedAt").asText()).isEqualTo("2026-05-04T01:38:33.848574Z");
+        assertThat(rootNode.path("summary").path("succeededCount").asInt()).isEqualTo(1);
+        assertThat(rootNode.path("summary").path("failedCount").asInt()).isEqualTo(0);
     }
 
     /**
@@ -259,6 +351,99 @@ class AdminProcessingTaskControllerTests {
             }
         }
         return null;
+    }
+
+    /**
+     * 创建上传型资料源。
+     *
+     * @param sourceCode 资料源编码
+     * @param name 资料源名称
+     * @return 新建资料源主键
+     */
+    private Long createUploadSource(String sourceCode, String name) {
+        jdbcTemplate.update(
+                """
+                        insert into lattice_processing_task_test.knowledge_sources (
+                            source_code,
+                            name,
+                            source_type,
+                            content_profile,
+                            status,
+                            visibility,
+                            default_sync_mode,
+                            config_json,
+                            metadata_json
+                        )
+                        values (?, ?, 'UPLOAD', 'DOCUMENT', 'ACTIVE', 'NORMAL', 'FULL', '{}'::jsonb, '{}'::jsonb)
+                        """,
+                sourceCode,
+                name
+        );
+        return jdbcTemplate.queryForObject(
+                "select id from lattice_processing_task_test.knowledge_sources where source_code = ?",
+                Long.class,
+                sourceCode
+        );
+    }
+
+    /**
+     * 插入一条同步运行记录。
+     *
+     * @param sourceId 资料源主键
+     * @param status 运行状态
+     * @param requestedAt 提交时间
+     * @param updatedAt 更新时间
+     * @param message 提示文案
+     * @param errorMessage 错误文案
+     */
+    private void insertSourceSyncRun(
+            Long sourceId,
+            String status,
+            String requestedAt,
+            String updatedAt,
+            String message,
+            String errorMessage
+    ) {
+        String evidenceJson = "{\"message\":\"" + escapeJson(message) + "\"}";
+        jdbcTemplate.update(
+                """
+                        insert into lattice_processing_task_test.source_sync_runs (
+                            source_id,
+                            source_type,
+                            trigger_type,
+                            resolver_mode,
+                            status,
+                            evidence_json,
+                            error_message,
+                            requested_at,
+                            updated_at,
+                            finished_at
+                        )
+                        values (?, 'UPLOAD', 'MANUAL', 'RULE_ONLY', ?, cast(? as jsonb), ?, ?::timestamptz, ?::timestamptz, ?::timestamptz)
+                        """,
+                sourceId,
+                status,
+                evidenceJson,
+                errorMessage,
+                requestedAt,
+                updatedAt,
+                updatedAt
+        );
+    }
+
+    /**
+     * 转义 JSON 字符串。
+     *
+     * @param value 原始文案
+     * @return 转义结果
+     */
+    private String escapeJson(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"");
     }
 
     /**

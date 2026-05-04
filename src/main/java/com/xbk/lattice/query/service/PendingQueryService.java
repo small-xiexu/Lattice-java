@@ -443,6 +443,7 @@ public class PendingQueryService implements PendingQueryManager {
                 articleRecord.getTitle(),
                 articleRecord.getContent(),
                 articleRecord.getMetadataJson(),
+                articleRecord.getReviewStatus(),
                 articleRecord.getSourcePaths(),
                 10.0D
         );

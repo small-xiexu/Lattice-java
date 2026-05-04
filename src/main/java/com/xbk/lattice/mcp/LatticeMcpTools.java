@@ -1449,10 +1449,29 @@ public class LatticeMcpTools {
                 + "\"matchedSourceId\":" + detail.getMatchedSourceId() + ","
                 + "\"compileJobId\":" + jsonString(detail.getCompileJobId()) + ","
                 + "\"compileJobStatus\":" + jsonString(detail.getCompileJobStatus()) + ","
+                + "\"compileDerivedStatus\":" + jsonString(detail.getCompileDerivedStatus()) + ","
+                + "\"compileCurrentStep\":" + jsonString(detail.getCompileCurrentStep()) + ","
+                + "\"compileProgressCurrent\":" + detail.getCompileProgressCurrent() + ","
+                + "\"compileProgressTotal\":" + detail.getCompileProgressTotal() + ","
+                + "\"compileProgressMessage\":" + jsonString(detail.getCompileProgressMessage()) + ","
+                + "\"displayStatus\":" + jsonString(detail.getDisplayStatus()) + ","
+                + "\"displayStatusLabel\":" + jsonString(detail.getDisplayStatusLabel()) + ","
+                + "\"currentStepLabel\":" + jsonString(detail.getCurrentStepLabel()) + ","
+                + "\"nextStepHint\":" + jsonString(detail.getNextStepHint()) + ","
+                + "\"progressText\":" + jsonString(detail.getProgressText()) + ","
+                + "\"reasonSummary\":" + jsonString(detail.getReasonSummary()) + ","
+                + "\"operationalNote\":" + jsonString(detail.getOperationalNote()) + ","
+                + "\"displayTone\":" + jsonString(detail.getDisplayTone()) + ","
+                + "\"processingActive\":" + detail.isProcessingActive() + ","
+                + "\"requiresManualAction\":" + detail.isRequiresManualAction() + ","
+                + "\"noticeTone\":" + jsonString(detail.getNoticeTone()) + ","
+                + "\"completionNotice\":" + jsonString(detail.getCompletionNotice()) + ","
                 + "\"manifestHash\":" + jsonString(detail.getManifestHash()) + ","
                 + "\"message\":" + jsonString(detail.getMessage()) + ","
                 + "\"errorMessage\":" + jsonString(detail.getErrorMessage()) + ","
                 + "\"sourceNames\":" + jsonStringList(detail.getSourceNames()) + ","
+                + "\"actions\":" + jsonTaskActions(detail.getActions()) + ","
+                + "\"progressSteps\":" + jsonTaskSteps(detail.getProgressSteps()) + ","
                 + "\"requestedAt\":" + jsonString(detail.getRequestedAt()) + ","
                 + "\"updatedAt\":" + jsonString(detail.getUpdatedAt()) + ","
                 + "\"startedAt\":" + jsonString(detail.getStartedAt()) + ","
@@ -1477,6 +1496,54 @@ public class LatticeMcpTools {
                 builder.append(",");
             }
             builder.append(jsonString(values.get(index)));
+        }
+        builder.append("]");
+        return builder.toString();
+    }
+
+    private String jsonTaskActions(List<com.xbk.lattice.api.admin.AdminProcessingTaskActionResponse> actions) {
+        if (actions == null) {
+            return "[]";
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append("[");
+        for (int index = 0; index < actions.size(); index++) {
+            com.xbk.lattice.api.admin.AdminProcessingTaskActionResponse action = actions.get(index);
+            if (index > 0) {
+                builder.append(",");
+            }
+            builder.append("{")
+                    .append("\"actionKey\":").append(jsonString(action.getActionKey())).append(",")
+                    .append("\"label\":").append(jsonString(action.getLabel())).append(",")
+                    .append("\"buttonClass\":").append(jsonString(action.getButtonClass())).append(",")
+                    .append("\"runId\":").append(action.getRunId()).append(",")
+                    .append("\"sourceId\":").append(action.getSourceId()).append(",")
+                    .append("\"decision\":").append(jsonString(action.getDecision())).append(",")
+                    .append("\"decisionSourceId\":").append(action.getDecisionSourceId()).append(",")
+                    .append("\"uploadRetry\":").append(action.isUploadRetry())
+                    .append("}");
+        }
+        builder.append("]");
+        return builder.toString();
+    }
+
+    private String jsonTaskSteps(List<com.xbk.lattice.api.admin.AdminProcessingTaskStepResponse> steps) {
+        if (steps == null) {
+            return "[]";
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append("[");
+        for (int index = 0; index < steps.size(); index++) {
+            com.xbk.lattice.api.admin.AdminProcessingTaskStepResponse step = steps.get(index);
+            if (index > 0) {
+                builder.append(",");
+            }
+            builder.append("{")
+                    .append("\"key\":").append(jsonString(step.getKey())).append(",")
+                    .append("\"label\":").append(jsonString(step.getLabel())).append(",")
+                    .append("\"status\":").append(jsonString(step.getStatus())).append(",")
+                    .append("\"detail\":").append(jsonString(step.getDetail()))
+                    .append("}");
         }
         builder.append("]");
         return builder.toString();

@@ -16,7 +16,7 @@ public class CompileReviewProperties {
 
     private int maxFixRounds = 1;
 
-    private boolean allowPersistNeedsHumanReview = true;
+    private boolean allowPersistNeedsHumanReview = false;
 
     private String humanReviewSeverityThreshold = "HIGH";
 

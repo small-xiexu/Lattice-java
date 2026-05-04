@@ -104,6 +104,17 @@ public class AdminUploadController {
     }
 
     /**
+     * 重试失败的上传型同步运行。
+     *
+     * @param runId 运行主键
+     * @return 重试后的同步运行详情
+     */
+    @PostMapping("/source-runs/{runId}/retry")
+    public SourceSyncRunDetail retryRun(@PathVariable Long runId) {
+        return sourceUploadService.retryRun(runId);
+    }
+
+    /**
      * 查询资料源同步历史。
      *
      * @param sourceId 资料源主键

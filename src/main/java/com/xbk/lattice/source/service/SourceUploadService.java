@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.xbk.lattice.admin.service.AdminProcessingTaskPresentation;
+import com.xbk.lattice.admin.service.AdminProcessingTaskPresentationResolver;
+import com.xbk.lattice.api.admin.AdminProcessingTaskActionResponse;
 import com.xbk.lattice.compiler.service.CompileJobService;
 import com.xbk.lattice.compiler.service.CompileJobDerivedStatusResolver;
 import com.xbk.lattice.compiler.service.CompileJobStatuses;
@@ -21,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -57,6 +61,8 @@ public class SourceUploadService {
 
     private final SourceSnapshotJdbcRepository sourceSnapshotJdbcRepository;
 
+    private final AdminProcessingTaskPresentationResolver presentationResolver;
+
     /**
      * 创建统一上传服务。
      *
@@ -67,6 +73,7 @@ public class SourceUploadService {
      * @param compileJobService 编译作业服务
      * @param compileJobDerivedStatusResolver 编译作业派生状态解析器
      * @param sourceSnapshotJdbcRepository 资料源快照仓储
+     * @param presentationResolver 当前处理任务展示解析器
      */
     public SourceUploadService(
             BundleFeatureExtractor bundleFeatureExtractor,
@@ -75,7 +82,8 @@ public class SourceUploadService {
             SourceSyncService sourceSyncService,
             CompileJobService compileJobService,
             CompileJobDerivedStatusResolver compileJobDerivedStatusResolver,
-            SourceSnapshotJdbcRepository sourceSnapshotJdbcRepository
+            SourceSnapshotJdbcRepository sourceSnapshotJdbcRepository,
+            AdminProcessingTaskPresentationResolver presentationResolver
     ) {
         this.bundleFeatureExtractor = bundleFeatureExtractor;
         this.sourceDecisionPolicy = sourceDecisionPolicy;
@@ -84,6 +92,7 @@ public class SourceUploadService {
         this.compileJobService = compileJobService;
         this.compileJobDerivedStatusResolver = compileJobDerivedStatusResolver;
         this.sourceSnapshotJdbcRepository = sourceSnapshotJdbcRepository;
+        this.presentationResolver = presentationResolver;
     }
 
     /**
@@ -228,6 +237,68 @@ public class SourceUploadService {
                 .orElseThrow(() -> new IllegalArgumentException("source not found: " + sourceId));
         SourceSyncRun acceptedRun = routeExplicitSource(currentRun, targetSource, bundleSnapshot, "MANUAL_OVERRIDE", normalizedDecision);
         return getRunDetail(acceptedRun.getId());
+    }
+
+    /**
+     * 重试失败的上传型同步运行。
+     *
+     * <p>当上传型资料在 compile 阶段失败时，优先复用原 compile job 与 stagingDir，
+     * 避免要求用户重新上传大文件。</p>
+     *
+     * @param runId 运行主键
+     * @return 最新同步运行详情
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public SourceSyncRunDetail retryRun(Long runId) {
+        SourceSyncRun existingRun = sourceSyncService.findById(runId)
+                .orElseThrow(() -> new IllegalArgumentException("run not found: " + runId));
+        SourceSyncRun currentRun = refreshRunFromCompileJob(existingRun);
+        if (!"UPLOAD".equals(currentRun.getSourceType())) {
+            throw new IllegalArgumentException("only upload runs support retry: " + runId);
+        }
+        if (!"FAILED".equals(currentRun.getStatus())) {
+            throw new IllegalStateException("run is not failed: " + runId);
+        }
+
+        BundleFeatureExtractor.UploadBundleSnapshot bundleSnapshot = loadBundleSnapshot(currentRun);
+        ensureStagingDirAvailable(bundleSnapshot.getStagingDir());
+        if (currentRun.getSourceId() != null) {
+            KnowledgeSource targetSource = sourceService.findById(currentRun.getSourceId())
+                    .orElseThrow(() -> new IllegalArgumentException("source not found: " + currentRun.getSourceId()));
+            rejectWhenSourceStatusBlocksSync(targetSource);
+            rejectWhenSourceHasActiveRun(targetSource.getId(), currentRun.getId());
+        }
+
+        if (currentRun.getCompileJobId() != null && !currentRun.getCompileJobId().isBlank()) {
+            CompileJobRecord retriedCompileJob = compileJobService.retry(currentRun.getCompileJobId());
+            SourceSyncRun retriedRun = sourceSyncService.saveRun(rebuildRunForRetry(
+                    currentRun,
+                    currentRun.getCompileJobId(),
+                    buildEvidenceJson(
+                            bundleSnapshot,
+                            currentRun.getResolverDecision(),
+                            currentRun.getCompileJobId(),
+                            "已重新提交处理任务，等待后台执行",
+                            readMaterializationNode(currentRun.getEvidenceJson())
+                    )
+            ));
+            return toDetail(retriedRun, retriedCompileJob);
+        }
+
+        if (currentRun.getSourceId() == null) {
+            throw new IllegalStateException("failed upload run cannot retry without sourceId or compileJobId");
+        }
+        KnowledgeSource targetSource = sourceService.findById(currentRun.getSourceId())
+                .orElseThrow(() -> new IllegalArgumentException("source not found: " + currentRun.getSourceId()));
+        SourceSyncRun requeuedRun = submitCompile(
+                currentRun,
+                targetSource,
+                bundleSnapshot,
+                currentRun.getResolverMode(),
+                currentRun.getResolverDecision(),
+                currentRun.getSyncAction()
+        );
+        return getRunDetail(requeuedRun.getId());
     }
 
     private SourceSyncRun createInitialRun(
@@ -422,7 +493,7 @@ public class SourceUploadService {
                         bundleSnapshot,
                         resolverDecision,
                         compileJobRecord.getJobId(),
-                        "已提交编译任务，等待后台执行",
+                        "已提交处理任务，等待后台执行",
                         readMaterializationNode(run.getEvidenceJson())
                 ),
                 null,
@@ -456,6 +527,23 @@ public class SourceUploadService {
                     null
             ));
         }
+        if (CompileJobStatuses.QUEUED.equals(compileJobRecord.getStatus())
+                && !"COMPILE_QUEUED".equals(run.getStatus())) {
+            return sourceSyncService.saveRun(replaceRun(
+                    run,
+                    run.getSourceId(),
+                    run.getResolverMode(),
+                    run.getResolverDecision(),
+                    run.getSyncAction(),
+                    "COMPILE_QUEUED",
+                    run.getMatchedSourceId(),
+                    run.getCompileJobId(),
+                    updateEvidenceMessage(run.getEvidenceJson(), "已回收运行中任务，等待后台重新执行"),
+                    null,
+                    null,
+                    null
+            ));
+        }
         if (CompileJobStatuses.SUCCEEDED.equals(compileJobRecord.getStatus())) {
             SourceSyncRun succeededRun = sourceSyncService.saveRun(replaceRun(
                     run,
@@ -466,7 +554,7 @@ public class SourceUploadService {
                     "SUCCEEDED",
                     run.getMatchedSourceId(),
                     run.getCompileJobId(),
-                    updateEvidenceMessage(run.getEvidenceJson(), "编译成功，资料已完成入库"),
+                    updateEvidenceMessage(run.getEvidenceJson(), "处理成功，资料已写入知识库"),
                     null,
                     compileJobRecord.getStartedAt(),
                     compileJobRecord.getFinishedAt()
@@ -487,7 +575,7 @@ public class SourceUploadService {
                     "FAILED",
                     run.getMatchedSourceId(),
                     run.getCompileJobId(),
-                    updateEvidenceMessage(run.getEvidenceJson(), "编译失败"),
+                    updateEvidenceMessage(run.getEvidenceJson(), "处理失败"),
                     compileJobRecord.getErrorMessage(),
                     compileJobRecord.getStartedAt(),
                     compileJobRecord.getFinishedAt()
@@ -530,6 +618,51 @@ public class SourceUploadService {
         List<String> sourceNames = readStringArray(evidenceNode.path("sourceNames"));
         KnowledgeSource source = run.getSourceId() == null ? null : sourceService.findById(run.getSourceId()).orElse(null);
         CompileJobRecord compileJobRecord = run.getCompileJobId() == null ? null : compileJobService.getJob(run.getCompileJobId());
+        return toDetail(run, compileJobRecord, source, sourceNames, evidenceNode);
+    }
+
+    private SourceSyncRunDetail toDetail(SourceSyncRun run, CompileJobRecord compileJobRecord) {
+        JsonNode evidenceNode = readEvidence(run.getEvidenceJson());
+        List<String> sourceNames = readStringArray(evidenceNode.path("sourceNames"));
+        KnowledgeSource source = run.getSourceId() == null ? null : sourceService.findById(run.getSourceId()).orElse(null);
+        return toDetail(run, compileJobRecord, source, sourceNames, evidenceNode);
+    }
+
+    private SourceSyncRunDetail toDetail(
+            SourceSyncRun run,
+            CompileJobRecord compileJobRecord,
+            KnowledgeSource source,
+            List<String> sourceNames,
+            JsonNode evidenceNode
+    ) {
+        String compileJobStatus = compileJobRecord == null ? null : compileJobRecord.getStatus();
+        String compileDerivedStatus = compileJobRecord == null ? null : compileJobDerivedStatusResolver.resolve(compileJobRecord);
+        String compileCurrentStep = compileJobRecord == null ? null : compileJobRecord.getCurrentStep();
+        Integer compileProgressCurrent = compileJobRecord == null ? null : Integer.valueOf(compileJobRecord.getProgressCurrent());
+        Integer compileProgressTotal = compileJobRecord == null ? null : Integer.valueOf(compileJobRecord.getProgressTotal());
+        String compileProgressMessage = compileJobRecord == null ? null : compileJobRecord.getProgressMessage();
+        String compileLastHeartbeatAt = compileJobRecord == null ? null : formatTime(compileJobRecord.getLastHeartbeatAt());
+        String compileRunningExpiresAt = compileJobRecord == null ? null : formatTime(compileJobRecord.getRunningExpiresAt());
+        String compileErrorCode = compileJobRecord == null ? null : compileJobRecord.getErrorCode();
+        String message = evidenceNode.path("message").asText(defaultMessage(run));
+        String displayStatus = presentationResolver.resolveDisplayStatus(
+                compileDerivedStatus,
+                compileJobStatus,
+                run.getStatus()
+        );
+        AdminProcessingTaskPresentation presentation = presentationResolver.resolve(
+                AdminProcessingTaskPresentationResolver.TASK_TYPE_SOURCE_SYNC,
+                displayStatus,
+                compileCurrentStep,
+                compileProgressCurrent,
+                compileProgressTotal,
+                compileProgressMessage,
+                compileErrorCode,
+                message,
+                run.getErrorMessage(),
+                run.getSourceId()
+        );
+        List<AdminProcessingTaskActionResponse> actions = buildSourceSyncActions(run, displayStatus);
         return new SourceSyncRunDetail(
                 run.getId(),
                 run.getSourceId(),
@@ -541,25 +674,105 @@ public class SourceUploadService {
                 run.getSyncAction(),
                 run.getMatchedSourceId(),
                 run.getCompileJobId(),
-                compileJobRecord == null ? null : compileJobRecord.getStatus(),
-                compileJobRecord == null ? null : compileJobDerivedStatusResolver.resolve(compileJobRecord),
-                compileJobRecord == null ? null : compileJobRecord.getCurrentStep(),
-                compileJobRecord == null ? null : Integer.valueOf(compileJobRecord.getProgressCurrent()),
-                compileJobRecord == null ? null : Integer.valueOf(compileJobRecord.getProgressTotal()),
-                compileJobRecord == null ? null : compileJobRecord.getProgressMessage(),
-                compileJobRecord == null ? null : formatTime(compileJobRecord.getLastHeartbeatAt()),
-                compileJobRecord == null ? null : formatTime(compileJobRecord.getRunningExpiresAt()),
-                compileJobRecord == null ? null : compileJobRecord.getErrorCode(),
+                compileJobStatus,
+                compileDerivedStatus,
+                compileCurrentStep,
+                compileProgressCurrent,
+                compileProgressTotal,
+                compileProgressMessage,
+                compileLastHeartbeatAt,
+                compileRunningExpiresAt,
+                compileErrorCode,
                 run.getManifestHash(),
-                evidenceNode.path("message").asText(defaultMessage(run)),
+                message,
                 run.getErrorMessage(),
                 sourceNames,
+                actions,
+                presentation.getDisplayStatus(),
+                presentation.getDisplayStatusLabel(),
+                presentation.getCurrentStepLabel(),
+                presentation.getNextStepHint(),
+                presentation.getProgressText(),
+                presentation.getReasonSummary(),
+                presentation.getOperationalNote(),
+                presentation.getProgressSteps(),
+                presentation.getDisplayTone(),
+                presentation.isProcessingActive(),
+                presentation.isRequiresManualAction(),
+                presentation.getNoticeTone(),
+                presentation.getCompletionNotice(),
                 run.getEvidenceJson(),
                 formatTime(run.getRequestedAt()),
                 formatTime(run.getUpdatedAt()),
                 formatTime(run.getStartedAt()),
                 formatTime(run.getFinishedAt())
         );
+    }
+
+    private List<AdminProcessingTaskActionResponse> buildSourceSyncActions(SourceSyncRun run, String displayStatus) {
+        List<AdminProcessingTaskActionResponse> actions = new ArrayList<AdminProcessingTaskActionResponse>();
+        if ("WAIT_CONFIRM".equals(displayStatus)) {
+            actions.add(new AdminProcessingTaskActionResponse(
+                    "CONFIRM_NEW_SOURCE",
+                    "确认为新资料源",
+                    "ghost-btn",
+                    run.getId(),
+                    run.getSourceId(),
+                    "NEW_SOURCE",
+                    null,
+                    false
+            ));
+            if (run.getMatchedSourceId() != null) {
+                actions.add(new AdminProcessingTaskActionResponse(
+                        "CONFIRM_APPEND_SOURCE",
+                        "追加到候选资料源",
+                        "secondary-btn",
+                        run.getId(),
+                        run.getSourceId(),
+                        "EXISTING_SOURCE_APPEND",
+                        run.getMatchedSourceId(),
+                        false
+                ));
+                actions.add(new AdminProcessingTaskActionResponse(
+                        "CONFIRM_UPDATE_SOURCE",
+                        "按更新覆盖候选资料源",
+                        "ghost-btn",
+                        run.getId(),
+                        run.getSourceId(),
+                        "EXISTING_SOURCE_UPDATE",
+                        run.getMatchedSourceId(),
+                        false
+                ));
+            }
+        }
+        if (run.getSourceId() != null
+                && !"UPLOAD".equalsIgnoreCase(run.getSourceType())
+                && ("FAILED".equals(displayStatus)
+                || "STALLED".equals(displayStatus)
+                || "SUCCEEDED".equals(displayStatus)
+                || "SKIPPED_NO_CHANGE".equals(displayStatus))) {
+            actions.add(new AdminProcessingTaskActionResponse(
+                    "RESYNC_SOURCE",
+                    "FAILED".equals(displayStatus) || "STALLED".equals(displayStatus)
+                            ? "重新同步当前资料源"
+                            : "再次同步当前资料源",
+                    "FAILED".equals(displayStatus) || "STALLED".equals(displayStatus)
+                            ? "secondary-btn"
+                            : "ghost-btn",
+                    run.getId(),
+                    run.getSourceId(),
+                    null,
+                    null,
+                    false
+            ));
+        }
+        return actions;
+    }
+
+    private void ensureStagingDirAvailable(Path stagingDir) {
+        if (stagingDir == null || !Files.isDirectory(stagingDir)) {
+            throw new IllegalStateException("stagingDir no longer exists, please upload again");
+        }
     }
 
     private String defaultMessage(SourceSyncRun run) {
@@ -841,6 +1054,33 @@ public class SourceUploadService {
                 OffsetDateTime.now(),
                 startedAt == null ? existingRun.getStartedAt() : startedAt,
                 finishedAt == null ? existingRun.getFinishedAt() : finishedAt
+        );
+    }
+
+    private SourceSyncRun rebuildRunForRetry(
+            SourceSyncRun existingRun,
+            String compileJobId,
+            String evidenceJson
+    ) {
+        OffsetDateTime now = OffsetDateTime.now();
+        return new SourceSyncRun(
+                existingRun.getId(),
+                existingRun.getSourceId(),
+                existingRun.getSourceType(),
+                existingRun.getManifestHash(),
+                existingRun.getTriggerType(),
+                existingRun.getResolverMode(),
+                existingRun.getResolverDecision(),
+                existingRun.getSyncAction(),
+                "COMPILE_QUEUED",
+                existingRun.getMatchedSourceId(),
+                compileJobId,
+                evidenceJson,
+                null,
+                existingRun.getRequestedAt(),
+                now,
+                null,
+                null
         );
     }
 

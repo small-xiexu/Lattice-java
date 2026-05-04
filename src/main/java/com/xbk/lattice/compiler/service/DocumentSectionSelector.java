@@ -35,6 +35,54 @@ public class DocumentSectionSelector {
         if (content.length() <= maxChars) {
             return content;
         }
+        List<DocumentHeading> headings = toc(content);
+        List<String> matchedSections = collectMatchedMarkdownSections(content, conceptTerms, headings);
+        if (matchedSections.isEmpty()) {
+            matchedSections = collectMatchedLegacySections(content, conceptTerms);
+        }
+        String selected = matchedSections.isEmpty() ? content : String.join("\n\n", matchedSections);
+        if (selected.length() <= maxChars) {
+            return selected;
+        }
+        return selected.substring(0, maxChars);
+    }
+
+    /**
+     * 收集命中概念关键词的 Markdown 章节。
+     *
+     * @param content 原始内容
+     * @param conceptTerms 概念关键词
+     * @param headings 章节目录
+     * @return 命中的章节正文
+     */
+    private List<String> collectMatchedMarkdownSections(
+            String content,
+            List<String> conceptTerms,
+            List<DocumentHeading> headings
+    ) {
+        List<String> matchedSections = new ArrayList<String>();
+        for (DocumentHeading heading : headings) {
+            DocumentSection documentSection = readSection(content, heading.getHeading());
+            String normalizedContent = documentSection.getContent().trim();
+            if (normalizedContent.isEmpty()) {
+                continue;
+            }
+            String lowercaseSection = normalizedContent.toLowerCase(Locale.ROOT);
+            if (matchesAny(lowercaseSection, conceptTerms)) {
+                matchedSections.add(normalizedContent);
+            }
+        }
+        return matchedSections;
+    }
+
+    /**
+     * 收集命中概念关键词的旧版分隔章节。
+     *
+     * @param content 原始内容
+     * @param conceptTerms 概念关键词
+     * @return 命中的章节正文
+     */
+    private List<String> collectMatchedLegacySections(String content, List<String> conceptTerms) {
         String[] sections = content.split("(?m)^=== ");
         List<String> matchedSections = new ArrayList<String>();
         for (String section : sections) {
@@ -47,11 +95,7 @@ public class DocumentSectionSelector {
                 matchedSections.add("=== " + normalizedSection);
             }
         }
-        String selected = matchedSections.isEmpty() ? content : String.join("\n\n", matchedSections);
-        if (selected.length() <= maxChars) {
-            return selected;
-        }
-        return selected.substring(0, maxChars);
+        return matchedSections;
     }
 
     /**
@@ -120,7 +164,7 @@ public class DocumentSectionSelector {
         int startIndex = Math.max(target.getLine() - 1, 0);
         int endIndex = lines.length;
         for (DocumentHeading item : headings) {
-            if (item.getLine() > target.getLine()) {
+            if (item.getLine() > target.getLine() && item.getLevel() <= target.getLevel()) {
                 endIndex = item.getLine() - 1;
                 break;
             }

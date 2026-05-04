@@ -2,6 +2,7 @@ package com.xbk.lattice.llm.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xbk.lattice.llm.domain.LlmModelProfile;
 import com.xbk.lattice.llm.domain.LlmProviderConnection;
 import org.springframework.ai.model.anthropic.autoconfigure.AnthropicConnectionProperties;
 import org.springframework.context.annotation.Profile;
@@ -17,6 +18,7 @@ import org.springframework.web.client.RestClientResponseException;
 import java.net.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -45,6 +47,8 @@ public class LlmConnectionProbeService {
 
     private final AnthropicConnectionProperties anthropicConnectionProperties;
 
+    private final LlmEndpointUrlResolver llmEndpointUrlResolver;
+
     /**
      * 创建 LLM 连接探测服务。
      *
@@ -53,19 +57,22 @@ public class LlmConnectionProbeService {
      * @param llmConfigAdminService LLM 配置中心后台服务
      * @param llmSecretCryptoService 密钥加解密服务
      * @param anthropicConnectionProperties Anthropic 连接配置
+     * @param llmEndpointUrlResolver 端点地址解析器
      */
     public LlmConnectionProbeService(
             RestClient.Builder restClientBuilder,
             ObjectMapper objectMapper,
             LlmConfigAdminService llmConfigAdminService,
             LlmSecretCryptoService llmSecretCryptoService,
-            AnthropicConnectionProperties anthropicConnectionProperties
+            AnthropicConnectionProperties anthropicConnectionProperties,
+            LlmEndpointUrlResolver llmEndpointUrlResolver
     ) {
         this.restClientBuilder = restClientBuilder;
         this.objectMapper = objectMapper;
         this.llmConfigAdminService = llmConfigAdminService;
         this.llmSecretCryptoService = llmSecretCryptoService;
         this.anthropicConnectionProperties = anthropicConnectionProperties;
+        this.llmEndpointUrlResolver = llmEndpointUrlResolver;
     }
 
     /**
@@ -144,9 +151,9 @@ public class LlmConnectionProbeService {
                 .map(this::normalizeProviderType)
                 .orElse("");
         String resolvedBaseUrl = StringUtils.hasText(baseUrl)
-                ? normalizeBaseUrl(baseUrl)
+                ? llmEndpointUrlResolver.normalizeBaseUrl(baseUrl)
                 : existingConnection.map(LlmProviderConnection::getBaseUrl)
-                .map(this::normalizeBaseUrl)
+                .map(llmEndpointUrlResolver::normalizeBaseUrl)
                 .orElse("");
         String resolvedApiKey = StringUtils.hasText(apiKey)
                 ? apiKey.trim()
@@ -160,7 +167,7 @@ public class LlmConnectionProbeService {
         if (!StringUtils.hasText(resolvedBaseUrl)) {
             throw new IllegalArgumentException("请先填写接口地址");
         }
-        return new ResolvedConnectionConfig(resolvedProviderType, resolvedBaseUrl, resolvedApiKey);
+        return new ResolvedConnectionConfig(connectionId, resolvedProviderType, resolvedBaseUrl, resolvedApiKey);
     }
 
     /**
@@ -176,6 +183,9 @@ public class LlmConnectionProbeService {
         if ("ollama".equals(resolvedConfig.providerType)) {
             return probeOllama(resolvedConfig);
         }
+        if (shouldProbeEmbeddingEndpoint(resolvedConfig)) {
+            return probeOpenAiEmbeddingEndpoint(resolvedConfig);
+        }
         return probeOpenAi(resolvedConfig);
     }
 
@@ -188,7 +198,7 @@ public class LlmConnectionProbeService {
     private ProbeSuccessDetails probeOpenAi(ResolvedConnectionConfig resolvedConfig) {
         String endpoint = resolveOpenAiModelsPath(resolvedConfig.baseUrl);
         RestClient client = buildRestClient(
-                resolvedConfig.baseUrl,
+                llmEndpointUrlResolver.resolveModelsBaseUrl(resolvedConfig.baseUrl),
                 resolvedConfig.apiKey,
                 HttpHeaders.AUTHORIZATION,
                 resolvedConfig.apiKey
@@ -202,6 +212,51 @@ public class LlmConnectionProbeService {
     }
 
     /**
+     * 探测 OpenAI 兼容 embedding 专用接口。
+     *
+     * @param resolvedConfig 最终探测配置
+     * @return 成功结果
+     */
+    private ProbeSuccessDetails probeOpenAiEmbeddingEndpoint(ResolvedConnectionConfig resolvedConfig) {
+        String endpoint = resolveOpenAiEmbeddingsPath(resolvedConfig.baseUrl);
+        RestClientResponseException lastResponseException = null;
+        RestClientException lastClientException = null;
+        for (String baseUrlCandidate : llmEndpointUrlResolver.resolveEmbeddingBaseUrlCandidates(resolvedConfig.baseUrl)) {
+            try {
+                RestClient client = buildRestClient(
+                        baseUrlCandidate,
+                        resolvedConfig.apiKey,
+                        HttpHeaders.AUTHORIZATION,
+                        resolvedConfig.apiKey
+                );
+                String responseBody = requestJson(
+                        client,
+                        endpoint,
+                        "{\"model\":\"embedding-3\",\"input\":\"probe\"}"
+                );
+                int vectorCount = extractCollectionSize(responseBody, "data");
+                String message = vectorCount >= 0
+                        ? "OpenAI embedding 连接成功，接口已返回向量结果"
+                        : "OpenAI embedding 连接成功，接口已正常返回";
+                return new ProbeSuccessDetails(endpoint, message);
+            }
+            catch (RestClientResponseException exception) {
+                lastResponseException = exception;
+            }
+            catch (RestClientException exception) {
+                lastClientException = exception;
+            }
+        }
+        if (lastResponseException != null) {
+            throw lastResponseException;
+        }
+        if (lastClientException != null) {
+            throw lastClientException;
+        }
+        throw new IllegalStateException("embedding 连接探测失败");
+    }
+
+    /**
      * 探测 Claude 风格接口。
      *
      * @param resolvedConfig 最终探测配置
@@ -212,7 +267,7 @@ public class LlmConnectionProbeService {
         SimpleClientHttpRequestFactory requestFactory = createRequestFactory();
         RestClient.Builder clientBuilder = restClientBuilder.clone()
                 .requestFactory(requestFactory)
-                .baseUrl(resolvedConfig.baseUrl)
+                .baseUrl(llmEndpointUrlResolver.resolveAnthropicBaseUrl(resolvedConfig.baseUrl))
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
         if (StringUtils.hasText(resolvedConfig.apiKey)) {
             clientBuilder.defaultHeader("x-api-key", resolvedConfig.apiKey);
@@ -315,6 +370,27 @@ public class LlmConnectionProbeService {
     }
 
     /**
+     * 发起 POST JSON 请求并返回文本响应。
+     *
+     * @param client RestClient
+     * @param endpoint 探测端点
+     * @param requestBody JSON 请求体
+     * @return 响应文本
+     */
+    private String requestJson(RestClient client, String endpoint, String requestBody) {
+        byte[] responseBytes = client.post()
+                .uri(endpoint)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(requestBody)
+                .retrieve()
+                .body(byte[].class);
+        if (responseBytes == null || responseBytes.length == 0) {
+            return "";
+        }
+        return new String(responseBytes, StandardCharsets.UTF_8);
+    }
+
+    /**
      * 从 JSON 响应中读取集合长度。
      *
      * @param responseBody 响应文本
@@ -390,14 +466,6 @@ public class LlmConnectionProbeService {
      * @param baseUrl 原始基础地址
      * @return 规范化后的基础地址
      */
-    private String normalizeBaseUrl(String baseUrl) {
-        String normalized = baseUrl.trim();
-        while (normalized.endsWith("/")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-        return normalized;
-    }
-
     /**
      * 解析 Provider 展示名称。
      *
@@ -421,7 +489,17 @@ public class LlmConnectionProbeService {
      * @return 端点路径
      */
     private String resolveOpenAiModelsPath(String baseUrl) {
-        return baseUrl.endsWith("/v1") ? "/models" : "/v1/models";
+        return llmEndpointUrlResolver.resolveModelsPath(baseUrl);
+    }
+
+    /**
+     * 解析 OpenAI 风格 embedding 探测端点。
+     *
+     * @param baseUrl 基础地址
+     * @return 端点路径
+     */
+    private String resolveOpenAiEmbeddingsPath(String baseUrl) {
+        return llmEndpointUrlResolver.resolveEmbeddingsPath(baseUrl);
     }
 
     /**
@@ -431,7 +509,7 @@ public class LlmConnectionProbeService {
      * @return 端点路径
      */
     private String resolveAnthropicModelsPath(String baseUrl) {
-        return baseUrl.endsWith("/v1") ? "/models" : "/v1/models";
+        return llmEndpointUrlResolver.resolveAnthropicModelsPath(baseUrl);
     }
 
     /**
@@ -459,6 +537,48 @@ public class LlmConnectionProbeService {
             return normalized;
         }
         return normalized.substring(0, 160) + "...";
+    }
+
+    /**
+     * 判断当前连接是否应按 embedding 专用 endpoint 探测。
+     *
+     * @param resolvedConfig 最终探测配置
+     * @return 是否使用 embedding 探测
+     */
+    private boolean shouldProbeEmbeddingEndpoint(ResolvedConnectionConfig resolvedConfig) {
+        if (resolvedConfig.connectionId == null || resolvedConfig.connectionId.longValue() <= 0L) {
+            return usesOpenAiCompatibleEmbeddingEndpoint(resolvedConfig.baseUrl);
+        }
+        List<LlmModelProfile> modelProfiles = llmConfigAdminService.listModelProfiles();
+        boolean hasChatModel = false;
+        boolean hasEmbeddingModel = false;
+        for (LlmModelProfile modelProfile : modelProfiles) {
+            if (modelProfile.getConnectionId() == null
+                    || !modelProfile.getConnectionId().equals(resolvedConfig.connectionId)
+                    || !modelProfile.isEnabled()) {
+                continue;
+            }
+            if (LlmModelProfile.MODEL_KIND_CHAT.equalsIgnoreCase(modelProfile.getModelKind())) {
+                hasChatModel = true;
+            }
+            if (LlmModelProfile.MODEL_KIND_EMBEDDING.equalsIgnoreCase(modelProfile.getModelKind())) {
+                hasEmbeddingModel = true;
+            }
+        }
+        if (hasEmbeddingModel && !hasChatModel) {
+            return true;
+        }
+        return usesOpenAiCompatibleEmbeddingEndpoint(resolvedConfig.baseUrl) && !hasChatModel;
+    }
+
+    /**
+     * 判断基础地址是否为 embedding 专用 endpoint。
+     *
+     * @param baseUrl 基础地址
+     * @return 是否为 embedding 专用 endpoint
+     */
+    private boolean usesOpenAiCompatibleEmbeddingEndpoint(String baseUrl) {
+        return llmEndpointUrlResolver.usesDedicatedEmbeddingEndpoint(baseUrl);
     }
 
     /**
@@ -558,13 +678,16 @@ public class LlmConnectionProbeService {
      */
     private static final class ResolvedConnectionConfig {
 
+        private final Long connectionId;
+
         private final String providerType;
 
         private final String baseUrl;
 
         private final String apiKey;
 
-        private ResolvedConnectionConfig(String providerType, String baseUrl, String apiKey) {
+        private ResolvedConnectionConfig(Long connectionId, String providerType, String baseUrl, String apiKey) {
+            this.connectionId = connectionId;
             this.providerType = providerType;
             this.baseUrl = baseUrl;
             this.apiKey = apiKey;

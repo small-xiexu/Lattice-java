@@ -78,7 +78,7 @@ public class CompileJobLeaseManager implements DisposableBean {
         }
         cancelJob(jobId);
         ScheduledFuture<?> heartbeatFuture = scheduledExecutorService.scheduleWithFixedDelay(
-                () -> refreshHeartbeat(jobId),
+                () -> refreshHeartbeatSafely(jobId),
                 compileJobProperties.getHeartbeatIntervalSeconds(),
                 compileJobProperties.getHeartbeatIntervalSeconds(),
                 TimeUnit.SECONDS
@@ -181,6 +181,12 @@ public class CompileJobLeaseManager implements DisposableBean {
         for (String jobId : heartbeatFutures.keySet()) {
             cancelJob(jobId);
         }
+        try {
+            compileJobJdbcRepository.requeueRunningJobsOwnedByWorker(compileJobProperties.getWorkerId());
+        }
+        catch (RuntimeException ex) {
+            log.warn("compile job requeue on shutdown failed. workerId: {}", compileJobProperties.getWorkerId(), ex);
+        }
         scheduledExecutorService.shutdownNow();
     }
 
@@ -200,6 +206,23 @@ public class CompileJobLeaseManager implements DisposableBean {
         );
         if (!refreshed) {
             cancelJob(jobId);
+        }
+    }
+
+    /**
+     * 安全刷新指定作业的后台心跳。
+     *
+     * <p>单次续租异常不应导致整个定时任务永久退出，否则长步骤会在后续无心跳续租的情况下
+     * 被误判成陈旧任务并触发 {@code COMPILE_STALE_TIMEOUT}。</p>
+     *
+     * @param jobId 作业标识
+     */
+    private void refreshHeartbeatSafely(String jobId) {
+        try {
+            refreshHeartbeat(jobId);
+        }
+        catch (RuntimeException ex) {
+            log.warn("compile job heartbeat refresh failed, keep scheduler alive. jobId: {}", jobId, ex);
         }
     }
 

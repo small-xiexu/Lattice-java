@@ -33,7 +33,7 @@ class ReviewerAgentTests {
                 List.of("payment/analyze.json")
         );
 
-        assertThat(reviewResult.isPass()).isTrue();
+        assertThat(reviewResult.isPass()).isFalse();
         assertThat(reviewResult.getStatus()).isEqualTo(ReviewStatus.TIMEOUT_FALLBACK);
         assertThat(reviewResult.getIssues()).isEmpty();
     }

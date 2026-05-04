@@ -35,7 +35,7 @@ class PaginatedTextCleanerTests {
                 """,
                 """
                 2026/4/29 11:04 Internal Migration Plan
-                businessTypeCode=26 has traffic.
+                scenarioCode=42 has traffic.
                 https://docs.example.test/pdf#print 3/4
                 """,
                 """
@@ -47,7 +47,7 @@ class PaginatedTextCleanerTests {
 
         assertThat(cleanedText).contains("=== Page: 1 ===");
         assertThat(cleanedText).contains("Scenario A keeps /api/v2/orders/add compatible.");
-        assertThat(cleanedText).contains("businessTypeCode=26 has traffic.");
+        assertThat(cleanedText).contains("scenarioCode=42 has traffic.");
         assertThat(cleanedText).doesNotContain("2026/4/29 11:04 Internal Migration Plan");
         assertThat(cleanedText).doesNotContain("pdf#print");
     }

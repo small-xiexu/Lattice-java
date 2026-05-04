@@ -30,6 +30,10 @@ public class ArticleRecord {
 
     private final OffsetDateTime compiledAt;
 
+    private final OffsetDateTime createdAt;
+
+    private final OffsetDateTime updatedAt;
+
     private final List<String> sourcePaths;
 
     private final String metadataJson;
@@ -81,7 +85,9 @@ public class ArticleRecord {
                 Collections.<String>emptyList(),
                 Collections.<String>emptyList(),
                 "medium",
-                "pending"
+                "pending",
+                null,
+                null
         );
     }
 
@@ -132,7 +138,9 @@ public class ArticleRecord {
                 dependsOn,
                 related,
                 confidence,
-                reviewStatus
+                reviewStatus,
+                null,
+                null
         );
     }
 
@@ -155,6 +163,65 @@ public class ArticleRecord {
      * @param confidence 置信度
      * @param reviewStatus 审查状态
      */
+    public ArticleRecord(
+            Long sourceId,
+            String articleKey,
+            String conceptId,
+            String title,
+            String content,
+            String lifecycle,
+            OffsetDateTime compiledAt,
+            List<String> sourcePaths,
+            String metadataJson,
+            String summary,
+            List<String> referentialKeywords,
+            List<String> dependsOn,
+            List<String> related,
+            String confidence,
+            String reviewStatus
+    ) {
+        this(
+                sourceId,
+                articleKey,
+                conceptId,
+                title,
+                content,
+                lifecycle,
+                compiledAt,
+                sourcePaths,
+                metadataJson,
+                summary,
+                referentialKeywords,
+                dependsOn,
+                related,
+                confidence,
+                reviewStatus,
+                null,
+                null
+        );
+    }
+
+    /**
+     * 创建文章记录。
+     *
+     * @param sourceId 资料源主键
+     * @param articleKey 文章唯一键
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param content 内容
+     * @param lifecycle 生命周期
+     * @param compiledAt 编译时间
+     * @param sourcePaths 来源路径
+     * @param metadataJson 元数据 JSON
+     * @param summary 摘要
+     * @param referentialKeywords 明确性关键词
+     * @param dependsOn 依赖概念
+     * @param related 相关概念
+     * @param confidence 置信度
+     * @param reviewStatus 审查状态
+     * @param createdAt 首次入库时间
+     * @param updatedAt 最近入库时间
+     */
     @JsonCreator
     public ArticleRecord(
             @JsonProperty("sourceId") Long sourceId,
@@ -171,7 +238,9 @@ public class ArticleRecord {
             @JsonProperty("dependsOn") List<String> dependsOn,
             @JsonProperty("related") List<String> related,
             @JsonProperty("confidence") String confidence,
-            @JsonProperty("reviewStatus") String reviewStatus
+            @JsonProperty("reviewStatus") String reviewStatus,
+            @JsonProperty("createdAt") OffsetDateTime createdAt,
+            @JsonProperty("updatedAt") OffsetDateTime updatedAt
     ) {
         this.sourceId = sourceId;
         this.articleKey = articleKey;
@@ -188,6 +257,8 @@ public class ArticleRecord {
         this.related = related;
         this.confidence = confidence;
         this.reviewStatus = reviewStatus;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
     }
 
     /**
@@ -215,7 +286,9 @@ public class ArticleRecord {
                 Collections.<String>emptyList(),
                 Collections.<String>emptyList(),
                 "medium",
-                "pending"
+                "pending",
+                null,
+                null
         );
     }
 
@@ -280,6 +353,24 @@ public class ArticleRecord {
      */
     public OffsetDateTime getCompiledAt() {
         return compiledAt;
+    }
+
+    /**
+     * 获取首次入库时间。
+     *
+     * @return 首次入库时间
+     */
+    public OffsetDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    /**
+     * 获取最近入库时间。
+     *
+     * @return 最近入库时间
+     */
+    public OffsetDateTime getUpdatedAt() {
+        return updatedAt;
     }
 
     /**
@@ -400,7 +491,9 @@ public class ArticleRecord {
                 dependsOn,
                 related,
                 confidence,
-                reviewStatus
+                reviewStatus,
+                createdAt,
+                updatedAt
         );
     }
 }

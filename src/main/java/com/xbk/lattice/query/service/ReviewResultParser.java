@@ -129,10 +129,14 @@ public class ReviewResultParser {
      */
     private ReviewResult toReviewResult(ReviewerPayload reviewerPayload) {
         List<ReviewIssue> issues = new ArrayList<ReviewIssue>(reviewerPayload.getIssues());
+        promoteStructuredCompletenessIssues(issues, reviewerPayload.getRiskLevel());
         if (reviewerPayload.isApproved() && !reviewerPayload.isRewriteRequired() && issues.isEmpty()) {
             return ReviewResult.passed();
         }
         if (issues.isEmpty()) {
+            if (reviewerPayload.getCacheWritePolicy() == PromptCacheWritePolicy.EVICT_AFTER_READ) {
+                issues.add(new ReviewIssue("MEDIUM", "CACHE_EVICT_AFTER_READ", "审查要求读取后立即驱逐 prompt cache"));
+            }
             if (!reviewerPayload.getUserFacingRewriteHints().isEmpty()) {
                 for (String rewriteHint : reviewerPayload.getUserFacingRewriteHints()) {
                     issues.add(new ReviewIssue(reviewerPayload.getRiskLevel(), "REWRITE_REQUIRED", rewriteHint));
@@ -145,10 +149,79 @@ public class ReviewResultParser {
                 issues.add(new ReviewIssue(reviewerPayload.getRiskLevel(), "REVIEW_REJECTED", description));
             }
         }
-        if (reviewerPayload.getCacheWritePolicy() == PromptCacheWritePolicy.EVICT_AFTER_READ && issues.isEmpty()) {
-            issues.add(new ReviewIssue("MEDIUM", "CACHE_EVICT_AFTER_READ", "审查要求读取后立即驱逐 prompt cache"));
-        }
         return ReviewResult.issuesFound(issues);
+    }
+
+    /**
+     * 将“结构化事实缺失/枚举不全/清单未列全”这类问题提升到至少 HIGH，
+     * 避免它们在 compile review 阶段被当作可忽略的小问题放行。
+     *
+     * @param issues 审查问题列表
+     * @param fallbackSeverity 兜底严重度
+     */
+    private void promoteStructuredCompletenessIssues(List<ReviewIssue> issues, String fallbackSeverity) {
+        if (issues == null || issues.isEmpty()) {
+            return;
+        }
+        for (int index = 0; index < issues.size(); index++) {
+            ReviewIssue issue = issues.get(index);
+            if (issue == null || !looksLikeStructuredCompletenessIssue(issue)) {
+                continue;
+            }
+            String promotedSeverity = severityRank(issue.getSeverity()) >= severityRank("HIGH")
+                    ? issue.getSeverity()
+                    : "HIGH";
+            issues.set(index, new ReviewIssue(
+                    promotedSeverity,
+                    issue.getCategory(),
+                    issue.getDescription()
+            ));
+        }
+    }
+
+    /**
+     * 判断审查问题是否属于结构化事实不完整。
+     *
+     * @param issue 审查问题
+     * @return 命中返回 true
+     */
+    private boolean looksLikeStructuredCompletenessIssue(ReviewIssue issue) {
+        String haystack = (safe(issue.getCategory()) + " " + safe(issue.getDescription())).toLowerCase(Locale.ROOT);
+        return haystack.contains("missing_referential")
+                || haystack.contains("missing")
+                || haystack.contains("遗漏")
+                || haystack.contains("未列出")
+                || haystack.contains("未保留")
+                || haystack.contains("枚举")
+                || haystack.contains("列表")
+                || haystack.contains("表格")
+                || haystack.contains("清单")
+                || haystack.contains("未覆盖")
+                || haystack.contains("不完整");
+    }
+
+    /**
+     * 将严重度映射为可比较等级。
+     *
+     * @param severity 严重度文本
+     * @return 等级值
+     */
+    private int severityRank(String severity) {
+        if (severity == null || severity.isBlank()) {
+            return 3;
+        }
+        String normalizedSeverity = severity.trim().toUpperCase(Locale.ROOT);
+        if ("LOW".equals(normalizedSeverity)) {
+            return 1;
+        }
+        if ("MEDIUM".equals(normalizedSeverity)) {
+            return 2;
+        }
+        return 3;
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 
     /**

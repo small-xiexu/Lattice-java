@@ -312,6 +312,33 @@ class LlmConfigCenterIntegrationTests {
     }
 
     /**
+     * 验证未保存 OpenAI 连接即使直接填写完整 models 地址，也能自动归一化成功探测。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldProbeUnsavedOpenAiConnectionWhenUrlAlreadyContainsModelsEndpoint() throws Exception {
+        AtomicReference<String> authorizationHeader = new AtomicReference<String>();
+        int port = startJsonServer(
+                "/v1/models",
+                new FixedJsonHandler("{\"data\":[{\"id\":\"gpt-5.4\"}]}", "Authorization", authorizationHeader)
+        );
+
+        mockMvc.perform(post("/api/v1/admin/llm/connections/test")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"providerType\":\"openai\","
+                                + "\"baseUrl\":\"http://127.0.0.1:" + port + "/v1/models\","
+                                + "\"apiKey\":\"sk-probe-123456\""
+                                + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.endpoint").value("/v1/models"));
+
+        assertThat(authorizationHeader.get()).isEqualTo("Bearer sk-probe-123456");
+    }
+
+    /**
      * 验证测试连接时，编辑已有连接可复用已保存密钥而不要求重新输入。
      *
      * @throws Exception 测试异常
@@ -342,6 +369,155 @@ class LlmConfigCenterIntegrationTests {
                 .andExpect(jsonPath("$.message").value(containsString("可访问 2 个模型")));
 
         assertThat(authorizationHeader.get()).isEqualTo("Bearer sk-saved-123456");
+    }
+
+    /**
+     * 验证 embedding-only 已保存连接会走 embedding endpoint 探测，而不是 /models。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldProbeSavedEmbeddingOnlyConnectionViaEmbeddingsEndpoint() throws Exception {
+        resetTables();
+        AtomicReference<String> authorizationHeader = new AtomicReference<String>();
+        int port = startJsonServer(
+                "/api/paas/v4/embeddings",
+                new FixedJsonHandler(
+                        "{"
+                                + "\"data\":[{\"index\":0,\"embedding\":[0.11,0.22,0.33]}],"
+                                + "\"usage\":{\"prompt_tokens\":1,\"total_tokens\":1}"
+                                + "}",
+                        "Authorization",
+                        authorizationHeader
+                )
+        );
+        Long connectionId = createConnection(
+                "saved-embedding-only",
+                "openai_compatible",
+                "http://127.0.0.1:" + port + "/api/paas/v4",
+                "sk-embed-only-123456"
+        );
+        mockMvc.perform(post("/api/v1/admin/llm/models")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"connectionId\":" + connectionId + ","
+                                + "\"modelName\":\"embedding-3\","
+                                + "\"modelKind\":\"EMBEDDING\","
+                                + "\"expectedDimensions\":3,"
+                                + "\"enabled\":true"
+                                + "}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/admin/llm/connections/test")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"connectionId\":" + connectionId
+                                + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.providerType").value("openai"))
+                .andExpect(jsonPath("$.endpoint").value("/embeddings"))
+                .andExpect(jsonPath("$.message").value(containsString("embedding 连接成功")));
+
+        assertThat(authorizationHeader.get()).isEqualTo("Bearer sk-embed-only-123456");
+    }
+
+    /**
+     * 验证保存 embedding-only 连接时，即使用户直接填写完整 embeddings 地址，也能自动归一化成功探测。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldProbeSavedEmbeddingOnlyConnectionWhenUrlAlreadyContainsEmbeddingsEndpoint() throws Exception {
+        resetTables();
+        AtomicReference<String> authorizationHeader = new AtomicReference<String>();
+        int port = startJsonServer(
+                "/api/paas/v4/embeddings",
+                new FixedJsonHandler(
+                        "{"
+                                + "\"data\":[{\"index\":0,\"embedding\":[0.11,0.22,0.33]}],"
+                                + "\"usage\":{\"prompt_tokens\":1,\"total_tokens\":1}"
+                                + "}",
+                        "Authorization",
+                        authorizationHeader
+                )
+        );
+        Long connectionId = createConnection(
+                "saved-embedding-suffixed",
+                "openai_compatible",
+                "http://127.0.0.1:" + port + "/api/paas/v4/embeddings",
+                "sk-embed-only-654321"
+        );
+        mockMvc.perform(post("/api/v1/admin/llm/models")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"connectionId\":" + connectionId + ","
+                                + "\"modelName\":\"embedding-3\","
+                                + "\"modelKind\":\"EMBEDDING\","
+                                + "\"expectedDimensions\":3,"
+                                + "\"enabled\":true"
+                                + "}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/admin/llm/connections/test")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"connectionId\":" + connectionId
+                                + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.endpoint").value("/embeddings"));
+
+        assertThat(authorizationHeader.get()).isEqualTo("Bearer sk-embed-only-654321");
+    }
+
+    /**
+     * 验证 embedding-only 连接即使只填写根域名，也能自动尝试兼容前缀并探测成功。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldProbeSavedEmbeddingOnlyConnectionWhenOnlyRootDomainProvided() throws Exception {
+        resetTables();
+        AtomicReference<String> authorizationHeader = new AtomicReference<String>();
+        int port = startJsonServer(
+                "/api/paas/v4/embeddings",
+                new FixedJsonHandler(
+                        "{"
+                                + "\"data\":[{\"index\":0,\"embedding\":[0.11,0.22,0.33]}],"
+                                + "\"usage\":{\"prompt_tokens\":1,\"total_tokens\":1}"
+                                + "}",
+                        "Authorization",
+                        authorizationHeader
+                )
+        );
+        Long connectionId = createConnection(
+                "saved-embedding-root-only",
+                "openai_compatible",
+                "http://127.0.0.1:" + port,
+                "sk-embed-root-123456"
+        );
+        mockMvc.perform(post("/api/v1/admin/llm/models")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"connectionId\":" + connectionId + ","
+                                + "\"modelName\":\"embedding-3\","
+                                + "\"modelKind\":\"EMBEDDING\","
+                                + "\"expectedDimensions\":3,"
+                                + "\"enabled\":true"
+                                + "}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/admin/llm/connections/test")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"connectionId\":" + connectionId
+                                + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.endpoint").value("/embeddings"));
+
+        assertThat(authorizationHeader.get()).isEqualTo("Bearer sk-embed-root-123456");
     }
 
     /**
@@ -385,6 +561,47 @@ class LlmConfigCenterIntegrationTests {
                 .andExpect(jsonPath("$.message").value(containsString("已返回对话结果")));
 
         assertThat(authorizationHeader.get()).isEqualTo("Bearer sk-model-123456");
+    }
+
+    /**
+     * 验证未保存对话模型即使连接地址已经带上 chat completions 端点，也能成功探测。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldProbeUnsavedChatModelWhenUrlAlreadyContainsChatEndpoint() throws Exception {
+        resetTables();
+        AtomicReference<String> authorizationHeader = new AtomicReference<String>();
+        int port = startJsonServer(
+                "/v1/chat/completions",
+                new FixedJsonHandler(
+                        "{"
+                                + "\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"OK\"}}],"
+                                + "\"usage\":{\"prompt_tokens\":8,\"completion_tokens\":1}"
+                                + "}",
+                        "Authorization",
+                        authorizationHeader
+                )
+        );
+        Long connectionId = createConnection(
+                "model-probe-openai-suffixed",
+                "openai",
+                "http://127.0.0.1:" + port + "/v1/chat/completions",
+                "sk-model-654321"
+        );
+
+        mockMvc.perform(post("/api/v1/admin/llm/models/test")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"connectionId\":" + connectionId + ","
+                                + "\"modelName\":\"gpt-5.4\","
+                                + "\"modelKind\":\"CHAT\""
+                                + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.modelKind").value("CHAT"));
+
+        assertThat(authorizationHeader.get()).isEqualTo("Bearer sk-model-654321");
     }
 
     /**

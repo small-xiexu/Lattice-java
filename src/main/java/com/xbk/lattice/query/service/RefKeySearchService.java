@@ -57,6 +57,7 @@ public class RefKeySearchService {
                        a.title,
                        a.content,
                        a.metadata_json::text as metadata_json,
+                       a.review_status,
                        a.source_paths,
                        0
                 """);
@@ -102,6 +103,7 @@ public class RefKeySearchService {
                 resultSet.getString("title"),
                 resultSet.getString("content"),
                 resultSet.getString("metadata_json"),
+                resultSet.getString("review_status"),
                 readSourcePaths(resultSet),
                 resultSet.getDouble("score")
         );

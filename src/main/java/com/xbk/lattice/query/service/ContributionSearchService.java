@@ -89,6 +89,7 @@ public class ContributionSearchService {
                 record.getTitle(),
                 record.getContent(),
                 record.getMetadataJson(),
+                null,
                 record.getSourcePaths(),
                 record.getScore()
         );

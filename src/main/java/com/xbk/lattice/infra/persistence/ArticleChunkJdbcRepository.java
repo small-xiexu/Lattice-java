@@ -292,6 +292,7 @@ public class ArticleChunkJdbcRepository {
                        ac.chunk_index,
                        ac.chunk_text,
                        a.metadata_json::text as metadata_json,
+                       a.review_status,
                        a.source_paths,
                        ts_rank_cd(ac.search_tsv, query.tsq)
                 """);
@@ -356,6 +357,7 @@ public class ArticleChunkJdbcRepository {
                 resultSet.getString("title"),
                 resultSet.getString("chunk_text"),
                 resultSet.getString("metadata_json"),
+                resultSet.getString("review_status"),
                 readSourcePaths(resultSet),
                 Integer.valueOf(resultSet.getInt("chunk_index")),
                 null,

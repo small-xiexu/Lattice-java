@@ -11,6 +11,8 @@ import com.xbk.lattice.source.domain.KnowledgeSourcePage;
 import com.xbk.lattice.source.domain.SourceSyncRunDetail;
 import com.xbk.lattice.source.service.SourceService;
 import com.xbk.lattice.source.service.SourceSyncWorkflowService;
+import com.xbk.lattice.api.admin.AdminProcessingTaskActionResponse;
+import com.xbk.lattice.api.admin.AdminProcessingTaskStepResponse;
 import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
@@ -240,6 +242,29 @@ class LatticeMcpToolsTest {
                 "ok",
                 null,
                 List.of("README.md"),
+                List.of(new AdminProcessingTaskActionResponse(
+                        "RESYNC_SOURCE",
+                        "再次同步当前资料源",
+                        "ghost-btn",
+                        21L,
+                        11L,
+                        null,
+                        null,
+                        false
+                )),
+                "COMPILE_QUEUED",
+                "待编译",
+                "等待编译",
+                "等待后台 worker 开始执行",
+                "等待执行",
+                "ok",
+                "运行态：待编译 · 当前步骤：等待编译 · 下一步：等待后台 worker 开始执行",
+                List.of(new AdminProcessingTaskStepResponse("COMPILE_QUEUED", "等待编译", "ACTIVE", "等待后台 worker 领取")),
+                "warning",
+                true,
+                false,
+                "success",
+                "识别与物化已完成，正在等待编译任务开始执行。",
                 "{}",
                 "2026-04-19T18:10:00+08:00",
                 "2026-04-19T18:10:01+08:00",
@@ -255,6 +280,8 @@ class LatticeMcpToolsTest {
         assertThat(result).contains("\"sourceId\":11");
         assertThat(result).contains("\"status\":\"COMPILE_QUEUED\"");
         assertThat(result).contains("\"compileJobStatus\":\"QUEUED\"");
+        assertThat(result).contains("\"processingActive\":true");
+        assertThat(result).contains("\"displayTone\":\"warning\"");
     }
 
     // -----------------------------------------------------------------------
@@ -276,7 +303,7 @@ class LatticeMcpToolsTest {
          * @param response 预置响应
          */
         private FixedQueryFacadeService(QueryResponse response) {
-            super(null, null, null, null, null, null);
+            super(null, null, null, null, null, null, null);
             this.response = response;
         }
 

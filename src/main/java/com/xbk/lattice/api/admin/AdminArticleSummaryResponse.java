@@ -25,6 +25,10 @@ public class AdminArticleSummaryResponse {
 
     private final String compiledAt;
 
+    private final String createdAt;
+
+    private final String updatedAt;
+
     private final String summary;
 
     private final int sourceCount;
@@ -45,6 +49,8 @@ public class AdminArticleSummaryResponse {
      * @param lifecycle 生命周期
      * @param reviewStatus 审查状态
      * @param compiledAt 编译时间
+     * @param createdAt 首次入库时间
+     * @param updatedAt 最近入库时间
      * @param summary 摘要
      * @param sourceCount 来源数量
      * @param primarySourcePath 首个来源路径
@@ -59,6 +65,8 @@ public class AdminArticleSummaryResponse {
             String lifecycle,
             String reviewStatus,
             String compiledAt,
+            String createdAt,
+            String updatedAt,
             String summary,
             int sourceCount,
             String primarySourcePath,
@@ -72,6 +80,8 @@ public class AdminArticleSummaryResponse {
         this.lifecycle = lifecycle;
         this.reviewStatus = reviewStatus;
         this.compiledAt = compiledAt;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
         this.summary = summary;
         this.sourceCount = sourceCount;
         this.primarySourcePath = primarySourcePath;
@@ -140,6 +150,24 @@ public class AdminArticleSummaryResponse {
      */
     public String getCompiledAt() {
         return compiledAt;
+    }
+
+    /**
+     * 获取首次入库时间。
+     *
+     * @return 首次入库时间
+     */
+    public String getCreatedAt() {
+        return createdAt;
+    }
+
+    /**
+     * 获取最近入库时间。
+     *
+     * @return 最近入库时间
+     */
+    public String getUpdatedAt() {
+        return updatedAt;
     }
 
     /**

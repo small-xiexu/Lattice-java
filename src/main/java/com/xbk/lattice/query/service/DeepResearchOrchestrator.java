@@ -185,7 +185,9 @@ public class DeepResearchOrchestrator {
                             citationCheckReport == null ? 0.0D : citationCheckReport.getCoverageRate(),
                             finalState.isPartialAnswer(),
                             finalState.isHasConflicts()
-                        )
+                        ),
+                    "",
+                    QueryResponseCitationAssembler.toCitationMarkerResponses(citationCheckReport, answerProjectionBundle, rootHits)
                 );
         }
         catch (Exception exception) {

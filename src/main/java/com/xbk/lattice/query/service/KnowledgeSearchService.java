@@ -218,6 +218,7 @@ public class KnowledgeSearchService {
                 safeLimit,
                 retrievalStrategy.getRrfK()
         );
+        fusedHits = applyReviewQualityGuardrail(fusedHits);
         if (retrievalAuditService != null) {
             retrievalAuditService.persist(retrievalQueryContext, channelHits, fusedHits);
         }
@@ -286,5 +287,45 @@ public class KnowledgeSearchService {
                 retrievalStrategy.getQueryIntent(),
                 supplier.get()
         );
+    }
+
+    /**
+     * 对融合后的候选应用统一质量门禁，优先保留已通过审查的文章。
+     *
+     * @param fusedHits 融合候选
+     * @return 门禁处理后的候选
+     */
+    private List<QueryArticleHit> applyReviewQualityGuardrail(List<QueryArticleHit> fusedHits) {
+        if (fusedHits == null || fusedHits.isEmpty()) {
+            return List.of();
+        }
+        List<QueryArticleHit> passedHits = new java.util.ArrayList<QueryArticleHit>();
+        List<QueryArticleHit> nonPassedHits = new java.util.ArrayList<QueryArticleHit>();
+        for (QueryArticleHit fusedHit : fusedHits) {
+            if (isPassedArticleHit(fusedHit)) {
+                passedHits.add(fusedHit);
+                continue;
+            }
+            nonPassedHits.add(fusedHit);
+        }
+        if (passedHits.isEmpty()) {
+            return fusedHits;
+        }
+        passedHits.addAll(nonPassedHits);
+        return passedHits;
+    }
+
+    /**
+     * 判断候选是否为已通过审查的文章命中。
+     *
+     * @param fusedHit 融合候选
+     * @return 已通过审查返回 true
+     */
+    private boolean isPassedArticleHit(QueryArticleHit fusedHit) {
+        if (fusedHit == null || fusedHit.getEvidenceType() != QueryEvidenceType.ARTICLE) {
+            return false;
+        }
+        String reviewStatus = fusedHit.getReviewStatus();
+        return reviewStatus != null && "passed".equalsIgnoreCase(reviewStatus.trim());
     }
 }

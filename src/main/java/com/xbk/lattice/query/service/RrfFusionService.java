@@ -123,6 +123,7 @@ public class RrfFusionService {
                     entry.getValue().getTitle(),
                     entry.getValue().getContent(),
                     entry.getValue().getMetadataJson(),
+                    entry.getValue().getReviewStatus(),
                     entry.getValue().getSourcePaths(),
                     scoreMap.getOrDefault(entry.getKey(), 0.0D)
             ));

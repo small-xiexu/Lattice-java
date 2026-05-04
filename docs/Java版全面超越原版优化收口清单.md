@@ -92,20 +92,20 @@
   - 已验证：`AnswerGenerationServiceTests / QueryGraphOrchestratorTests / CitationCheckServiceTests` 共 `47/47` 通过，覆盖 citation 二次检查不再误整体回退、结构化答案缺 citation 时自动补当前证据引用、流程题旁证过滤，以及枚举/步骤题 fallback 多事实选句
   - 待验证：已调整 citation 二次检查策略，避免存在可用引用时把 LLM 成功答案整体替换为 deterministic fallback；待真实 `/api/v1/query` 回归
   - 待验证：已调整 fallback 枚举题选句，跳过目录/页码行，并对“有哪些/步骤/技巧/形态/字段/渠道”保留多条事实项；待真实 `/api/v1/query` 回归
-  - 已完成：`2026-04-29` 已补 IAG SAML Response 成功状态问法识别、IAG 长文档 StatusCode 证据补齐、重试形态稳定 fallback、SWIP 指定字段稳定 fallback、CGB/TRANS 过度保守提示清理
+  - 已完成：`2026-04-29` 已补 接入状态码问法识别、长文档状态码证据补齐、重试形态稳定 fallback、字段定义稳定 fallback、差异题过度保守提示清理
   - 已验证：`2026-04-29` 定向回归 `SourceFileJdbcRepositoryTests / IngestNodeTests / AnswerGenerationServiceTests / QueryEvidenceRelevanceSupportTests / QueryGraphOrchestratorTests / CitationCheckServiceTests / CitationExtractorTests / CitationValidatorTests` 共 `83/83` 通过
-  - 已验证：`2026-04-29` 清 Redis 后真实 8 题事实回归 `8/8 HTTP 200`、`8/8 reviewStatus=PASSED`、`8/8 answerOutcome=SUCCESS`；买一赠一渠道、CGB V2 差异、TRANS-JOB action 覆盖、支付重试形态、IAG 定义、IAG 成功状态、SWIP 字段、AI 六技巧关键事实均命中，且 CGB 不再串 SWIP、TRANS-JOB 不串 AI
+  - 已验证：`2026-04-29` 清 Redis 后真实 8 题事实回归 `8/8 HTTP 200`、`8/8 reviewStatus=PASSED`、`8/8 answerOutcome=SUCCESS`；渠道差异、版本差异、补偿 action 覆盖、重试形态、接入定义、成功状态、字段定义、提示技巧关键事实均命中，且不同资料域之间不再串答
   - 已验证：`2026-04-29` 真实 8 题中 `7/8 generationMode=LLM / modelExecutionStatus=SUCCESS`；`payment_retry_shapes` 仍有一次走 `FALLBACK / DEGRADED`，但 deterministic fallback 已覆盖 6 类重试形态并通过 citation check
-  - 待继续：当前最低 citation coverage 为 `0.4`（SWIP 指定字段题），且样本量仍只有 `docs/test` 五类文档 8 个问法；不能宣称已达到 `99.99999%` 或“任意文档都准确”
-  - 进行中：`2026-04-29` 继续追 `payment_retry_shapes` 偶发 `FALLBACK / DEGRADED` 与 SWIP 指定字段题 citation coverage 偏低，目标是减少主链退化和引用覆盖薄弱点
+  - 待继续：当前最低 citation coverage 为 `0.4`（字段定义题），且样本量仍有限；不能宣称已达到 `99.99999%` 或“任意文档都准确”
+  - 进行中：`2026-04-29` 继续追 `payment_retry_shapes` 偶发 `FALLBACK / DEGRADED` 与字段定义题 citation coverage 偏低，目标是减少主链退化和引用覆盖薄弱点
   - 已验证：`2026-04-29` 已把 Deep Research 自动路由从固定“维度/目标/触发时机/实现方式”等词表改为问题结构判断；普通“有什么区别”事实题不再被 Deep Research 抢路由，显式多维列表式对比仍可进入 Deep Research；`DeepResearchRouterTests / AnswerGenerationServiceTests` 共 `50/50` 通过
-  - 已验证：`2026-04-29` 已把 TRANS-JOB/买一赠一证据保留从专名词表改为“按问题高信号词保留互补证据”，并避开二选一冲突判定题；宽回归 `SourceFileJdbcRepositoryTests / IngestNodeTests / AnswerGenerationServiceTests / QueryEvidenceRelevanceSupportTests / QueryGraphOrchestratorTests / CitationCheckServiceTests / CitationExtractorTests / CitationValidatorTests / DeepResearchRouterTests` 共 `93/93` 通过
-  - 待继续：真实抽查 4 题中 `4/4` 事实命中、`4/4 reviewStatus=PASSED`，但 SWIP 指定字段题仍为 `FALLBACK / DEGRADED`；下一步继续追该题为什么没有稳定进入 `LLM/SUCCESS`
+  - 已验证：`2026-04-29` 已把特定差异资料的证据保留从专名词表改为“按问题高信号词保留互补证据”，并避开二选一冲突判定题；宽回归 `SourceFileJdbcRepositoryTests / IngestNodeTests / AnswerGenerationServiceTests / QueryEvidenceRelevanceSupportTests / QueryGraphOrchestratorTests / CitationCheckServiceTests / CitationExtractorTests / CitationValidatorTests / DeepResearchRouterTests` 共 `93/93` 通过
+  - 待继续：真实抽查 4 题中 `4/4` 事实命中、`4/4 reviewStatus=PASSED`，但字段定义题仍为 `FALLBACK / DEGRADED`；下一步继续追该题为什么没有稳定进入 `LLM/SUCCESS`
   - 进行中：`2026-04-29` 已开始参考原始 `/Users/sxie/xbk/Lattice` 的 referential knowledge 设计，优先把字段名、状态码、枚举、配置值等精确标识类问题从业务专名补丁改为通用高信号处理
-  - 已验证：`2026-04-29` 已把指定字段/状态码/枚举/配置键这类精确标识题从 SWIP 专名 fallback 改为通用标识抽取、通用字段定义行解析和 referential focus 提示；新增非 SWIP `Order API` 字段用例，避免靠业务关键词命中
+  - 已验证：`2026-04-29` 已把指定字段/状态码/枚举/配置键这类精确标识题从业务专名 fallback 改为通用标识抽取、通用字段定义行解析和 referential focus 提示；新增 `Order API` 字段用例，避免靠业务关键词命中
   - 已验证：`2026-04-29` 已修复 Markdown 表格行 citation 被整体跳过的问题；无引用表格仍作为结构内容跳过，带引用的数据行会进入 claim/citation 校验，减少字段/枚举类答案被二次 `citation_check` 误降级
-  - 已验证：`2026-04-29` 真实 `/api/v1/query` 抽查 SWIP 四字段题已回到 `generationMode=LLM / modelExecutionStatus=SUCCESS / reviewStatus=PASSED / answerOutcome=SUCCESS`，`citation coverage=0.75`
-  - 已验证：`2026-04-29` 非 SWIP 真实精确标识题 `PaymentCancelTask / CouponCancelTask / activeCancel / rechargeCancel` 已逐项命中，最终 `LLM/SUCCESS`，`citation coverage=1.0`
+  - 已验证：`2026-04-29` 真实 `/api/v1/query` 抽查字段定义题已回到 `generationMode=LLM / modelExecutionStatus=SUCCESS / reviewStatus=PASSED / answerOutcome=SUCCESS`，`citation coverage=0.75`
+  - 已验证：`2026-04-29` 真实精确标识题已逐项命中，最终 `LLM/SUCCESS`，`citation coverage=1.0`
   - 已验证：`2026-04-29` 宽回归 `SourceFileJdbcRepositoryTests / IngestNodeTests / AnswerGenerationServiceTests / QueryEvidenceRelevanceSupportTests / QueryGraphOrchestratorTests / QueryGraphConditionsTests / CitationCheckServiceTests / CitationExtractorTests / CitationValidatorTests / DeepResearchRouterTests` 共 `99/99` 通过
   - 已验证：`2026-04-29` 按用户补充的 `docs/ai agent` 资料集抽样验证，选取 3 份 PDF：第 3-0 节项目介绍、第 3-10 节 Agent 执行链路分析、第 3-19 节拖拉拽编排数据存储；真实 compile `jobId=f47cd1d7-ef65-40cb-8080-5941bb00e152 / persistedCount=3`
   - 已验证：`2026-04-29` AI Agent 抽样入库结果为 `articles=3 / review_status passed=3 / article_chunks=5 / article_chunk_vectors=5`；三份 PDF 的 `source_files.content_text` 均已抽取，长度约 `3763 / 22735 / 4011`
@@ -115,20 +115,20 @@
   - 已验证：`2026-04-29` 针对 `scenarios.xlsx` 的 Excel 表格问答已修复两类退化：尾部 `case 100997` 不再因采集上限被截断；`case 100814` 的“场景名称 + 预期结果”和 `case 100997` “步骤详情第 9 步”均稳定返回 `generationMode=LLM / modelExecutionStatus=SUCCESS / reviewStatus=PASSED / answerOutcome=SUCCESS`，未退回 `FALLBACK/DEGRADED`
   - 已验证：`2026-04-29` 表格召回方案已从业务字段翻译改为通用结构化行与字段赋值加权：Excel 抽取只保留原始表头 `header=value`，不生成 `case=` / `step=` / 中文列名别名；source chunk 检索仅对任意 `字段=查询值` 做通用加权，并通过单数字 token 支持“第 9 步”这类自然语言问法
   - 进行中：`2026-04-29` 按用户补充的 `/Users/sxie/xbk/deep_evals` 测试集继续扩样本回归，计划抽取法规政策、年报、标准文档三类 PDF；其中有 gold Markdown 的样本用于事实核验，无 gold 的标准文档用于 PDF 抽取与入库压力观察
-  - 已验证：`2026-04-29` `deep_evals` 代表性 PDF 子集完成真实问答回归，样本覆盖云计算指南、节能装备方案、低空经济指南、中国人保年报、金徽股份年报、`GB/T 46883-2025` 标准文档；6 题均 `HTTP 200 / reviewStatus=PASSED / answerOutcome=SUCCESS`
+  - 已验证：`2026-04-29` `deep_evals` 代表性 PDF 子集完成真实问答回归，样本覆盖指南类、方案类、年报类与标准文档；6 题均 `HTTP 200 / reviewStatus=PASSED / answerOutcome=SUCCESS`
   - 已验证：`2026-04-29` `deep_evals` 回归中原 `5/6` 为 `generationMode=LLM / modelExecutionStatus=SUCCESS`，且 gold 对照事实命中：云计算 `30项以上 / 超过1000家`、金徽股份 `每10股2.30元 / 224,940,000.00元`、中国人保 `每10股1.45元 / 全年97.29亿元`、节能装备制氢 `低于4.2kWh/Nm³`、`GB/T 46883-2025` 的服务供给/过程/运营管理与适用主体
-  - 已验证：`2026-04-29` 低空经济目标题已从 `FALLBACK / DEGRADED` 修到 `generationMode=LLM / modelExecutionStatus=SUCCESS / reviewStatus=PASSED / answerOutcome=SUCCESS`，复验 `queryId=9d663d26-36a8-4afd-9446-ac33954d6bea`，citation coverage `1.0`；本轮修复为通用问题锚点复用、中文数字 token 拆分与未问额外锚点缺口尾注清理，未新增低空经济专名硬编码
-  - 已验证：`2026-04-29` 纳入公司业务 PDF `docs/test/卡券三期-迁移方案 · 语雀.pdf` 作为长业务方案样本；本轮已补通用 PDF 页眉页脚清理、接口路径 token、敏感配置脱敏与 `key: value` 配置行 fallback 打分，并通过相关自动化回归 `114/114`
-  - 已验证：`2026-04-29` 公司业务 PDF 单文档隔离真实 compile/query 端到端复验完成，最终复验 job `7e5a5647-477e-4004-a97b-8cfec8080301` 为 `SUCCEEDED / persistedCount=1`；8 题真实 `/api/v1/query` 均为 `HTTP 200 / reviewStatus=PASSED / answerOutcome=SUCCESS / generationMode=LLM / modelExecutionStatus=SUCCESS`，覆盖迁移范围与原则、FC 兼容接口路径、`businessTypeCode=26` 30 天流量、SVC `1301/1302/3401`、`5G/5H/5I`、O2O 链路、非迁移队列、风险灰度与敏感配置诱导
-  - 已验证：`2026-04-29` 公司业务 PDF 回归中敏感信息诱导题只返回 `<masked>`，批量扫描 8 条答案未发现未脱敏的 `apiKey/secret/token/password/sk-*`；风险灰度题能主动说明 `7.1` 高风险表存在 PDF 表格抽取缺口，并基于可见证据回答 `7.2/7.3`，未编造完整高风险清单
-  - 已完成：`2026-04-29` 继续打磨公司业务 PDF 的表格型证据，目标是用 PDF 坐标位置做通用表格行重建，并在 source chunk 检索命中表格附近内容时补邻近 chunk，避免依赖业务专名硬编码
-  - 已验证：`2026-04-29` 已补通用 PDF 坐标表格抽取、表格续行合并、页内坐标排序与 source chunk 邻近补证据；公司业务 PDF 重新抽取约 `155800` 字符、生成 `319` 个 `=== Table` 表格块，`7.1` 高风险项跨页明细已落在 chunk `54/55` 中，可随标题与邻近 chunk 一起进入问答证据
+  - 已验证：`2026-04-29` 阶段目标题已从 `FALLBACK / DEGRADED` 修到 `generationMode=LLM / modelExecutionStatus=SUCCESS / reviewStatus=PASSED / answerOutcome=SUCCESS`，复验 `queryId=9d663d26-36a8-4afd-9446-ac33954d6bea`，citation coverage `1.0`；本轮修复为通用问题锚点复用、中文数字 token 拆分与未问额外锚点缺口尾注清理，未新增业务专名硬编码
+  - 已验证：`2026-04-29` 纳入一份长业务方案 PDF 作为复杂真实样本；本轮已补通用 PDF 页眉页脚清理、接口路径 token、敏感配置脱敏与 `key: value` 配置行 fallback 打分，并通过相关自动化回归 `114/114`
+  - 已验证：`2026-04-29` 长业务方案单文档隔离真实 compile/query 端到端复验完成，最终复验 job `7e5a5647-477e-4004-a97b-8cfec8080301` 为 `SUCCEEDED / persistedCount=1`；8 题真实 `/api/v1/query` 均为 `HTTP 200 / reviewStatus=PASSED / answerOutcome=SUCCESS / generationMode=LLM / modelExecutionStatus=SUCCESS`，覆盖迁移范围与原则、兼容接口路径、流量结论、业务码分支、链路场景、风险灰度与敏感配置诱导
+  - 已验证：`2026-04-29` 长业务方案回归中敏感信息诱导题只返回 `<masked>`，批量扫描 8 条答案未发现未脱敏的 `apiKey/secret/token/password/sk-*`；风险灰度题能主动说明 `7.1` 高风险表存在 PDF 表格抽取缺口，并基于可见证据回答 `7.2/7.3`，未编造完整高风险清单
+  - 已完成：`2026-04-29` 继续打磨长业务方案 PDF 的表格型证据，目标是用 PDF 坐标位置做通用表格行重建，并在 source chunk 检索命中表格附近内容时补邻近 chunk，避免依赖业务专名硬编码
+  - 已验证：`2026-04-29` 已补通用 PDF 坐标表格抽取、表格续行合并、页内坐标排序与 source chunk 邻近补证据；该长业务方案 PDF 重新抽取约 `155800` 字符、生成 `319` 个 `=== Table` 表格块，某跨页高风险项明细已落在相邻 chunk 中，可随标题与邻近 chunk 一起进入问答证据
   - 已验证：`2026-04-29` 本轮回归 `ArticleMarkdownSupportTests / SourceFileJdbcRepositoryTests / IngestNodeTests / SourceFileChunkJdbcRepositoryTests / AnswerGenerationServiceTests / QueryEvidenceRelevanceSupportTests / QueryTokenExtractorTests / CitationCheckServiceTests / CitationExtractorTests / CitationValidatorTests / QueryGraphOrchestratorTests / QueryGraphConditionsTests / DeepResearchRouterTests / PaginatedTextCleanerTests / SensitiveTextMaskerTests / PdfPositionedTextTableFormatterTests / PdfTextExtractorTests / SourceSearchServiceTests` 共 `124/124` 通过，`git diff --check` 通过
   - 进行中：`2026-04-29` 按用户要求清理历史验证 schema 后重跑公司业务 PDF 完整验证；先删除 `lattice_*` 验证 schema，保留默认 `lattice/public`，再用全新隔离 schema 重建模型配置、compile、query、入库与向量状态
   - 下一步：
     - 扩一组真实问法回归样本，至少覆盖“入口方式 / 配置解释 / 架构原因 / 运行态说明”四类
     - 逐题看真实返回是否仍会掉回 `FALLBACK/DEGRADED`
-    - 优先继续扩充非 SWIP 的字段、状态码、枚举、配置键真实样本，验证通用精确标识链路不会退回业务词表补丁
+    - 优先继续扩充字段、状态码、枚举、配置键真实样本，验证通用精确标识链路不会退回业务词表补丁
     - 继续把“启动前需要配置什么”这类题从“步骤摘要”磨到“4 件事 / 必配项”级别的更精确回答
     - 让 `deep_research` 的向量检索在 embedding 不可用或上游 `502` 时自动降级，不再让解释题整题被拖死
     - 目标：主回归样本中的普通 Query 以 `LLM/SUCCESS` 为主，不再靠偶发命中
@@ -141,10 +141,10 @@
   - 已验证：`2026-04-28` clean schema 全量 compile 成功，`jobId=501d109a-248e-43f0-9271-2b738b3d1f2e / persistedCount=5 / duration=719s`
   - 已验证：入库基线为 `source_files=5 / source_file_chunks=11 / articles=5 / article_chunks=12 / article_vector_index=5 / article_chunk_vector_index=12`
   - 已验证：文章审查状态为 `passed=2 / needs_human_review=3`；向量状态为 `dimensionsMatch=true / annIndexReady=true / annIndexType=hnsw`
-  - 进行中：`2026-04-28` 已抽取 IAG、SWIP、买一赠一、支付重试、AI 最佳实践 5 类文档的关键事实，正在把它们作为 query 回归期望值逐题验证
+  - 进行中：`2026-04-28` 已抽取接入文档、字段定义、渠道差异、重试机制、提示技巧等 5 类文档的关键事实，正在把它们作为 query 回归期望值逐题验证
   - 已验证：`2026-04-29` clean schema 重新全量 compile 成功，`jobId=ebb2c118-0fd8-44cf-bd67-5067b312abf8 / persistedCount=5`
   - 已验证：`2026-04-29` 当前入库计数为 `source_files=5 / source_file_chunks=25 / articles=5 / article_chunks=8 / article_vector_index=5 / article_chunk_vector_index=8`
-  - 已验证：`2026-04-29` IAG 源文档 `content_text` 已提升到 `29209` 字符，`StatusCode` 与 `status:Success` 位于长文档尾部并已可被真实 Query 检索使用
+  - 已验证：`2026-04-29` 某接入文档 `content_text` 已提升到 `29209` 字符，`StatusCode` 与 `status:Success` 位于长文档尾部并已可被真实 Query 检索使用
   - 进行中：`2026-04-29` 本轮新增 Excel 样本 `docs/test/scenarios.xlsx`，准备核对表格内容抽取、文章摘要、reviewStatus 与向量状态
   - 已验证：`2026-04-29` `scenarios.xlsx` 隔离 compile 成功，`jobId=d839c46b-a02e-4ba6-8641-1400336a033e / persistedCount=1`；入库计数为 `source_files=1 / source_file_chunks=2539 / articles=1 / article_chunks=4 / article_vector_index=1`，文章 `review_status=passed`
   - 已验证：`2026-04-29` `scenarios.xlsx` 源文全文长度为 `5306005`，尾部结构化行 `sheet=步骤详情; row=1454; case_num=100997; step_index=9` 与 `step_name=查询asset_lock(9张券应全部解锁)` 均已入库；未生成 `case=100997` / `step=9; 第9步` 解析层别名；最大 source chunk 约 `4615` 字符，未再出现结构化索引被吞成百万字符级大 chunk
@@ -154,7 +154,7 @@
   - 已验证：`2026-04-29` `deep_evals` 入库计数为 `source_files=6 / source_file_chunks=36 / articles=6 / article_chunks=11 / article_vector_index=6 / article_chunk_vector_index=11`，文章 `review_status=passed=6`
   - 已验证：`2026-04-29` `deep_evals` 向量配置为 `BAAI/bge-m3 / 1024`，compile 后 `dimensionsMatch=true / indexedArticleCount=6`；补跑后台 vector rebuild 后 `annIndexReady=true / annIndexType=hnsw`
   - 待继续：`2026-04-29` `deep_evals` PDF 抽取文本与 gold Markdown 仍有明显长度差异，例如云计算指南 PDF 抽取约 `5468` 字符、gold 约 `16660` 字符；年报类 PDF 抽取也明显短于 gold，下一步需要做“PDF 抽取完整度 vs gold”专项对比，而不能只以问答命中代表抽取准确率已完全收口
-  - 已验证：`2026-04-29` 公司业务 PDF 已用项目 PDFBox 抽取器复验，清理后仍保留 `75` 个页标记、约 `87887` 字符，`pdf#print` 页脚已移除，接口路径、`businessTypeCode=26` 与 `1301` 等精确事实仍可检索
+  - 已验证：`2026-04-29` 公司业务 PDF 已用项目 PDFBox 抽取器复验，清理后仍保留 `75` 个页标记、约 `87887` 字符，`pdf#print` 页脚已移除，接口路径、业务码与子场景编码等精确事实仍可检索
   - 已验证：`2026-04-29` 公司业务 PDF 隔离入库复验完成：`source_files=1 / source_file_chunks=45 / articles=1 / article_chunks=2 / article_vector_index=1 / article_chunk_vector_index=2`，文章 `review_status=needs_human_review`；向量状态 `dimensionsMatch=true / annIndexReady=true / annIndexType=hnsw / indexedArticleCount=1`，正文已从合法 YAML frontmatter 开始，模型修复说明性前言不再污染持久化文章
   - 下一步：
     - 固定 3 到 5 个真实样本目录，覆盖 README、配置文档、后台 HTML、PDF、Excel

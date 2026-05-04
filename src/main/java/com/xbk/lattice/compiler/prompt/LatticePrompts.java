@@ -85,6 +85,12 @@ public final class LatticePrompts {
             5. Include a "Related Concepts" section at the bottom linking to other concepts.
             6. If there are controversies or trade-offs, present all positions fairly with their source references.
             7. LANGUAGE: Write the article in Chinese (中文). Technical terms can keep their English names but should include Chinese explanation on first use.
+            8. For exact identifiers / values (codes, counts, endpoints, paths, queue names, scene numbers, route labels), NEVER invent a replacement value from nearby context. If the source does not state the exact value, say the evidence does not directly provide it.
+            9. If the source explicitly says an old statement was corrected to a new conclusion, preserve the correction chain explicitly (for example “from X corrected to Y”). Do not collapse it into a different unsupported conclusion.
+            10. If the source says a value / code / route is unrelated, inapplicable, or should be removed, preserve that negative conclusion exactly. Do not substitute another exact identifier unless the source explicitly gives the replacement.
+            11. If the source materials do NOT directly provide an abnormal-case outcome, error code, state transition, or DB verification result, do NOT write a full expected result section from analogy. Instead, explicitly state that the source does not directly provide the conclusion, and limit the content to evidence-backed context plus the missing-evidence note.
+            12. Phrases such as “可推断”, “合理推断”, “基于正向场景推导”, “源材料未直接提供” are warning signals, not permission to continue filling in precise outcomes. When such a signal appears, prefer omission plus evidence-gap disclosure over speculative completion.
+            13. If a concept is mainly an evidence gap or unresolved abnormal scenario, it is acceptable to produce a short article whose main conclusion is “当前源材料未直接给出该结论”; do not force a fully elaborated article.
 
             Output format — a Markdown article with YAML frontmatter:
 
@@ -171,6 +177,15 @@ public final class LatticePrompts {
             Compare with source values.
             Flag any mismatches.
 
+            CHECK 4 — Unsupported Exact Values:
+            Find every exact identifier / value newly introduced by the article (codes, counts, paths, queue names, API endpoints, scene numbers, route labels).
+            If the exact value does not appear in source materials, or the article replaced a wrong value with another unsupported exact value, flag it as a HIGH issue.
+
+            CHECK 5 — Speculative Abnormal Scenarios:
+            If the article describes an abnormal case / failure case / refund branch / state transition that the source materials do not directly specify, treat “reasoned extrapolation” as a defect, not as acceptable completion.
+            If the article contains phrases like “推断”, “未直接提供”, “可推测”, “基于正向场景推导”, verify whether the article still goes on to present concrete expected outcomes, status codes, DB results, or exact states.
+            If yes, flag this as a HIGH issue and require rewrite toward evidence-gap disclosure.
+
             Output a JSON object:
             {
               "approved": true/false,
@@ -244,7 +259,10 @@ public final class LatticePrompts {
             4. 对于数值错误，以源文件数值为准
             5. 保留文章整体结构
             6. 保留原有 sources/source_paths，不要改写成标题、摘要或别名
-            7. 输出完整的修正后文章
+            7. 如果源文件只是说明“旧值/旧结论错误”或“某值与当前接口无关”，不要根据相邻上下文脑补新的精确值；应删除不实值，或明确写“当前证据未直接给出替代值”
+            8. 如果源文件明确给出了“从旧结论修正为新结论”的链路，修复时必须保留这条修正关系，而不是改写成第三种未被证实的新说法
+            9. 如果审查问题指出“异常场景结论来自推断而非直接证据”，修复时必须把这部分改写成“源材料未直接给出结论/当前仅有上下文证据”，不得保留具体 statusCode、状态流转或 DB 校验结果
+            10. 输出完整的修正后文章
             """;
 
     public static final String SYSTEM_CROSS_VALIDATE = """

@@ -97,6 +97,36 @@ class ReviewResultParserTests {
     }
 
     /**
+     * 验证结构化事实缺失类问题会被提升为 HIGH，避免 compile review 阶段被误放行。
+     */
+    @Test
+    void shouldPromoteStructuredCompletenessIssuesToHighSeverity() {
+        ReviewResultParser reviewResultParser = new ReviewResultParser();
+
+        ReviewResult reviewResult = reviewResultParser.parse("""
+                {
+                  "approved": false,
+                  "rewriteRequired": true,
+                  "riskLevel": "MEDIUM",
+                  "issues": [
+                    {
+                      "severity": "MEDIUM",
+                      "category": "missing_referential",
+                      "description": "关键枚举列表未列全"
+                    }
+                  ],
+                  "userFacingRewriteHints": [],
+                  "cacheWritePolicy": "SKIP_WRITE"
+                }
+                """);
+
+        assertThat(reviewResult.isPass()).isFalse();
+        assertThat(reviewResult.getStatus()).isEqualTo(ReviewStatus.ISSUES_FOUND);
+        assertThat(reviewResult.getIssues()).hasSize(1);
+        assertThat(reviewResult.getIssues().get(0).getSeverity()).isEqualTo("HIGH");
+    }
+
+    /**
      * 验证 parser 可直接提取统一 reviewer payload 与 cache policy。
      */
     @Test
@@ -145,5 +175,19 @@ class ReviewResultParserTests {
         assertThat(reviewResult.getStatus()).isEqualTo(ReviewStatus.PARSE_RESCUED);
         assertThat(reviewResult.getIssues()).hasSize(1);
         assertThat(reviewResult.getIssues().get(0).getCategory()).isEqualTo("PARSE_RESCUED");
+    }
+
+    /**
+     * 验证完全无法解析的审查结果不会再被当成通过。
+     */
+    @Test
+    void shouldTreatUnparseableReviewAsFailedReview() {
+        ReviewResultParser reviewResultParser = new ReviewResultParser();
+
+        ReviewResult reviewResult = reviewResultParser.parse("not-json and no issue markers");
+
+        assertThat(reviewResult.isPass()).isFalse();
+        assertThat(reviewResult.getStatus()).isEqualTo(ReviewStatus.PARSE_FAILED);
+        assertThat(reviewResult.getIssues()).isEmpty();
     }
 }

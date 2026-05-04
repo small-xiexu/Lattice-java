@@ -94,6 +94,47 @@ class QueryHitIntentRerankerTests {
     }
 
     /**
+     * 验证已通过审查的文章会优先于 needs_human_review 的同主题候选。
+     */
+    @Test
+    void shouldDemoteNeedsHumanReviewArticlesBehindPassedArticles() {
+        List<QueryArticleHit> rerankedHits = QueryHitIntentReranker.rerank(
+                "external type code 列表是什么？",
+                QueryIntent.CONFIGURATION,
+                List.of(
+                        new QueryArticleHit(
+                                QueryEvidenceType.ARTICLE,
+                                1L,
+                                "legacy-default--needs-human",
+                                "needs-human",
+                                "Needs Human",
+                                "externalTypeCodeList = [22,26]",
+                                "{\"description\":\"低质量候选\"}",
+                                "needs_human_review",
+                                List.of("docs/a.md"),
+                                20.0D
+                        ),
+                        new QueryArticleHit(
+                                QueryEvidenceType.ARTICLE,
+                                1L,
+                                "legacy-default--passed",
+                                "passed",
+                                "Passed",
+                                "externalTypeCodeList = [22,26,43,37]",
+                                "{\"description\":\"高质量候选\"}",
+                                "passed",
+                                List.of("docs/b.md"),
+                                18.0D
+                        )
+                )
+        );
+
+        assertThat(rerankedHits).hasSize(2);
+        assertThat(rerankedHits.get(0).getConceptId()).isEqualTo("passed");
+        assertThat(rerankedHits.get(1).getConceptId()).isEqualTo("needs-human");
+    }
+
+    /**
      * 验证“消息队列 / 同步调用”类问题会被识别为架构题，而不是先落到排障题。
      */
     @Test
@@ -105,5 +146,19 @@ class QueryHitIntentRerankerTests {
         );
 
         assertThat(queryIntent).isEqualTo(QueryIntent.ARCHITECTURE);
+    }
+
+    /**
+     * 验证接口路径 / 命中数这类精确查值题会优先落到配置型检索意图。
+     */
+    @Test
+    void shouldClassifyExactLookupQuestionAsConfiguration() {
+        QueryIntentClassifier queryIntentClassifier = new QueryIntentClassifier();
+
+        QueryIntent pathIntent = queryIntentClassifier.classify("子场景 B 的接口路径是什么？");
+        QueryIntent countIntent = queryIntentClassifier.classify("某个渠道的 30 天命中数是多少？");
+
+        assertThat(pathIntent).isEqualTo(QueryIntent.CONFIGURATION);
+        assertThat(countIntent).isEqualTo(QueryIntent.CONFIGURATION);
     }
 }

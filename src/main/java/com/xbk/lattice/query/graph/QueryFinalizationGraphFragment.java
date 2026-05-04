@@ -224,7 +224,9 @@ public class QueryFinalizationGraphFragment {
                 readGenerationMode(state.getGenerationMode()),
                 readModelExecutionStatus(state.getModelExecutionStatus()),
                 report == null ? null : report.toSummary(),
-                null
+                null,
+                state.getFallbackReason(),
+                QueryResponseCitationAssembler.toCitationMarkerResponses(report, answerProjectionBundle, fusedHits)
         );
     }
 
@@ -276,6 +278,7 @@ public class QueryFinalizationGraphFragment {
         state.setAnswerOutcome(fallbackPayload.getAnswerOutcome().name());
         state.setGenerationMode(fallbackPayload.getGenerationMode().name());
         state.setModelExecutionStatus(fallbackPayload.getModelExecutionStatus().name());
+        state.setFallbackReason("CITATION_QUALITY_INSUFFICIENT");
         state.setAnswerCacheable(fallbackPayload.isAnswerCacheable());
         AnswerProjectionBundle fallbackProjectionBundle = queryAnswerProjectionBuilder == null
                 ? new AnswerProjectionBundle(fallbackPayload.getAnswerMarkdown(), List.of())
@@ -408,7 +411,9 @@ public class QueryFinalizationGraphFragment {
                 queryResponse.getGenerationMode(),
                 queryResponse.getModelExecutionStatus(),
                 queryResponse.getCitationCheck(),
-                queryResponse.getDeepResearch()
+                queryResponse.getDeepResearch(),
+                queryResponse.getFallbackReason(),
+                queryResponse.getCitationMarkers()
         );
     }
 

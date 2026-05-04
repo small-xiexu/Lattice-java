@@ -42,6 +42,8 @@ class ReviewFixServiceTests {
         assertThat(llmGateway.lastScene).isEqualTo("compile");
         assertThat(llmGateway.lastAgentRole).isEqualTo("fixer");
         assertThat(llmGateway.lastPurpose).isEqualTo("review-fix");
+        assertThat(llmGateway.lastSystemPrompt).contains("不要根据相邻上下文脑补新的精确值");
+        assertThat(llmGateway.lastSystemPrompt).contains("保留这条修正关系");
     }
 
     /**
@@ -60,6 +62,8 @@ class ReviewFixServiceTests {
         private String lastAgentRole;
 
         private String lastPurpose;
+
+        private String lastSystemPrompt;
 
         private RecordingLlmGateway() {
             super(
@@ -82,6 +86,7 @@ class ReviewFixServiceTests {
             lastScene = scene;
             lastAgentRole = agentRole;
             lastPurpose = purpose;
+            lastSystemPrompt = systemPrompt;
             return "fixed-markdown";
         }
     }

@@ -1184,7 +1184,7 @@
                     detail.conceptId,
                     detail.lifecycle ? "生命周期：" + getBadgeLabel(detail.lifecycle) : "",
                     detail.reviewStatus ? "审查：" + getBadgeLabel(detail.reviewStatus) : "",
-                    detail.compiledAt ? "编译时间：" + formatDateTime(detail.compiledAt) : ""
+                    detail.updatedAt ? "入库时间：" + formatDateTime(detail.updatedAt) : ""
                 ]
                         .filter(Boolean)
                         .join(" | ");

@@ -61,7 +61,9 @@ public final class QueryHitIntentReranker {
         if (hit == null) {
             return null;
         }
-        double adjustedScore = hit.getScore() + intentBonus(question, queryIntent, hit);
+        double adjustedScore = hit.getScore()
+                + intentBonus(question, queryIntent, hit)
+                + reviewQualityBonus(hit);
         return new QueryArticleHit(
                 hit.getEvidenceType(),
                 hit.getSourceId(),
@@ -70,9 +72,30 @@ public final class QueryHitIntentReranker {
                 hit.getTitle(),
                 hit.getContent(),
                 hit.getMetadataJson(),
+                hit.getReviewStatus(),
                 hit.getSourcePaths(),
                 adjustedScore
         );
+    }
+
+    /**
+     * 根据 compile review 状态调整候选优先级，优先使用已通过审查的文章。
+     *
+     * @param hit 查询命中
+     * @return 分值增量
+     */
+    private static double reviewQualityBonus(QueryArticleHit hit) {
+        if (hit == null || hit.getReviewStatus() == null || hit.getReviewStatus().isBlank()) {
+            return 0.0D;
+        }
+        String normalizedReviewStatus = lowerCase(hit.getReviewStatus());
+        if ("passed".equals(normalizedReviewStatus)) {
+            return 8.0D;
+        }
+        if ("needs_human_review".equals(normalizedReviewStatus)) {
+            return -40.0D;
+        }
+        return -12.0D;
     }
 
     /**
@@ -218,8 +241,7 @@ public final class QueryHitIntentReranker {
                     || normalizedPath.contains("architecture/")
                     || normalizedPath.contains("/adr/")
                     || normalizedPath.contains("adr/")
-                    || normalizedPath.contains("design")
-                    || normalizedPath.contains("mq")) {
+                    || normalizedPath.contains("design")) {
                 return true;
             }
         }
@@ -283,13 +305,11 @@ public final class QueryHitIntentReranker {
      */
     private static boolean looksLikeArchitectureQuestion(String question) {
         String normalizedQuestion = lowerCase(question);
-        return normalizedQuestion.contains("消息队列")
-                || normalizedQuestion.contains("同步调用")
-                || normalizedQuestion.contains("异步")
-                || normalizedQuestion.contains("解耦")
-                || normalizedQuestion.contains("为什么要")
+        return normalizedQuestion.contains("为什么要")
                 || normalizedQuestion.contains("架构")
                 || normalizedQuestion.contains("设计")
+                || normalizedQuestion.contains("同步")
+                || normalizedQuestion.contains("异步")
                 || normalizedQuestion.contains("取舍");
     }
 

@@ -105,9 +105,9 @@
 
                     <section class="panel tab-nav-panel workbench-tab-nav-panel">
                         <div class="sub-tabs workbench-sub-tabs" role="tablist" aria-label="工作台二级标签">
-                            <button id="knowledge-tab-upload" class="tab-btn active" type="button" role="tab" aria-selected="true" data-tab-trigger="knowledge-upload">资料导入</button>
-                            <button id="knowledge-tab-runs" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="knowledge-runs">当前处理任务</button>
-                            <button id="knowledge-tab-articles" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="knowledge-articles">已入库内容</button>
+                            <button id="knowledge-tab-upload" class="tab-btn active" type="button" role="tab" aria-selected="true" data-tab-trigger="knowledge-upload" data-tab-scroll="true">资料导入</button>
+                            <button id="knowledge-tab-runs" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="knowledge-runs" data-tab-scroll="true">当前处理任务</button>
+                            <button id="knowledge-tab-articles" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="knowledge-articles" data-tab-scroll="true">已入库内容</button>
                         </div>
                     </section>
 
@@ -266,10 +266,9 @@
                             <div class="panel-title-row">
                                 <div>
                                     <h2>当前处理任务</h2>
-                                    <p>先看整体运行概况，再看每条任务的编译态、当前步骤、当前进度、最近推进时间和原因摘要。这样上传、Git、目录同步和直接编译都不会混成一串难读的列表。</p>
+                                    <p>这里优先展示正在处理、失败或需要确认的任务；普通成功记录会收成轻量提示，完整历史放在对应资料源里查看。</p>
                                 </div>
                                 <div class="processing-refresh-actions">
-                                    <span id="processing-task-refresh-status" class="processing-refresh-status" aria-live="polite"></span>
                                     <button id="refresh-jobs" class="ghost-btn" type="button">刷新记录</button>
                                 </div>
                             </div>
@@ -498,7 +497,7 @@
         </div>
     </div>
  </div>
-<script src="/admin/admin-tabs.js?v=20260419-tabs-1"></script>
-<script src="/admin/management.js?v=20260429-processing-scroll-1"></script>
+<script src="/admin/admin-tabs.js?v=20260502-tabs-scroll-2"></script>
+<script src="/admin/management.js?v=20260502-workbench-nav-2"></script>
 </body>
 </html>

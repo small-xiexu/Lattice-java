@@ -34,7 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.compiler.review.auto-fix-enabled=true",
         "lattice.compiler.review.max-fix-rounds=1",
-        "lattice.compiler.review.allow-persist-needs-human-review=true",
+        "lattice.compiler.review.allow-persist-needs-human-review=false",
         "lattice.compiler.review.human-review-severity-threshold=HIGH"
 })
 @AutoConfigureMockMvc
@@ -62,7 +62,7 @@ class AdminCompileReviewConfigControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.autoFixEnabled").value(true))
                 .andExpect(jsonPath("$.maxFixRounds").value(1))
-                .andExpect(jsonPath("$.allowPersistNeedsHumanReview").value(true))
+                .andExpect(jsonPath("$.allowPersistNeedsHumanReview").value(false))
                 .andExpect(jsonPath("$.humanReviewSeverityThreshold").value("HIGH"))
                 .andExpect(jsonPath("$.configSource").value("properties"));
     }
@@ -132,7 +132,7 @@ class AdminCompileReviewConfigControllerTests {
         jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_compile_review_config_test.compile_review_settings");
         compileReviewProperties.setAutoFixEnabled(true);
         compileReviewProperties.setMaxFixRounds(1);
-        compileReviewProperties.setAllowPersistNeedsHumanReview(true);
+        compileReviewProperties.setAllowPersistNeedsHumanReview(false);
         compileReviewProperties.setHumanReviewSeverityThreshold("HIGH");
     }
 }

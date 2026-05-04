@@ -163,6 +163,71 @@ class CompileArticleReviewFlowTests {
     }
 
     /**
+     * 验证审查超时不会再被当成自动通过，而是收敛为 needs_human_review。
+     */
+    @Test
+    void shouldMarkArticleAsNeedsHumanReviewWhenReviewTimesOut() {
+        CompileArticleNode compileArticleNode = new CompileArticleNode(
+                createLlmGateway("", "{}"),
+                new FakeSourceFileJdbcRepository(),
+                new DocumentSectionSelector(),
+                new StubArticleReviewerGateway(ReviewResult.timeoutFallback(), true),
+                new StubReviewFixService(null)
+        );
+
+        ArticleRecord articleRecord = compileArticleNode.compile(createMergedConcept());
+
+        assertThat(articleRecord.getReviewStatus()).isEqualTo("needs_human_review");
+        assertThat(articleRecord.getContent()).contains("review_status: needs_human_review");
+    }
+
+    /**
+     * 验证 fallback 文章会把关键事实速览前置到正文开头，帮助 query 更早看到精确枚举。
+     */
+    @Test
+    void shouldPlaceFactHighlightsBeforeDetailedSectionsInFallbackMarkdown() {
+        CompileArticleNode compileArticleNode = new CompileArticleNode(
+                null,
+                new FakeSourceFileJdbcRepository(),
+                new DocumentSectionSelector(),
+                null,
+                null
+        );
+
+        ArticleRecord articleRecord = compileArticleNode.compileDraft(new MergedConcept(
+                "migration-facts",
+                "Migration Facts",
+                "总结迁移关键事实。",
+                List.of("docs/migration.md"),
+                List.of("dpfm-callback-service"),
+                List.of(
+                        new ConceptSection(
+                                "配置分裂",
+                                Arrays.asList(
+                                        "externalSrkitTypeCodeList = [22, 26, 43, 37]",
+                                        "fc-digital 硬编码 = [\"22\", \"26\"]"
+                                ),
+                                Arrays.asList("docs/migration.md#配置分裂")
+                        ),
+                        new ConceptSection(
+                                "灰度批次",
+                                Arrays.asList(
+                                        "第一批：场景6",
+                                        "第二批：场景7"
+                                ),
+                                Arrays.asList("docs/migration.md#灰度批次")
+                        )
+                )
+        ), null);
+
+        String body = com.xbk.lattice.article.service.ArticleMarkdownSupport.extractBody(articleRecord.getContent());
+        assertThat(body).contains("## 关键事实速览");
+        assertThat(body.indexOf("## 关键事实速览")).isLessThan(body.indexOf("## 配置分裂"));
+        assertThat(body).contains("externalSrkitTypeCodeList = [22, 26, 43, 37]");
+        assertThat(body).contains("第一批：场景6");
+    }
+
+    /**
      * 创建测试用概念。
      *
      * @return 合并概念

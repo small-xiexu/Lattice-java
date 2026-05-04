@@ -75,6 +75,8 @@ public class AdminArticleController {
                     ? Collections.<String>emptyList()
                     : articleRecord.getSourcePaths();
             String compiledAt = articleRecord.getCompiledAt() == null ? null : articleRecord.getCompiledAt().toString();
+            String createdAt = articleRecord.getCreatedAt() == null ? null : articleRecord.getCreatedAt().toString();
+            String updatedAt = articleRecord.getUpdatedAt() == null ? null : articleRecord.getUpdatedAt().toString();
             int resolvedSourceCount = sourcePaths.size();
             String primarySourcePath = sourcePaths.isEmpty() ? null : sourcePaths.get(0);
             items.add(new AdminArticleSummaryResponse(
@@ -85,6 +87,8 @@ public class AdminArticleController {
                     articleRecord.getLifecycle(),
                     articleRecord.getReviewStatus(),
                     compiledAt,
+                    createdAt,
+                    updatedAt,
                     articleRecord.getSummary(),
                     resolvedSourceCount,
                     primarySourcePath,
@@ -112,6 +116,8 @@ public class AdminArticleController {
                 ? Collections.<String>emptyList()
                 : articleRecord.getSourcePaths();
         String compiledAt = articleRecord.getCompiledAt() == null ? null : articleRecord.getCompiledAt().toString();
+        String createdAt = articleRecord.getCreatedAt() == null ? null : articleRecord.getCreatedAt().toString();
+        String updatedAt = articleRecord.getUpdatedAt() == null ? null : articleRecord.getUpdatedAt().toString();
         int resolvedSourceCount = sourcePaths.size();
         String primarySourcePath = sourcePaths.isEmpty() ? null : sourcePaths.get(0);
         return new AdminArticleDetailResponse(
@@ -122,6 +128,8 @@ public class AdminArticleController {
                 articleRecord.getContent(),
                 articleRecord.getLifecycle(),
                 compiledAt,
+                createdAt,
+                updatedAt,
                 articleRecord.getSummary(),
                 articleRecord.getReviewStatus(),
                 articleRecord.getConfidence(),

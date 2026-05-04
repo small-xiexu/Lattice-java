@@ -99,6 +99,8 @@ class ArticleJdbcRepositoryTests {
         assertThat(loaded.orElseThrow().getRelated()).containsExactly("source-index");
         assertThat(loaded.orElseThrow().getConfidence()).isEqualTo("medium");
         assertThat(loaded.orElseThrow().getReviewStatus()).isEqualTo("pending");
+        assertThat(loaded.orElseThrow().getCreatedAt()).isNotNull();
+        assertThat(loaded.orElseThrow().getUpdatedAt()).isNotNull();
     }
 
     /**
@@ -183,6 +185,39 @@ class ArticleJdbcRepositoryTests {
         assertThat(loaded.getConfidence()).isEqualTo("high");
         assertThat(loaded.getReviewStatus()).isEqualTo("needs_human_review");
         assertThat(loaded.getCompiledAt()).isEqualTo(compiledAt);
+    }
+
+    /**
+     * 验证 upsert 更新已有文章时刷新最近入库时间。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldRefreshUpdatedAtWhenUpsertingExistingArticle() throws Exception {
+        OffsetDateTime compiledAt = OffsetDateTime.parse("2026-04-20T10:00:00+08:00");
+        ArticleRecord originalArticle = new ArticleRecord(
+                "stored-at-policy",
+                "Stored At Policy",
+                "# Stored At Policy",
+                "ACTIVE",
+                compiledAt
+        );
+        articleJdbcRepository.upsert(originalArticle);
+        ArticleRecord firstLoaded = articleJdbcRepository.findByConceptId("stored-at-policy").orElseThrow();
+
+        Thread.sleep(10L);
+        ArticleRecord updatedArticle = new ArticleRecord(
+                "stored-at-policy",
+                "Stored At Policy Updated",
+                "# Stored At Policy Updated",
+                "ACTIVE",
+                compiledAt
+        );
+        articleJdbcRepository.upsert(updatedArticle);
+        ArticleRecord secondLoaded = articleJdbcRepository.findByConceptId("stored-at-policy").orElseThrow();
+
+        assertThat(secondLoaded.getCreatedAt()).isEqualTo(firstLoaded.getCreatedAt());
+        assertThat(secondLoaded.getUpdatedAt()).isAfter(firstLoaded.getUpdatedAt());
     }
 
     /**

@@ -24,6 +24,7 @@ import com.xbk.lattice.query.service.QueryIntent;
 import com.xbk.lattice.query.service.QueryIntentClassifier;
 import com.xbk.lattice.query.service.QueryArticleHit;
 import com.xbk.lattice.query.service.QueryCacheStore;
+import com.xbk.lattice.query.service.QueryEvidenceType;
 import com.xbk.lattice.query.service.QueryEvidenceRelevanceSupport;
 import com.xbk.lattice.query.service.QueryHitIntentReranker;
 import com.xbk.lattice.query.service.QueryRetrievalSettingsService;
@@ -64,6 +65,12 @@ import java.util.Set;
 public class QueryGraphDefinitionFactory {
 
     private static final int TOP_K = 8;
+
+    private static final int RETRIEVAL_CANDIDATE_LIMIT = 16;
+
+    private static final int EXACT_LOOKUP_CONTEXT_LIMIT = 16;
+
+    private static final int EXACT_LOOKUP_SUPPORT_LIMIT = 6;
 
     private static final String CHANNEL_FTS = RetrievalStrategyResolver.CHANNEL_FTS;
 
@@ -411,7 +418,9 @@ public class QueryGraphDefinitionFactory {
         return saveSingleChannelHits(
                 state,
                 CHANNEL_FTS,
-                shouldSearch(state, CHANNEL_FTS) ? ftsSearchService.search(readRetrievalQuestion(state), TOP_K) : List.of()
+                shouldSearch(state, CHANNEL_FTS)
+                        ? ftsSearchService.search(readRetrievalQuestion(state), RETRIEVAL_CANDIDATE_LIMIT)
+                        : List.of()
         );
     }
 
@@ -421,7 +430,7 @@ public class QueryGraphDefinitionFactory {
                 state,
                 CHANNEL_ARTICLE_CHUNK_FTS,
                 shouldSearch(state, CHANNEL_ARTICLE_CHUNK_FTS)
-                        ? articleChunkFtsSearchService.search(readRetrievalQuestion(state), TOP_K)
+                        ? articleChunkFtsSearchService.search(readRetrievalQuestion(state), RETRIEVAL_CANDIDATE_LIMIT)
                         : List.of()
         );
     }
@@ -431,7 +440,9 @@ public class QueryGraphDefinitionFactory {
         return saveSingleChannelHits(
                 state,
                 CHANNEL_REFKEY,
-                shouldSearch(state, CHANNEL_REFKEY) ? refKeySearchService.search(readRetrievalQuestion(state), TOP_K) : List.of()
+                shouldSearch(state, CHANNEL_REFKEY)
+                        ? refKeySearchService.search(readRetrievalQuestion(state), RETRIEVAL_CANDIDATE_LIMIT)
+                        : List.of()
         );
     }
 
@@ -440,7 +451,9 @@ public class QueryGraphDefinitionFactory {
         return saveSingleChannelHits(
                 state,
                 CHANNEL_SOURCE,
-                shouldSearch(state, CHANNEL_SOURCE) ? sourceSearchService.search(readRetrievalQuestion(state), TOP_K) : List.of()
+                shouldSearch(state, CHANNEL_SOURCE)
+                        ? sourceSearchService.search(readRetrievalQuestion(state), RETRIEVAL_CANDIDATE_LIMIT)
+                        : List.of()
         );
     }
 
@@ -450,7 +463,7 @@ public class QueryGraphDefinitionFactory {
                 state,
                 CHANNEL_SOURCE_CHUNK_FTS,
                 shouldSearch(state, CHANNEL_SOURCE_CHUNK_FTS)
-                        ? sourceChunkFtsSearchService.search(readRetrievalQuestion(state), TOP_K)
+                        ? sourceChunkFtsSearchService.search(readRetrievalQuestion(state), RETRIEVAL_CANDIDATE_LIMIT)
                         : List.of()
         );
     }
@@ -461,7 +474,7 @@ public class QueryGraphDefinitionFactory {
                 state,
                 CHANNEL_CONTRIBUTION,
                 shouldSearch(state, CHANNEL_CONTRIBUTION)
-                        ? contributionSearchService.search(readRetrievalQuestion(state), TOP_K)
+                        ? contributionSearchService.search(readRetrievalQuestion(state), RETRIEVAL_CANDIDATE_LIMIT)
                         : List.of()
         );
     }
@@ -471,7 +484,9 @@ public class QueryGraphDefinitionFactory {
         return saveSingleChannelHits(
                 state,
                 CHANNEL_GRAPH,
-                shouldSearch(state, CHANNEL_GRAPH) ? graphSearchService.search(readRetrievalQuestion(state), TOP_K) : List.of()
+                shouldSearch(state, CHANNEL_GRAPH)
+                        ? graphSearchService.search(readRetrievalQuestion(state), RETRIEVAL_CANDIDATE_LIMIT)
+                        : List.of()
         );
     }
 
@@ -481,7 +496,7 @@ public class QueryGraphDefinitionFactory {
                 state,
                 CHANNEL_ARTICLE_VECTOR,
                 shouldSearch(state, CHANNEL_ARTICLE_VECTOR)
-                        ? vectorSearchService.search(readRetrievalQuestion(state), TOP_K)
+                        ? vectorSearchService.search(readRetrievalQuestion(state), RETRIEVAL_CANDIDATE_LIMIT)
                         : List.of()
         );
     }
@@ -492,7 +507,7 @@ public class QueryGraphDefinitionFactory {
                 state,
                 CHANNEL_CHUNK_VECTOR,
                 shouldSearch(state, CHANNEL_CHUNK_VECTOR)
-                        ? chunkVectorSearchService.search(readRetrievalQuestion(state), TOP_K)
+                        ? chunkVectorSearchService.search(readRetrievalQuestion(state), RETRIEVAL_CANDIDATE_LIMIT)
                         : List.of()
         );
     }
@@ -503,7 +518,7 @@ public class QueryGraphDefinitionFactory {
         Map<String, List<QueryArticleHit>> channelHits = loadChannelHits(state);
         Map<String, Double> weights = retrievalStrategy.getChannelWeights();
         List<QueryArticleHit> fusedHits = rrfFusionService.fuse(channelHits, weights, TOP_K, retrievalStrategy.getRrfK());
-        fusedHits = enrichIagStatusSourceHit(state.getQuestion(), fusedHits, channelHits);
+        fusedHits = enrichExactLookupSupportHits(state.getQuestion(), fusedHits, channelHits);
         fusedHits = filterFusedHits(state.getQuestion(), fusedHits);
         state.setHasFusedHits(!fusedHits.isEmpty());
         if (!fusedHits.isEmpty()) {
@@ -550,83 +565,152 @@ public class QueryGraphDefinitionFactory {
     }
 
     /**
-     * IAG 成功状态题需要完整源文档里的 SAML StatusCode 示例，避免只命中前置步骤摘要时误答“没有状态”。
+     * 精确查值题额外补入更直接的 source/refkey 证据，避免 fused 结果只剩概述性 article。
      *
      * @param question 用户问题
-     * @param fusedHits 融合命中
+     * @param fusedHits 当前融合命中
      * @param channelHits 各通道命中
-     * @return 补齐完整源文档后的命中
+     * @return 补齐后的融合命中
      */
-    private List<QueryArticleHit> enrichIagStatusSourceHit(
+    private List<QueryArticleHit> enrichExactLookupSupportHits(
             String question,
             List<QueryArticleHit> fusedHits,
             Map<String, List<QueryArticleHit>> channelHits
     ) {
-        if (!looksLikeIagSuccessStatusQuestion(question) || channelHits == null || channelHits.isEmpty()) {
+        if (!looksLikeExactLookupQuestion(question) || channelHits == null || channelHits.isEmpty()) {
             return fusedHits;
         }
-        List<QueryArticleHit> sourceHits = channelHits.get(CHANNEL_SOURCE);
-        if (sourceHits == null || sourceHits.isEmpty()) {
+        List<QueryArticleHit> supportCandidates = collectExactLookupSupportCandidates(question, channelHits);
+        if (supportCandidates.isEmpty()) {
             return fusedHits;
         }
-        for (QueryArticleHit sourceHit : sourceHits) {
-            if (!containsIagSuccessStatus(sourceHit)) {
+        List<QueryArticleHit> enrichedHits = fusedHits == null
+                ? new ArrayList<QueryArticleHit>()
+                : new ArrayList<QueryArticleHit>(fusedHits);
+        for (QueryArticleHit supportCandidate : supportCandidates) {
+            if (containsEquivalentHit(enrichedHits, supportCandidate)) {
                 continue;
             }
-            if (containsEquivalentHit(fusedHits, sourceHit)) {
-                return fusedHits;
+            enrichedHits.add(supportCandidate);
+            if (enrichedHits.size() >= EXACT_LOOKUP_CONTEXT_LIMIT) {
+                break;
             }
-            List<QueryArticleHit> enrichedHits = new ArrayList<QueryArticleHit>(fusedHits);
-            enrichedHits.add(sourceHit);
-            return enrichedHits;
         }
-        return fusedHits;
+        return enrichedHits;
     }
 
     /**
-     * 判断是否是在问 IAG 集成成功后的返回状态。
+     * 收集精确查值题更值得补进 fused hits 的 support 证据。
      *
      * @param question 用户问题
-     * @return 命中返回 true
+     * @param channelHits 各通道命中
+     * @return 候选证据
      */
-    private boolean looksLikeIagSuccessStatusQuestion(String question) {
-        String normalizedQuestion = lowerCase(question);
-        boolean asksStatus = normalizedQuestion.contains("状态")
-                || normalizedQuestion.contains("状态码")
-                || normalizedQuestion.contains("statuscode")
-                || normalizedQuestion.contains("status code");
-        boolean asksSuccessOrReturn = normalizedQuestion.contains("成功")
-                || normalizedQuestion.contains("返回")
-                || normalizedQuestion.contains("response")
-                || normalizedQuestion.contains("令牌");
-        boolean asksIagScope = normalizedQuestion.contains("集成")
-                || normalizedQuestion.contains("步骤")
-                || normalizedQuestion.contains("认证")
-                || normalizedQuestion.contains("saml")
-                || normalizedQuestion.contains("response")
-                || normalizedQuestion.contains("令牌");
-        return normalizedQuestion.contains("iag")
-                && asksStatus
-                && asksSuccessOrReturn
-                && asksIagScope;
+    private List<QueryArticleHit> collectExactLookupSupportCandidates(
+            String question,
+            Map<String, List<QueryArticleHit>> channelHits
+    ) {
+        List<QueryArticleHit> supportHits = new ArrayList<QueryArticleHit>();
+        addExactLookupSupportHits(
+                supportHits,
+                question,
+                channelHits.get(CHANNEL_SOURCE_CHUNK_FTS)
+        );
+        addExactLookupSupportHits(
+                supportHits,
+                question,
+                channelHits.get(CHANNEL_SOURCE)
+        );
+        addExactLookupSupportHits(
+                supportHits,
+                question,
+                channelHits.get(CHANNEL_REFKEY)
+        );
+        supportHits.sort((leftHit, rightHit) -> Integer.compare(
+                scoreExactLookupSupportHit(question, rightHit),
+                scoreExactLookupSupportHit(question, leftHit)
+        ));
+        if (supportHits.size() <= EXACT_LOOKUP_SUPPORT_LIMIT) {
+            return supportHits;
+        }
+        return new ArrayList<QueryArticleHit>(supportHits.subList(0, EXACT_LOOKUP_SUPPORT_LIMIT));
     }
 
     /**
-     * 判断命中内容是否包含 IAG SAML Success 状态。
+     * 从单个通道里挑出适合精确查值题的补充证据。
      *
-     * @param queryArticleHit 查询命中
-     * @return 包含返回 true
+     * @param supportHits 目标列表
+     * @param question 用户问题
+     * @param channelHits 通道命中
      */
-    private boolean containsIagSuccessStatus(QueryArticleHit queryArticleHit) {
-        if (queryArticleHit == null) {
-            return false;
+    private void addExactLookupSupportHits(
+            List<QueryArticleHit> supportHits,
+            String question,
+            List<QueryArticleHit> channelHits
+    ) {
+        if (channelHits == null || channelHits.isEmpty()) {
+            return;
         }
+        for (QueryArticleHit channelHit : channelHits) {
+            if (channelHit == null || !QueryEvidenceRelevanceSupport.isRelevant(question, channelHit)) {
+                continue;
+            }
+            int supportScore = scoreExactLookupSupportHit(question, channelHit);
+            if (supportScore <= 0) {
+                continue;
+            }
+            supportHits.add(channelHit);
+            if (supportHits.size() >= EXACT_LOOKUP_CONTEXT_LIMIT) {
+                return;
+            }
+        }
+    }
+
+    /**
+     * 为精确查值题评估单条 support 证据的价值。
+     *
+     * @param question 用户问题
+     * @param queryArticleHit 查询命中
+     * @return 支持分值
+     */
+    private int scoreExactLookupSupportHit(String question, QueryArticleHit queryArticleHit) {
+        if (queryArticleHit == null) {
+            return Integer.MIN_VALUE;
+        }
+        String normalizedQuestion = lowerCase(question);
         String haystack = lowerCase(queryArticleHit.getTitle())
                 + " "
-                + lowerCase(queryArticleHit.getContent());
-        return haystack.contains("iag")
-                && haystack.contains("statuscode")
-                && haystack.contains("status:success");
+                + lowerCase(queryArticleHit.getContent())
+                + " "
+                + lowerCase(queryArticleHit.getMetadataJson());
+        int score = QueryEvidenceRelevanceSupport.score(question, queryArticleHit);
+        if (queryArticleHit.getEvidenceType() == QueryEvidenceType.SOURCE) {
+            score += 16;
+        }
+        if (normalizedQuestion.contains("命中数") && haystack.matches("(?s).*\\d.*")) {
+            score += 18;
+        }
+        if ((normalizedQuestion.contains("路径") || normalizedQuestion.contains("接口")) && haystack.contains("/")) {
+            score += 18;
+        }
+        if ((normalizedQuestion.contains("结论") || normalizedQuestion.contains("状态"))
+                && (haystack.contains("修正为")
+                || haystack.contains("确认")
+                || haystack.contains("生效")
+                || haystack.contains("启用")
+                || haystack.contains("禁用"))) {
+            score += 20;
+        }
+        if ((normalizedQuestion.contains("差异") || normalizedQuestion.contains("不同") || normalizedQuestion.contains("是否一致"))
+                && (haystack.contains("不同") || haystack.contains("不一致") || haystack.contains("差异"))) {
+            score += 18;
+        }
+        if ((normalizedQuestion.contains("批") || normalizedQuestion.contains("场景"))
+                && haystack.contains("第")
+                && haystack.contains("批")) {
+            score += 16;
+        }
+        return score;
     }
 
     /**
@@ -690,6 +774,7 @@ public class QueryGraphDefinitionFactory {
         state.setAnswerOutcome(answerPayload.getAnswerOutcome().name());
         state.setGenerationMode(answerPayload.getGenerationMode().name());
         state.setModelExecutionStatus(answerPayload.getModelExecutionStatus().name());
+        state.setFallbackReason(answerPayload.getFallbackReason());
         state.setAnswerCacheable(answerPayload.isAnswerCacheable());
         return queryGraphStateMapper.toDeltaMap(state);
     }
@@ -740,6 +825,7 @@ public class QueryGraphDefinitionFactory {
         state.setAnswerOutcome(rewrittenPayload.getAnswerOutcome().name());
         state.setGenerationMode(rewrittenPayload.getGenerationMode().name());
         state.setModelExecutionStatus(rewrittenPayload.getModelExecutionStatus().name());
+        state.setFallbackReason(rewrittenPayload.getFallbackReason());
         state.setAnswerCacheable(rewrittenPayload.isAnswerCacheable());
         state.setRewriteAttemptCount(state.getRewriteAttemptCount() + 1);
         return queryGraphStateMapper.toDeltaMap(state);
@@ -766,7 +852,9 @@ public class QueryGraphDefinitionFactory {
                 queryResponse.getGenerationMode(),
                 queryResponse.getModelExecutionStatus(),
                 queryResponse.getCitationCheck(),
-                queryResponse.getDeepResearch()
+                queryResponse.getDeepResearch(),
+                queryResponse.getFallbackReason(),
+                queryResponse.getCitationMarkers()
         );
     }
 
@@ -813,53 +901,65 @@ public class QueryGraphDefinitionFactory {
         delta.putAll(saveSingleChannelHits(
                 state,
                 CHANNEL_FTS,
-                shouldSearch(state, CHANNEL_FTS) ? ftsSearchService.search(retrievalQuestion, TOP_K) : List.of()
+                shouldSearch(state, CHANNEL_FTS)
+                        ? ftsSearchService.search(retrievalQuestion, RETRIEVAL_CANDIDATE_LIMIT)
+                        : List.of()
         ));
         delta.putAll(saveSingleChannelHits(
                 state,
                 CHANNEL_ARTICLE_CHUNK_FTS,
                 shouldSearch(state, CHANNEL_ARTICLE_CHUNK_FTS)
-                        ? articleChunkFtsSearchService.search(retrievalQuestion, TOP_K)
+                        ? articleChunkFtsSearchService.search(retrievalQuestion, RETRIEVAL_CANDIDATE_LIMIT)
                         : List.of()
         ));
         delta.putAll(saveSingleChannelHits(
                 state,
                 CHANNEL_REFKEY,
-                shouldSearch(state, CHANNEL_REFKEY) ? refKeySearchService.search(retrievalQuestion, TOP_K) : List.of()
+                shouldSearch(state, CHANNEL_REFKEY)
+                        ? refKeySearchService.search(retrievalQuestion, RETRIEVAL_CANDIDATE_LIMIT)
+                        : List.of()
         ));
         delta.putAll(saveSingleChannelHits(
                 state,
                 CHANNEL_SOURCE,
-                shouldSearch(state, CHANNEL_SOURCE) ? sourceSearchService.search(retrievalQuestion, TOP_K) : List.of()
+                shouldSearch(state, CHANNEL_SOURCE)
+                        ? sourceSearchService.search(retrievalQuestion, RETRIEVAL_CANDIDATE_LIMIT)
+                        : List.of()
         ));
         delta.putAll(saveSingleChannelHits(
                 state,
                 CHANNEL_SOURCE_CHUNK_FTS,
                 shouldSearch(state, CHANNEL_SOURCE_CHUNK_FTS)
-                        ? sourceChunkFtsSearchService.search(retrievalQuestion, TOP_K)
+                        ? sourceChunkFtsSearchService.search(retrievalQuestion, RETRIEVAL_CANDIDATE_LIMIT)
                         : List.of()
         ));
         delta.putAll(saveSingleChannelHits(
                 state,
                 CHANNEL_CONTRIBUTION,
                 shouldSearch(state, CHANNEL_CONTRIBUTION)
-                        ? contributionSearchService.search(retrievalQuestion, TOP_K)
+                        ? contributionSearchService.search(retrievalQuestion, RETRIEVAL_CANDIDATE_LIMIT)
                         : List.of()
         ));
         delta.putAll(saveSingleChannelHits(
                 state,
                 CHANNEL_GRAPH,
-                shouldSearch(state, CHANNEL_GRAPH) ? graphSearchService.search(retrievalQuestion, TOP_K) : List.of()
+                shouldSearch(state, CHANNEL_GRAPH)
+                        ? graphSearchService.search(retrievalQuestion, RETRIEVAL_CANDIDATE_LIMIT)
+                        : List.of()
         ));
         delta.putAll(saveSingleChannelHits(
                 state,
                 CHANNEL_ARTICLE_VECTOR,
-                shouldSearch(state, CHANNEL_ARTICLE_VECTOR) ? vectorSearchService.search(retrievalQuestion, TOP_K) : List.of()
+                shouldSearch(state, CHANNEL_ARTICLE_VECTOR)
+                        ? vectorSearchService.search(retrievalQuestion, RETRIEVAL_CANDIDATE_LIMIT)
+                        : List.of()
         ));
         delta.putAll(saveSingleChannelHits(
                 state,
                 CHANNEL_CHUNK_VECTOR,
-                shouldSearch(state, CHANNEL_CHUNK_VECTOR) ? chunkVectorSearchService.search(retrievalQuestion, TOP_K) : List.of()
+                shouldSearch(state, CHANNEL_CHUNK_VECTOR)
+                        ? chunkVectorSearchService.search(retrievalQuestion, RETRIEVAL_CANDIDATE_LIMIT)
+                        : List.of()
         ));
         return delta;
     }
@@ -1000,6 +1100,37 @@ public class QueryGraphDefinitionFactory {
         catch (IllegalArgumentException exception) {
             return QueryIntent.GENERAL;
         }
+    }
+
+    /**
+     * 判断当前问题是否属于精确查值/精确结论类问题。
+     *
+     * @param question 用户问题
+     * @return 精确查值题返回 true
+     */
+    private boolean looksLikeExactLookupQuestion(String question) {
+        String normalizedQuestion = lowerCase(question);
+        return normalizedQuestion.contains("多少")
+                || normalizedQuestion.contains("几")
+                || normalizedQuestion.contains("列出")
+                || normalizedQuestion.contains("有哪些")
+                || normalizedQuestion.contains("哪些")
+                || normalizedQuestion.contains("配置")
+                || normalizedQuestion.contains("规范")
+                || normalizedQuestion.contains("规则")
+                || normalizedQuestion.contains("命名")
+                || normalizedQuestion.contains("格式")
+                || normalizedQuestion.contains("结论")
+                || normalizedQuestion.contains("命中数")
+                || normalizedQuestion.contains("路径")
+                || normalizedQuestion.contains("接口")
+                || normalizedQuestion.contains("归属")
+                || normalizedQuestion.contains("对应")
+                || normalizedQuestion.contains("第几批")
+                || normalizedQuestion.contains("哪一批")
+                || normalizedQuestion.contains("是否一致")
+                || normalizedQuestion.contains("是否生效")
+                || normalizedQuestion.contains("是否启用");
     }
 
     /**

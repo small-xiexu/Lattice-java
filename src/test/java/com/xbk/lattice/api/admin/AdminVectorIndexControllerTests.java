@@ -60,7 +60,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "lattice.query.search.vector.enabled=true",
         "lattice.query.search.vector.embedding-model-profile-id=1",
         "lattice.query.search.vector.embedding-model=test-embedding-model",
-        "lattice.query.search.vector.expected-dimensions=1536"
+        "lattice.query.search.vector.expected-dimensions=2000"
 })
 @AutoConfigureMockMvc
 class AdminVectorIndexControllerTests {
@@ -89,7 +89,7 @@ class AdminVectorIndexControllerTests {
     void shouldExposeVectorStatusViaAdminApi() throws Exception {
         resetTables();
         ensureVectorInfrastructure();
-        seedEmbeddingProfile(1536);
+        seedEmbeddingProfile(2000);
         articleJdbcRepository.upsert(createArticleRecord("payment-timeout"));
 
         mockMvc.perform(get("/api/v1/admin/vector/status"))
@@ -100,9 +100,9 @@ class AdminVectorIndexControllerTests {
                 .andExpect(jsonPath("$.indexingAvailable").value(true))
                 .andExpect(jsonPath("$.embeddingModelProfileId").value(1))
                 .andExpect(jsonPath("$.configuredModelName").value("test-embedding-model"))
-                .andExpect(jsonPath("$.configuredExpectedDimensions").value(1536))
-                .andExpect(jsonPath("$.embeddingColumnType").value("vector(1536)"))
-                .andExpect(jsonPath("$.schemaDimensions").value(1536))
+                .andExpect(jsonPath("$.configuredExpectedDimensions").value(2000))
+                .andExpect(jsonPath("$.embeddingColumnType").value("vector(2000)"))
+                .andExpect(jsonPath("$.schemaDimensions").value(2000))
                 .andExpect(jsonPath("$.dimensionsMatch").value(true))
                 .andExpect(jsonPath("$.articleCount").value(1))
                 .andExpect(jsonPath("$.indexedArticleCount").value(0));
@@ -117,7 +117,7 @@ class AdminVectorIndexControllerTests {
     void shouldRebuildVectorIndexViaAdminApi() throws Exception {
         resetTables();
         ensureVectorInfrastructure();
-        seedEmbeddingProfile(1536);
+        seedEmbeddingProfile(2000);
         articleJdbcRepository.upsert(createArticleRecord("payment-timeout"));
         insertLegacyVectorRecord("payment-timeout", "legacy-embedding-model", "legacy-hash");
 
@@ -162,7 +162,7 @@ class AdminVectorIndexControllerTests {
         mockMvc.perform(get("/api/v1/admin/vector/status"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.configuredExpectedDimensions").value(1024))
-                .andExpect(jsonPath("$.schemaDimensions").value(1536))
+                .andExpect(jsonPath("$.schemaDimensions").value(2000))
                 .andExpect(jsonPath("$.dimensionsMatch").value(false));
 
         mockMvc.perform(post("/api/v1/admin/vector/rebuild")
@@ -225,7 +225,7 @@ class AdminVectorIndexControllerTests {
      * @param contentHash 内容哈希
      */
     private void insertLegacyVectorRecord(String conceptId, String modelName, String contentHash) {
-        String vectorLiteral = createVectorLiteral(0.05F, 1536);
+        String vectorLiteral = createVectorLiteral(0.05F, 2000);
         jdbcTemplate.update(
                 """
                         insert into lattice_b8_vector_admin_test.article_vector_index (
@@ -243,8 +243,8 @@ class AdminVectorIndexControllerTests {
                 conceptId,
                 conceptId,
                 Long.valueOf(1L),
-                Integer.valueOf(1536),
-                "legacy-1536-article-v1",
+                Integer.valueOf(2000),
+                "legacy-2000-article-v1",
                 contentHash,
                 vectorLiteral
         );
@@ -366,7 +366,7 @@ class AdminVectorIndexControllerTests {
         @Bean
         @Primary
         public EmbeddingModel embeddingModel() {
-            return new FixedEmbeddingModel(1536);
+            return new FixedEmbeddingModel(2000);
         }
 
         /**
@@ -388,7 +388,7 @@ class AdminVectorIndexControllerTests {
                 @Override
                 public EmbeddingModel getOrCreate(EmbeddingRouteResolution routeResolution) {
                     int dimensions = routeResolution.getExpectedDimensions() == null
-                            ? 1536
+                            ? 2000
                             : routeResolution.getExpectedDimensions().intValue();
                     return new FixedEmbeddingModel(dimensions);
                 }

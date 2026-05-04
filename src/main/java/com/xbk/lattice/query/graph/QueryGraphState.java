@@ -100,6 +100,8 @@ public class QueryGraphState {
 
     private String modelExecutionStatus;
 
+    private String fallbackReason;
+
     private boolean answerCacheable;
 
     private int rewriteAttemptCount;

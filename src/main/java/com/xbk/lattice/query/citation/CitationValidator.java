@@ -294,7 +294,7 @@ public class CitationValidator {
         appendMatches(hardFactTokens, HTTP_PATH_PATTERN.matcher(normalizedClaimText));
         appendMatches(hardFactTokens, JAVA_SYMBOL_PATTERN.matcher(normalizedClaimText));
         appendMatches(hardFactTokens, LATIN_TERM_PATTERN.matcher(normalizedClaimText));
-        if (!hardFactTokens.isEmpty()) {
+        if (hardFactTokens.size() < 2) {
             appendHanTermMatches(hardFactTokens, HAN_TERM_PATTERN.matcher(normalizedClaimText));
         }
         return hardFactTokens;
@@ -316,7 +316,7 @@ public class CitationValidator {
     private void appendHanTermMatches(List<String> hardFactTokens, Matcher matcher) {
         while (matcher.find()) {
             String literal = matcher.group(1);
-            if (literal == null || literal.isBlank() || !containsNamedHanSignal(literal) || isGenericHanLiteral(literal)) {
+            if (literal == null || literal.isBlank() || isGenericHanLiteral(literal)) {
                 continue;
             }
             String normalizedLiteral = normalizeToken(literal);
@@ -326,7 +326,7 @@ public class CitationValidator {
             if (literal.length() >= 5) {
                 for (int start = 0; start <= literal.length() - 3; start++) {
                     String slice = literal.substring(start, start + 3);
-                    if (!containsNamedHanSignal(slice) || isGenericHanLiteral(slice)) {
+                    if (isGenericHanLiteral(slice)) {
                         continue;
                     }
                     String normalizedSlice = normalizeToken(slice);
@@ -355,25 +355,10 @@ public class CitationValidator {
                 || literal.contains("使用")
                 || literal.contains("暴露")
                 || literal.contains("采用")
-                || literal.contains("处理");
-    }
-
-    private boolean containsNamedHanSignal(String literal) {
-        if (literal == null || literal.isBlank()) {
-            return false;
-        }
-        return literal.contains("资和信")
-                || literal.contains("易百")
-                || literal.contains("杉德")
-                || literal.contains("苏州")
-                || literal.contains("得仕")
-                || literal.contains("广发")
-                || literal.contains("民生")
-                || literal.contains("宁波")
-                || literal.contains("上海")
-                || literal.contains("星巴克")
-                || literal.contains("账号数据库")
-                || literal.contains("目录服务");
+                || literal.contains("处理")
+                || literal.contains("这是一个")
+                || literal.contains("一般性")
+                || literal.contains("系统描述");
     }
 
     private Set<String> tokenize(String content) {

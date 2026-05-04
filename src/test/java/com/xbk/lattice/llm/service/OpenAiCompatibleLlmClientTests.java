@@ -108,6 +108,41 @@ class OpenAiCompatibleLlmClientTests {
     }
 
     /**
+     * 验证客户端即使拿到完整 chat completions 地址，也能自动归一化后正常调用。
+     *
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldNormalizeFullChatCompletionUrl() throws IOException {
+        AtomicReference<String> requestBody = new AtomicReference<String>();
+        httpServer = HttpServer.create(new InetSocketAddress(0), 0);
+        httpServer.createContext("/v1/chat/completions", new SuccessHandler(
+                requestBody,
+                new AtomicReference<String>(),
+                new AtomicReference<String>(),
+                "application/json"
+        ));
+        httpServer.start();
+        int port = httpServer.getAddress().getPort();
+        OpenAiCompatibleLlmClient llmClient = new OpenAiCompatibleLlmClient(
+                RestClient.builder(),
+                new ObjectMapper(),
+                "http://127.0.0.1:" + port + "/v1/chat/completions",
+                "test-openai-key",
+                "gpt-5.4",
+                0.3D,
+                96,
+                120,
+                null
+        );
+
+        LlmCallResult result = llmClient.call("query-system", "query-user");
+
+        assertThat(result.getContent()).isEqualTo("answer ok");
+        assertThat(requestBody.get()).contains("\"model\":\"gpt-5.4\"");
+    }
+
+    /**
      * 验证客户端在网关直接断开连接时会立即失败，不再自行重试。
      *
      * @throws Exception 异常

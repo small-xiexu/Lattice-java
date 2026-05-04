@@ -2,6 +2,7 @@ package com.xbk.lattice.compiler.node;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xbk.lattice.compiler.config.CompilerProperties;
 import com.xbk.lattice.compiler.domain.AnalyzePayload;
 import com.xbk.lattice.compiler.domain.AnalyzedConcept;
 import com.xbk.lattice.compiler.domain.ConceptSection;
@@ -38,11 +39,13 @@ public class AnalyzeNode {
 
     private final SchemaAwarePrompts schemaAwarePrompts;
 
+    private final DocumentTopicConceptExtractor documentTopicConceptExtractor;
+
     /**
      * 创建分析节点。
      */
     public AnalyzeNode() {
-        this(null, null);
+        this(null, null, (CompilerProperties.DocumentTopics) null);
     }
 
     /**
@@ -51,7 +54,7 @@ public class AnalyzeNode {
      * @param llmGateway LLM 网关
      */
     public AnalyzeNode(LlmGateway llmGateway) {
-        this(llmGateway, null);
+        this(llmGateway, null, (CompilerProperties.DocumentTopics) null);
     }
 
     /**
@@ -61,8 +64,52 @@ public class AnalyzeNode {
      * @param schemaAwarePrompts SCHEMA 感知 Prompt 服务
      */
     public AnalyzeNode(LlmGateway llmGateway, SchemaAwarePrompts schemaAwarePrompts) {
+        this(llmGateway, schemaAwarePrompts, (CompilerProperties.DocumentTopics) null);
+    }
+
+    /**
+     * 创建分析节点。
+     *
+     * @param llmGateway LLM 网关
+     * @param schemaAwarePrompts SCHEMA 感知 Prompt 服务
+     * @param compilerProperties 编译配置
+     */
+    public AnalyzeNode(
+            LlmGateway llmGateway,
+            SchemaAwarePrompts schemaAwarePrompts,
+            CompilerProperties compilerProperties
+    ) {
+        this(llmGateway, schemaAwarePrompts, getDocumentTopics(compilerProperties));
+    }
+
+    /**
+     * 创建分析节点。
+     *
+     * @param llmGateway LLM 网关
+     * @param schemaAwarePrompts SCHEMA 感知 Prompt 服务
+     * @param documentTopics 长文档专题拆分配置
+     */
+    private AnalyzeNode(
+            LlmGateway llmGateway,
+            SchemaAwarePrompts schemaAwarePrompts,
+            CompilerProperties.DocumentTopics documentTopics
+    ) {
         this.llmGateway = llmGateway;
         this.schemaAwarePrompts = schemaAwarePrompts;
+        this.documentTopicConceptExtractor = new DocumentTopicConceptExtractor(documentTopics);
+    }
+
+    /**
+     * 从编译配置中读取长文档专题配置。
+     *
+     * @param compilerProperties 编译配置
+     * @return 长文档专题配置
+     */
+    private static CompilerProperties.DocumentTopics getDocumentTopics(CompilerProperties compilerProperties) {
+        if (compilerProperties == null) {
+            return null;
+        }
+        return compilerProperties.getDocumentTopics();
     }
 
     /**
@@ -95,6 +142,12 @@ public class AnalyzeNode {
             List<AnalyzedConcept> structuredConcepts = analyzeStructuredConcepts(sortedSources, sourcePaths);
             if (!structuredConcepts.isEmpty()) {
                 analyzedConcepts.addAll(structuredConcepts);
+                continue;
+            }
+
+            List<AnalyzedConcept> topicAnalyzedConcepts = documentTopicConceptExtractor.extract(groupKey, sortedSources);
+            if (!topicAnalyzedConcepts.isEmpty()) {
+                analyzedConcepts.addAll(topicAnalyzedConcepts);
                 continue;
             }
 
