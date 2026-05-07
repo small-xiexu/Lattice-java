@@ -1,6 +1,5 @@
 package com.xbk.lattice.compiler.service;
 
-import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -14,7 +13,6 @@ import java.util.List;
  * @author xiexu
  */
 @Repository
-@Profile("jdbc")
 public class SynthesisArtifactJdbcStore implements SynthesisArtifactStore {
 
     private final JdbcTemplate jdbcTemplate;

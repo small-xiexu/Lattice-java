@@ -1,11 +1,6 @@
 spring:
   application:
     name: lattice-app
-  profiles:
-    default: jdbc
-    group:
-      local-dev:
-        - jdbc
   servlet:
     multipart:
       max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:20MB}
@@ -24,14 +19,15 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
     password: ${SPRING_DATASOURCE_PASSWORD:postgres}
-  flyway:
-    enabled: ${SPRING_FLYWAY_ENABLED:true}
-    schemas: ${SPRING_FLYWAY_SCHEMAS:lattice}
-    default-schema: ${SPRING_FLYWAY_DEFAULT_SCHEMA:lattice}
   data:
     redis:
       host: ${LATTICE_REDIS_HOST:127.0.0.1}
       port: ${LATTICE_REDIS_PORT:6379}
+
+mybatis:
+  mapper-locations: classpath*:/com/xbk/lattice/**/mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
 
 management:
   tracing:

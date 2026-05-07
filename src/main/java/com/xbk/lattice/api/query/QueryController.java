@@ -2,7 +2,6 @@ package com.xbk.lattice.api.query;
 
 import com.xbk.lattice.query.service.QueryFacadeService;
 import jakarta.validation.Valid;
-import org.springframework.context.annotation.Profile;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,7 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 @RequestMapping("/api/v1/query")
 public class QueryController {
 

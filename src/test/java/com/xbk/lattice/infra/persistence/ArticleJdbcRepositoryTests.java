@@ -14,18 +14,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * ArticleJdbcRepository 测试
  *
- * 职责：验证 Flyway 建表和最小文章落盘能力
+ * 职责：验证 手动 DDL 建表和最小文章落盘能力
  *
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b1_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b1_test",
-        "spring.flyway.default-schema=lattice_b1_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key"
 })
@@ -38,12 +34,12 @@ class ArticleJdbcRepositoryTests {
     private ArticleJdbcRepository articleJdbcRepository;
 
     /**
-     * 验证 Flyway 已创建 articles 表。
+     * 验证 手动 DDL 已创建 articles 表。
      */
     @Test
-    void shouldCreateArticlesTableByFlyway() {
+    void shouldCreateArticlesTableByManualDdl() {
         Integer count = jdbcTemplate.queryForObject(
-                "select count(*) from information_schema.tables where table_schema = 'lattice_b1_test' and table_name = 'articles'",
+                "select count(*) from information_schema.tables where table_schema = 'lattice' and table_name = 'articles'",
                 Integer.class
         );
 
@@ -112,7 +108,7 @@ class ArticleJdbcRepositoryTests {
                 """
                         select column_name
                         from information_schema.columns
-                        where table_schema = 'lattice_b1_test'
+                        where table_schema = 'lattice'
                           and table_name = 'articles'
                         order by ordinal_position
                         """,
@@ -125,7 +121,11 @@ class ArticleJdbcRepositoryTests {
                 .contains("depends_on")
                 .contains("related")
                 .contains("confidence")
-                .contains("review_status");
+                .contains("review_status")
+                .contains("risk_level")
+                .contains("risk_reasons")
+                .contains("is_hotspot")
+                .contains("requires_result_verification");
     }
 
     /**

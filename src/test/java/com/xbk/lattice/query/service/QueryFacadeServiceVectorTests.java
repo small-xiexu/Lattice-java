@@ -42,7 +42,9 @@ class QueryFacadeServiceVectorTests {
                 new InMemoryQueryCacheStore(),
                 new ReviewerAgent(new FixedReviewerGateway(), new ReviewResultParser()),
                 new QueryReviewProperties(),
-                List.of(vectorHit)
+                List.of(vectorHit),
+                new VectorEnabledQueryRetrievalSettingsService(),
+                null
         );
         QueryFacadeService queryFacadeService = QueryGraphTestSupport.createQueryFacadeService(
                 queryGraphOrchestrator,
@@ -74,6 +76,39 @@ class QueryFacadeServiceVectorTests {
         @Override
         public String review(String reviewPrompt) {
             return "{\"approved\":true,\"rewriteRequired\":false,\"riskLevel\":\"LOW\",\"issues\":[],\"userFacingRewriteHints\":[],\"cacheWritePolicy\":\"WRITE\"}";
+        }
+    }
+
+    /**
+     * 固定开启向量通道的检索配置服务替身。
+     *
+     * @author xiexu
+     */
+    private static class VectorEnabledQueryRetrievalSettingsService extends QueryRetrievalSettingsService {
+
+        /**
+         * 返回禁用意图感知向量裁剪的配置，确保本测试只验证向量通道接入。
+         *
+         * @return 检索配置
+         */
+        @Override
+        public QueryRetrievalSettingsState getCurrentState() {
+            return new QueryRetrievalSettingsState(
+                    true,
+                    QueryRetrievalSettingsState.DEFAULT_REWRITE_ENABLED,
+                    false,
+                    QueryRetrievalSettingsState.DEFAULT_FTS_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_REFKEY_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_ARTICLE_CHUNK_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_SOURCE_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_SOURCE_CHUNK_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_FACT_CARD_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_CONTRIBUTION_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_GRAPH_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_ARTICLE_VECTOR_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_CHUNK_VECTOR_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_RRF_K
+            );
         }
     }
 
@@ -379,12 +414,11 @@ class QueryFacadeServiceVectorTests {
         /**
          * 返回预置命中。
          *
-         * @param question 查询问题
-         * @param limit 返回数量
+         * @param executionContext 检索执行上下文
          * @return 命中列表
          */
         @Override
-        public List<QueryArticleHit> search(String question, int limit) {
+        public List<QueryArticleHit> search(RetrievalExecutionContext executionContext) {
             return hits;
         }
     }

@@ -3,8 +3,9 @@ package com.xbk.lattice.documentparse.infra.extractor;
 import com.xbk.lattice.documentparse.domain.DocumentParseMode;
 import com.xbk.lattice.documentparse.domain.model.ParseOutput;
 import com.xbk.lattice.documentparse.domain.model.ParseRequest;
+import com.xbk.lattice.documentparse.extractor.CsvTextExtractor;
+import com.xbk.lattice.documentparse.extractor.SourceExtractionResult;
 import com.xbk.lattice.documentparse.port.NativeExtractor;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -23,13 +24,21 @@ import java.util.Set;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class TextFileNativeExtractor implements NativeExtractor {
 
     private static final Set<String> SUPPORTED_FORMATS = new HashSet<String>(Arrays.asList(
             "md", "txt", "markdown", "csv", "java", "xml", "properties",
             "yml", "yaml", "json", "vue", "js", "css", "html", "sh", "py"
     ));
+
+    private final CsvTextExtractor csvTextExtractor;
+
+    /**
+     * 创建文本文件本地抽取器。
+     */
+    public TextFileNativeExtractor() {
+        this.csvTextExtractor = new CsvTextExtractor();
+    }
 
     /**
      * 判断当前抽取器是否支持指定格式。
@@ -52,6 +61,9 @@ public class TextFileNativeExtractor implements NativeExtractor {
      */
     @Override
     public ParseOutput extract(ParseRequest parseRequest) throws IOException {
+        if ("csv".equals(normalize(parseRequest.getFormat()))) {
+            return extractCsv(parseRequest);
+        }
         String content = Files.readString(parseRequest.getFilePath(), StandardCharsets.UTF_8);
         String normalizedContent = content == null ? "" : content.trim();
         if (normalizedContent.isEmpty()) {
@@ -69,6 +81,31 @@ public class TextFileNativeExtractor implements NativeExtractor {
                 "filesystem",
                 "{}",
                 false,
+                parseRequest.getRelativePath()
+        );
+    }
+
+    private ParseOutput extractCsv(ParseRequest parseRequest) throws IOException {
+        SourceExtractionResult extractionResult = csvTextExtractor.extract(parseRequest.getFilePath());
+        if (extractionResult == null) {
+            return null;
+        }
+        String extractedContent = extractionResult.getContent();
+        if (extractedContent == null || extractedContent.trim().isEmpty()) {
+            return null;
+        }
+        return new ParseOutput(
+                null,
+                parseRequest.getRelativePath(),
+                extractedContent.trim(),
+                "",
+                extractionResult.getStructuredContentJson(),
+                parseRequest.getFormat(),
+                parseRequest.getFileSize(),
+                DocumentParseMode.TEXT_READ,
+                "filesystem",
+                extractionResult.getMetadataJson(),
+                extractionResult.isVerbatim(),
                 parseRequest.getRelativePath()
         );
     }

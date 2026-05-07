@@ -2,12 +2,9 @@ package com.xbk.lattice.infra.persistence;
 
 import com.xbk.lattice.infra.chunking.SemanticChunker;
 import com.xbk.lattice.infra.chunking.TextChunk;
-import org.springframework.context.annotation.Profile;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.xbk.lattice.infra.persistence.mapper.SourceFileChunkMapper;
 import org.springframework.stereotype.Repository;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,24 +16,23 @@ import java.util.List;
  * @author xiexu
  */
 @Repository
-@Profile("jdbc")
 public class SourceFileChunkJdbcRepository {
 
     private static final int DEFAULT_MAX_CHARS = 3600;
 
     private static final float DEFAULT_OVERLAP_RATIO = 0.15f;
 
-    private final JdbcTemplate jdbcTemplate;
+    private final SourceFileChunkMapper sourceFileChunkMapper;
 
     private final SemanticChunker semanticChunker;
 
     /**
      * 创建 SourceFileChunk JDBC 仓储。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @param sourceFileChunkMapper 源文件分块 Mapper
      */
-    public SourceFileChunkJdbcRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public SourceFileChunkJdbcRepository(SourceFileChunkMapper sourceFileChunkMapper) {
+        this.sourceFileChunkMapper = sourceFileChunkMapper;
         this.semanticChunker = new SemanticChunker();
     }
 
@@ -58,36 +54,20 @@ public class SourceFileChunkJdbcRepository {
      * @param sourceFileChunkRecords 分块记录
      */
     public void replaceChunks(Long sourceFileId, String filePath, List<SourceFileChunkRecord> sourceFileChunkRecords) {
-        if (jdbcTemplate == null) {
+        if (sourceFileChunkMapper == null) {
             return;
         }
 
         if (sourceFileId == null) {
-            jdbcTemplate.update("delete from source_file_chunks where file_path = ?", filePath);
+            sourceFileChunkMapper.deleteByFilePath(filePath);
         }
         else {
-            jdbcTemplate.update("delete from source_file_chunks where source_file_id = ?", sourceFileId);
+            sourceFileChunkMapper.deleteBySourceFileId(sourceFileId);
         }
-        String sql = """
-                insert into source_file_chunks (
-                    source_file_id, file_path, chunk_index, chunk_text, is_verbatim,
-                    file_path_norm, search_tsv
-                )
-                values (?, ?, ?, ?, ?, ?, to_tsvector('simple'::regconfig, ?))
-                """;
         for (SourceFileChunkRecord sourceFileChunkRecord : sourceFileChunkRecords) {
             String filePathNorm = safeText(sourceFileChunkRecord.getFilePath()).toLowerCase();
             String searchText = buildSearchText(sourceFileChunkRecord);
-            jdbcTemplate.update(
-                    sql,
-                    sourceFileChunkRecord.getSourceFileId(),
-                    sourceFileChunkRecord.getFilePath(),
-                    sourceFileChunkRecord.getChunkIndex(),
-                    sourceFileChunkRecord.getChunkText(),
-                    sourceFileChunkRecord.isVerbatim(),
-                    filePathNorm,
-                    searchText
-            );
+            sourceFileChunkMapper.insert(sourceFileChunkRecord, filePathNorm, searchText);
         }
     }
 
@@ -132,11 +112,11 @@ public class SourceFileChunkJdbcRepository {
      * @return 重建的源文件数量
      */
     public int rebuildAll(List<SourceFileRecord> sourceFileRecords) {
-        if (jdbcTemplate == null) {
+        if (sourceFileChunkMapper == null) {
             return 0;
         }
 
-        jdbcTemplate.execute("TRUNCATE TABLE source_file_chunks RESTART IDENTITY");
+        sourceFileChunkMapper.truncateAll();
         int rebuiltCount = 0;
         for (SourceFileRecord sourceFileRecord : sourceFileRecords) {
             replaceChunksFromContent(
@@ -156,12 +136,10 @@ public class SourceFileChunkJdbcRepository {
      * @return chunk 数量
      */
     public int countAll() {
-        if (jdbcTemplate == null) {
+        if (sourceFileChunkMapper == null) {
             return 0;
         }
-
-        Integer count = jdbcTemplate.queryForObject("select count(*) from source_file_chunks", Integer.class);
-        return count == null ? 0 : count;
+        return sourceFileChunkMapper.countAll();
     }
 
     /**
@@ -170,16 +148,10 @@ public class SourceFileChunkJdbcRepository {
      * @return 分块记录列表
      */
     public List<SourceFileChunkRecord> findAll() {
-        if (jdbcTemplate == null) {
+        if (sourceFileChunkMapper == null) {
             return List.of();
         }
-
-        String sql = """
-                select source_file_id, file_path, chunk_index, chunk_text, is_verbatim
-                from source_file_chunks
-                order by file_path, chunk_index
-                """;
-        return jdbcTemplate.query(sql, this::mapSourceFileChunkRecord);
+        return sourceFileChunkMapper.findAll();
     }
 
     /**
@@ -189,18 +161,10 @@ public class SourceFileChunkJdbcRepository {
      * @return 分块记录列表
      */
     public List<SourceFileChunkRecord> findByFilePaths(List<String> filePaths) {
-        if (jdbcTemplate == null || filePaths == null || filePaths.isEmpty()) {
+        if (sourceFileChunkMapper == null || filePaths == null || filePaths.isEmpty()) {
             return List.of();
         }
-
-        String placeholders = String.join(", ", java.util.Collections.nCopies(filePaths.size(), "?"));
-        String sql = """
-                select source_file_id, file_path, chunk_index, chunk_text, is_verbatim
-                from source_file_chunks
-                where file_path in (%s)
-                order by file_path, chunk_index
-                """.formatted(placeholders);
-        return jdbcTemplate.query(sql, this::mapSourceFileChunkRecord, filePaths.toArray());
+        return sourceFileChunkMapper.findByFilePaths(filePaths);
     }
 
     /**
@@ -218,54 +182,28 @@ public class SourceFileChunkJdbcRepository {
             int limit,
             String tsConfig
     ) {
-        if (jdbcTemplate == null) {
+        if (sourceFileChunkMapper == null) {
             return List.of();
         }
-        List<String> normalizedTokens = normalizeTokens(queryTokens);
+        List<String> normalizedTokens = LexicalSearchTokenBudget.normalize(queryTokens);
         if (!hasText(question) && normalizedTokens.isEmpty()) {
             return List.of();
         }
-
-        List<Object> parameters = new ArrayList<Object>();
-        parameters.add(normalizeTsConfig(tsConfig));
-        parameters.add(question == null ? "" : question);
-        StringBuilder sqlBuilder = new StringBuilder();
-        sqlBuilder.append("""
-                with query as (
-                    select plainto_tsquery(cast(? as regconfig), ?) as tsq
-                )
-                select sfc.source_file_id,
-                       sfc.file_path,
-                       sfc.chunk_index,
-                       sfc.chunk_text,
-                       sfc.is_verbatim,
-                       ts_rank_cd(sfc.search_tsv, query.tsq)
-                """);
-        appendTokenScore(
-                sqlBuilder,
-                parameters,
-                normalizedTokens,
-                List.of("sfc.file_path_norm", "lower(sfc.chunk_text)"),
-                List.of(Double.valueOf(1.5D), Double.valueOf(3.0D))
+        List<String> likeTokens = LexicalSearchTokenBudget.selectLikeTokens(normalizedTokens);
+        List<String> likePatterns = likeTokens.stream()
+                .map(this::likePattern)
+                .toList();
+        List<String> assignmentPatterns = likeTokens.stream()
+                .filter(this::shouldScoreStructuredAssignment)
+                .map(this::structuredAssignmentPattern)
+                .toList();
+        return sourceFileChunkMapper.searchLexical(
+                normalizeTsConfig(tsConfig),
+                question == null ? "" : question,
+                likePatterns,
+                assignmentPatterns,
+                safeLimit(limit)
         );
-        sqlBuilder.append("""
-                       as score
-                from source_file_chunks sfc
-                cross join query
-                where sfc.search_tsv @@ query.tsq
-                """);
-        appendTokenWhere(
-                sqlBuilder,
-                parameters,
-                normalizedTokens,
-                List.of("sfc.file_path_norm", "lower(sfc.chunk_text)")
-        );
-        sqlBuilder.append("""
-                order by score desc, sfc.indexed_at desc, sfc.file_path asc, sfc.chunk_index asc
-                limit ?
-                """);
-        parameters.add(Integer.valueOf(safeLimit(limit)));
-        return jdbcTemplate.query(sqlBuilder.toString(), this::mapLexicalSearchRecord, parameters.toArray());
     }
 
     /**
@@ -278,155 +216,19 @@ public class SourceFileChunkJdbcRepository {
      * @return 邻近分块记录
      */
     public List<LexicalSearchRecord> findNeighborChunks(String filePath, int chunkIndex, int radius, int limit) {
-        if (jdbcTemplate == null || jdbcTemplate.getDataSource() == null || !hasText(filePath) || radius <= 0) {
+        if (sourceFileChunkMapper == null || !hasText(filePath) || radius <= 0) {
             return List.of();
         }
 
         int startIndex = Math.max(0, chunkIndex - radius);
         int endIndex = chunkIndex + radius;
-        String sql = """
-                select sfc.source_file_id,
-                       sfc.file_path,
-                       sfc.chunk_index,
-                       sfc.chunk_text,
-                       sfc.is_verbatim,
-                       (1.0 / (1 + abs(sfc.chunk_index - ?))) as score
-                from source_file_chunks sfc
-                where sfc.file_path = ?
-                  and sfc.chunk_index between ? and ?
-                  and sfc.chunk_index <> ?
-                order by abs(sfc.chunk_index - ?), sfc.chunk_index asc
-                limit ?
-                """;
-        return jdbcTemplate.query(
-                sql,
-                this::mapLexicalSearchRecord,
-                Integer.valueOf(chunkIndex),
+        return sourceFileChunkMapper.findNeighborChunks(
                 filePath,
-                Integer.valueOf(startIndex),
-                Integer.valueOf(endIndex),
-                Integer.valueOf(chunkIndex),
-                Integer.valueOf(chunkIndex),
-                Integer.valueOf(safeLimit(limit))
+                chunkIndex,
+                startIndex,
+                endIndex,
+                safeLimit(limit)
         );
-    }
-
-    /**
-     * 映射单条分块记录。
-     *
-     * @param resultSet 结果集
-     * @param rowNum 行号
-     * @return 分块记录
-     * @throws SQLException SQL 异常
-     */
-    private SourceFileChunkRecord mapSourceFileChunkRecord(ResultSet resultSet, int rowNum) throws SQLException {
-        return new SourceFileChunkRecord(
-                readLong(resultSet, "source_file_id"),
-                resultSet.getString("file_path"),
-                resultSet.getInt("chunk_index"),
-                resultSet.getString("chunk_text"),
-                resultSet.getBoolean("is_verbatim")
-        );
-    }
-
-    /**
-     * 映射 lexical 搜索记录。
-     *
-     * @param resultSet 结果集
-     * @param rowNum 行号
-     * @return lexical 搜索记录
-     * @throws SQLException SQL 异常
-     */
-    private LexicalSearchRecord mapLexicalSearchRecord(ResultSet resultSet, int rowNum) throws SQLException {
-        String filePath = resultSet.getString("file_path");
-        int chunkIndex = resultSet.getInt("chunk_index");
-        return new LexicalSearchRecord(
-                null,
-                filePath + "#" + chunkIndex,
-                filePath,
-                filePath,
-                resultSet.getString("chunk_text"),
-                buildMetadataJson(filePath, chunkIndex, resultSet.getBoolean("is_verbatim")),
-                List.of(filePath),
-                Integer.valueOf(chunkIndex),
-                Boolean.valueOf(resultSet.getBoolean("is_verbatim")),
-                resultSet.getDouble("score")
-        );
-    }
-
-    /**
-     * 拼接 token 评分表达式。
-     *
-     * @param sqlBuilder SQL 构造器
-     * @param parameters SQL 参数
-     * @param queryTokens 查询 token
-     * @param columns 参与匹配的列
-     * @param weights 列对应权重
-     */
-    private void appendTokenScore(
-            StringBuilder sqlBuilder,
-            List<Object> parameters,
-            List<String> queryTokens,
-            List<String> columns,
-            List<Double> weights
-    ) {
-        for (String queryToken : queryTokens) {
-            String pattern = likePattern(queryToken);
-            for (int index = 0; index < columns.size(); index++) {
-                sqlBuilder.append(" + case when ")
-                        .append(columns.get(index))
-                        .append(" like ? then ")
-                        .append(weights.get(index).doubleValue())
-                        .append(" else 0 end\n");
-                parameters.add(pattern);
-            }
-            if (shouldScoreStructuredAssignment(queryToken)) {
-                sqlBuilder.append(" + case when lower(sfc.chunk_text) like ? then 4.0 else 0 end\n");
-                parameters.add(structuredAssignmentPattern(queryToken));
-            }
-        }
-    }
-
-    /**
-     * 拼接 token 过滤条件。
-     *
-     * @param sqlBuilder SQL 构造器
-     * @param parameters SQL 参数
-     * @param queryTokens 查询 token
-     * @param columns 参与匹配的列
-     */
-    private void appendTokenWhere(
-            StringBuilder sqlBuilder,
-            List<Object> parameters,
-            List<String> queryTokens,
-            List<String> columns
-    ) {
-        for (String queryToken : queryTokens) {
-            String pattern = likePattern(queryToken);
-            for (String column : columns) {
-                sqlBuilder.append("                  or ").append(column).append(" like ?\n");
-                parameters.add(pattern);
-            }
-        }
-    }
-
-    /**
-     * 规范化查询 token。
-     *
-     * @param queryTokens 原始 token
-     * @return 规范化 token
-     */
-    private List<String> normalizeTokens(List<String> queryTokens) {
-        if (queryTokens == null || queryTokens.isEmpty()) {
-            return List.of();
-        }
-        List<String> normalizedTokens = new ArrayList<String>();
-        for (String queryToken : queryTokens) {
-            if (hasText(queryToken)) {
-                normalizedTokens.add(queryToken.toLowerCase());
-            }
-        }
-        return normalizedTokens;
     }
 
     /**
@@ -456,7 +258,23 @@ public class SourceFileChunkJdbcRepository {
      * @return LIKE 模式
      */
     private String likePattern(String queryToken) {
-        return "%" + queryToken + "%";
+        return "%" + escapeLikePattern(queryToken) + "%";
+    }
+
+    /**
+     * 转义 LIKE 模式中的通配符。
+     *
+     * @param value 原始值
+     * @return 转义后的 LIKE 片段
+     */
+    private String escapeLikePattern(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        return value
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
     }
 
     /**
@@ -488,25 +306,7 @@ public class SourceFileChunkJdbcRepository {
      * @return LIKE 模式
      */
     private String structuredAssignmentPattern(String queryToken) {
-        return "%=" + queryToken + "%";
-    }
-
-    /**
-     * 构建源文件分块元数据 JSON。
-     *
-     * @param filePath 文件路径
-     * @param chunkIndex 分块序号
-     * @param verbatim 是否逐字内容
-     * @return 元数据 JSON
-     */
-    private String buildMetadataJson(String filePath, int chunkIndex, boolean verbatim) {
-        return "{\"filePath\":\""
-                + filePath.replace("\"", "\\\"")
-                + "\",\"chunkIndex\":"
-                + chunkIndex
-                + ",\"verbatim\":"
-                + verbatim
-                + "}";
+        return "%=" + escapeLikePattern(queryToken) + "%";
     }
 
     /**
@@ -543,16 +343,4 @@ public class SourceFileChunkJdbcRepository {
         return value != null && !value.isBlank();
     }
 
-    /**
-     * 读取可空长整型列。
-     *
-     * @param resultSet 结果集
-     * @param columnName 列名
-     * @return 长整型值
-     * @throws SQLException SQL 异常
-     */
-    private Long readLong(ResultSet resultSet, String columnName) throws SQLException {
-        Object value = resultSet.getObject(columnName);
-        return value == null ? null : resultSet.getLong(columnName);
-    }
 }

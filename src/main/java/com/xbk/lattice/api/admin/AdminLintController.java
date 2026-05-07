@@ -4,7 +4,6 @@ import com.xbk.lattice.governance.LintFixResult;
 import com.xbk.lattice.governance.LintFixService;
 import com.xbk.lattice.governance.LintReport;
 import com.xbk.lattice.governance.LintService;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 @RequestMapping("/api/v1/admin/lint")
 public class AdminLintController {
 

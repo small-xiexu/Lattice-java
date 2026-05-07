@@ -22,9 +22,13 @@ public class QueryGraphState {
 
     private String queryIntent;
 
+    private String answerShape;
+
     private String rewriteAuditRef;
 
     private String retrievalStrategyRef;
+
+    private String retrievalChannelRunsRef;
 
     private String retrievalAuditRef;
 
@@ -53,6 +57,10 @@ public class QueryGraphState {
     private String sourceHitsRef;
 
     private String sourceChunkHitsRef;
+
+    private String factCardHitsRef;
+
+    private String factCardVectorHitsRef;
 
     private String contributionHitsRef;
 

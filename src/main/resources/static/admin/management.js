@@ -47,6 +47,8 @@
         sources: [],
         sourceRuns: [],
         sourceFiles: [],
+        queryFeedbackItems: [],
+        selectedQueryFeedbackId: null,
         activeRunId: null
     };
 
@@ -74,6 +76,15 @@
         bindIfPresent("refresh-sources", "click", loadSources);
         bindIfPresent("search-articles", "click", loadArticles);
         bindIfPresent("article-source-filter", "change", loadArticles);
+        bindIfPresent("article-review-status", "change", loadArticles);
+        bindIfPresent("article-risk-filter", "change", loadArticles);
+        bindIfPresent("refresh-hotspots", "click", refreshHotspots);
+        bindIfPresent("approve-article-review", "click", approveSelectedArticleReview);
+        bindIfPresent("request-article-changes", "click", requestSelectedArticleChanges);
+        bindIfPresent("refresh-query-feedback", "click", loadQueryFeedback);
+        bindIfPresent("query-feedback-status-filter", "change", loadQueryFeedback);
+        bindIfPresent("resolve-query-feedback", "click", resolveSelectedQueryFeedback);
+        bindIfPresent("dismiss-query-feedback", "click", dismissSelectedQueryFeedback);
         bindIfPresent("submit-upload-job", "click", uploadAndCompile);
         bindIfPresent("create-git-source", "click", createGitSourceAndSync);
         bindIfPresent("toggle-inline-git-credential", "click", toggleInlineGitCredentialPanel);
@@ -578,7 +589,7 @@
         if (normalized === "knowledge-status") {
             return "knowledge-upload";
         }
-        const allowedTabs = ["knowledge-upload", "knowledge-runs", "knowledge-articles"];
+        const allowedTabs = ["knowledge-upload", "knowledge-runs", "knowledge-articles", "knowledge-feedback"];
         return allowedTabs.includes(normalized) ? normalized : null;
     }
 
@@ -599,7 +610,8 @@
         await Promise.all([
             loadSourceCredentials(),
             loadProcessingTasks({background: false}),
-            loadArticles()
+            loadArticles(),
+            loadQueryFeedback()
         ]);
         applyGitAccessMode(resolveGitAccessMode());
         applyInitialRouteState();
@@ -693,10 +705,10 @@
             state.selectedSourceId = sourceId;
             const results = await Promise.all([
                 fetchJson("/api/v1/admin/sources/" + encodeURIComponent(sourceId)),
-                fetchJson("/api/v1/admin/sources/" + encodeURIComponent(sourceId) + "/runs"),
+                fetchJson("/api/v1/admin/sources/" + encodeURIComponent(sourceId) + "/processing-tasks?limit=20"),
                 fetchJson("/api/v1/admin/sources/" + encodeURIComponent(sourceId) + "/files")
             ]);
-            renderSourceDetail(results[0], results[1] || [], results[2] || []);
+            renderSourceDetail(results[0], resolveSourceProcessingHistoryItems(results[1]), results[2] || []);
             highlightSource(sourceId);
         }
         catch (error) {
@@ -811,13 +823,12 @@
 
     async function loadArticles() {
         try {
-            const query = encodeURIComponent(document.getElementById("article-query").value.trim());
-            const lifecycle = encodeURIComponent(document.getElementById("article-lifecycle").value.trim());
+            const query = document.getElementById("article-query").value.trim();
+            const lifecycle = document.getElementById("article-lifecycle").value.trim();
             const sourceId = document.getElementById("article-source-filter").value.trim();
-            const sourceIdQuery = sourceId ? "&sourceId=" + encodeURIComponent(sourceId) : "";
-            const response = await fetchJson(
-                    "/api/v1/admin/articles?query=" + query + "&lifecycle=" + lifecycle + sourceIdQuery
-            );
+            const reviewStatus = document.getElementById("article-review-status").value.trim();
+            const riskFilter = document.getElementById("article-risk-filter").value.trim();
+            const response = await fetchJson(buildArticleListRequestUrl(query, lifecycle, sourceId, reviewStatus, riskFilter));
             state.articleCount = Number(response.count || 0);
             renderArticleList(response);
             const items = response.items || [];
@@ -841,17 +852,380 @@
         }
     }
 
+    async function refreshHotspots() {
+        renderHotspotRefreshStatus({loading: true});
+        try {
+            const response = await fetchJson("/api/v1/admin/articles/hotspots/refresh", {
+                method: "POST",
+                body: JSON.stringify({})
+            });
+            renderHotspotRefreshStatus(response);
+            const riskFilterElement = document.getElementById("article-risk-filter");
+            if (riskFilterElement) {
+                riskFilterElement.value = "requiresResultVerification:true";
+            }
+            await refreshSummary();
+            await loadArticles();
+            setStatus(buildHotspotRefreshStatusText(response), "success");
+        }
+        catch (error) {
+            renderHotspotRefreshStatus(null);
+            showError("刷新热点统计失败", error);
+        }
+    }
+
+    async function loadQueryFeedback() {
+        const statusFilterElement = document.getElementById("query-feedback-status-filter");
+        if (!statusFilterElement) {
+            return;
+        }
+        try {
+            const status = statusFilterElement.value.trim();
+            const response = await fetchJson(buildQueryFeedbackListRequestUrl(status, 50));
+            const items = response.items || [];
+            state.queryFeedbackItems = items;
+            document.getElementById("query-feedback-count").textContent = String(response.count || items.length || 0);
+            renderQueryFeedbackList(items);
+            if (items.length === 0) {
+                clearQueryFeedbackDetail();
+                renderKnowledgeHelpSystem();
+                return;
+            }
+            if (!containsQueryFeedback(items, state.selectedQueryFeedbackId)) {
+                await loadQueryFeedbackDetail(items[0].id);
+            }
+            else {
+                highlightQueryFeedback(state.selectedQueryFeedbackId);
+            }
+            renderKnowledgeHelpSystem();
+        }
+        catch (error) {
+            showError("加载结果反馈失败", error);
+        }
+    }
+
+    function buildQueryFeedbackListRequestUrl(status, limit) {
+        const statusParam = encodeURIComponent(String(status || "").trim());
+        const limitParam = encodeURIComponent(String(limit || 50));
+        return "/api/v1/admin/query-feedback?status=" + statusParam + "&limit=" + limitParam;
+    }
+
+    function renderQueryFeedbackList(items) {
+        const list = document.getElementById("query-feedback-list");
+        if (!list) {
+            return;
+        }
+        if (!items || items.length === 0) {
+            list.innerHTML = "<div class='list-item'><p class='item-summary'>当前没有结果反馈。</p></div>";
+            return;
+        }
+        list.innerHTML = items.map(renderQueryFeedbackListItem).join("");
+        list.querySelectorAll("[data-query-feedback-id]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                loadQueryFeedbackDetail(parseOptionalInteger(button.dataset.queryFeedbackId));
+            });
+        });
+        highlightQueryFeedback(state.selectedQueryFeedbackId);
+    }
+
+    function renderQueryFeedbackListItem(item) {
+        return "<button class='list-item query-feedback-list-item' data-query-feedback-id='"
+                + escapeHtml(String(item.id || ""))
+                + "' type='button'>"
+                + "<div class='meta-row'>"
+                + renderBadge(item.status)
+                + renderBadge(item.feedbackType)
+                + "</div>"
+                + "<p class='item-kicker'>结果反馈</p>"
+                + "<h4>" + escapeHtml(compactText(item.question || "未记录问题", 80)) + "</h4>"
+                + "<p class='item-summary'>" + escapeHtml(compactText(item.answerSummary || "暂无答案摘要", 120)) + "</p>"
+                + "<p class='item-caption'>" + escapeHtml(buildQueryFeedbackCaption(item)) + "</p>"
+                + "</button>";
+    }
+
+    async function loadQueryFeedbackDetail(feedbackId) {
+        if (!feedbackId) {
+            clearQueryFeedbackDetail();
+            return;
+        }
+        try {
+            state.selectedQueryFeedbackId = feedbackId;
+            const response = await fetchJson("/api/v1/admin/query-feedback/" + encodeURIComponent(feedbackId));
+            renderQueryFeedbackDetail(response);
+            highlightQueryFeedback(feedbackId);
+        }
+        catch (error) {
+            showError("加载结果反馈详情失败", error);
+        }
+    }
+
+    function renderQueryFeedbackDetail(response) {
+        const feedback = response && response.feedback ? response.feedback : null;
+        if (!feedback) {
+            clearQueryFeedbackDetail();
+            return;
+        }
+        document.getElementById("query-feedback-detail-title").textContent = "结果反馈 #" + String(feedback.id || "");
+        document.getElementById("query-feedback-detail-meta").textContent = [
+            getBadgeLabel(feedback.status),
+            getBadgeLabel(feedback.feedbackType),
+            feedback.createdAt ? "提交时间：" + formatDateTime(feedback.createdAt) : "",
+            feedback.reportedBy ? "反馈人：" + feedback.reportedBy : ""
+        ].filter(Boolean).join(" | ");
+        document.getElementById("query-feedback-question").textContent = feedback.question || "暂无问题";
+        document.getElementById("query-feedback-answer").textContent = feedback.answerSummary || "暂无答案摘要";
+        document.getElementById("query-feedback-comment").textContent = feedback.comment || "暂无反馈说明";
+        document.getElementById("query-feedback-articles").innerHTML = renderTagGroup(feedback.articleKeys || []);
+        document.getElementById("query-feedback-sources").innerHTML = renderTagGroup(feedback.sourcePaths || []);
+        renderQueryFeedbackActionPanel(feedback);
+        renderQueryFeedbackHistory(response.audits || []);
+    }
+
+    function clearQueryFeedbackDetail() {
+        state.selectedQueryFeedbackId = null;
+        const title = document.getElementById("query-feedback-detail-title");
+        if (!title) {
+            return;
+        }
+        title.textContent = "请选择一条反馈";
+        document.getElementById("query-feedback-detail-meta").textContent = "";
+        document.getElementById("query-feedback-question").textContent = "暂无问题";
+        document.getElementById("query-feedback-answer").textContent = "暂无答案摘要";
+        document.getElementById("query-feedback-comment").textContent = "暂无反馈说明";
+        document.getElementById("query-feedback-articles").innerHTML = renderTagGroup([]);
+        document.getElementById("query-feedback-sources").innerHTML = renderTagGroup([]);
+        renderQueryFeedbackActionPanel(null);
+        renderQueryFeedbackHistory([]);
+    }
+
+    function renderQueryFeedbackActionPanel(feedback) {
+        const panel = document.getElementById("query-feedback-action-panel");
+        if (!panel) {
+            return;
+        }
+        panel.hidden = normalizeStatus(feedback && feedback.status) !== "PENDING";
+    }
+
+    function renderQueryFeedbackHistory(items) {
+        const container = document.getElementById("query-feedback-history");
+        if (!container) {
+            return;
+        }
+        if (!items || items.length === 0) {
+            container.innerHTML = "<div class='review-history-empty'><p class='item-summary'>暂无处理历史。</p></div>";
+            return;
+        }
+        container.innerHTML = items.map(renderQueryFeedbackHistoryItem).join("");
+    }
+
+    function renderQueryFeedbackHistoryItem(item) {
+        const statusText = [
+            getBadgeLabel(item && item.previousStatus),
+            getBadgeLabel(item && item.nextStatus)
+        ].filter(Boolean).join(" → ");
+        return "<article class='review-history-item'>"
+                + "<div class='review-history-head'>"
+                + "<div class='meta-row'>"
+                + renderBadge(item && item.action)
+                + "<span class='pill'>" + escapeHtml(statusText || "状态未记录") + "</span>"
+                + "</div>"
+                + "<span class='detail-compact-time'>" + escapeHtml(formatDateTime(item && item.operatedAt)) + "</span>"
+                + "</div>"
+                + "<p class='item-summary'>" + escapeHtml(item && item.comment ? item.comment : "暂无处理说明") + "</p>"
+                + "<p class='item-caption'>" + escapeHtml(item && item.operatedBy ? "操作人：" + item.operatedBy : "未记录操作人") + "</p>"
+                + "</article>";
+    }
+
+    async function resolveSelectedQueryFeedback() {
+        await handleSelectedQueryFeedback("resolve");
+    }
+
+    async function dismissSelectedQueryFeedback() {
+        await handleSelectedQueryFeedback("dismiss");
+    }
+
+    async function handleSelectedQueryFeedback(action) {
+        if (!state.selectedQueryFeedbackId) {
+            setStatus("请先选择一条结果反馈", "warning");
+            return;
+        }
+        try {
+            const request = buildQueryFeedbackHandleRequest();
+            await fetchJson(
+                    "/api/v1/admin/query-feedback/" + encodeURIComponent(state.selectedQueryFeedbackId) + "/" + action,
+                    {
+                        method: "POST",
+                        body: JSON.stringify(request)
+                    }
+            );
+            setStatus(action === "resolve" ? "结果反馈已标记处理" : "结果反馈已标记忽略", "success");
+            await refreshSummary();
+            await loadQueryFeedback();
+        }
+        catch (error) {
+            showError("处理结果反馈失败", error);
+        }
+    }
+
+    function buildQueryFeedbackHandleRequest() {
+        const handledByElement = document.getElementById("query-feedback-handler");
+        const commentElement = document.getElementById("query-feedback-resolution-comment");
+        return {
+            handledBy: handledByElement ? handledByElement.value.trim() : "",
+            comment: commentElement ? commentElement.value.trim() : ""
+        };
+    }
+
+    function containsQueryFeedback(items, feedbackId) {
+        return (items || []).some(function (item) {
+            return String(item.id || "") === String(feedbackId || "");
+        });
+    }
+
+    function highlightQueryFeedback(feedbackId) {
+        document.querySelectorAll("[data-query-feedback-id]").forEach(function (button) {
+            button.classList.toggle("active", String(button.dataset.queryFeedbackId || "") === String(feedbackId || ""));
+        });
+    }
+
+    function buildQueryFeedbackCaption(item) {
+        return [
+            item && item.queryId ? "queryId: " + item.queryId : "",
+            item && item.createdAt ? "提交：" + formatDateTime(item.createdAt) : "",
+            item && item.reportedBy ? "反馈人：" + item.reportedBy : ""
+        ].filter(Boolean).join(" | ");
+    }
+
+    function compactText(value, limit) {
+        const normalized = String(value || "").replace(/\s+/g, " ").trim();
+        const safeLimit = Number(limit || 80);
+        if (normalized.length <= safeLimit) {
+            return normalized;
+        }
+        return normalized.slice(0, Math.max(0, safeLimit - 3)) + "...";
+    }
+
+    function buildArticleListRequestUrl(query, lifecycle, sourceId, reviewStatus, riskFilter) {
+        const queryParam = encodeURIComponent(String(query || "").trim());
+        const lifecycleParam = encodeURIComponent(String(lifecycle || "").trim());
+        const sourceIdParam = String(sourceId || "").trim();
+        const reviewStatusParam = String(reviewStatus || "").trim();
+        const sourceIdQuery = sourceIdParam ? "&sourceId=" + encodeURIComponent(sourceIdParam) : "";
+        const reviewStatusQuery = reviewStatusParam ? "&reviewStatus=" + encodeURIComponent(reviewStatusParam) : "";
+        const riskFilterQuery = buildArticleRiskFilterQuery(riskFilter);
+        return "/api/v1/admin/articles?query=" + queryParam + "&lifecycle=" + lifecycleParam
+                + sourceIdQuery + reviewStatusQuery + riskFilterQuery;
+    }
+
+    function buildArticleRiskFilterQuery(riskFilter) {
+        const normalized = String(riskFilter || "").trim();
+        if (!normalized) {
+            return "";
+        }
+        const separatorIndex = normalized.indexOf(":");
+        if (separatorIndex <= 0 || separatorIndex >= normalized.length - 1) {
+            return "";
+        }
+        const key = normalized.slice(0, separatorIndex);
+        const value = normalized.slice(separatorIndex + 1);
+        const allowedKeys = ["riskLevel", "riskReason", "isHotspot", "requiresResultVerification"];
+        if (!allowedKeys.includes(key)) {
+            return "";
+        }
+        return "&" + encodeURIComponent(key) + "=" + encodeURIComponent(value);
+    }
+
     async function loadArticleDetail(articleId, sourceId) {
         try {
             state.selectedArticleId = articleId;
             state.selectedArticleSourceId = sourceId || null;
             const query = sourceId ? "?sourceId=" + encodeURIComponent(String(sourceId)) : "";
-            const detail = await fetchJson("/api/v1/admin/articles/" + encodeURIComponent(articleId) + query);
-            renderArticleDetail(detail);
+            const results = await Promise.all([
+                fetchJson("/api/v1/admin/articles/" + encodeURIComponent(articleId) + query),
+                fetchJson("/api/v1/admin/articles/" + encodeURIComponent(articleId) + "/review/audits" + query)
+            ]);
+            renderArticleDetail(results[0], results[1]);
             highlightArticle(articleId, sourceId);
         }
         catch (error) {
             showError("加载内容详情失败", error);
+        }
+    }
+
+    async function approveSelectedArticleReview() {
+        if (!state.selectedArticleId) {
+            setStatus("请先选择一条内容", "warning");
+            return;
+        }
+        const request = buildArticleReviewRequest(false);
+        if (!window.confirm("将把当前内容确认通过，确认继续吗？")) {
+            return;
+        }
+        try {
+            const result = await fetchJson(
+                    "/api/v1/admin/articles/" + encodeURIComponent(state.selectedArticleId) + "/review/approve",
+                    {
+                        method: "POST",
+                        body: JSON.stringify(request)
+                    }
+            );
+            renderArticleReviewActionResult(result);
+            setStatus("内容已确认通过", "success");
+            await refreshArticleReviewAfterAction();
+        }
+        catch (error) {
+            showError("确认通过失败", error);
+        }
+    }
+
+    async function requestSelectedArticleChanges() {
+        if (!state.selectedArticleId) {
+            setStatus("请先选择一条内容", "warning");
+            return;
+        }
+        const request = buildArticleReviewRequest(true);
+        if (!request.correctionSummary) {
+            setStatus("请先填写修正意见", "warning");
+            return;
+        }
+        try {
+            const result = await fetchJson(
+                    "/api/v1/admin/articles/" + encodeURIComponent(state.selectedArticleId) + "/review/request-changes",
+                    {
+                        method: "POST",
+                        body: JSON.stringify(request)
+                    }
+            );
+            renderArticleReviewActionResult(result);
+            setStatus("修正已提交，内容保持待复核", "success");
+            await refreshArticleReviewAfterAction();
+        }
+        catch (error) {
+            showError("提交修正失败", error);
+        }
+    }
+
+    function buildArticleReviewRequest(includeCorrectionSummary) {
+        const reviewerInput = document.getElementById("article-reviewer");
+        const commentInput = document.getElementById("article-review-comment");
+        const correctionInput = document.getElementById("article-correction-summary");
+        const selectedReviewStatus = state.selectedArticleReviewStatus || null;
+        return {
+            sourceId: state.selectedArticleSourceId || null,
+            reviewedBy: reviewerInput ? reviewerInput.value.trim() || "admin" : "admin",
+            comment: commentInput ? commentInput.value.trim() : "",
+            expectedReviewStatus: selectedReviewStatus,
+            correctionSummary: includeCorrectionSummary && correctionInput ? correctionInput.value.trim() : ""
+        };
+    }
+
+    async function refreshArticleReviewAfterAction() {
+        const articleId = state.selectedArticleId;
+        const sourceId = state.selectedArticleSourceId;
+        await refreshSummary();
+        await loadArticles();
+        if (articleId) {
+            await loadArticleDetail(articleId, sourceId);
         }
     }
 
@@ -1152,6 +1526,11 @@
 
     function renderSummary(overview, health) {
         const status = overview.status || {};
+        const manualReviewCount = Number(status.reviewPendingArticleCount || 0);
+        const highRiskCount = Number(status.highRiskArticleCount || 0);
+        const hotspotPendingCount = Number(status.hotspotPendingVerificationCount || 0);
+        const userReportedCount = Number(status.userReportedAnswerCount || 0);
+        const answerFeedbackPendingCount = Number(status.answerFeedbackPendingCount || 0);
         const cards = [
             {
                 label: "知识条目",
@@ -1182,6 +1561,36 @@
                 value: status.pendingQueryCount || 0,
                 note: (status.pendingQueryCount || 0) > 0 ? "后续可由内部继续处理" : "当前没有积压",
                 tone: (status.pendingQueryCount || 0) > 0 ? "warning" : "success"
+            },
+            {
+                label: "需复核内容",
+                value: manualReviewCount,
+                note: manualReviewCount > 0 ? "到“已入库内容”按复核状态筛选" : "当前没有复核积压",
+                tone: manualReviewCount > 0 ? "warning" : "success"
+            },
+            {
+                label: "高风险内容",
+                value: highRiskCount,
+                note: highRiskCount > 0 ? "按风险筛选定位来源与原因" : "当前没有高风险内容",
+                tone: highRiskCount > 0 ? "warning" : "success"
+            },
+            {
+                label: "热点待抽检",
+                value: hotspotPendingCount,
+                note: hotspotPendingCount > 0 ? "优先核对高频问题结果" : "当前没有热点抽检积压",
+                tone: hotspotPendingCount > 0 ? "warning" : "success"
+            },
+            {
+                label: "用户反馈风险",
+                value: userReportedCount,
+                note: userReportedCount > 0 ? "按用户反馈筛选处理" : "当前没有用户反馈风险",
+                tone: userReportedCount > 0 ? "warning" : "success"
+            },
+            {
+                label: "结果反馈待处理",
+                value: answerFeedbackPendingCount,
+                note: answerFeedbackPendingCount > 0 ? "到“结果反馈”处理问答结果" : "当前没有结果反馈积压",
+                tone: answerFeedbackPendingCount > 0 ? "warning" : "success"
             }
         ];
         document.getElementById("summary-cards").innerHTML = cards.map(renderMetricCard).join("");
@@ -1193,7 +1602,10 @@
             return;
         }
         const action = trigger.dataset.knowledgeHelpAction;
-        if (action === "knowledge-upload" || action === "knowledge-runs" || action === "knowledge-articles") {
+        if (action === "knowledge-upload"
+                || action === "knowledge-runs"
+                || action === "knowledge-articles"
+                || action === "knowledge-feedback") {
             activateKnowledgeTab(action, {scroll: true});
             return;
         }
@@ -1237,6 +1649,10 @@
 
         const articleCount = Number(status.articleCount || 0);
         const sourceFileCount = Number(status.sourceFileCount || 0);
+        const manualReviewCount = Number(status.reviewPendingArticleCount || 0);
+        const highRiskCount = Number(status.highRiskArticleCount || 0);
+        const hotspotPendingCount = Number(status.hotspotPendingVerificationCount || 0);
+        const answerFeedbackPendingCount = Number(status.answerFeedbackPendingCount || 0);
         if (articleCount <= 0 && sourceFileCount <= 0) {
             return {
                 tone: "info",
@@ -1258,6 +1674,58 @@
                 actions: [
                     {label: "去已入库内容", action: "knowledge-articles", className: "primary-btn"},
                     {label: "回资料导入", action: "knowledge-upload", className: "ghost-btn"}
+                ],
+                faqKey: "cannot-answer"
+            };
+        }
+
+        if (manualReviewCount > 0) {
+            return {
+                tone: "warning",
+                title: "有内容需要复核收口",
+                description: "进入“已入库内容”，用复核状态筛选只看需处理条目；确认通过或提交修正后，再回到知识问答验证结果。",
+                actions: [
+                    {label: "去已入库内容", action: "knowledge-articles", className: "primary-btn"},
+                    {label: "去知识问答", action: "go-ask", className: "ghost-btn"}
+                ],
+                faqKey: "cannot-answer"
+            };
+        }
+
+        if (answerFeedbackPendingCount > 0) {
+            return {
+                tone: "warning",
+                title: "有问答结果反馈待处理",
+                description: "进入“结果反馈”只处理用户标记过的回答结果；先看问题、答案摘要和引用来源，再决定已处理或忽略。",
+                actions: [
+                    {label: "去结果反馈", action: "knowledge-feedback", className: "primary-btn"},
+                    {label: "去知识问答", action: "go-ask", className: "ghost-btn"}
+                ],
+                faqKey: "cannot-answer"
+            };
+        }
+
+        if (hotspotPendingCount > 0) {
+            return {
+                tone: "warning",
+                title: "有高频热点内容待抽检",
+                description: "进入“已入库内容”，用待结果抽检或高频热点筛选只看高热度条目；优先核对结果是否稳定、来源是否足够清楚。",
+                actions: [
+                    {label: "去已入库内容", action: "knowledge-articles", className: "primary-btn"},
+                    {label: "去知识问答", action: "go-ask", className: "ghost-btn"}
+                ],
+                faqKey: "cannot-answer"
+            };
+        }
+
+        if (highRiskCount > 0) {
+            return {
+                tone: "warning",
+                title: "还有高风险内容需要治理",
+                description: "进入“已入库内容”，用风险筛选先看风险原因和来源依据；只对高风险、高频或用户反馈结果做抽检。",
+                actions: [
+                    {label: "去已入库内容", action: "knowledge-articles", className: "primary-btn"},
+                    {label: "去知识问答", action: "go-ask", className: "ghost-btn"}
                 ],
                 faqKey: "cannot-answer"
             };
@@ -1417,19 +1885,25 @@
             return;
         }
         container.innerHTML = items.map(function (item) {
+            const displayName = resolveSourceDisplayName(item);
+            const documentTitle = resolveSourceDocumentTitle(item);
+            const sourceMeta = [item.sourceCode, getBadgeLabel(item.contentProfile)]
+                    .filter(Boolean)
+                    .join(" · ");
             return "<button class='list-item' data-source-id='" + escapeHtml(String(item.id)) + "' type='button'>"
-                    + "<div class='meta-row'>"
-                    + renderBadge(item.status)
-                    + renderBadge(item.sourceType)
+                    + "<div class='source-list-row-top'>"
+                    + "<div>"
+                    + "<h4>" + escapeHtml(displayName || item.sourceCode || "未命名资料源") + "</h4>"
+                    + (documentTitle && documentTitle !== displayName
+                    ? "<p class='item-summary source-document-title'>" + escapeHtml(documentTitle) + "</p>"
+                    : "")
                     + "</div>"
-                    + "<h4>" + escapeHtml(item.name || item.sourceCode || "未命名资料源") + "</h4>"
-                    + "<p class='item-meta'>"
-                    + escapeHtml(item.sourceCode || "-")
-                    + " · "
-                    + escapeHtml(item.contentProfile || "-")
-                    + "</p>"
-                    + "<p class='item-summary'>" + escapeHtml(getSourceSummary(item)) + "</p>"
-                    + "<div class='meta-row'>"
+                    + "<span class='detail-compact-time'>" + escapeHtml(formatSourceLastSyncTime(item)) + "</span>"
+                    + "</div>"
+                    + "<p class='item-meta'>" + escapeHtml(sourceMeta || "-") + "</p>"
+                    + "<div class='source-list-status-row'>"
+                    + renderBadge(item.status)
+                    + renderContextBadge(item.sourceType)
                     + "<span class='pill'>默认：" + escapeHtml(getBadgeLabel(item.defaultSyncMode)) + "</span>"
                     + "<span class='pill'>最近：" + escapeHtml(item.lastSyncStatus ? getBadgeLabel(item.lastSyncStatus) : "未同步") + "</span>"
                     + "</div>"
@@ -1444,20 +1918,134 @@
     }
 
     function renderSourceDetail(source, runs, files) {
-        state.sourceRuns = runs || [];
+        state.sourceRuns = resolveSourceProcessingHistoryItems(runs);
         state.sourceFiles = files || [];
-        document.getElementById("source-detail-title").textContent = source.name || source.sourceCode || "未命名资料源";
+        const displayName = resolveSourceDisplayName(source);
+        const documentTitle = resolveSourceDocumentTitle(source);
+        const configElement = document.getElementById("source-detail-config");
+        document.getElementById("source-detail-title").textContent = displayName || source.sourceCode || "未命名资料源";
         document.getElementById("source-detail-meta").textContent = [
+            documentTitle && documentTitle !== displayName ? "文档标题：" + documentTitle : "",
             source.sourceCode,
-            "类型：" + getBadgeLabel(source.sourceType),
-            "画像：" + getBadgeLabel(source.contentProfile),
-            "状态：" + getBadgeLabel(source.status),
-            source.lastSyncAt ? "最近同步：" + formatDateTime(source.lastSyncAt) : "最近同步：未执行"
-        ].join(" | ");
-        document.getElementById("source-detail-config").textContent = prettyJson(source.configJson);
+            getBadgeLabel(source.sourceType),
+            getBadgeLabel(source.status),
+            source.lastSyncAt ? "最近同步 " + formatDateTime(source.lastSyncAt) : "最近未同步"
+        ].filter(Boolean).join(" | ");
+        if (configElement) {
+            configElement.textContent = prettyJson(source.configJson, "暂无特殊配置");
+            const configSection = configElement.closest(".detail-section");
+            if (configSection) {
+                configSection.hidden = isEmptyJson(source.configJson);
+            }
+        }
         updateSourceSyncButton(source);
         renderSourceRunList(state.sourceRuns);
         renderSourceFileList(state.sourceFiles);
+    }
+
+    function resolveSourceProcessingHistoryItems(response) {
+        if (!response) {
+            return [];
+        }
+        if (Array.isArray(response)) {
+            return response;
+        }
+        if (Array.isArray(response.items)) {
+            return response.items;
+        }
+        return [];
+    }
+
+    function resolveSourceDisplayName(source) {
+        const displayName = String(source && source.displayName || "").trim();
+        if (displayName) {
+            return displayName;
+        }
+        const fallbackName = String(source && source.name || "").trim();
+        const documentTitle = String(source && source.primaryDocumentTitle || "").trim();
+        if (fallbackName && fallbackName !== documentTitle) {
+            return fallbackName;
+        }
+        const metadataDisplayName = readSourceBundleField(source, "displayName");
+        if (metadataDisplayName) {
+            return metadataDisplayName;
+        }
+        const firstPath = readSourceBundleFirstPath(source);
+        if (firstPath) {
+            return formatArticleSourceTitle(firstPath);
+        }
+        return fallbackName;
+    }
+
+    function resolveSourceDocumentTitle(source) {
+        const primaryDocumentTitle = String(source && source.primaryDocumentTitle || "").trim();
+        if (primaryDocumentTitle) {
+            return primaryDocumentTitle;
+        }
+        const titleHints = readSourceBundleArray(source, "titleHints");
+        return titleHints.length > 0 ? titleHints[0] : "";
+    }
+
+    function readSourceBundleField(source, fieldName) {
+        const bundleSummary = readSourceBundleSummary(source);
+        const value = bundleSummary && bundleSummary[fieldName];
+        return typeof value === "string" ? value.trim() : "";
+    }
+
+    function readSourceBundleFirstPath(source) {
+        const paths = readSourceBundleArray(source, "relativePathsSample");
+        return paths.length > 0 ? paths[0] : "";
+    }
+
+    function readSourceBundleArray(source, fieldName) {
+        const bundleSummary = readSourceBundleSummary(source);
+        const values = bundleSummary && Array.isArray(bundleSummary[fieldName])
+                ? bundleSummary[fieldName]
+                : [];
+        return uniqueNonEmptyStrings(values);
+    }
+
+    function readSourceBundleSummary(source) {
+        const metadataJson = source && source.metadataJson;
+        if (!metadataJson || typeof metadataJson !== "string") {
+            return null;
+        }
+        try {
+            const metadata = JSON.parse(metadataJson);
+            return metadata && typeof metadata === "object" ? metadata.bundleSummary : null;
+        }
+        catch (error) {
+            return null;
+        }
+    }
+
+    function formatSourceLastSyncTime(item) {
+        if (item && item.lastSyncAt) {
+            return formatDateTime(item.lastSyncAt);
+        }
+        return "未同步";
+    }
+
+    function isEmptyJson(value) {
+        if (!value) {
+            return true;
+        }
+        try {
+            const parsed = JSON.parse(value);
+            if (parsed == null) {
+                return true;
+            }
+            if (Array.isArray(parsed)) {
+                return parsed.length === 0;
+            }
+            if (typeof parsed === "object") {
+                return Object.keys(parsed).length === 0;
+            }
+            return false;
+        }
+        catch (error) {
+            return false;
+        }
     }
 
     function updateSourceSyncButton(source) {
@@ -1481,7 +2069,7 @@
             state.selectedSourceRunMode = "auto";
             state.latestSourceRunKey = null;
             if (container) {
-                container.innerHTML = "<div class='detail-compact-empty'><p class='item-summary'>当前资料源还没有同步历史。</p></div>";
+                container.innerHTML = "<div class='detail-compact-empty'><p class='item-summary'>当前资料源还没有处理历史。</p></div>";
             }
             if (detail) {
                 detail.hidden = true;
@@ -1537,18 +2125,19 @@
         const runKey = resolveSourceRunKey(item);
         const stageInfo = getRunStageInfo(item);
         const lastProgressAt = resolveRunLastProgressAt(item);
+        const summary = resolveRunSpotlightSummaryText(item);
         return "<button class='detail-compact-item" + (active ? " active" : "") + "' data-source-run-key='"
                 + escapeHtml(runKey) + "' type='button'>"
                 + "<div class='detail-compact-title-row'>"
                 + "<div class='meta-row'>"
-                + renderBadge(item.status)
+                + renderBadge(resolveRunDisplayStatus(item) || item.status)
                 + renderDerivedStatusBadge(item)
-                + "<span class='pill'>阶段：" + escapeHtml(stageInfo.label) + "</span>"
+                + "<span class='pill'>" + escapeHtml(stageInfo.label) + "</span>"
                 + "</div>"
-                + "<span class='detail-compact-time'>" + escapeHtml(formatDateTime(item.requestedAt)) + "</span>"
+                + "<span class='detail-compact-time'>" + escapeHtml(formatDateTime(resolveRunTimelineAt(item))) + "</span>"
                 + "</div>"
                 + "<h5 class='detail-compact-title'>" + escapeHtml(getRunTitle(item)) + "</h5>"
-                + "<p class='detail-compact-summary'>" + escapeHtml(getRunSummary(item)) + "</p>"
+                + (summary ? "<p class='detail-compact-summary'>" + escapeHtml(summary) + "</p>" : "")
                 + "<p class='detail-compact-meta'>"
                 + escapeHtml(lastProgressAt
                         ? "最近推进 " + formatDateTime(lastProgressAt)
@@ -1586,10 +2175,14 @@
                 ? buildRunProgressStrip(item, stageInfo)
                 : "";
         const fileSummary = buildRunFileSummary(item);
+        const spotlightSummary = resolveRunSpotlightSummaryText(item);
+        const stageHighlights = buildRunStageHighlights(item, stageInfo);
         return "<div class='detail-focus-header'>"
                 + "<div>"
                 + "<span class='detail-focus-kicker'>选中运行详情</span>"
-                + "<p class='detail-focus-copy'>" + escapeHtml(getRunSummary(item)) + "</p>"
+                + (spotlightSummary
+                ? "<p class='detail-focus-copy'>" + escapeHtml(spotlightSummary) + "</p>"
+                : "")
                 + (fileSummary
                 ? "<p class='detail-focus-files'><strong>本次文件：</strong>" + escapeHtml(fileSummary) + "</p>"
                 : "")
@@ -1599,12 +2192,9 @@
                 + "</span>"
                 + "</div>"
                 + buildRunDetailFacts(item)
-                + "<div class='run-spotlight-highlights'>"
-                + "<span class='surface-chip'>当前阶段：" + escapeHtml(stageInfo.label) + "</span>"
-                + "<span class='surface-chip'>下一步：" + escapeHtml(stageInfo.nextStep) + "</span>"
-                + "</div>"
                 + detailedProgress
                 + buildRunRuntimeSnapshot(item)
+                + stageHighlights
                 + buildRunFailurePanel(item)
                 + buildRunActions(item);
     }
@@ -1646,13 +2236,13 @@
                 + escapeHtml(resolveSourceFileKey(item)) + "' type='button'>"
                 + "<div class='detail-compact-title-row'>"
                 + "<div class='meta-row'>"
-                + renderBadge(item.format)
-                + renderBadge(item.parseMode || "UNKNOWN")
+                + renderContextBadge(item.format)
+                + renderContextBadge(item.parseMode || "UNKNOWN")
                 + "</div>"
                 + "<span class='detail-compact-time'>" + escapeHtml(formatBytes(item.fileSize)) + "</span>"
                 + "</div>"
                 + "<h5 class='detail-compact-title'>" + escapeHtml(fileName || relativePath) + "</h5>"
-                + "<p class='detail-compact-path'>" + escapeHtml(relativePath) + "</p>"
+                + (relativePath !== fileName ? "<p class='detail-compact-path'>" + escapeHtml(relativePath) + "</p>" : "")
                 + "<p class='detail-compact-meta'>" + escapeHtml(buildSourceFileMeta(item)) + "</p>"
                 + "</button>";
     }
@@ -1678,16 +2268,12 @@
                 + "<h5>" + escapeHtml(extractSourceFileName(item.relativePath || "") || item.relativePath || "-") + "</h5>"
                 + "<p class='detail-focus-copy'>" + escapeHtml(buildSourceFileSummary(item)) + "</p>"
                 + "</div>"
-                + "<div class='meta-row'>"
-                + renderBadge(item.format)
-                + renderBadge(item.parseMode || "UNKNOWN")
-                + "</div>"
                 + "</div>"
                 + "<div class='run-runtime-grid detail-focus-grid'>"
                 + buildRunRuntimeItem("完整路径", item.relativePath || "-", true)
                 + buildRunRuntimeItem("文件大小", formatBytes(item.fileSize))
-                + buildRunRuntimeItem("解析提供方", item.parseProvider || "默认解析链")
-                + buildRunRuntimeItem("解析方式", item.parseMode ? getBadgeLabel(item.parseMode) : "未记录")
+                + buildRunRuntimeItem("解析提供方", formatParseProvider(item.parseProvider))
+                + buildRunRuntimeItem("解析方式", formatParseMode(item.parseMode))
                 + "</div>";
     }
 
@@ -1725,10 +2311,12 @@
                 + "<div class='meta-row'>"
                 + renderBadge(item.lifecycle)
                 + renderBadge(item.reviewStatus)
+                + renderArticleRiskBadge(item)
                 + "</div>"
                 + "<p class='item-kicker'>知识条目</p>"
                 + "<h4>" + escapeHtml(resolveArticleDisplayTitle(item)) + "</h4>"
                 + "<p class='item-summary article-purpose'>" + escapeHtml(resolveArticleSummary(item)) + "</p>"
+                + "<p class='item-summary article-risk-summary'>" + escapeHtml(buildArticleRiskSummary(item)) + "</p>"
                 + "<div class='article-reference-box'>"
                 + "<span class='article-reference-label'>主要参考文件</span>"
                 + "<strong class='article-reference-title'>" + escapeHtml(primarySourceTitle) + "</strong>"
@@ -1742,7 +2330,16 @@
                 + "</button>";
     }
 
-    function renderArticleDetail(detail) {
+    function renderArticleRiskBadge(item) {
+        const riskLevel = normalizeStatus(item && item.riskLevel);
+        if (!riskLevel || riskLevel === "LOW") {
+            return "";
+        }
+        return renderBadge(riskLevel);
+    }
+
+    function renderArticleDetail(detail, auditResponse) {
+        state.selectedArticleReviewStatus = detail && detail.reviewStatus ? detail.reviewStatus : null;
         document.getElementById("article-detail-title").textContent = resolveArticleDisplayTitle(detail);
         document.getElementById("article-detail-meta").textContent = [
             buildArticleAvailabilitySummary(detail),
@@ -1750,12 +2347,17 @@
             detail.updatedAt ? "入库时间：" + formatDateTime(detail.updatedAt) : ""
         ].filter(Boolean).join(" | ");
         document.getElementById("article-detail-summary").textContent = resolveArticleSummary(detail);
+        document.getElementById("article-risk-summary").innerHTML = buildArticleRiskNotice(detail);
         document.getElementById("article-primary-source").textContent = buildPrimarySourceSummary(detail);
         document.getElementById("article-source-overview").textContent = buildArticleSourceOverview(detail);
         document.getElementById("article-source-note").textContent = buildArticleTraceabilityNote(detail);
         document.getElementById("article-content").textContent = detail.content || "";
         document.getElementById("article-metadata").textContent = prettyJson(detail.metadataJson, "暂无技术元数据");
-        document.getElementById("article-sources").innerHTML = renderArticleSourceReferences(detail.sourcePaths || []);
+        document.getElementById("article-sources").innerHTML = renderArticleSourceReferences(detail);
+        renderArticleSourcePreview(null);
+        bindArticleSourcePreviewActions(detail);
+        renderArticleReviewPanel(detail);
+        renderArticleReviewHistory(auditResponse);
         const relations = []
                 .concat((detail.referentialKeywords || []).map(function (item) { return "关键词: " + item; }))
                 .concat((detail.dependsOn || []).map(function (item) { return "依赖: " + item; }))
@@ -1773,7 +2375,7 @@
         state.selectedSourceFilePath = null;
         document.getElementById("source-detail-title").textContent = "请选择一个资料源";
         document.getElementById("source-detail-meta").textContent = "";
-        document.getElementById("source-run-list").innerHTML = "<div class='detail-compact-empty'><p class='item-summary'>暂无同步历史</p></div>";
+        document.getElementById("source-run-list").innerHTML = "<div class='detail-compact-empty'><p class='item-summary'>暂无处理历史</p></div>";
         document.getElementById("source-file-list").innerHTML = "<div class='detail-compact-empty'><p class='item-summary'>暂无文件</p></div>";
         document.getElementById("source-run-detail").hidden = true;
         document.getElementById("source-run-detail").innerHTML = "";
@@ -1786,14 +2388,19 @@
         document.getElementById("article-detail-title").textContent = "请选择一条内容";
         document.getElementById("article-detail-meta").textContent = "";
         document.getElementById("article-detail-summary").textContent = "暂无摘要";
+        document.getElementById("article-risk-summary").innerHTML = "暂无风险提示";
         document.getElementById("article-primary-source").textContent = "暂无主要参考文件";
         document.getElementById("article-source-overview").textContent = "暂无来源概况";
         document.getElementById("article-source-note").textContent = "当前还没有可追溯的来源文件。";
         document.getElementById("article-content").textContent = "暂无内容";
         document.getElementById("article-metadata").textContent = "暂无技术元数据";
         document.getElementById("article-sources").innerHTML = "";
+        renderArticleSourcePreview(null);
+        renderArticleReviewPanel(null);
+        renderArticleReviewHistory(null);
         document.getElementById("article-relations").innerHTML = "";
         document.getElementById("article-technical-info").innerHTML = "";
+        state.selectedArticleReviewStatus = null;
     }
 
     function renderRecentRunOverview(summary) {
@@ -1839,7 +2446,7 @@
         if (orderedItems.length === 0) {
             updateContainerMarkup(
                     container,
-                    "<div class='job-card'><p class='item-summary'>当前没有需要关注的处理任务。已完成记录归档在下方“资料源与文件”的同步历史中。</p></div>",
+                    "<div class='job-card'><p class='item-summary'>当前没有需要关注的处理任务。已完成记录归档在下方“资料源与文件”的处理历史中。</p></div>",
                     "soft-refresh-panel"
             );
             bindRunActions(container);
@@ -1903,10 +2510,13 @@
     function renderRecentRunCard(item) {
         const stageInfo = getRunStageInfo(item);
         const toneClass = "run-tone-" + stageInfo.tone;
+        const operationalNote = resolveRunOperationalNoteText(item);
+        const spotlightSummary = resolveRunSpotlightSummaryText(item);
+        const stageHighlights = buildRunStageHighlights(item, stageInfo);
         return "<article class='run-spotlight-card " + toneClass + "' data-processing-task-key='"
                 + escapeHtml(resolveProcessingTaskKey(item)) + "'>"
                 + "<div class='run-spotlight-header'>"
-                + "<div class='meta-row'>"
+                + "<div class='meta-row run-spotlight-badges'>"
                 + renderBadge(item.sourceType || "UPLOAD")
                 + renderBadge(item.status)
                 + renderDerivedStatusBadge(item)
@@ -1915,16 +2525,17 @@
                 + "<div class='run-spotlight-time'>提交 " + escapeHtml(formatDateTime(item.requestedAt)) + "</div>"
                 + "</div>"
                 + "<h3 class='run-spotlight-title'>" + escapeHtml(getRunTitle(item)) + "</h3>"
-                + "<p class='run-spotlight-summary'>" + escapeHtml(getRunSummary(item)) + "</p>"
-                + "<div class='run-spotlight-highlights'>"
-                + "<span class='surface-chip'>当前阶段：" + escapeHtml(stageInfo.label) + "</span>"
-                + "<span class='surface-chip'>下一步：" + escapeHtml(stageInfo.nextStep) + "</span>"
-                + "</div>"
+                + (spotlightSummary
+                ? "<p class='run-spotlight-summary'>" + escapeHtml(spotlightSummary) + "</p>"
+                : "")
+                + stageHighlights
                 + buildRunProgressStrip(item, stageInfo)
                 + buildRunRuntimeSnapshot(item)
-                + "<div class='run-spotlight-footnotes'>"
-                + "<p class='run-spotlight-note'><strong>任务线索：</strong>" + escapeHtml(buildRunOperationalNote(item)) + "</p>"
+                + (operationalNote
+                ? "<div class='run-spotlight-footnotes'>"
+                + "<p class='run-spotlight-note'><strong>任务线索：</strong>" + escapeHtml(operationalNote) + "</p>"
                 + "</div>"
+                : "")
                 + buildRunFailurePanel(item)
                 + buildRunActions(item)
                 + "</article>";
@@ -1935,7 +2546,7 @@
         return "<article class='run-completion-notice' data-processing-task-key='"
                 + escapeHtml(resolveProcessingTaskKey(item)) + "'>"
                 + "<div class='run-completion-main'>"
-                + "<div class='meta-row'>"
+                + "<div class='meta-row run-spotlight-badges'>"
                 + renderBadge(item.sourceType || "UPLOAD")
                 + renderBadge(resolveRunDisplayStatus(item) || item.status)
                 + renderTaskModeBadge(item)
@@ -1947,7 +2558,7 @@
                 + "<span class='run-spotlight-time'>完成 "
                 + escapeHtml(formatDateTime(resolveRunUpdatedAt(item)))
                 + "</span>"
-                + "<span class='surface-chip'>完整记录在资料源同步历史</span>"
+                + "<span class='surface-chip'>完整记录在资料源处理历史</span>"
                 + "</div>"
                 + "</article>";
     }
@@ -2052,30 +2663,56 @@
         if (progressSteps.length === 0) {
             return "";
         }
+        const displayStatus = resolveRunDisplayStatus(item);
+        const runStalled = displayStatus === "STALLED";
+        const runFailed = displayStatus === "FAILED";
         return "<div class='run-progress-strip run-progress-strip-detailed'>"
                 + progressSteps.map(function (step, index) {
                     const stepStatus = normalizeStatus(step && step.status);
                     const stepDetail = cleanRunProgressDetail(step && step.detail);
-                    const stepClass = stepStatus === "COMPLETED"
-                            ? "completed"
-                            : stepStatus === "FAILED"
-                            ? "failed"
-                            : stepStatus === "ACTIVE"
-                            ? stageInfo.tone === "danger"
-                                    ? "failed"
-                                    : stageInfo.tone === "warning"
-                                    ? "warning"
-                                    : "active"
-                            : "pending";
+                    const stepClass = resolveRunProgressStepClass(stepStatus, runStalled, runFailed);
+                    const stepStatusMark = buildRunProgressStatusMark(stepClass, displayStatus);
                     return "<div class='run-progress-step " + stepClass + "'>"
                             + "<span class='run-progress-order'>" + escapeHtml(String(index + 1)) + "</span>"
                             + "<div class='run-progress-copy'>"
+                            + "<div class='run-progress-label-row'>"
                             + "<span class='run-progress-label'>" + escapeHtml(step.label || step.key || ("步骤 " + String(index + 1))) + "</span>"
+                            + stepStatusMark
+                            + "</div>"
                             + (stepDetail ? "<span class='run-progress-detail'>" + escapeHtml(stepDetail) + "</span>" : "")
                             + "</div>"
                             + "</div>";
                 }).join("")
                 + "</div>";
+    }
+
+    function resolveRunProgressStepClass(stepStatus, runStalled, runFailed) {
+        if (stepStatus === "COMPLETED") {
+            return "completed";
+        }
+        if (stepStatus === "FAILED") {
+            return runStalled ? "warning" : "failed";
+        }
+        if (stepStatus === "ACTIVE") {
+            if (runStalled) {
+                return "warning";
+            }
+            if (runFailed) {
+                return "failed";
+            }
+            return "active";
+        }
+        return "pending";
+    }
+
+    function buildRunProgressStatusMark(stepClass, displayStatus) {
+        if (stepClass === "warning" && displayStatus === "STALLED") {
+            return "<span class='run-progress-status-mark warning'>卡住</span>";
+        }
+        if (stepClass === "failed") {
+            return "<span class='run-progress-status-mark failed'>失败</span>";
+        }
+        return "";
     }
 
     function cleanRunProgressDetail(detail) {
@@ -2097,6 +2734,40 @@
             return String(item.operationalNote);
         }
         return "系统正在继续处理当前任务";
+    }
+
+    function resolveRunOperationalNoteText(item) {
+        const operationalNote = sanitizeDisplayMessage(buildRunOperationalNote(item));
+        if (!operationalNote) {
+            return "";
+        }
+        return isRunOperationalNoteDuplicated(item, operationalNote) ? "" : operationalNote;
+    }
+
+    function resolveRunSpotlightSummaryText(item) {
+        const summary = sanitizeDisplayMessage(getRunSummary(item));
+        if (!summary) {
+            return "";
+        }
+        return isRunSpotlightSummaryDuplicated(item, summary) ? "" : summary;
+    }
+
+    function buildRunStageHighlights(item, stageInfo) {
+        const nextStep = resolveRunNextStepText(item, stageInfo);
+        if (!nextStep) {
+            return "";
+        }
+        return "<div class='run-spotlight-highlights'>"
+                + "<span class='surface-chip'>下一步：" + escapeHtml(nextStep) + "</span>"
+                + "</div>";
+    }
+
+    function resolveRunNextStepText(item, stageInfo) {
+        const nextStep = sanitizeDisplayMessage(stageInfo && stageInfo.nextStep ? stageInfo.nextStep : "");
+        if (!nextStep) {
+            return "";
+        }
+        return shouldHideRunNextStep(item, nextStep) ? "" : nextStep;
     }
 
     function bindRunActions(container) {
@@ -2275,16 +2946,33 @@
     }
 
     function buildSourceFileSummary(item) {
-        const mode = item.parseMode ? getBadgeLabel(item.parseMode) : "未记录";
-        const provider = item.parseProvider ? item.parseProvider : "默认解析链";
+        const mode = formatParseMode(item.parseMode);
+        const provider = formatParseProvider(item.parseProvider);
         return "解析方式：" + mode + "；解析提供方：" + provider + "。";
     }
 
     function buildSourceFileMeta(item) {
         return [
-            "格式：" + (item.format || "-"),
+            "格式：" + getBadgeLabel(item.format),
+            "解析：" + formatParseMode(item.parseMode),
             "大小：" + formatBytes(item.fileSize)
         ].join(" · ");
+    }
+
+    function formatParseMode(value) {
+        return getBadgeLabel(value || "UNKNOWN");
+    }
+
+    function formatParseProvider(value) {
+        const normalized = String(value || "").trim();
+        if (!normalized) {
+            return "默认解析链";
+        }
+        const labels = {
+            filesystem: "本地文件系统",
+            "default-parser": "默认解析器"
+        };
+        return labels[normalized.toLowerCase()] || normalized;
     }
 
     function deriveGitSourceName(remoteUrl) {
@@ -2415,13 +3103,13 @@
 
     function renderTaskModeBadge(item) {
         if (item && item.syncAction) {
-            return renderBadge(item.syncAction);
+            return renderContextBadge(item.syncAction);
         }
         if (item && item.resolverDecision) {
-            return renderBadge(item.resolverDecision);
+            return renderContextBadge(item.resolverDecision);
         }
         if (item && item.taskType === "SOURCE_SYNC") {
-            return renderBadge("AUTO");
+            return renderContextBadge("AUTO");
         }
         return "";
     }
@@ -2430,6 +3118,14 @@
         const displayStatus = normalizeStatus(item && item.displayStatus);
         if (displayStatus) {
             return displayStatus;
+        }
+        const compileDerivedStatus = normalizeStatus(item && item.compileDerivedStatus);
+        if (compileDerivedStatus) {
+            return compileDerivedStatus;
+        }
+        const compileJobStatus = normalizeStatus(item && item.compileJobStatus);
+        if (compileJobStatus) {
+            return compileJobStatus;
         }
         return normalizeStatus(item && item.status);
     }
@@ -2463,6 +3159,9 @@
     function shouldRenderRunReasonSummary(item) {
         const reasonSummary = resolveRunReasonSummaryText(item);
         if (!reasonSummary || isPlaceholderRunReasonSummary(reasonSummary)) {
+            return false;
+        }
+        if (shouldHideRunReasonSummaryBecauseFailurePanelCoversIt(item, reasonSummary)) {
             return false;
         }
         if (!shouldExposeRunReasonByStatus(item)) {
@@ -2510,6 +3209,101 @@
         });
     }
 
+    function shouldHideRunReasonSummaryBecauseFailurePanelCoversIt(item, reasonSummary) {
+        const displayStatus = resolveRunDisplayStatus(item);
+        if (displayStatus !== "FAILED" && displayStatus !== "STALLED") {
+            return false;
+        }
+        const normalizedReason = normalizeRunMessageForComparison(reasonSummary);
+        const normalizedFailureSummary = normalizeRunMessageForComparison(buildRunReasonSummary(item));
+        if (!normalizedReason || !normalizedFailureSummary) {
+            return false;
+        }
+        return normalizedReason === normalizedFailureSummary
+                || normalizedReason.includes(normalizedFailureSummary)
+                || normalizedFailureSummary.includes(normalizedReason);
+    }
+
+    function isRunOperationalNoteDuplicated(item, operationalNote) {
+        const normalizedNote = normalizeRunMessageForComparison(operationalNote);
+        if (!normalizedNote) {
+            return true;
+        }
+        const comparableMessages = [
+            resolveRunProgressText(item),
+            resolveRunStepLabel(item),
+            item && item.message,
+            item && item.compileProgressMessage,
+            item && item.currentStepLabel,
+            item && item.reasonSummary
+        ];
+        return comparableMessages.some(function (message) {
+            const normalizedMessage = normalizeRunMessageForComparison(message);
+            if (!normalizedMessage) {
+                return false;
+            }
+            return normalizedMessage === normalizedNote
+                    || normalizedMessage.includes(normalizedNote)
+                    || normalizedNote.includes(normalizedMessage);
+        });
+    }
+
+    function isRunSpotlightSummaryDuplicated(item, summary) {
+        const normalizedSummary = normalizeRunMessageForComparison(summary);
+        if (!normalizedSummary) {
+            return true;
+        }
+        const comparableMessages = [
+            resolveRunProgressText(item),
+            resolveRunStepLabel(item),
+            item && item.compileProgressMessage,
+            item && item.currentStepLabel
+        ];
+        return comparableMessages.some(function (message) {
+            const normalizedMessage = normalizeRunMessageForComparison(message);
+            if (!normalizedMessage) {
+                return false;
+            }
+            return normalizedMessage === normalizedSummary
+                    || normalizedMessage.includes(normalizedSummary)
+                    || normalizedSummary.includes(normalizedMessage);
+        });
+    }
+
+    function shouldHideRunNextStep(item, nextStep) {
+        const normalizedNextStep = normalizeRunMessageForComparison(nextStep);
+        if (!normalizedNextStep) {
+            return true;
+        }
+        const placeholderNextSteps = [
+            "等待系统继续处理",
+            "继续等待当前真实步骤推进",
+            "等待当前真实步骤推进",
+            "继续等待系统处理",
+            "等待下一步刷新"
+        ];
+        if (placeholderNextSteps.some(function (placeholder) {
+            return normalizeRunMessageForComparison(placeholder) === normalizedNextStep;
+        })) {
+            return true;
+        }
+        const comparableMessages = [
+            resolveRunProgressText(item),
+            resolveRunStepLabel(item),
+            item && item.currentStepLabel,
+            item && item.operationalNote
+        ];
+        return comparableMessages.some(function (message) {
+            const normalizedMessage = normalizeRunMessageForComparison(message);
+            if (!normalizedMessage) {
+                return false;
+            }
+            return normalizedMessage === normalizedNextStep
+                    || normalizedMessage.includes(normalizedNextStep)
+                    || normalizedNextStep.includes(normalizedMessage);
+        });
+    }
+
     function normalizeRunMessageForComparison(message) {
         return String(message || "")
                 .trim()
@@ -2530,10 +3324,13 @@
         const reasonSummary = shouldRenderRunReasonSummary(item)
                 ? resolveRunReasonSummaryText(item)
                 : "";
+        const progressSteps = Array.isArray(item && item.progressSteps) ? item.progressSteps : [];
+        const shouldShowCurrentStep = progressSteps.length === 0;
         return "<div class='run-runtime-summary'>"
                 + "<div class='run-runtime-inline-list'>"
-                + buildRunRuntimeBadge("编译态", getBadgeLabel(resolveRunDisplayStatus(item) || item.status))
-                + buildRunRuntimeBadge("当前步骤", resolveRunStepLabel(item))
+                + (shouldShowCurrentStep
+                ? buildRunRuntimeBadge("当前步骤", resolveRunStepLabel(item))
+                : "")
                 + buildRunRuntimeBadge("当前进度", resolveRunProgressText(item))
                 + "</div>"
                 + (reasonSummary
@@ -2554,7 +3351,8 @@
     }
 
     function buildRunRuntimeBadge(label, value) {
-        return "<div class='run-runtime-badge'>"
+        const wideClass = label === "当前进度" ? " run-runtime-badge-wide" : "";
+        return "<div class='run-runtime-badge" + wideClass + "'>"
                 + "<span class='run-runtime-label'>" + escapeHtml(label) + "</span>"
                 + "<strong class='run-runtime-value'>" + escapeHtml(value || "暂无") + "</strong>"
                 + "</div>";
@@ -2721,6 +3519,90 @@
         return parts.join("");
     }
 
+    function shouldShowArticleReviewPanel(item) {
+        const normalizedReviewStatus = normalizeStatus(item && item.reviewStatus);
+        return normalizedReviewStatus === "NEEDS_HUMAN_REVIEW" || normalizedReviewStatus === "NEEDS_REVIEW";
+    }
+
+    function renderArticleReviewPanel(item) {
+        const panel = document.getElementById("article-review-panel");
+        if (!panel) {
+            return;
+        }
+        if (!shouldShowArticleReviewPanel(item)) {
+            panel.hidden = true;
+            clearArticleReviewInputs();
+            return;
+        }
+        panel.hidden = false;
+        const reviewerInput = document.getElementById("article-reviewer");
+        const note = document.getElementById("article-review-note");
+        if (reviewerInput && !reviewerInput.value.trim()) {
+            reviewerInput.value = "admin";
+        }
+        if (note) {
+            note.textContent = buildArticleReviewNote(item);
+        }
+    }
+
+    function clearArticleReviewInputs() {
+        ["article-reviewer", "article-review-comment", "article-correction-summary"].forEach(function (id) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.value = "";
+            }
+        });
+    }
+
+    function buildArticleReviewNote(item) {
+        const normalizedReviewStatus = normalizeStatus(item && item.reviewStatus);
+        if (normalizedReviewStatus === "NEEDS_REVIEW") {
+            return "这条内容已提交过修正，确认证据稳定后再通过。";
+        }
+        return "这条内容需要人工复核，可确认通过，也可提交修正意见后继续走纠错链路。";
+    }
+
+    function renderArticleReviewHistory(auditResponse) {
+        const container = document.getElementById("article-review-history");
+        if (!container) {
+            return;
+        }
+        const items = Array.isArray(auditResponse && auditResponse.items) ? auditResponse.items : [];
+        if (items.length === 0) {
+            container.innerHTML = "<div class='review-history-empty'><p class='item-summary'>暂无复核历史。</p></div>";
+            return;
+        }
+        container.innerHTML = items.map(renderArticleReviewHistoryItem).join("");
+    }
+
+    function renderArticleReviewHistoryItem(item) {
+        const statusText = [
+            getBadgeLabel(item && item.previousReviewStatus),
+            getBadgeLabel(item && item.nextReviewStatus)
+        ].filter(Boolean).join(" → ");
+        return "<article class='review-history-item'>"
+                + "<div class='review-history-head'>"
+                + "<div class='meta-row'>"
+                + renderBadge(item && item.action)
+                + "<span class='pill'>" + escapeHtml(statusText || "状态未记录") + "</span>"
+                + "</div>"
+                + "<span class='detail-compact-time'>" + escapeHtml(formatDateTime(item && item.reviewedAt)) + "</span>"
+                + "</div>"
+                + "<p class='item-summary'>" + escapeHtml(item && item.comment ? item.comment : "暂无复核意见") + "</p>"
+                + "<p class='item-caption'>" + escapeHtml(item && item.reviewedBy ? "复核人：" + item.reviewedBy : "未记录复核人") + "</p>"
+                + "</article>";
+    }
+
+    function renderArticleReviewActionResult(result) {
+        const container = document.getElementById("article-review-history");
+        if (!container || !result) {
+            return;
+        }
+        container.innerHTML = "<div class='review-history-empty'><p class='item-summary'>"
+                + escapeHtml("刚刚完成：" + getBadgeLabel(result.previousReviewStatus) + " → " + getBadgeLabel(result.reviewStatus))
+                + "</p></div>";
+    }
+
     function buildArticleTraceabilityNote(item) {
         const sourcePaths = getArticleSourcePaths(item);
         if (sourcePaths.length === 0) {
@@ -2778,6 +3660,24 @@
                 value: item && item.reviewStatus ? getBadgeLabel(item.reviewStatus) : ""
             },
             {
+                label: "风险等级",
+                value: item && item.riskLevel ? getBadgeLabel(item.riskLevel) : ""
+            },
+            {
+                label: "风险原因",
+                value: item && item.riskReasons && item.riskReasons.length > 0
+                        ? item.riskReasons.map(getBadgeLabel).join("、")
+                        : ""
+            },
+            {
+                label: "热点内容",
+                value: item && Boolean(item.isHotspot) ? "是" : ""
+            },
+            {
+                label: "结果抽检",
+                value: item && Boolean(item.requiresResultVerification) ? "需要" : ""
+            },
+            {
                 label: "技术置信度",
                 value: item && item.confidence ? String(item.confidence) : ""
             }
@@ -2785,6 +3685,76 @@
         return technicalItems.filter(function (technicalItem) {
             return technicalItem.value;
         });
+    }
+
+    function buildArticleRiskNotice(item) {
+        if (!item) {
+            return "<p class='item-summary'>暂无风险提示</p>";
+        }
+        const riskSummary = buildArticleRiskSummary(item);
+        const riskReasons = item.riskReasons || [];
+        const reasonList = riskReasons.length > 0
+                ? "<div class='risk-reason-list'>"
+                + riskReasons.map(function (riskReason) {
+                    return "<span class='pill'>" + escapeHtml(getBadgeLabel(riskReason)) + "</span>";
+                }).join("")
+                + "</div>"
+                : "";
+        return "<p class='item-summary'>" + escapeHtml(riskSummary) + "</p>" + reasonList;
+    }
+
+    function buildArticleRiskSummary(item) {
+        if (!item) {
+            return "暂无风险提示";
+        }
+        const riskLevel = normalizeStatus(item.riskLevel || "low");
+        const riskReasons = item.riskReasons || [];
+        const flags = [];
+        if (Boolean(item.isHotspot)) {
+            flags.push("高频热点");
+        }
+        if (Boolean(item.requiresResultVerification)) {
+            flags.push("需要结果抽检");
+        }
+        const reasonLabels = riskReasons.map(getBadgeLabel);
+        if (riskLevel === "LOW" && reasonLabels.length === 0 && flags.length === 0) {
+            return "低风险，暂无额外抽检原因";
+        }
+        const parts = [];
+        parts.push(getBadgeLabel(riskLevel || "low"));
+        if (reasonLabels.length > 0) {
+            parts.push("不稳定点：" + reasonLabels.join("、"));
+        }
+        if (flags.length > 0) {
+            parts.push("治理标记：" + flags.join("、"));
+        }
+        return parts.join("；");
+    }
+
+    function buildHotspotRefreshStatusText(response) {
+        if (!response) {
+            return "热点未刷新";
+        }
+        if (response.loading) {
+            return "热点刷新中";
+        }
+        const candidateCount = Number(response.hotspotCandidateCount || 0);
+        const updatedCount = Number(response.updatedArticleCount || 0);
+        const threshold = Number(response.heatScoreThreshold || 0);
+        return "候选 " + candidateCount + " · 更新 " + updatedCount + " · 阈值 " + threshold;
+    }
+
+    function renderHotspotRefreshStatus(response) {
+        const element = document.getElementById("hotspot-refresh-status");
+        if (!element) {
+            return;
+        }
+        element.textContent = buildHotspotRefreshStatusText(response);
+        if (response && response.loading) {
+            element.dataset.status = "loading";
+            return;
+        }
+        element.dataset.status = response ? "refreshed" : "idle";
     }
 
     function renderDescriptionList(items) {
@@ -2799,24 +3769,91 @@
         }).join("");
     }
 
-    function renderArticleSourceReferences(sourcePaths) {
+    function renderArticleSourceReferences(item) {
+        const sourcePaths = getArticleSourcePaths(item);
         if (!sourcePaths || sourcePaths.length === 0) {
             return "<div class='source-reference-card'><p class='item-summary'>暂未记录可追溯的来源文件。</p></div>";
         }
         return sourcePaths.map(function (sourcePath, index) {
             const sourceType = resolveSourceTypeLabel(sourcePath);
             const sourceRole = index === 0 ? "主要参考文件" : "关联来源";
+            const sourceFile = findArticleSourceFile(item, sourcePath);
+            const previewButton = sourceFile
+                    ? "<button class='ghost-btn source-preview-trigger' type='button' data-article-source-path='"
+                    + escapeHtml(sourcePath)
+                    + "'>预览</button>"
+                    : "";
             return "<article class='source-reference-card'>"
                     + "<div class='source-reference-header'>"
                     + "<div>"
                     + "<p class='item-kicker'>" + escapeHtml(sourceRole) + "</p>"
                     + "<p class='source-reference-path'>" + escapeHtml(sourcePath) + "</p>"
                     + "</div>"
+                    + "<div class='meta-row'>"
                     + "<span class='pill'>" + escapeHtml(sourceType) + "</span>"
+                    + previewButton
+                    + "</div>"
                     + "</div>"
                     + "<p class='item-summary'>" + escapeHtml(buildSourceGranularityNote(sourcePath)) + "</p>"
                     + "</article>";
         }).join("");
+    }
+
+    function bindArticleSourcePreviewActions(item) {
+        const container = document.getElementById("article-sources");
+        if (!container || typeof container.querySelectorAll !== "function") {
+            return;
+        }
+        container.querySelectorAll("[data-article-source-path]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                renderArticleSourcePreview(findArticleSourceFile(item, button.dataset.articleSourcePath));
+            });
+        });
+    }
+
+    function renderArticleSourcePreview(sourceFile) {
+        const container = document.getElementById("article-source-preview");
+        if (!container) {
+            return;
+        }
+        if (!sourceFile) {
+            container.hidden = true;
+            container.innerHTML = "";
+            return;
+        }
+        container.hidden = false;
+        const preview = String(sourceFile.contentPreview || "").trim();
+        container.innerHTML = "<div class='source-preview-header'>"
+                + "<div>"
+                + "<p class='item-kicker'>来源预览</p>"
+                + "<h5>" + escapeHtml(extractSourceFileName(sourceFile.relativePath || "") || sourceFile.relativePath || "来源文件") + "</h5>"
+                + "</div>"
+                + renderContextBadge(sourceFile.format || "UNKNOWN")
+                + "</div>"
+                + "<p class='source-reference-path'>" + escapeHtml(sourceFile.relativePath || "-") + "</p>"
+                + "<pre class='code-view compact'>" + escapeHtml(preview || "当前文件没有可展示预览。") + "</pre>";
+    }
+
+    function findArticleSourceFile(item, sourcePath) {
+        if (!item || !sourcePath || !Array.isArray(state.sourceFiles)) {
+            return null;
+        }
+        const normalizedSourceId = item.sourceId == null ? null : String(item.sourceId);
+        const normalizedSourcePath = normalizeSourceFilePath(sourcePath);
+        for (let index = 0; index < state.sourceFiles.length; index++) {
+            const sourceFile = state.sourceFiles[index];
+            const sameSource = normalizedSourceId == null || String(sourceFile.sourceId || "") === normalizedSourceId;
+            const samePath = normalizeSourceFilePath(sourceFile.relativePath) === normalizedSourcePath
+                    || normalizeSourceFilePath(sourceFile.filePath) === normalizedSourcePath;
+            if (sameSource && samePath) {
+                return sourceFile;
+            }
+        }
+        return null;
+    }
+
+    function normalizeSourceFilePath(value) {
+        return String(value || "").trim().replaceAll("\\", "/");
     }
 
     function collectArticleSourceTypes(item) {
@@ -3156,7 +4193,7 @@
     function renderMetricCard(item) {
         const toneClass = item.tone ? " " + item.tone : "";
         const note = item.note
-                ? "<span class='note'>" + escapeHtml(item.note) + "</span>"
+                ? "<span class='note'>" + escapeHtml(compactMetricNote(item.note)) + "</span>"
                 : "";
         return "<div class='metric-card" + toneClass + "'><span class='label'>" + escapeHtml(item.label)
                 + "</span><span class='value'>" + escapeHtml(String(item.value)) + "</span>" + note + "</div>";
@@ -3177,6 +4214,7 @@
         if (normalized === "SUCCEEDED"
                 || normalized === "ACTIVE"
                 || normalized === "PASSED"
+                || normalized === "APPROVE"
                 || normalized === "CONFIRMED"
                 || normalized === "DOCUMENT"
                 || normalized === "UPLOAD"
@@ -3191,7 +4229,39 @@
         else {
             className += " warning";
         }
-        return "<span class='" + className + "'>" + escapeHtml(getBadgeLabel(value)) + "</span>";
+        return "<span class='" + className + "' title='" + escapeHtml(String(value || "")) + "'>"
+                + escapeHtml(getBadgeLabel(value))
+                + "</span>";
+    }
+
+    function renderContextBadge(value) {
+        return "<span class='badge context' title='" + escapeHtml(String(value || "")) + "'>"
+                + escapeHtml(getBadgeLabel(value))
+                + "</span>";
+    }
+
+    function compactMetricNote(note) {
+        const text = String(note || "").trim();
+        if (!text) {
+            return "";
+        }
+        const replacements = [{
+            from: "系统仍在持续推进这些任务",
+            to: "仍在持续推进"
+        }, {
+            from: "当前没有需要人工确认的任务",
+            to: "当前无需人工确认"
+        }, {
+            from: "最近还没有成功完成的任务",
+            to: "最近暂无成功任务"
+        }, {
+            from: "最近没有失败任务",
+            to: "最近暂无失败任务"
+        }];
+        const matched = replacements.find(function (replacement) {
+            return replacement.from === text;
+        });
+        return matched ? matched.to : text;
     }
 
     function normalizeStatus(value) {
@@ -3420,7 +4490,25 @@
             ARCHIVED: "已归档",
             PASSED: "已通过",
             PENDING: "待处理",
+            NEEDS_REVIEW: "待复核",
             NEEDS_HUMAN_REVIEW: "需人工复核",
+            LOW: "低风险",
+            MEDIUM: "中风险",
+            HIGH: "高风险",
+            SOURCE_CONFLICT: "来源冲突",
+            LOW_TRACEABILITY: "低可追溯",
+            OCR_LOW_CONFIDENCE: "OCR 低置信",
+            HOTSPOT_UNVERIFIED: "热点未验证",
+            USER_REPORTED: "用户反馈",
+            RELIABLE: "答案可靠",
+            ANSWER_PROBLEM: "答案有问题",
+            NEEDS_MANUAL_CONFIRMATION: "需要人工确认",
+            RESOLVED: "已处理",
+            DISMISSED: "已忽略",
+            RESOLVE: "标记处理",
+            DISMISS: "标记忽略",
+            APPROVE: "确认通过",
+            REQUEST_CHANGES: "提交修正",
             SUCCEEDED: "成功",
             FAILED: "失败",
             STALLED: "失败",
@@ -3457,6 +4545,20 @@
             NORMAL: "普通",
             ADMIN_ONLY: "仅管理员",
             DIRECT_TEXT: "直读",
+            TEXT_READ: "文本读取",
+            NATIVE: "原生解析",
+            MD: "Markdown",
+            MARKDOWN: "Markdown",
+            TXT: "文本",
+            PDF: "PDF",
+            DOC: "Word",
+            DOCX: "Word",
+            XLS: "Excel",
+            XLSX: "Excel",
+            CSV: "CSV",
+            JSON: "JSON",
+            HTML: "HTML",
+            XML: "XML",
             OCR_IMAGE: "图片 OCR",
             OCR_SCANNED_PDF: "扫描 PDF OCR",
             HYBRID_PDF: "PDF 混合解析",
@@ -3516,6 +4618,8 @@
             resolveRunDisplayStatus: resolveRunDisplayStatus,
             resolveRunStepLabel: resolveRunStepLabel,
             resolveRunProgressText: resolveRunProgressText,
+            resolveRunSpotlightSummaryText: resolveRunSpotlightSummaryText,
+            resolveRunNextStepText: resolveRunNextStepText,
             buildRunProgressStrip: buildRunProgressStrip,
             buildRunReasonSummary: buildRunReasonSummary,
             shouldRenderRunReasonSummary: shouldRenderRunReasonSummary,
@@ -3530,13 +4634,29 @@
             resolveHttpErrorDisplayMessage: resolveHttpErrorDisplayMessage
         };
         globalThis.__LATTICE_ADMIN_TEST__.source = {
+            renderSourceList: renderSourceList,
+            renderSourceDetail: renderSourceDetail,
+            resolveSourceDisplayName: resolveSourceDisplayName,
+            resolveSourceDocumentTitle: resolveSourceDocumentTitle,
             renderSourceFileListItem: renderSourceFileListItem,
             buildSourceFileDetailCard: buildSourceFileDetailCard,
+            resolveSourceProcessingHistoryItems: resolveSourceProcessingHistoryItems,
             resolveSourceRunKey: resolveSourceRunKey,
             resolveSourceFileKey: resolveSourceFileKey,
             isUploadSource: isUploadSource,
             focusSourceRunDetail: focusSourceRunDetail,
             shouldFollowLatestSourceRun: shouldFollowLatestSourceRun
+        };
+        globalThis.__LATTICE_ADMIN_TEST__.knowledge = {
+            renderSummary: renderSummary,
+            deriveKnowledgeHelpState: deriveKnowledgeHelpState
+        };
+        globalThis.__LATTICE_ADMIN_TEST__.feedback = {
+            buildQueryFeedbackListRequestUrl: buildQueryFeedbackListRequestUrl,
+            renderQueryFeedbackListItem: renderQueryFeedbackListItem,
+            renderQueryFeedbackHistoryItem: renderQueryFeedbackHistoryItem,
+            buildQueryFeedbackHandleRequest: buildQueryFeedbackHandleRequest,
+            compactText: compactText
         };
         globalThis.__LATTICE_ADMIN_TEST__.article = {
             resolveArticleDisplayTitle: resolveArticleDisplayTitle,
@@ -3545,9 +4665,22 @@
             buildArticleSourceCountText: buildArticleSourceCountText,
             buildArticleSourceOverview: buildArticleSourceOverview,
             buildArticleTraceabilityNote: buildArticleTraceabilityNote,
+            buildArticleListRequestUrl: buildArticleListRequestUrl,
+            buildArticleRiskFilterQuery: buildArticleRiskFilterQuery,
+            buildArticleRiskSummary: buildArticleRiskSummary,
+            buildArticleRiskNotice: buildArticleRiskNotice,
+            buildHotspotRefreshStatusText: buildHotspotRefreshStatusText,
+            renderHotspotRefreshStatus: renderHotspotRefreshStatus,
             collectArticleSourceTypes: collectArticleSourceTypes,
             getPrimaryArticleSourcePath: getPrimaryArticleSourcePath,
             renderArticleDetail: renderArticleDetail,
+            shouldShowArticleReviewPanel: shouldShowArticleReviewPanel,
+            buildArticleReviewNote: buildArticleReviewNote,
+            buildArticleReviewRequest: buildArticleReviewRequest,
+            renderArticleReviewHistory: renderArticleReviewHistory,
+            renderArticleSourceReferences: renderArticleSourceReferences,
+            renderArticleSourcePreview: renderArticleSourcePreview,
+            findArticleSourceFile: findArticleSourceFile,
             resolveSourceTypeLabel: resolveSourceTypeLabel,
             buildSourceGranularityNote: buildSourceGranularityNote,
             buildFileLevelTraceExplanation: buildFileLevelTraceExplanation

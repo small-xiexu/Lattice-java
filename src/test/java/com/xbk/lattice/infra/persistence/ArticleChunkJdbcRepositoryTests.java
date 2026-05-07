@@ -18,13 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b1_chunk_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b1_chunk_test",
-        "spring.flyway.default-schema=lattice_b1_chunk_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key"
 })
@@ -40,12 +36,12 @@ class ArticleChunkJdbcRepositoryTests {
     private ArticleChunkJdbcRepository articleChunkJdbcRepository;
 
     /**
-     * 验证 Flyway 已创建 article_chunks 表。
+     * 验证 手动 DDL 已创建 article_chunks 表。
      */
     @Test
-    void shouldCreateArticleChunksTableByFlyway() {
+    void shouldCreateArticleChunksTableByManualDdl() {
         Integer count = jdbcTemplate.queryForObject(
-                "select count(*) from information_schema.tables where table_schema = 'lattice_b1_chunk_test' and table_name = 'article_chunks'",
+                "select count(*) from information_schema.tables where table_schema = 'lattice' and table_name = 'article_chunks'",
                 Integer.class
         );
 
@@ -57,7 +53,7 @@ class ArticleChunkJdbcRepositoryTests {
      */
     @Test
     void shouldReplaceAndLoadChunksByConceptId() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_chunk_test.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
         articleJdbcRepository.upsert(new ArticleRecord(
                 "payment",
                 "Payment",
@@ -79,7 +75,7 @@ class ArticleChunkJdbcRepositoryTests {
      */
     @Test
     void shouldRebuildAllChunksFromArticleContent() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_chunk_test.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
         articleJdbcRepository.upsert(new ArticleRecord(
                 "payment",
                 "Payment",
@@ -112,7 +108,7 @@ class ArticleChunkJdbcRepositoryTests {
      */
     @Test
     void shouldSearchArticleChunksByLexicalIndex() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_chunk_test.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
         articleJdbcRepository.upsert(new ArticleRecord(
                 "payment",
                 "Payment",

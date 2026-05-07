@@ -19,7 +19,6 @@ import com.xbk.lattice.query.service.ArticleVectorIndexService;
 import com.xbk.lattice.query.service.QueryCacheStore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -37,7 +36,6 @@ import java.util.UUID;
  */
 @Service
 @Slf4j
-@Profile("jdbc")
 public class CompilePipelineService {
 
     private final SourceIngestSupport sourceIngestSupport;
@@ -402,6 +400,17 @@ public class CompilePipelineService {
     @Autowired(required = false)
     void setQueryCacheStore(QueryCacheStore queryCacheStore) {
         this.queryCacheStore = queryCacheStore;
+    }
+
+    /**
+     * 注入事实证据卡生成服务。
+     *
+     * @param factCardGenerationService 事实证据卡生成服务
+     */
+    @Autowired(required = false)
+    void setFactCardGenerationService(FactCardGenerationService factCardGenerationService) {
+        sourceIngestSupport.setFactCardGenerationService(factCardGenerationService);
+        incrementalCompileService.setFactCardGenerationService(factCardGenerationService);
     }
 
     /**

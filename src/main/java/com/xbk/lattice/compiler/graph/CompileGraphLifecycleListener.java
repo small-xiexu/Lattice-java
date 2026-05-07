@@ -8,7 +8,6 @@ import com.xbk.lattice.observability.StructuredEventLogger;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -25,7 +24,6 @@ import java.util.concurrent.ConcurrentLinkedDeque;
  */
 @Component
 @Slf4j
-@Profile("jdbc")
 public class CompileGraphLifecycleListener implements GraphLifecycleListener {
 
     private static final String MDC_TRACE_ID = "traceId";

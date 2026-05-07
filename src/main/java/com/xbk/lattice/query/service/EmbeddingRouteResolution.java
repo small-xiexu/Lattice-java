@@ -21,6 +21,8 @@ public class EmbeddingRouteResolution {
 
     private final Integer expectedDimensions;
 
+    private final Integer timeoutSeconds;
+
     /**
      * 创建 Embedding 路由解析结果。
      *
@@ -30,6 +32,7 @@ public class EmbeddingRouteResolution {
      * @param apiKey 解密后的 API Key
      * @param modelName 模型名称
      * @param expectedDimensions 期望维度
+     * @param timeoutSeconds 超时秒数
      */
     public EmbeddingRouteResolution(
             Long profileId,
@@ -37,7 +40,8 @@ public class EmbeddingRouteResolution {
             String baseUrl,
             String apiKey,
             String modelName,
-            Integer expectedDimensions
+            Integer expectedDimensions,
+            Integer timeoutSeconds
     ) {
         this.profileId = profileId;
         this.providerType = providerType;
@@ -45,6 +49,7 @@ public class EmbeddingRouteResolution {
         this.apiKey = apiKey;
         this.modelName = modelName;
         this.expectedDimensions = expectedDimensions;
+        this.timeoutSeconds = timeoutSeconds;
     }
 
     /**
@@ -99,5 +104,14 @@ public class EmbeddingRouteResolution {
      */
     public Integer getExpectedDimensions() {
         return expectedDimensions;
+    }
+
+    /**
+     * 返回超时秒数。
+     *
+     * @return 超时秒数
+     */
+    public Integer getTimeoutSeconds() {
+        return timeoutSeconds;
     }
 }

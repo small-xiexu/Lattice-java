@@ -25,6 +25,7 @@ import java.util.Objects;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -35,17 +36,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_processing_task_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_processing_task_test",
-        "spring.flyway.default-schema=lattice_processing_task_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.query.cache.store=in-memory",
-        "lattice.compiler.jobs.worker-enabled=false"
+        "lattice.compiler.jobs.worker-enabled=false",
+        "lattice.source.admin.allowed-server-dirs[0]=${java.io.tmpdir}"
 })
 @AutoConfigureMockMvc
 class AdminProcessingTaskControllerTests {
@@ -98,7 +96,7 @@ class AdminProcessingTaskControllerTests {
                 .getContentAsString(StandardCharsets.UTF_8);
         Long runId = readLong(uploadResponseBody, "runId");
         String linkedCompileJobId = jdbcTemplate.queryForObject(
-                "select compile_job_id from lattice_processing_task_test.source_sync_runs where id = ?",
+                "select compile_job_id from lattice.source_sync_runs where id = ?",
                 String.class,
                 runId
         );
@@ -200,6 +198,69 @@ class AdminProcessingTaskControllerTests {
     }
 
     /**
+     * 验证目录资料源同步会进入统一处理任务列表。
+     *
+     * @param tempDir 临时目录
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldExposeServerDirSyncInProcessingTasks(@TempDir Path tempDir) throws Exception {
+        resetTables();
+        Path serverDir = Files.createDirectories(tempDir.resolve("server-reference"));
+        Files.writeString(
+                serverDir.resolve("guide.md"),
+                "# Guide\n\nruntime config",
+                StandardCharsets.UTF_8
+        );
+
+        String sourceResponseBody = mockMvc.perform(post("/api/v1/admin/sources/server-dir")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sourceCode": "server-reference",
+                                  "name": "Server Reference",
+                                  "contentProfile": "DOCUMENT",
+                                  "serverDir": "%s"
+                                }
+                                """.formatted(serverDir.toString().replace("\\", "\\\\"))))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        Long sourceId = readLong(sourceResponseBody, "id");
+
+        String syncResponseBody = mockMvc.perform(post("/api/v1/admin/sources/" + sourceId + "/sync"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        Long runId = readLong(syncResponseBody, "runId");
+        String compileJobId = readText(syncResponseBody, "compileJobId");
+
+        String responseBody = mockMvc.perform(get("/api/v1/admin/processing-tasks?limit=10"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        JsonNode rootNode = OBJECT_MAPPER.readTree(responseBody);
+
+        assertThat(rootNode.path("summary").path("runningCount").asInt()).isEqualTo(1);
+        assertThat(rootNode.path("items").size()).isEqualTo(1);
+        JsonNode sourceSyncTask = findTaskByType(rootNode.path("items"), "SOURCE_SYNC");
+        assertThat(sourceSyncTask).isNotNull();
+        assertThat(sourceSyncTask.path("runId").asLong()).isEqualTo(runId.longValue());
+        assertThat(sourceSyncTask.path("sourceId").asLong()).isEqualTo(sourceId.longValue());
+        assertThat(sourceSyncTask.path("sourceName").asText()).isEqualTo("Server Reference");
+        assertThat(sourceSyncTask.path("sourceType").asText()).isEqualTo("SERVER_DIR");
+        assertThat(sourceSyncTask.path("status").asText()).isEqualTo("COMPILE_QUEUED");
+        assertThat(sourceSyncTask.path("compileDerivedStatus").asText()).isEqualTo("QUEUED");
+        assertThat(sourceSyncTask.path("compileJobId").asText()).isEqualTo(compileJobId);
+        assertThat(sourceSyncTask.path("displayStatus").asText()).isEqualTo("QUEUED");
+        assertThat(sourceSyncTask.path("processingActive").asBoolean()).isTrue();
+        assertThat(rootNode.path("items").findValuesAsText("compileJobId")).containsExactly(compileJobId);
+    }
+
+    /**
      * 验证统一处理任务接口会将长时间未推进的独立编译任务标记为 STALLED。
      *
      * @param tempDir 临时目录
@@ -225,7 +286,7 @@ class AdminProcessingTaskControllerTests {
         compileJobJdbcRepository.markRunning(jobId, compileJobProperties.getWorkerId(), startedAt, expiredAt);
         jdbcTemplate.update(
                 """
-                        update lattice_processing_task_test.compile_jobs
+                        update lattice.compile_jobs
                         set last_heartbeat_at = current_timestamp - interval '10 minutes',
                             progress_updated_at = current_timestamp - interval '10 minutes',
                             current_step = 'fix_review_issues',
@@ -363,7 +424,7 @@ class AdminProcessingTaskControllerTests {
     private Long createUploadSource(String sourceCode, String name) {
         jdbcTemplate.update(
                 """
-                        insert into lattice_processing_task_test.knowledge_sources (
+                        insert into lattice.knowledge_sources (
                             source_code,
                             name,
                             source_type,
@@ -380,7 +441,7 @@ class AdminProcessingTaskControllerTests {
                 name
         );
         return jdbcTemplate.queryForObject(
-                "select id from lattice_processing_task_test.knowledge_sources where source_code = ?",
+                "select id from lattice.knowledge_sources where source_code = ?",
                 Long.class,
                 sourceCode
         );
@@ -407,7 +468,7 @@ class AdminProcessingTaskControllerTests {
         String evidenceJson = "{\"message\":\"" + escapeJson(message) + "\"}";
         jdbcTemplate.update(
                 """
-                        insert into lattice_processing_task_test.source_sync_runs (
+                        insert into lattice.source_sync_runs (
                             source_id,
                             source_type,
                             trigger_type,
@@ -450,12 +511,12 @@ class AdminProcessingTaskControllerTests {
      * 重置测试表。
      */
     private void resetTables() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_processing_task_test.pending_queries");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_processing_task_test.contributions");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_processing_task_test.knowledge_sources RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.pending_queries");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.contributions");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.knowledge_sources RESTART IDENTITY CASCADE");
         jdbcTemplate.update(
                 """
-                        insert into lattice_processing_task_test.knowledge_sources (
+                        insert into lattice.knowledge_sources (
                             source_code,
                             name,
                             source_type,
@@ -496,5 +557,22 @@ class AdminProcessingTaskControllerTests {
             return null;
         }
         return Long.valueOf(valueNode.asLong());
+    }
+
+    /**
+     * 从 JSON 响应中读取文本字段。
+     *
+     * @param responseBody 响应体
+     * @param fieldName 字段名
+     * @return 文本值
+     * @throws Exception 解析异常
+     */
+    private String readText(String responseBody, String fieldName) throws Exception {
+        JsonNode rootNode = OBJECT_MAPPER.readTree(responseBody);
+        JsonNode valueNode = rootNode.path(fieldName);
+        if (valueNode.isMissingNode() || valueNode.isNull()) {
+            return null;
+        }
+        return valueNode.asText();
     }
 }

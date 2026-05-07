@@ -4,7 +4,6 @@ import com.xbk.lattice.article.service.ArticleIdentityResolver;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayDeque;
@@ -24,7 +23,6 @@ import java.util.Set;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class PropagationService {
 
     private final DependencyGraphService dependencyGraphService;

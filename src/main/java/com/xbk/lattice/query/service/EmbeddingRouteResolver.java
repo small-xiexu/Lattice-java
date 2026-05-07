@@ -5,7 +5,6 @@ import com.xbk.lattice.llm.domain.LlmProviderConnection;
 import com.xbk.lattice.llm.infra.LlmModelProfileJdbcRepository;
 import com.xbk.lattice.llm.infra.LlmProviderConnectionJdbcRepository;
 import com.xbk.lattice.llm.service.LlmSecretCryptoService;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -18,7 +17,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class EmbeddingRouteResolver {
 
     private final LlmModelProfileJdbcRepository llmModelProfileJdbcRepository;
@@ -74,7 +72,8 @@ public class EmbeddingRouteResolver {
                 providerConnection.orElseThrow().getBaseUrl(),
                 llmSecretCryptoService.decrypt(providerConnection.orElseThrow().getApiKeyCiphertext()),
                 modelProfile.orElseThrow().getModelName(),
-                modelProfile.orElseThrow().getExpectedDimensions()
+                modelProfile.orElseThrow().getExpectedDimensions(),
+                modelProfile.orElseThrow().getTimeoutSeconds()
         );
     }
 }

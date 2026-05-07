@@ -7,9 +7,11 @@ import com.xbk.lattice.query.citation.QueryAnswerAuditSnapshot;
 import com.xbk.lattice.query.domain.ReviewResult;
 import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import com.xbk.lattice.query.service.QueryArticleHit;
+import com.xbk.lattice.query.service.RetrievalChannelRun;
 import com.xbk.lattice.query.service.RetrievalStrategy;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 问答图工作集存储
@@ -88,6 +90,23 @@ public interface QueryWorkingSetStore {
      * @return 检索策略
      */
     RetrievalStrategy loadRetrievalStrategy(String ref);
+
+    /**
+     * 保存检索通道运行摘要。
+     *
+     * @param queryId 查询标识
+     * @param channelRuns 通道运行摘要
+     * @return 工作集引用
+     */
+    String saveRetrievalChannelRuns(String queryId, Map<String, RetrievalChannelRun> channelRuns);
+
+    /**
+     * 读取检索通道运行摘要。
+     *
+     * @param ref 工作集引用
+     * @return 通道运行摘要
+     */
+    Map<String, RetrievalChannelRun> loadRetrievalChannelRuns(String ref);
 
     /**
      * 保存答案草稿。

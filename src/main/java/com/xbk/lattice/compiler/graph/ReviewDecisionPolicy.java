@@ -1,6 +1,5 @@
 package com.xbk.lattice.compiler.graph;
 
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -14,7 +13,6 @@ import java.util.List;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class ReviewDecisionPolicy {
 
     /**

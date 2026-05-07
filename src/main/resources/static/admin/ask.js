@@ -17,6 +17,12 @@
         lastFallbackReason: "",
         lastReviewStatus: "",
         lastQueryId: "",
+        lastQuestion: "",
+        lastAnswer: "",
+        lastArticles: [],
+        lastSources: [],
+        lastSearchItems: [],
+        lastRetrievalAudit: null,
         lastSupportSourceCount: 0,
         lastEvidenceSourceCount: 0,
         lastEvidenceWeak: false
@@ -36,7 +42,16 @@
         document.getElementById("submit-question").addEventListener("click", submitQuestion);
         document.getElementById("clear-question").addEventListener("click", clearQuestion);
         document.getElementById("ask-question").addEventListener("keydown", handleQuestionShortcut);
+        bindIfPresent("submit-answer-feedback", "click", submitAnswerFeedback);
         document.addEventListener("click", handleAskHelpActionClick);
+    }
+
+    function bindIfPresent(id, eventName, handler) {
+        const element = document.getElementById(id);
+        if (!element) {
+            return;
+        }
+        element.addEventListener(eventName, handler);
     }
 
     function handleQuestionShortcut(event) {
@@ -118,6 +133,7 @@
             renderAnswerSupport(queryResponse, searchItems, responseSources);
             renderSourceSummary(queryResponse, searchItems, responseSources);
             renderSources(searchItems, responseSources);
+            await renderRetrievalAudit(queryResponse.queryId || "");
             renderGlobalResult(queryResponse);
             state.lastQueryFailed = false;
             state.lastQueryError = "";
@@ -127,6 +143,12 @@
             state.lastFallbackReason = queryResponse.fallbackReason || "";
             state.lastReviewStatus = queryResponse.reviewStatus || "";
             state.lastQueryId = queryResponse.queryId || "";
+            state.lastQuestion = question;
+            state.lastAnswer = queryResponse.answer || "";
+            state.lastArticles = queryResponse.articles || [];
+            state.lastSources = responseSources;
+            state.lastSearchItems = searchItems;
+            state.lastRetrievalAudit = state.lastRetrievalAudit || null;
             state.lastAnswerHasCitation = hasAskCitations(searchItems, responseSources);
             state.lastAnswerEmpty = !String(queryResponse.answer || "").trim();
             state.lastSupportSourceCount = responseSources.length;
@@ -148,6 +170,12 @@
             state.lastFallbackReason = "";
             state.lastReviewStatus = "";
             state.lastQueryId = "";
+            state.lastQuestion = question;
+            state.lastAnswer = "";
+            state.lastArticles = [];
+            state.lastSources = [];
+            state.lastSearchItems = [];
+            state.lastRetrievalAudit = null;
             state.lastAnswerHasCitation = false;
             state.lastAnswerEmpty = true;
             state.lastSupportSourceCount = 0;
@@ -173,6 +201,12 @@
         state.lastFallbackReason = "";
         state.lastReviewStatus = "";
         state.lastQueryId = "";
+        state.lastQuestion = "";
+        state.lastAnswer = "";
+        state.lastArticles = [];
+        state.lastSources = [];
+        state.lastSearchItems = [];
+        state.lastRetrievalAudit = null;
         state.lastAnswerHasCitation = false;
         state.lastAnswerEmpty = true;
         state.lastSupportSourceCount = 0;
@@ -180,6 +214,7 @@
         state.lastEvidenceWeak = false;
         state.hasSubmitted = false;
         resetAnswerExperience();
+        resetFeedbackExperience();
         renderReadinessCard();
         renderResultGuide();
         syncAskFaqOpenState();
@@ -191,7 +226,9 @@
         document.getElementById("ask-answer-metrics").innerHTML = "<div class='job-card'><p class='item-summary'>正在判断这次回答的结果态、模型态、证据态和复核态...</p></div>";
         document.getElementById("ask-answer-support").innerHTML = "<strong>回答依据</strong><p>正在整理本次回答最直接依赖的来源...</p>";
         document.getElementById("ask-source-summary").innerHTML = "<strong>证据分层</strong><p>正在区分直接支撑来源和补充检索命中...</p>";
-        document.getElementById("ask-sources").innerHTML = "<div class='job-card'><p class='item-summary'>正在整理引用来源...</p></div>";
+            document.getElementById("ask-sources").innerHTML = "<div class='job-card'><p class='item-summary'>正在整理引用来源...</p></div>";
+        renderRetrievalAuditLoading();
+        resetFeedbackExperience();
     }
 
     function renderFailureState() {
@@ -206,6 +243,8 @@
         document.getElementById("ask-answer-support").innerHTML = "<strong>回答依据</strong><p>这次没有成功拿到可用来源。先判断是知识库未准备好，还是服务 / 配置层面的问题。</p>";
         document.getElementById("ask-source-summary").innerHTML = "<strong>证据分层</strong><p>本次没有返回可展示的证据。优先先看报错，再决定是回工作台还是去系统配置。</p>";
         document.getElementById("ask-sources").innerHTML = "<div class='job-card'><p class='item-summary'>本次未能加载引用来源。</p></div>";
+        renderRetrievalAuditEmpty("本次没有可展示的检索审计。");
+        resetFeedbackExperience();
     }
 
     function resetAnswerExperience() {
@@ -221,17 +260,135 @@
         document.getElementById("ask-answer-support").innerHTML = "<strong>回答依据</strong><p>提交问题后，这里会显示这次回答最直接依赖的来源，以及是否已经形成稳定引用。</p>";
         document.getElementById("ask-source-summary").innerHTML = "<strong>证据分层</strong><p>这里会区分“回答直接引用的来源”和“本次检索命中的补充证据”，避免所有来源平铺在一起。</p>";
         document.getElementById("ask-sources").innerHTML = "<div class='job-card'><p class='item-summary'>还没有引用来源，先提交一个问题。</p></div>";
+        renderRetrievalAuditEmpty("还没有检索审计，先提交一个问题。");
+        resetFeedbackExperience();
     }
 
     function toggleAskResultExperience(visible) {
         const resultPanel = document.getElementById("ask-result-panel");
         const sourcePanel = document.getElementById("ask-source-panel");
+        const retrievalAuditPanel = document.getElementById("ask-retrieval-audit-panel");
         if (resultPanel) {
             resultPanel.hidden = !visible;
         }
         if (sourcePanel) {
             sourcePanel.hidden = !visible;
         }
+        if (retrievalAuditPanel) {
+            retrievalAuditPanel.hidden = !visible;
+        }
+    }
+
+    async function submitAnswerFeedback() {
+        if (!state.lastQuestion || !state.hasSubmitted) {
+            setFeedbackStatus("请先完成一次提问再提交反馈。", "warning");
+            return;
+        }
+        const request = buildAnswerFeedbackRequest(
+                document.getElementById("ask-feedback-type") ? document.getElementById("ask-feedback-type").value : "",
+                document.getElementById("ask-feedback-comment") ? document.getElementById("ask-feedback-comment").value : "",
+                document.getElementById("ask-feedback-reporter") ? document.getElementById("ask-feedback-reporter").value : ""
+        );
+        setFeedbackSubmitting(true);
+        setFeedbackStatus("正在提交反馈...", "info");
+        try {
+            const response = await fetchJson("/api/v1/admin/query-feedback", {
+                method: "POST",
+                body: JSON.stringify(request)
+            });
+            setFeedbackStatus("已进入结果反馈队列 #" + String(response.id || ""), "success");
+            const commentElement = document.getElementById("ask-feedback-comment");
+            if (commentElement) {
+                commentElement.value = "";
+            }
+        }
+        catch (error) {
+            const message = error && error.message ? error.message : String(error);
+            setFeedbackStatus("反馈提交失败：" + message, "danger");
+        }
+        finally {
+            setFeedbackSubmitting(false);
+        }
+    }
+
+    function buildAnswerFeedbackRequest(feedbackType, comment, reportedBy) {
+        return {
+            queryId: state.lastQueryId || null,
+            question: state.lastQuestion || "",
+            answerSummary: trimFeedbackAnswer(state.lastAnswer || ""),
+            feedbackType: feedbackType || "answer_problem",
+            comment: String(comment || "").trim(),
+            articleKeys: collectAnswerFeedbackArticleKeys(state.lastArticles, state.lastSources, state.lastSearchItems),
+            sourcePaths: collectAnswerFeedbackSourcePaths(state.lastSources, state.lastSearchItems),
+            reportedBy: String(reportedBy || "").trim() || "anonymous"
+        };
+    }
+
+    function collectAnswerFeedbackArticleKeys(articles, sources, searchItems) {
+        const keys = new Set();
+        (articles || []).forEach(function (item) {
+            addIfPresent(keys, item && item.articleKey);
+        });
+        (sources || []).forEach(function (item) {
+            addIfPresent(keys, item && item.articleKey);
+        });
+        (searchItems || []).forEach(function (item) {
+            addIfPresent(keys, item && item.articleKey);
+        });
+        return Array.from(keys);
+    }
+
+    function collectAnswerFeedbackSourcePaths(sources, searchItems) {
+        const paths = new Set();
+        (sources || []).forEach(function (item) {
+            addSourcePaths(paths, item && item.sourcePaths);
+        });
+        (searchItems || []).forEach(function (item) {
+            addSourcePaths(paths, item && item.sourcePaths);
+        });
+        return Array.from(paths);
+    }
+
+    function addSourcePaths(paths, sourcePaths) {
+        (sourcePaths || []).forEach(function (sourcePath) {
+            addIfPresent(paths, sourcePath);
+        });
+    }
+
+    function addIfPresent(values, value) {
+        const normalized = String(value || "").trim();
+        if (normalized) {
+            values.add(normalized);
+        }
+    }
+
+    function trimFeedbackAnswer(answer) {
+        const normalized = String(answer || "").trim();
+        if (normalized.length <= 1200) {
+            return normalized;
+        }
+        return normalized.slice(0, 1200);
+    }
+
+    function resetFeedbackExperience() {
+        setFeedbackStatus("", "info");
+        setFeedbackSubmitting(false);
+    }
+
+    function setFeedbackSubmitting(submitting) {
+        const button = document.getElementById("submit-answer-feedback");
+        if (button) {
+            button.disabled = Boolean(submitting);
+        }
+    }
+
+    function setFeedbackStatus(message, tone) {
+        const element = document.getElementById("ask-feedback-status");
+        if (!element) {
+            return;
+        }
+        element.textContent = message || "";
+        element.dataset.tone = tone || "";
     }
 
     function renderReadiness(overview, jobs) {
@@ -742,6 +899,215 @@
                 + "<p class='source-snippet'>" + escapeHtml(options.snippet || "暂无片段") + "</p>"
                 + "<div class='tag-list'>" + renderTagGroup(options.sourcePaths || []) + "</div>"
                 + "</article>";
+    }
+
+    async function renderRetrievalAudit(queryId) {
+        if (!queryId) {
+            state.lastRetrievalAudit = null;
+            renderRetrievalAuditEmpty("本次没有 queryId，无法读取检索审计。");
+            return;
+        }
+        try {
+            const audit = await fetchJson(
+                    "/api/v1/admin/query/retrieval/audits/latest?queryId="
+                    + encodeURIComponent(queryId)
+                    + "&historyLimit=5"
+            );
+            state.lastRetrievalAudit = audit || null;
+            renderRetrievalAuditDetail(audit || {});
+        }
+        catch (error) {
+            state.lastRetrievalAudit = null;
+            renderRetrievalAuditEmpty("检索审计加载失败：" + (error && error.message ? error.message : String(error)));
+        }
+    }
+
+    function renderRetrievalAuditLoading() {
+        const summary = document.getElementById("ask-retrieval-audit-summary");
+        const channelRuns = document.getElementById("ask-retrieval-channel-runs");
+        const channelHits = document.getElementById("ask-retrieval-channel-hits");
+        if (summary) {
+            summary.innerHTML = "<strong>通道运行</strong><p>正在读取本次检索 run、channel run 与 hit 明细...</p>";
+        }
+        if (channelRuns) {
+            channelRuns.innerHTML = "<div class='job-card'><p class='item-summary'>正在加载通道运行状态...</p></div>";
+        }
+        if (channelHits) {
+            channelHits.innerHTML = "<div class='job-card'><p class='item-summary'>正在加载通道命中明细...</p></div>";
+        }
+    }
+
+    function renderRetrievalAuditEmpty(message) {
+        const summary = document.getElementById("ask-retrieval-audit-summary");
+        const channelRuns = document.getElementById("ask-retrieval-channel-runs");
+        const channelHits = document.getElementById("ask-retrieval-channel-hits");
+        if (summary) {
+            summary.innerHTML = "<strong>通道运行</strong><p>" + escapeHtml(message || "暂无检索审计。") + "</p>";
+        }
+        if (channelRuns) {
+            channelRuns.innerHTML = "<div class='job-card'><p class='item-summary'>暂无通道运行状态。</p></div>";
+        }
+        if (channelHits) {
+            channelHits.innerHTML = "";
+        }
+    }
+
+    function renderRetrievalAuditDetail(audit) {
+        const latestRun = audit && audit.latestRun ? audit.latestRun : null;
+        if (!audit || !audit.found || !latestRun) {
+            renderRetrievalAuditEmpty("没有找到本次 queryId 对应的检索审计。");
+            return;
+        }
+        renderRetrievalAuditSummary(latestRun, audit);
+        renderRetrievalChannelRuns(latestRun.channelRuns || []);
+        renderRetrievalChannelHits(audit.channelHits || []);
+    }
+
+    function renderRetrievalAuditSummary(run, audit) {
+        const summary = document.getElementById("ask-retrieval-audit-summary");
+        if (!summary) {
+            return;
+        }
+        const channelRuns = run.channelRuns || [];
+        const failedCount = channelRuns.filter(function (item) {
+            return normalizeStatusValue(item.status) === "FAILED";
+        }).length;
+        const timeoutCount = channelRuns.filter(function (item) {
+            return normalizeStatusValue(item.status) === "TIMEOUT";
+        }).length;
+        const skippedCount = channelRuns.filter(function (item) {
+            return normalizeStatusValue(item.status) === "SKIPPED";
+        }).length;
+        const zeroHitCount = channelRuns.filter(function (item) {
+            return !!item.zeroHit;
+        }).length;
+        summary.innerHTML = "<strong>通道运行</strong>"
+                + "<p>run #"
+                + escapeHtml(String(run.runId || "-"))
+                + "，"
+                + escapeHtml(run.retrievalMode || "-")
+                + " 模式；通道 "
+                + escapeHtml(String(channelRuns.length || run.channelCount || 0))
+                + " 个，融合命中 "
+                + escapeHtml(String(run.fusedHitCount || 0))
+                + " 条，hit 明细 "
+                + escapeHtml(String(audit.channelHitCount || 0))
+                + " 条。失败 "
+                + escapeHtml(String(failedCount))
+                + "，超时 "
+                + escapeHtml(String(timeoutCount))
+                + "，跳过 "
+                + escapeHtml(String(skippedCount))
+                + "，零命中 "
+                + escapeHtml(String(zeroHitCount))
+                + "。</p>";
+    }
+
+    function renderRetrievalChannelRuns(channelRuns) {
+        const container = document.getElementById("ask-retrieval-channel-runs");
+        if (!container) {
+            return;
+        }
+        if (!channelRuns || channelRuns.length === 0) {
+            container.innerHTML = "<div class='job-card'><p class='item-summary'>暂无通道运行状态。</p></div>";
+            return;
+        }
+        container.innerHTML = channelRuns.map(renderRetrievalChannelRunCard).join("");
+    }
+
+    function renderRetrievalChannelRunCard(channelRun) {
+        const statusMeta = getChannelRunStatusMeta(channelRun && channelRun.status);
+        const reason = channelRun && channelRun.errorSummary
+                ? channelRun.errorSummary
+                : (channelRun && channelRun.skippedReason ? channelRun.skippedReason : "");
+        const tags = [
+            "耗时 " + String(channelRun && channelRun.durationMillis != null ? channelRun.durationMillis : 0) + "ms",
+            "命中 " + String(channelRun && channelRun.hitCount != null ? channelRun.hitCount : 0),
+            channelRun && channelRun.zeroHit ? "零命中" : "",
+            channelRun && channelRun.timeout ? "超时" : ""
+        ].filter(Boolean).map(function (tag) {
+            return "<span class='pill'>" + escapeHtml(tag) + "</span>";
+        }).join("");
+        return "<article class='query-audit-channel-card' data-status='"
+                + escapeHtml(statusMeta.tone)
+                + "'>"
+                + "<div class='meta-row'>"
+                + "<span class='pill'>" + escapeHtml(channelRun && channelRun.channelName ? channelRun.channelName : "-") + "</span>"
+                + renderStatusBadge(statusMeta.label, statusMeta.tone)
+                + "</div>"
+                + "<div class='query-audit-channel-tags'>" + tags + "</div>"
+                + (reason ? "<p class='source-snippet'>" + escapeHtml(reason) + "</p>" : "")
+                + "</article>";
+    }
+
+    function renderRetrievalChannelHits(channelHits) {
+        const container = document.getElementById("ask-retrieval-channel-hits");
+        if (!container) {
+            return;
+        }
+        if (!channelHits || channelHits.length === 0) {
+            container.innerHTML = "<div class='job-card'><p class='item-summary'>本次没有通道 hit 明细。</p></div>";
+            return;
+        }
+        const rows = channelHits.slice(0, 80).map(function (hit) {
+            const fusedRank = hit.fusedRank == null ? "-" : String(hit.fusedRank);
+            return "<tr>"
+                    + "<td>" + escapeHtml(hit.channelName || "-") + "</td>"
+                    + "<td>" + escapeHtml(String(Number(hit.hitRank || 0) + 1)) + "</td>"
+                    + "<td>" + escapeHtml(fusedRank) + "</td>"
+                    + "<td>" + (hit.includedInFused ? renderStatusBadge("进入融合", "success") : renderStatusBadge("未融合", "warning")) + "</td>"
+                    + "<td>" + escapeHtml(hit.evidenceType || "-") + "</td>"
+                    + "<td>" + escapeHtml(hit.title || hit.conceptId || hit.articleKey || "-") + "</td>"
+                    + "<td>" + escapeHtml(formatScore(hit.score)) + "</td>"
+                    + "<td>" + escapeHtml(formatSourcePaths(hit.sourcePathsJson)) + "</td>"
+                    + "</tr>";
+        }).join("");
+        container.innerHTML = "<table class='simple-table query-audit-hit-table'>"
+                + "<thead><tr>"
+                + "<th>通道</th><th>通道排名</th><th>融合排名</th><th>融合</th><th>证据</th><th>标题</th><th>分数</th><th>来源</th>"
+                + "</tr></thead>"
+                + "<tbody>" + rows + "</tbody>"
+                + "</table>";
+    }
+
+    function getChannelRunStatusMeta(status) {
+        const normalized = normalizeStatusValue(status);
+        const mapping = {
+            SUCCESS: {label: "成功", tone: "success"},
+            SKIPPED: {label: "跳过", tone: "warning"},
+            FAILED: {label: "失败", tone: "danger"},
+            TIMEOUT: {label: "超时", tone: "danger"}
+        };
+        return mapping[normalized] || {label: normalized || "未知", tone: "warning"};
+    }
+
+    function renderStatusBadge(label, tone) {
+        return "<span class='badge " + escapeHtml(tone || "warning") + "'>" + escapeHtml(label || "-") + "</span>";
+    }
+
+    function formatScore(score) {
+        const numericScore = Number(score);
+        if (!Number.isFinite(numericScore)) {
+            return "-";
+        }
+        return numericScore.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+    }
+
+    function formatSourcePaths(sourcePathsJson) {
+        const rawValue = String(sourcePathsJson || "").trim();
+        if (!rawValue) {
+            return "-";
+        }
+        try {
+            const parsed = JSON.parse(rawValue);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                return parsed.slice(0, 3).join("，");
+            }
+        }
+        catch (error) {
+            return trimSnippet(rawValue);
+        }
+        return "-";
     }
 
     function deduplicateSourceItems(items) {
@@ -1540,6 +1906,18 @@
             trimSnippet: trimSnippet,
             sanitizeSnippetContent: sanitizeSnippetContent,
             getFallbackReasonMeta: getFallbackReasonMeta,
+            buildAnswerFeedbackRequest: buildAnswerFeedbackRequest,
+            collectAnswerFeedbackArticleKeys: collectAnswerFeedbackArticleKeys,
+            collectAnswerFeedbackSourcePaths: collectAnswerFeedbackSourcePaths,
+            setLastAnswerContext: function (context) {
+                state.lastQueryId = context.queryId || "";
+                state.lastQuestion = context.question || "";
+                state.lastAnswer = context.answer || "";
+                state.lastArticles = context.articles || [];
+                state.lastSources = context.sources || [];
+                state.lastSearchItems = context.searchItems || [];
+                state.hasSubmitted = true;
+            },
             setCanAsk: function (value) {
                 canAsk = !!value;
                 syncAskComposerState();

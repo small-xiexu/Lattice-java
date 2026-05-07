@@ -60,6 +60,53 @@ final class QueryGraphTestSupport {
             QueryReviewProperties queryReviewProperties,
             List<QueryArticleHit> evidenceCatalog
     ) {
+        return createQueryGraphOrchestrator(
+                ftsSearchService,
+                refKeySearchService,
+                sourceSearchService,
+                contributionSearchService,
+                vectorSearchService,
+                answerGenerationService,
+                queryCacheStore,
+                reviewerAgent,
+                queryReviewProperties,
+                evidenceCatalog,
+                new QueryRetrievalSettingsService(),
+                null
+        );
+    }
+
+    /**
+     * 创建可注入检索配置与审计服务的 Query Graph 编排器。
+     *
+     * @param ftsSearchService FTS 检索服务
+     * @param refKeySearchService RefKey 检索服务
+     * @param sourceSearchService Source 检索服务
+     * @param contributionSearchService Contribution 检索服务
+     * @param vectorSearchService Vector 检索服务
+     * @param answerGenerationService 答案生成服务
+     * @param queryCacheStore 查询缓存
+     * @param reviewerAgent 审查代理
+     * @param queryReviewProperties 审查配置
+     * @param evidenceCatalog 引用核验用证据目录
+     * @param queryRetrievalSettingsService 检索配置服务
+     * @param retrievalAuditService 检索审计服务
+     * @return Query Graph 编排器
+     */
+    static QueryGraphOrchestrator createQueryGraphOrchestrator(
+            FtsSearchService ftsSearchService,
+            RefKeySearchService refKeySearchService,
+            SourceSearchService sourceSearchService,
+            ContributionSearchService contributionSearchService,
+            VectorSearchService vectorSearchService,
+            AnswerGenerationService answerGenerationService,
+            QueryCacheStore queryCacheStore,
+            ReviewerAgent reviewerAgent,
+            QueryReviewProperties queryReviewProperties,
+            List<QueryArticleHit> evidenceCatalog,
+            QueryRetrievalSettingsService queryRetrievalSettingsService,
+            RetrievalAuditService retrievalAuditService
+    ) {
         QueryWorkingSetStore queryWorkingSetStore = new InMemoryQueryWorkingSetStore();
         QueryGraphStateMapper queryGraphStateMapper = new QueryGraphStateMapper();
         CitationExtractor citationExtractor = new CitationExtractor();
@@ -76,16 +123,22 @@ final class QueryGraphTestSupport {
                 refKeySearchService,
                 sourceSearchService,
                 new SourceChunkFtsSearchService(null),
+                new FactCardFtsSearchService(null),
+                new FactCardVectorSearchService(),
                 contributionSearchService,
                 new GraphSearchService(),
                 vectorSearchService,
                 new ChunkVectorSearchService(),
                 new RrfFusionService(),
-                new QueryRetrievalSettingsService(),
+                queryRetrievalSettingsService == null
+                        ? new QueryRetrievalSettingsService()
+                        : queryRetrievalSettingsService,
+                new QuerySearchProperties(),
                 new QueryRewriteService(),
                 new QueryIntentClassifier(),
+                new AnswerShapeClassifier(),
                 new RetrievalStrategyResolver(),
-                null,
+                retrievalAuditService,
                 answerGenerationService,
                 queryCacheStore,
                 reviewerAgent,

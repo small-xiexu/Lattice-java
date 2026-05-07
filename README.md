@@ -316,16 +316,11 @@ sequenceDiagram
 下面先给一组安全的最小启动命令，默认使用 `lattice` schema：
 
 ```bash
-docker exec vector_db psql -U postgres -d ai-rag-knowledge \
-  -c "CREATE SCHEMA IF NOT EXISTS lattice;"
+./scripts/reset-lattice-schema.sh
 
-export SPRING_PROFILES_ACTIVE=jdbc
 export SPRING_DATASOURCE_URL='jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice'
 export SPRING_DATASOURCE_USERNAME=postgres
 export SPRING_DATASOURCE_PASSWORD=postgres
-export SPRING_FLYWAY_ENABLED=true
-export SPRING_FLYWAY_SCHEMAS=lattice
-export SPRING_FLYWAY_DEFAULT_SCHEMA=lattice
 export LATTICE_REDIS_HOST=127.0.0.1
 export LATTICE_REDIS_PORT=6379
 export LATTICE_LLM_BOOTSTRAP_ENABLED=true
@@ -347,21 +342,15 @@ mvn -q -s .codex/maven-settings.xml spring-boot:run
 - 基础可用：`compile` 和 `query`
 - 复杂问题可用：再补齐 `deep_research` 的 `planner / researcher / synthesizer / reviewer`
 
-### 如果遇到旧迁移污染，再重建 schema
+### 手动重建 schema
 
-只有当你本地的 `lattice` schema 跑过旧版本迁移链时，才需要执行下面这组重建命令：
+应用启动不会自动建表。需要初始化或重建数据库时，显式执行：
 
 ```bash
-docker exec vector_db psql -U postgres -d ai-rag-knowledge \
-  -c "DROP SCHEMA IF EXISTS lattice CASCADE; CREATE SCHEMA lattice;"
+./scripts/reset-lattice-schema.sh
 ```
 
-这是因为：
-
-- 当前仓库的 Flyway 迁移已经收敛为单一基线 `V1__baseline_schema.sql`
-- 如果你本地 schema 跑过旧迁移链，旧的 `flyway_schema_history` 可能还在
-- 启动时会出现 `Migration checksum mismatch for migration version 1`
-- 这时最稳妥的处理方式就是重建 schema，再重新启动
+这会删除并重建唯一业务 schema `lattice`，然后执行 `src/main/resources/db/schema.sql`。
 
 ### 启动后 3 分钟首轮验证
 

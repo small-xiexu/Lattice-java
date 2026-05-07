@@ -2,9 +2,8 @@ package com.xbk.lattice.infra.persistence;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xbk.lattice.infra.persistence.mapper.QueryRewriteAuditMapper;
 import com.xbk.lattice.query.service.QueryRewriteResult;
-import org.springframework.context.annotation.Profile;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -15,20 +14,19 @@ import org.springframework.stereotype.Repository;
  * @author xiexu
  */
 @Repository
-@Profile("jdbc")
 public class QueryRewriteAuditJdbcRepository {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
 
-    private final JdbcTemplate jdbcTemplate;
+    private final QueryRewriteAuditMapper queryRewriteAuditMapper;
 
     /**
      * 创建 Query Rewrite 审计 JDBC 仓储。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @param queryRewriteAuditMapper Query Rewrite 审计 Mapper
      */
-    public QueryRewriteAuditJdbcRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public QueryRewriteAuditJdbcRepository(QueryRewriteAuditMapper queryRewriteAuditMapper) {
+        this.queryRewriteAuditMapper = queryRewriteAuditMapper;
     }
 
     /**
@@ -39,23 +37,16 @@ public class QueryRewriteAuditJdbcRepository {
      * @return 审计引用
      */
     public String save(String queryId, QueryRewriteResult queryRewriteResult) {
-        if (jdbcTemplate == null || queryRewriteResult == null || queryId == null || queryId.isBlank()) {
+        if (queryRewriteResult == null || queryId == null || queryId.isBlank()) {
             return null;
         }
-        Long auditId = jdbcTemplate.queryForObject(
-                """
-                        insert into query_rewrite_audits (
-                            query_id, original_question, rewritten_question,
-                            matched_rule_codes, rewrite_applied, created_at
-                        ) values (?, ?, ?, cast(? as jsonb), ?, current_timestamp)
-                        returning audit_id
-                        """,
-                Long.class,
+        String matchedRuleCodesJson = toJson(queryRewriteResult);
+        Long auditId = queryRewriteAuditMapper.insert(
                 queryId,
                 queryRewriteResult.getOriginalQuestion(),
                 queryRewriteResult.getRewrittenQuestion(),
-                toJson(queryRewriteResult),
-                Boolean.valueOf(queryRewriteResult.isRewriteApplied())
+                matchedRuleCodesJson,
+                queryRewriteResult.isRewriteApplied()
         );
         return auditId == null ? null : "query_rewrite_audits:" + auditId;
     }

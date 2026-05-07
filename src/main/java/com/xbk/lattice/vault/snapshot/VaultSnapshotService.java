@@ -16,7 +16,6 @@ import com.xbk.lattice.infra.persistence.RepoSnapshotJdbcRepository;
 import com.xbk.lattice.infra.persistence.RepoSnapshotRecord;
 import com.xbk.lattice.vault.VaultExportResult;
 import com.xbk.lattice.vault.VaultExportService;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,7 +36,6 @@ import java.util.UUID;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class VaultSnapshotService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();

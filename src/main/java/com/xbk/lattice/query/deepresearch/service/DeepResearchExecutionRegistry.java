@@ -1,6 +1,5 @@
 package com.xbk.lattice.query.deepresearch.service;
 
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -14,7 +13,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class DeepResearchExecutionRegistry {
 
     private final Map<String, DeepResearchExecutionContext> contexts = new ConcurrentHashMap<String, DeepResearchExecutionContext>();

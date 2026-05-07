@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.CompileReviewConfigMapper">
+
+    <resultMap id="CompileReviewConfigRecordResultMap" type="com.xbk.lattice.infra.persistence.CompileReviewConfigRecord">
+        <constructor>
+            <arg column="config_scope" javaType="java.lang.String"/>
+            <arg column="auto_fix_enabled" javaType="_boolean"/>
+            <arg column="max_fix_rounds" javaType="_int"/>
+            <arg column="allow_persist_needs_human_review" javaType="_boolean"/>
+            <arg column="human_review_severity_threshold" javaType="java.lang.String"/>
+            <arg column="created_by" javaType="java.lang.String"/>
+            <arg column="updated_by" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="updated_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <select id="findDefault" resultMap="CompileReviewConfigRecordResultMap">
+        select config_scope, auto_fix_enabled, max_fix_rounds,
+               allow_persist_needs_human_review, human_review_severity_threshold,
+               created_by, updated_by, created_at, updated_at
+        from compile_review_settings
+        where config_scope = 'default'
+    </select>
+
+    <insert id="saveDefault">
+        insert into compile_review_settings (
+            config_scope, auto_fix_enabled, max_fix_rounds,
+            allow_persist_needs_human_review, human_review_severity_threshold,
+            created_by, updated_by, created_at, updated_at
+        )
+        values (
+            #{record.configScope},
+            #{record.autoFixEnabled},
+            #{record.maxFixRounds},
+            #{record.allowPersistNeedsHumanReview},
+            #{record.humanReviewSeverityThreshold},
+            #{record.createdBy},
+            #{record.updatedBy},
+            coalesce(#{record.createdAt}, current_timestamp),
+            current_timestamp
+        )
+        on conflict (config_scope) do update
+        set auto_fix_enabled = excluded.auto_fix_enabled,
+            max_fix_rounds = excluded.max_fix_rounds,
+            allow_persist_needs_human_review = excluded.allow_persist_needs_human_review,
+            human_review_severity_threshold = excluded.human_review_severity_threshold,
+            updated_by = excluded.updated_by,
+            updated_at = current_timestamp
+    </insert>
+</mapper>

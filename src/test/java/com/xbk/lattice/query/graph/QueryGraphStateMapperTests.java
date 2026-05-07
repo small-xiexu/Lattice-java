@@ -51,6 +51,8 @@ class QueryGraphStateMapperTests {
         queryGraphState.setAnswerRoute("query.answer.gpt54");
         queryGraphState.setReviewRoute("query.reviewer.claude");
         queryGraphState.setRewriteRoute("query.rewrite.gpt54");
+        queryGraphState.setFactCardHitsRef("query-id-001:fact-card-hits");
+        queryGraphState.setFactCardVectorHitsRef("query-id-001:fact-card-vector-hits");
         queryGraphState.setAnswerProjectionBundleRef("query-id-001:answer-projection-bundle");
 
         Map<String, Object> stateMap = queryGraphStateMapper.toMap(queryGraphState);
@@ -67,6 +69,11 @@ class QueryGraphStateMapperTests {
         assertThat(stateMap).containsEntry(QueryGraphStateKeys.ANSWER_ROUTE, "query.answer.gpt54");
         assertThat(stateMap).containsEntry(QueryGraphStateKeys.REVIEW_ROUTE, "query.reviewer.claude");
         assertThat(stateMap).containsEntry(QueryGraphStateKeys.REWRITE_ROUTE, "query.rewrite.gpt54");
+        assertThat(stateMap).containsEntry(QueryGraphStateKeys.FACT_CARD_HITS_REF, "query-id-001:fact-card-hits");
+        assertThat(stateMap).containsEntry(
+                QueryGraphStateKeys.FACT_CARD_VECTOR_HITS_REF,
+                "query-id-001:fact-card-vector-hits"
+        );
         assertThat(stateMap).containsEntry(
                 QueryGraphStateKeys.ANSWER_PROJECTION_BUNDLE_REF,
                 "query-id-001:answer-projection-bundle"

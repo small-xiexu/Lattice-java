@@ -4,7 +4,6 @@ import com.xbk.lattice.documentparse.domain.model.ParseCapability;
 import com.xbk.lattice.documentparse.domain.model.ProviderConnection;
 import com.xbk.lattice.documentparse.domain.model.ProviderDescriptor;
 import com.xbk.lattice.documentparse.domain.model.ProviderFieldDescriptor;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -25,7 +24,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class DocumentParseProviderDescriptorService {
 
     private final Map<String, ProviderDescriptor> descriptors;

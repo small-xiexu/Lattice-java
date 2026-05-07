@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.source.infra.mapper.SourceSnapshotMapper">
+
+    <insert id="save">
+        insert into source_snapshots (
+            source_id,
+            sync_run_id,
+            manifest_hash,
+            summary_json
+        )
+        values (
+            #{sourceId},
+            #{syncRunId},
+            #{manifestHash},
+            #{summaryJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler}
+        )
+    </insert>
+</mapper>

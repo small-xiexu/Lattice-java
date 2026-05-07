@@ -11,7 +11,6 @@ import com.xbk.lattice.infra.persistence.ContributionRecord;
 import com.xbk.lattice.infra.persistence.RepoSnapshotItemRecord;
 import com.xbk.lattice.infra.persistence.RepoSnapshotJdbcRepository;
 import com.xbk.lattice.infra.persistence.RepoSnapshotRecord;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,7 +29,6 @@ import java.util.List;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class RepoSnapshotService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();

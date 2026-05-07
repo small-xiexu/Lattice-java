@@ -31,13 +31,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b9_vault_export_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b9_vault_export_test",
-        "spring.flyway.default-schema=lattice_b9_vault_export_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key"
 })
@@ -167,10 +163,10 @@ class VaultExportServiceTests {
     }
 
     private void resetTables() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_export_test.contributions");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_export_test.synthesis_artifacts");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_export_test.articles CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_vault_export_test.knowledge_sources RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.contributions");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.synthesis_artifacts");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.knowledge_sources RESTART IDENTITY CASCADE");
     }
 
     private Long createManagedSourceId() {

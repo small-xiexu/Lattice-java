@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.PendingQueryMapper">
+
+    <resultMap id="PendingQueryRecordResultMap" type="com.xbk.lattice.infra.persistence.PendingQueryRecord">
+        <constructor>
+            <arg column="query_id" javaType="java.lang.String"/>
+            <arg column="question" javaType="java.lang.String"/>
+            <arg column="answer" javaType="java.lang.String"/>
+            <arg column="selected_concept_ids" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="selected_article_keys" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="source_file_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="corrections" javaType="java.lang.String"/>
+            <arg column="review_status" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="expires_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="PendingQueryColumns">
+        query_id, question, answer, selected_concept_ids, selected_article_keys, source_file_paths,
+        corrections::text as corrections, review_status, created_at, expires_at
+    </sql>
+
+    <insert id="upsert">
+        insert into pending_queries (
+            query_id, question, answer, selected_concept_ids, selected_article_keys, source_file_paths,
+            corrections, review_status, created_at, expires_at
+        )
+        values (
+            #{record.queryId},
+            #{record.question},
+            #{record.answer},
+            #{record.selectedConceptIds,typeHandler=com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler},
+            #{record.selectedArticleKeys,typeHandler=com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler},
+            #{record.sourceFilePaths,typeHandler=com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler},
+            #{record.correctionsJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{record.reviewStatus},
+            #{record.createdAt},
+            #{record.expiresAt}
+        )
+        on conflict (query_id) do update
+        set answer = excluded.answer,
+            selected_concept_ids = excluded.selected_concept_ids,
+            selected_article_keys = excluded.selected_article_keys,
+            source_file_paths = excluded.source_file_paths,
+            corrections = excluded.corrections,
+            review_status = excluded.review_status,
+            expires_at = excluded.expires_at
+    </insert>
+
+    <select id="findByQueryId" resultMap="PendingQueryRecordResultMap">
+        select <include refid="PendingQueryColumns"/>
+        from pending_queries
+        where query_id = #{queryId}
+    </select>
+
+    <select id="findAllActive" resultMap="PendingQueryRecordResultMap">
+        select <include refid="PendingQueryColumns"/>
+        from pending_queries
+        where expires_at &gt;= CURRENT_TIMESTAMP
+        order by created_at desc, query_id desc
+    </select>
+
+    <delete id="deleteByQueryId">
+        delete from pending_queries
+        where query_id = #{queryId}
+    </delete>
+</mapper>

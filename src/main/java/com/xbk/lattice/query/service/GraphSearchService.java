@@ -10,7 +10,6 @@ import com.xbk.lattice.infra.persistence.GraphFactJdbcRepository;
 import com.xbk.lattice.infra.persistence.GraphRelationJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -30,7 +29,6 @@ import java.util.Set;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class GraphSearchService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();

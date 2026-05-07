@@ -19,13 +19,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_r16_schema_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_r16_schema_test",
-        "spring.flyway.default-schema=lattice_r16_schema_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key"
 })
@@ -38,12 +34,12 @@ class DeepResearchBaselineSchemaTests {
      * 验证 v2.6 baseline DDL 已创建 Deep Research 与 Citation 所需表。
      */
     @Test
-    void shouldCreateV26DeepResearchTablesByFlyway() {
+    void shouldCreateV26DeepResearchTablesByManualDdl() {
         List<String> tableNames = jdbcTemplate.queryForList(
                 """
                         select table_name
                         from information_schema.tables
-                        where table_schema = 'lattice_r16_schema_test'
+                        where table_schema = 'lattice'
                           and table_name in (
                               'deep_research_runs',
                               'deep_research_tasks',

@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.llm.infra.mapper.ExecutionLlmSnapshotMapper">
+
+    <resultMap id="ExecutionLlmSnapshotResultMap" type="com.xbk.lattice.llm.domain.ExecutionLlmSnapshot">
+        <constructor>
+            <arg column="id" javaType="java.lang.Long"/>
+            <arg column="scope_type" javaType="java.lang.String"/>
+            <arg column="scope_id" javaType="java.lang.String"/>
+            <arg column="scene" javaType="java.lang.String"/>
+            <arg column="agent_role" javaType="java.lang.String"/>
+            <arg column="binding_id" javaType="java.lang.Long"/>
+            <arg column="model_profile_id" javaType="java.lang.Long"/>
+            <arg column="connection_id" javaType="java.lang.Long"/>
+            <arg column="route_label" javaType="java.lang.String"/>
+            <arg column="provider_type" javaType="java.lang.String"/>
+            <arg column="base_url" javaType="java.lang.String"/>
+            <arg column="model_name" javaType="java.lang.String"/>
+            <arg column="temperature" javaType="java.math.BigDecimal"/>
+            <arg column="max_tokens" javaType="java.lang.Integer"/>
+            <arg column="timeout_seconds" javaType="java.lang.Integer"/>
+            <arg column="extra_options_json" javaType="java.lang.String"/>
+            <arg column="input_price_per_1k_tokens" javaType="java.math.BigDecimal"/>
+            <arg column="output_price_per_1k_tokens" javaType="java.math.BigDecimal"/>
+            <arg column="snapshot_version" javaType="java.lang.Integer"/>
+            <arg column="created_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="ExecutionLlmSnapshotColumns">
+        id, scope_type, scope_id, scene, agent_role, binding_id, model_profile_id,
+        connection_id, route_label, provider_type, base_url, model_name, temperature,
+        max_tokens, timeout_seconds, extra_options_json::text as extra_options_json, input_price_per_1k_tokens,
+        output_price_per_1k_tokens, snapshot_version, created_at
+    </sql>
+
+    <insert id="save">
+        insert into execution_llm_snapshots (
+            scope_type, scope_id, scene, agent_role, binding_id, model_profile_id,
+            connection_id, route_label, provider_type, base_url, model_name, temperature,
+            max_tokens, timeout_seconds, extra_options_json, input_price_per_1k_tokens,
+            output_price_per_1k_tokens, snapshot_version
+        )
+        values (
+            #{snapshot.scopeType},
+            #{snapshot.scopeId},
+            #{snapshot.scene},
+            #{snapshot.agentRole},
+            #{snapshot.bindingId},
+            #{snapshot.modelProfileId},
+            #{snapshot.connectionId},
+            #{snapshot.routeLabel},
+            #{snapshot.providerType},
+            #{snapshot.baseUrl},
+            #{snapshot.modelName},
+            #{snapshot.temperature},
+            #{snapshot.maxTokens},
+            #{snapshot.timeoutSeconds},
+            #{snapshot.extraOptionsJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{snapshot.inputPricePer1kTokens},
+            #{snapshot.outputPricePer1kTokens},
+            #{snapshot.snapshotVersion}
+        )
+        on conflict (scope_type, scope_id, scene, agent_role) do update
+        set binding_id = excluded.binding_id,
+            model_profile_id = excluded.model_profile_id,
+            connection_id = excluded.connection_id,
+            route_label = excluded.route_label,
+            provider_type = excluded.provider_type,
+            base_url = excluded.base_url,
+            model_name = excluded.model_name,
+            temperature = excluded.temperature,
+            max_tokens = excluded.max_tokens,
+            timeout_seconds = excluded.timeout_seconds,
+            extra_options_json = excluded.extra_options_json,
+            input_price_per_1k_tokens = excluded.input_price_per_1k_tokens,
+            output_price_per_1k_tokens = excluded.output_price_per_1k_tokens,
+            snapshot_version = excluded.snapshot_version
+    </insert>
+
+    <select id="findByScope" resultMap="ExecutionLlmSnapshotResultMap">
+        select <include refid="ExecutionLlmSnapshotColumns"/>
+        from execution_llm_snapshots
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and scene = #{scene}
+        order by agent_role asc
+    </select>
+
+    <select id="findByScopeAndRole" resultMap="ExecutionLlmSnapshotResultMap">
+        select <include refid="ExecutionLlmSnapshotColumns"/>
+        from execution_llm_snapshots
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and scene = #{scene}
+          and agent_role = #{agentRole}
+    </select>
+
+    <delete id="deleteByScope">
+        delete from execution_llm_snapshots
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and scene = #{scene}
+    </delete>
+</mapper>

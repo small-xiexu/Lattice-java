@@ -6,7 +6,6 @@ import com.xbk.lattice.llm.service.PromptCacheWritePolicy;
 import com.xbk.lattice.query.domain.ReviewIssue;
 import com.xbk.lattice.query.domain.ReviewResult;
 import com.xbk.lattice.query.domain.ReviewerPayload;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -24,7 +23,6 @@ import java.util.regex.Pattern;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class ReviewResultParser {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

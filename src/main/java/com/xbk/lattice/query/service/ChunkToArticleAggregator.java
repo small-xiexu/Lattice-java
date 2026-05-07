@@ -1,6 +1,5 @@
 package com.xbk.lattice.query.service;
 
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -15,7 +14,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class ChunkToArticleAggregator {
 
     /**

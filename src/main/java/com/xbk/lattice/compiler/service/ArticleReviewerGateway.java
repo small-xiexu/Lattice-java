@@ -7,7 +7,6 @@ import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import com.xbk.lattice.llm.service.LlmInvocationEnvelope;
 import com.xbk.lattice.query.domain.ReviewResult;
 import com.xbk.lattice.query.service.ReviewResultParser;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -21,7 +20,6 @@ import java.util.Locale;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class ArticleReviewerGateway {
 
     private final LlmGateway llmGateway;

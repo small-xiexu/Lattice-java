@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.QualityMetricsHistoryMapper">
+
+    <resultMap id="QualityMetricsHistoryRecordResultMap" type="com.xbk.lattice.infra.persistence.QualityMetricsHistoryRecord">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+            <arg column="measured_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="total_articles" javaType="_int"/>
+            <arg column="passed_articles" javaType="_int"/>
+            <arg column="pending_articles" javaType="_int"/>
+            <arg column="needs_review" javaType="_int"/>
+            <arg column="contributions" javaType="_int"/>
+            <arg column="source_count" javaType="_int"/>
+            <arg column="review_pass_rate" javaType="_double"/>
+            <arg column="grounding_rate" javaType="_double"/>
+            <arg column="referential_rate" javaType="_double"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="save">
+        insert into quality_metrics_history (
+            measured_at, total_articles, passed_articles, pending_articles, needs_review,
+            contributions, source_count, review_pass_rate, grounding_rate, referential_rate
+        )
+        values (
+            #{record.measuredAt},
+            #{record.totalArticles},
+            #{record.passedArticles},
+            #{record.pendingArticles},
+            #{record.needsReview},
+            #{record.contributions},
+            #{record.sourceCount},
+            #{record.reviewPassRate},
+            #{record.groundingRate},
+            #{record.referentialRate}
+        )
+    </insert>
+
+    <select id="findSince" resultMap="QualityMetricsHistoryRecordResultMap">
+        select id, measured_at, total_articles, passed_articles, pending_articles, needs_review,
+               contributions, source_count, review_pass_rate, grounding_rate, referential_rate
+        from quality_metrics_history
+        where measured_at &gt; current_timestamp - (#{days} * interval '1 day')
+        order by measured_at desc, id desc
+    </select>
+</mapper>

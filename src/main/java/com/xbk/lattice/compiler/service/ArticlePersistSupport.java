@@ -12,7 +12,6 @@ import com.xbk.lattice.query.service.ArticleVectorIndexService;
 import com.xbk.lattice.query.service.QueryCacheStore;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +26,6 @@ import java.util.List;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class ArticlePersistSupport {
 
     private final ArticleCompileSupport articleCompileSupport;

@@ -45,6 +45,43 @@ class PdfTextExtractorTests {
     }
 
     /**
+     * 验证 PDF 抽取内容可按 gold Markdown 口径复核关键正文、页码和表格证据。
+     *
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldMatchGoldMarkdownForTextAndTableExtraction() throws IOException {
+        Path pdfPath = tempDir.resolve("gold.pdf");
+        writeGoldPdf(pdfPath);
+        String goldMarkdown = """
+                === Page: 1 ===
+                Payment Retry Guide
+                Retry window: 15 minutes
+                Owner: platform-team
+
+                === Page: 2 ===
+                Escalation Matrix
+                table_row: Level | Response | Owner
+                table_row: P1 | 5 minutes | oncall
+                table_row: P2 | 30 minutes | support
+                """;
+
+        SourceExtractionResult result = new PdfTextExtractor().extract(pdfPath);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getContent()).contains("=== Page: 1 ===");
+        assertThat(result.getContent()).contains("=== Page: 2 ===");
+        assertThat(result.getContent()).contains("Payment Retry Guide");
+        assertThat(result.getContent()).contains("Retry window: 15 minutes");
+        assertThat(result.getContent()).contains("Owner: platform-team");
+        assertThat(result.getContent()).contains("table_row: Level | Response | Owner");
+        assertThat(result.getContent()).contains("table_row: P1 | 5 minutes | oncall");
+        assertThat(result.getContent()).contains("table_row: P2 | 30 minutes | support");
+        assertThat(result.getMetadataJson()).contains("\"pageCount\":2");
+        assertThat(goldMarkdown).contains("Payment Retry Guide");
+    }
+
+    /**
      * 写入测试 PDF。
      *
      * @param pdfPath PDF 路径
@@ -59,6 +96,35 @@ class PdfTextExtractorTests {
                 writeRow(contentStream, font, 720.0F, "Risk", "Impact", "Mitigation");
                 writeRow(contentStream, font, 700.0F, "Capacity", "Latency", "Throttle writes");
                 writeRow(contentStream, font, 680.0F, "Rollback", "Mismatch", "Reconcile");
+            }
+            document.save(pdfPath.toFile());
+        }
+    }
+
+    /**
+     * 写入带正文和表格的 gold PDF。
+     *
+     * @param pdfPath PDF 路径
+     * @throws IOException IO 异常
+     */
+    private void writeGoldPdf(Path pdfPath) throws IOException {
+        try (PDDocument document = new PDDocument()) {
+            PDPage firstPage = new PDPage();
+            document.addPage(firstPage);
+            try (PDPageContentStream contentStream = new PDPageContentStream(document, firstPage)) {
+                PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+                writeText(contentStream, font, 50.0F, 720.0F, "Payment Retry Guide");
+                writeText(contentStream, font, 50.0F, 700.0F, "Retry window: 15 minutes");
+                writeText(contentStream, font, 50.0F, 680.0F, "Owner: platform-team");
+            }
+            PDPage secondPage = new PDPage();
+            document.addPage(secondPage);
+            try (PDPageContentStream contentStream = new PDPageContentStream(document, secondPage)) {
+                PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+                writeText(contentStream, font, 50.0F, 740.0F, "Escalation Matrix");
+                writeRow(contentStream, font, 710.0F, "Level", "Response", "Owner");
+                writeRow(contentStream, font, 690.0F, "P1", "5 minutes", "oncall");
+                writeRow(contentStream, font, 670.0F, "P2", "30 minutes", "support");
             }
             document.save(pdfPath.toFile());
         }

@@ -1,6 +1,5 @@
 package com.xbk.lattice.query.service;
 
-import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -15,7 +14,6 @@ import java.util.Set;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class StringRedisKeyValueStore implements RedisKeyValueStore {
 
     private final StringRedisTemplate stringRedisTemplate;

@@ -10,7 +10,6 @@ import com.xbk.lattice.query.evidence.domain.ProjectionCitationFormat;
 import com.xbk.lattice.query.evidence.domain.ProjectionStatus;
 import com.xbk.lattice.query.service.QueryArticleHit;
 import com.xbk.lattice.query.service.QueryEvidenceType;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -28,7 +27,6 @@ import java.util.Set;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class QueryAnswerProjectionBuilder {
 
     private final CitationExtractor citationExtractor;

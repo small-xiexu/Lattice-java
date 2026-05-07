@@ -3,7 +3,6 @@ package com.xbk.lattice.query.service;
 import com.xbk.lattice.infra.persistence.QueryRetrievalAuditJdbcRepository;
 import com.xbk.lattice.infra.persistence.QueryRetrievalChannelHitView;
 import com.xbk.lattice.infra.persistence.QueryRetrievalRunView;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -17,7 +16,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class RetrievalAuditQueryService {
 
     private static final int DEFAULT_HISTORY_LIMIT = 5;

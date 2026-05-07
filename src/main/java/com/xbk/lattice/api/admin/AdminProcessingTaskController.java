@@ -1,8 +1,8 @@
 package com.xbk.lattice.api.admin;
 
 import com.xbk.lattice.admin.service.AdminProcessingTaskService;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 @RequestMapping("/api/v1/admin")
 public class AdminProcessingTaskController {
 
@@ -40,5 +39,21 @@ public class AdminProcessingTaskController {
     public AdminProcessingTaskListResponse listProcessingTasks(@RequestParam(defaultValue = "10") Integer limit) {
         int resolvedLimit = limit == null ? 10 : Math.max(1, Math.min(limit.intValue(), 50));
         return adminProcessingTaskService.listProcessingTasks(resolvedLimit);
+    }
+
+    /**
+     * 查询指定资料源的处理历史。
+     *
+     * @param sourceId 资料源主键
+     * @param limit 返回数量
+     * @return 指定资料源处理历史
+     */
+    @GetMapping("/sources/{sourceId}/processing-tasks")
+    public AdminProcessingTaskListResponse listSourceProcessingTasks(
+            @PathVariable Long sourceId,
+            @RequestParam(defaultValue = "10") Integer limit
+    ) {
+        int resolvedLimit = limit == null ? 10 : Math.max(1, Math.min(limit.intValue(), 50));
+        return adminProcessingTaskService.listProcessingTasksBySourceId(sourceId, resolvedLimit);
     }
 }

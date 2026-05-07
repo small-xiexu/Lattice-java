@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.llm.domain.LlmModelProfile;
 import com.xbk.lattice.llm.domain.LlmProviderConnection;
 import org.springframework.ai.model.anthropic.autoconfigure.AnthropicConnectionProperties;
-import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -30,7 +29,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class LlmConnectionProbeService {
 
     private static final int DEFAULT_TIMEOUT_SECONDS = 15;

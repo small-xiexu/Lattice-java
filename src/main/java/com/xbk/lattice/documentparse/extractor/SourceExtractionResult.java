@@ -13,6 +13,8 @@ public class SourceExtractionResult {
 
     private final String metadataJson;
 
+    private final String structuredContentJson;
+
     private final boolean verbatim;
 
     /**
@@ -23,8 +25,26 @@ public class SourceExtractionResult {
      * @param verbatim 是否按原文保留
      */
     public SourceExtractionResult(String content, String metadataJson, boolean verbatim) {
+        this(content, metadataJson, "", verbatim);
+    }
+
+    /**
+     * 创建源文件抽取结果。
+     *
+     * @param content 抽取后的正文
+     * @param metadataJson 元数据 JSON
+     * @param structuredContentJson 结构化内容 JSON
+     * @param verbatim 是否按原文保留
+     */
+    public SourceExtractionResult(
+            String content,
+            String metadataJson,
+            String structuredContentJson,
+            boolean verbatim
+    ) {
         this.content = content;
         this.metadataJson = metadataJson;
+        this.structuredContentJson = structuredContentJson;
         this.verbatim = verbatim;
     }
 
@@ -44,6 +64,15 @@ public class SourceExtractionResult {
      */
     public String getMetadataJson() {
         return metadataJson;
+    }
+
+    /**
+     * 获取结构化内容 JSON。
+     *
+     * @return 结构化内容 JSON
+     */
+    public String getStructuredContentJson() {
+        return structuredContentJson;
     }
 
     /**

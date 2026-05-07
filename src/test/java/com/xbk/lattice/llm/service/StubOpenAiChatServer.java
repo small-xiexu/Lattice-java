@@ -40,6 +40,8 @@ class StubOpenAiChatServer {
 
     private final List<String> capturedResponseFormatTypes = new CopyOnWriteArrayList<String>();
 
+    private final List<JsonNode> capturedResponseFormats = new CopyOnWriteArrayList<JsonNode>();
+
     private final List<String> capturedTransferEncodings = new CopyOnWriteArrayList<String>();
 
     private final List<String> capturedContentLengths = new CopyOnWriteArrayList<String>();
@@ -101,6 +103,10 @@ class StubOpenAiChatServer {
         return capturedResponseFormatTypes;
     }
 
+    List<JsonNode> getCapturedResponseFormats() {
+        return capturedResponseFormats;
+    }
+
     List<String> getCapturedTransferEncodings() {
         return capturedTransferEncodings;
     }
@@ -138,7 +144,9 @@ class StubOpenAiChatServer {
             String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             JsonNode rootNode = OBJECT_MAPPER.readTree(requestBody);
             capturedModels.add(rootNode.path("model").asText());
-            capturedResponseFormatTypes.add(rootNode.path("response_format").path("type").asText(null));
+            JsonNode responseFormatNode = rootNode.path("response_format");
+            capturedResponseFormatTypes.add(responseFormatNode.path("type").asText(null));
+            capturedResponseFormats.add(responseFormatNode.deepCopy());
             String responseBody = """
                     {
                       "id": "chatcmpl_test",

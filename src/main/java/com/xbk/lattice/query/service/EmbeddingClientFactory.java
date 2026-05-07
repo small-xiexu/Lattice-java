@@ -18,7 +18,8 @@ import org.springframework.ai.openai.OpenAiEmbeddingModel;
 import org.springframework.ai.openai.OpenAiEmbeddingOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.context.event.EventListener;
-import org.springframework.context.annotation.Profile;
+import org.springframework.http.client.BufferingClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -26,9 +27,12 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.ArrayList;
+import java.net.ProxySelector;
+import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
@@ -45,8 +49,11 @@ import java.util.concurrent.ConcurrentMap;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class EmbeddingClientFactory {
+
+    private static final int DEFAULT_TIMEOUT_SECONDS = 60;
+
+    private static final ProxySelector NO_PROXY_SELECTOR = ProxySelector.of(null);
 
     private final RestClient.Builder restClientBuilder;
 
@@ -145,7 +152,7 @@ public class EmbeddingClientFactory {
         OpenAiApi openAiApi = OpenAiApi.builder()
                 .baseUrl(baseUrl)
                 .apiKey(routeResolution.getApiKey())
-                .restClientBuilder(restClientBuilder)
+                .restClientBuilder(createRestClientBuilder(routeResolution.getTimeoutSeconds()))
                 .webClientBuilder(webClientBuilder)
                 .build();
         OpenAiEmbeddingOptions options = OpenAiEmbeddingOptions.builder()
@@ -157,7 +164,9 @@ public class EmbeddingClientFactory {
 
     private EmbeddingModel createOpenAiCompatibleEmbeddingEndpointClient(EmbeddingRouteResolution routeResolution) {
         RestClient restClient = restClientBuilder
+                .clone()
                 .baseUrl(llmEndpointUrlResolver.resolveEmbeddingBaseUrl(routeResolution.getBaseUrl()))
+                .requestFactory(createRequestFactory(routeResolution.getTimeoutSeconds()))
                 .defaultHeader("Authorization", "Bearer " + routeResolution.getApiKey())
                 .build();
         return new OpenAiCompatibleEmbeddingEndpointModel(
@@ -170,7 +179,7 @@ public class EmbeddingClientFactory {
     private EmbeddingModel createOllamaClient(EmbeddingRouteResolution routeResolution) {
         OllamaApi ollamaApi = OllamaApi.builder()
                 .baseUrl(llmEndpointUrlResolver.normalizeBaseUrl(routeResolution.getBaseUrl()))
-                .restClientBuilder(restClientBuilder)
+                .restClientBuilder(createRestClientBuilder(routeResolution.getTimeoutSeconds()))
                 .webClientBuilder(webClientBuilder)
                 .build();
         OllamaEmbeddingOptions options = OllamaEmbeddingOptions.builder()
@@ -196,8 +205,51 @@ public class EmbeddingClientFactory {
         stringBuilder.append("|");
         stringBuilder.append(routeResolution.getExpectedDimensions() == null ? "" : routeResolution.getExpectedDimensions());
         stringBuilder.append("|");
+        stringBuilder.append(resolveTimeout(routeResolution.getTimeoutSeconds()));
+        stringBuilder.append("|");
         stringBuilder.append(hash(routeResolution.getApiKey()));
         return stringBuilder.toString();
+    }
+
+    /**
+     * 创建带超时的 RestClient 构建器。
+     *
+     * @param timeoutSeconds 超时秒数
+     * @return RestClient 构建器
+     */
+    private RestClient.Builder createRestClientBuilder(Integer timeoutSeconds) {
+        return restClientBuilder.clone().requestFactory(createRequestFactory(timeoutSeconds));
+    }
+
+    /**
+     * 创建带超时的 JDK HTTP 请求工厂。
+     *
+     * @param timeoutSeconds 超时秒数
+     * @return 请求工厂
+     */
+    private BufferingClientHttpRequestFactory createRequestFactory(Integer timeoutSeconds) {
+        int resolvedTimeoutSeconds = resolveTimeout(timeoutSeconds);
+        HttpClient httpClient = HttpClient.newBuilder()
+                .proxy(NO_PROXY_SELECTOR)
+                .connectTimeout(Duration.ofSeconds(resolvedTimeoutSeconds))
+                .version(HttpClient.Version.HTTP_1_1)
+                .build();
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(Duration.ofSeconds(resolvedTimeoutSeconds));
+        return new BufferingClientHttpRequestFactory(requestFactory);
+    }
+
+    /**
+     * 解析超时秒数。
+     *
+     * @param timeoutSeconds 配置值
+     * @return 有效超时秒数
+     */
+    private int resolveTimeout(Integer timeoutSeconds) {
+        if (timeoutSeconds == null || timeoutSeconds.intValue() <= 0) {
+            return DEFAULT_TIMEOUT_SECONDS;
+        }
+        return timeoutSeconds.intValue();
     }
 
     private String normalizeProviderType(String providerType) {

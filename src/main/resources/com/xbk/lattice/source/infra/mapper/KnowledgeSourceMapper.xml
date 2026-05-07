@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.source.infra.mapper.KnowledgeSourceMapper">
+
+    <resultMap id="KnowledgeSourceResultMap" type="com.xbk.lattice.source.domain.KnowledgeSource">
+        <constructor>
+            <arg column="id" javaType="java.lang.Long"/>
+            <arg column="source_code" javaType="java.lang.String"/>
+            <arg column="name" javaType="java.lang.String"/>
+            <arg column="source_type" javaType="java.lang.String"/>
+            <arg column="content_profile" javaType="java.lang.String"/>
+            <arg column="status" javaType="java.lang.String"/>
+            <arg column="visibility" javaType="java.lang.String"/>
+            <arg column="default_sync_mode" javaType="java.lang.String"/>
+            <arg column="config_json" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="latest_manifest_hash" javaType="java.lang.String"/>
+            <arg column="last_sync_run_id" javaType="java.lang.Long"/>
+            <arg column="last_sync_status" javaType="java.lang.String"/>
+            <arg column="last_sync_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="created_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="updated_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="KnowledgeSourceColumns">
+        id, source_code, name, source_type, content_profile, status, visibility,
+        default_sync_mode, config_json::text as config_json, metadata_json::text as metadata_json,
+        latest_manifest_hash, last_sync_run_id, last_sync_status, last_sync_at, created_at, updated_at
+    </sql>
+
+    <sql id="KnowledgeSourceFilters">
+        <if test="keyword != null and keyword != ''">
+            and (
+                source_code ilike concat('%', #{keyword}, '%')
+                or name ilike concat('%', #{keyword}, '%')
+            )
+        </if>
+        <if test="status != null and status != ''">
+            and status = #{status}
+        </if>
+        <if test="sourceType != null and sourceType != ''">
+            and source_type = #{sourceType}
+        </if>
+    </sql>
+
+    <select id="findAll" resultMap="KnowledgeSourceResultMap">
+        select <include refid="KnowledgeSourceColumns"/>
+        from knowledge_sources
+        order by id desc
+    </select>
+
+    <select id="findById" resultMap="KnowledgeSourceResultMap">
+        select <include refid="KnowledgeSourceColumns"/>
+        from knowledge_sources
+        where id = #{id}
+    </select>
+
+    <select id="findBySourceCode" resultMap="KnowledgeSourceResultMap">
+        select <include refid="KnowledgeSourceColumns"/>
+        from knowledge_sources
+        where source_code = #{sourceCode}
+    </select>
+
+    <select id="countAll" resultType="_long">
+        select count(*)
+        from knowledge_sources
+        where source_code &lt;&gt; 'legacy-default'
+        <include refid="KnowledgeSourceFilters"/>
+    </select>
+
+    <select id="findPage" resultMap="KnowledgeSourceResultMap">
+        select <include refid="KnowledgeSourceColumns"/>
+        from knowledge_sources
+        where source_code &lt;&gt; 'legacy-default'
+        <include refid="KnowledgeSourceFilters"/>
+        order by updated_at desc, id desc
+        limit #{limit} offset #{offset}
+    </select>
+
+    <select id="insert" resultType="java.lang.Long">
+        insert into knowledge_sources (
+            source_code, name, source_type, content_profile, status, visibility,
+            default_sync_mode, config_json, metadata_json, latest_manifest_hash,
+            last_sync_run_id, last_sync_status, last_sync_at
+        )
+        values (
+            #{source.sourceCode},
+            #{source.name},
+            #{source.sourceType},
+            #{source.contentProfile},
+            #{source.status},
+            #{source.visibility},
+            #{source.defaultSyncMode},
+            #{source.configJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{source.metadataJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{source.latestManifestHash},
+            #{source.lastSyncRunId},
+            #{source.lastSyncStatus},
+            #{source.lastSyncAt}
+        )
+        returning id
+    </select>
+
+    <update id="update">
+        update knowledge_sources
+        set source_code = #{source.sourceCode},
+            name = #{source.name},
+            source_type = #{source.sourceType},
+            content_profile = #{source.contentProfile},
+            status = #{source.status},
+            visibility = #{source.visibility},
+            default_sync_mode = #{source.defaultSyncMode},
+            config_json = #{source.configJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            metadata_json = #{source.metadataJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            latest_manifest_hash = #{source.latestManifestHash},
+            last_sync_run_id = #{source.lastSyncRunId},
+            last_sync_status = #{source.lastSyncStatus},
+            last_sync_at = #{source.lastSyncAt},
+            updated_at = current_timestamp
+        where id = #{source.id}
+    </update>
+</mapper>

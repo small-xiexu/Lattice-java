@@ -1,7 +1,6 @@
 package com.xbk.lattice.compiler.prompt;
 
 import com.xbk.lattice.compiler.config.CompilerProperties;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -19,7 +18,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class SchemaAwarePrompts {
 
     private static final int MAX_SCHEMA_CHARS = 8000;

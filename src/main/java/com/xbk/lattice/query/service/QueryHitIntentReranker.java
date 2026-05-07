@@ -88,6 +88,9 @@ public final class QueryHitIntentReranker {
         if (hit == null || hit.getReviewStatus() == null || hit.getReviewStatus().isBlank()) {
             return 0.0D;
         }
+        if (hit.getEvidenceType() == QueryEvidenceType.FACT_CARD) {
+            return factCardReviewQualityBonus(hit);
+        }
         String normalizedReviewStatus = lowerCase(hit.getReviewStatus());
         if ("passed".equals(normalizedReviewStatus)) {
             return 8.0D;
@@ -96,6 +99,22 @@ public final class QueryHitIntentReranker {
             return -40.0D;
         }
         return -12.0D;
+    }
+
+    /**
+     * 根据 Fact Card 卡级审查状态调整候选优先级。
+     *
+     * @param hit 查询命中
+     * @return 分值增量
+     */
+    private static double factCardReviewQualityBonus(QueryArticleHit hit) {
+        if (!FactCardReviewUsagePolicy.allowsQueryCandidate(hit.getReviewStatus())) {
+            return -80.0D;
+        }
+        if (FactCardReviewUsagePolicy.isBackgroundOnly(hit.getReviewStatus())) {
+            return -30.0D;
+        }
+        return 0.0D;
     }
 
     /**

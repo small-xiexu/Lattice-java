@@ -3,6 +3,7 @@ package com.xbk.lattice.query.service;
 import com.xbk.lattice.infra.persistence.QueryRewriteAuditJdbcRepository;
 import com.xbk.lattice.infra.persistence.QueryRewriteRuleJdbcRepository;
 import com.xbk.lattice.infra.persistence.QueryRewriteRuleRecord;
+import com.xbk.lattice.query.evidence.domain.AnswerShape;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -53,14 +54,23 @@ class QueryPreparationServiceTests {
         RetrievalStrategy retrievalStrategy = new RetrievalStrategyResolver().resolve(
                 "payment.retry.maxAttempts 配置在哪里",
                 QueryIntent.CONFIGURATION,
+                AnswerShape.GENERAL,
                 settings
         );
 
         assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_REFKEY)).isTrue();
         assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_SOURCE_CHUNK_FTS)).isTrue();
+        assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS)).isTrue();
+        assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_FACT_CARD_VECTOR)).isFalse();
         assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR)).isFalse();
+        assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_CHUNK_VECTOR)).isFalse();
+        assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_GRAPH)).isFalse();
         assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_REFKEY))
                 .isGreaterThan(settings.getRefkeyWeight());
+        assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS))
+                .isGreaterThan(settings.getFactCardWeight());
+        assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS))
+                .isLessThan(settings.getArticleChunkWeight());
     }
 
     /**
@@ -72,13 +82,14 @@ class QueryPreparationServiceTests {
         RetrievalStrategy retrievalStrategy = new RetrievalStrategyResolver().resolve(
                 "PaymentRetryService 调用链经过哪些类",
                 QueryIntent.CODE_STRUCTURE,
+                AnswerShape.GENERAL,
                 settings
         );
 
         assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_GRAPH))
-                .isGreaterThan(settings.getGraphWeight());
+                .isGreaterThan(settings.getGraphWeight() * 1.50D);
         assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_SOURCE_CHUNK_FTS))
-                .isGreaterThan(settings.getSourceChunkWeight());
+                .isGreaterThan(settings.getSourceChunkWeight() * 1.45D);
         assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS))
                 .isGreaterThan(settings.getArticleChunkWeight());
         assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR)).isFalse();
@@ -94,6 +105,7 @@ class QueryPreparationServiceTests {
         RetrievalStrategy retrievalStrategy = new RetrievalStrategyResolver().resolve(
                 "为什么要做知识编译而不是只靠关键词检索",
                 QueryIntent.ARCHITECTURE,
+                AnswerShape.GENERAL,
                 settings
         );
 
@@ -101,6 +113,81 @@ class QueryPreparationServiceTests {
         assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_CHUNK_VECTOR)).isTrue();
         assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_GRAPH))
                 .isGreaterThan(settings.getGraphWeight());
+        assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR))
+                .isGreaterThan(settings.getArticleVectorWeight());
+        assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_CHUNK_VECTOR))
+                .isGreaterThan(settings.getChunkVectorWeight());
+    }
+
+    /**
+     * 验证结构化答案形态会提升 Fact Card 与 source chunk，压低 article 背景层。
+     */
+    @Test
+    void shouldPromoteFactCardAndSourceChunkForStructuredAnswerShape() {
+        QueryRetrievalSettingsState settings = new QueryRetrievalSettingsService().defaultState();
+        RetrievalStrategy retrievalStrategy = new RetrievalStrategyResolver().resolve(
+                "处理流程有哪些步骤",
+                QueryIntent.GENERAL,
+                AnswerShape.SEQUENCE,
+                settings
+        );
+
+        assertThat(retrievalStrategy.getAnswerShape()).isEqualTo(AnswerShape.SEQUENCE);
+        assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS))
+                .isGreaterThan(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS));
+        assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_FACT_CARD_VECTOR))
+                .isGreaterThan(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS));
+        assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_SOURCE_CHUNK_FTS))
+                .isGreaterThan(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS));
+        assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_FTS))
+                .isLessThan(settings.getFtsWeight());
+        assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR))
+                .isLessThan(settings.getArticleVectorWeight());
+        assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_CHUNK_VECTOR))
+                .isLessThan(settings.getChunkVectorWeight());
+    }
+
+    /**
+     * 验证带结构符号的精确标识问题会收敛到直接证据通道，不再按宽泛解释题放大背景向量。
+     */
+    @Test
+    void shouldFocusExactIdentifierQuestionOnDirectEvidenceChannels() {
+        QueryRetrievalSettingsState settings = new QueryRetrievalSettingsService().defaultState();
+        QueryIntent queryIntent = new QueryIntentClassifier().classify("/api/v1/orders/create 这个接口的约束是什么");
+        RetrievalStrategy retrievalStrategy = new RetrievalStrategyResolver().resolve(
+                "/api/v1/orders/create 这个接口的约束是什么",
+                queryIntent,
+                AnswerShape.POLICY,
+                settings
+        );
+
+        assertThat(queryIntent).isEqualTo(QueryIntent.CONFIGURATION);
+        assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_GRAPH)).isFalse();
+        assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR)).isFalse();
+        assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_CHUNK_VECTOR)).isFalse();
+        assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_SOURCE_CHUNK_FTS))
+                .isGreaterThan(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS));
+        assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS))
+                .isGreaterThan(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS));
+    }
+
+    /**
+     * 验证宽泛概念题提升语义与 article chunk 通道，保留背景解释收益。
+     */
+    @Test
+    void shouldPromoteSemanticChannelsForBroadConceptQuestion() {
+        QueryRetrievalSettingsState settings = new QueryRetrievalSettingsService().defaultState();
+        RetrievalStrategy retrievalStrategy = new RetrievalStrategyResolver().resolve(
+                "知识编译为什么能提升问答准确率",
+                QueryIntent.GENERAL,
+                AnswerShape.GENERAL,
+                settings
+        );
+
+        assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR)).isTrue();
+        assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_CHUNK_VECTOR)).isTrue();
+        assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS))
+                .isGreaterThan(settings.getArticleChunkWeight());
         assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR))
                 .isGreaterThan(settings.getArticleVectorWeight());
         assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_CHUNK_VECTOR))
@@ -136,6 +223,8 @@ class QueryPreparationServiceTests {
 
         assertThat(ftsSearchService.lastQuestion).contains("payment timeout retry policy");
         assertThat(retrievalAuditService.lastRetrievalQuestion).contains("payment timeout retry policy");
+        assertThat(retrievalAuditService.lastAnswerShape).isEqualTo(AnswerShape.POLICY);
+        assertThat(retrievalAuditService.lastStrategyAnswerShape).isEqualTo(AnswerShape.POLICY);
         assertThat(retrievalAuditService.lastStrategyTag).contains("rewrite=on");
         assertThat(hits).hasSize(1);
         assertThat(hits.get(0).getConceptId()).isEqualTo("payment-timeout");
@@ -273,6 +362,10 @@ class QueryPreparationServiceTests {
 
         private String lastRetrievalQuestion;
 
+        private AnswerShape lastAnswerShape;
+
+        private AnswerShape lastStrategyAnswerShape;
+
         private String lastStrategyTag;
 
         /**
@@ -296,10 +389,39 @@ class QueryPreparationServiceTests {
                 Map<String, List<QueryArticleHit>> channelHits,
                 List<QueryArticleHit> fusedHits
         ) {
+            return capture(retrievalQueryContext);
+        }
+
+        /**
+         * 记录 dispatcher 审计入口的最近一次写入，并返回固定引用。
+         *
+         * @param retrievalQueryContext 检索上下文
+         * @param dispatchResult dispatcher 调度结果
+         * @param fusedHits 融合命中
+         * @return 固定引用
+         */
+        @Override
+        public String persist(
+                RetrievalQueryContext retrievalQueryContext,
+                RetrievalDispatchResult dispatchResult,
+                List<QueryArticleHit> fusedHits
+        ) {
+            return capture(retrievalQueryContext);
+        }
+
+        /**
+         * 捕获检索上下文。
+         *
+         * @param retrievalQueryContext 检索上下文
+         * @return 固定引用
+         */
+        private String capture(RetrievalQueryContext retrievalQueryContext) {
             lastRetrievalQuestion = retrievalQueryContext == null ? "" : retrievalQueryContext.getRetrievalQuestion();
+            lastAnswerShape = retrievalQueryContext == null ? AnswerShape.GENERAL : retrievalQueryContext.getAnswerShape();
             RetrievalStrategy retrievalStrategy = retrievalQueryContext == null
                     ? null
                     : retrievalQueryContext.getRetrievalStrategy();
+            lastStrategyAnswerShape = retrievalStrategy == null ? AnswerShape.GENERAL : retrievalStrategy.getAnswerShape();
             QueryRewriteResult queryRewriteResult = retrievalQueryContext == null
                     ? null
                     : retrievalQueryContext.getQueryRewriteResult();

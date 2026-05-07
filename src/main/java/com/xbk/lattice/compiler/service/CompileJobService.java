@@ -14,7 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.ai.retry.TransientAiException;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 
@@ -35,7 +34,6 @@ import java.util.UUID;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 @Slf4j
 public class CompileJobService {
 
@@ -185,6 +183,20 @@ public class CompileJobService {
      */
     public List<CompileJobRecord> listRecentStandaloneJobs(int limit) {
         return compileJobJdbcRepository.findRecentStandalone(limit);
+    }
+
+    /**
+     * 读取指定资料源最近独立编译作业。
+     *
+     * @param sourceId 资料源主键
+     * @param limit 返回数量
+     * @return 最近独立编译作业列表
+     */
+    public List<CompileJobRecord> listRecentStandaloneJobsBySourceId(Long sourceId, int limit) {
+        if (sourceId == null) {
+            return List.of();
+        }
+        return compileJobJdbcRepository.findRecentStandaloneBySourceId(sourceId, limit);
     }
 
     /**

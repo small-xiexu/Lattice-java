@@ -28,13 +28,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b1_compile_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b1_compile_test",
-        "spring.flyway.default-schema=lattice_b1_compile_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.compiler.ingest-max-chars=800",
@@ -77,7 +73,7 @@ class CompilePipelineServiceTests {
 
         assertThat(compileResult.getPersistedCount()).isEqualTo(2);
         Integer sourceFileCount = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_b1_compile_test.source_files",
+                "select count(*) from lattice.source_files",
                 Integer.class
         );
         Optional<ArticleRecord> paymentArticle = articleJdbcRepository.findByConceptId("payment");
@@ -185,11 +181,11 @@ class CompilePipelineServiceTests {
         compilePipelineService.compile(tempDir);
 
         Integer synthesisCount = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_b1_compile_test.synthesis_artifacts",
+                "select count(*) from lattice.synthesis_artifacts",
                 Integer.class
         );
         Integer repoSnapshotCount = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_b1_compile_test.repo_snapshots",
+                "select count(*) from lattice.repo_snapshots",
                 Integer.class
         );
 
@@ -221,10 +217,10 @@ class CompilePipelineServiceTests {
      */
     private void resetCompileTables() {
         queryCacheStore.evictAll();
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.repo_snapshot_items");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.repo_snapshots RESTART IDENTITY CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.source_files CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.synthesis_artifacts");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_compile_test.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.repo_snapshot_items");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.repo_snapshots RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_files CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.synthesis_artifacts");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
     }
 }

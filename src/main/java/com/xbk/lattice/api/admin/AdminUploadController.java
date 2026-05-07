@@ -3,7 +3,6 @@ package com.xbk.lattice.api.admin;
 import com.xbk.lattice.admin.service.AdminUploadWorkspaceService;
 import com.xbk.lattice.source.domain.SourceSyncRunDetail;
 import com.xbk.lattice.source.service.SourceUploadService;
-import org.springframework.context.annotation.Profile;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,7 +25,6 @@ import java.util.List;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 @RequestMapping("/api/v1/admin")
 public class AdminUploadController {
 

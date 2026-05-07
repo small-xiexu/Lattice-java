@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.ArticleSnapshotMapper">
+
+    <resultMap id="ArticleSnapshotRecordResultMap" type="com.xbk.lattice.infra.persistence.ArticleSnapshotRecord">
+        <constructor>
+            <arg column="snapshot_id" javaType="_long"/>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="article_key" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="content" javaType="java.lang.String"/>
+            <arg column="lifecycle" javaType="java.lang.String"/>
+            <arg column="compiled_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="source_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="summary" javaType="java.lang.String"/>
+            <arg column="referential_keywords" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="depends_on" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="related" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="confidence" javaType="java.lang.String"/>
+            <arg column="review_status" javaType="java.lang.String"/>
+            <arg column="snapshot_reason" javaType="java.lang.String"/>
+            <arg column="captured_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="ArticleSnapshotColumns">
+        snapshot_id, source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
+        source_paths, metadata_json::text as metadata_json, summary, referential_keywords,
+        depends_on, related, confidence, review_status, snapshot_reason, captured_at
+    </sql>
+
+    <insert id="insert">
+        insert into article_snapshots (
+            source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
+            source_paths, metadata_json, summary, referential_keywords,
+            depends_on, related, confidence, review_status, snapshot_reason, captured_at
+        )
+        values (
+            #{record.sourceId},
+            #{record.articleKey},
+            #{record.conceptId},
+            #{record.title},
+            #{record.content},
+            #{record.lifecycle},
+            #{record.compiledAt},
+            #{record.sourcePaths,typeHandler=com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler},
+            #{record.metadataJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{record.summary},
+            #{record.referentialKeywords,typeHandler=com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler},
+            #{record.dependsOn,typeHandler=com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler},
+            #{record.related,typeHandler=com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler},
+            #{record.confidence},
+            #{record.reviewStatus},
+            #{record.snapshotReason},
+            #{record.capturedAt}
+        )
+    </insert>
+
+    <select id="findRecent" resultMap="ArticleSnapshotRecordResultMap">
+        select <include refid="ArticleSnapshotColumns"/>
+        from article_snapshots
+        order by captured_at desc, snapshot_id desc
+        limit #{limit}
+    </select>
+
+    <select id="findByConceptId" resultMap="ArticleSnapshotRecordResultMap">
+        select <include refid="ArticleSnapshotColumns"/>
+        from article_snapshots
+        where concept_id = #{conceptId}
+        order by captured_at desc, snapshot_id desc
+        limit #{limit}
+    </select>
+
+    <select id="findByArticleKey" resultMap="ArticleSnapshotRecordResultMap">
+        select <include refid="ArticleSnapshotColumns"/>
+        from article_snapshots
+        where article_key = #{articleKey}
+        order by captured_at desc, snapshot_id desc
+        limit #{limit}
+    </select>
+
+    <select id="findBySnapshotId" resultMap="ArticleSnapshotRecordResultMap">
+        select <include refid="ArticleSnapshotColumns"/>
+        from article_snapshots
+        where snapshot_id = #{snapshotId}
+    </select>
+</mapper>

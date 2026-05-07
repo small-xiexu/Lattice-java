@@ -16,6 +16,8 @@ public class QuerySearchProperties {
 
     private VectorProperties vector = new VectorProperties();
 
+    private RetrievalDispatchProperties retrievalDispatch = new RetrievalDispatchProperties();
+
     /**
      * 获取 FTS 配置。
      *
@@ -50,6 +52,26 @@ public class QuerySearchProperties {
      */
     public void setVector(VectorProperties vector) {
         this.vector = vector;
+    }
+
+    /**
+     * 获取召回调度配置。
+     *
+     * @return 召回调度配置
+     */
+    public RetrievalDispatchProperties getRetrievalDispatch() {
+        return retrievalDispatch;
+    }
+
+    /**
+     * 设置召回调度配置。
+     *
+     * @param retrievalDispatch 召回调度配置
+     */
+    public void setRetrievalDispatch(RetrievalDispatchProperties retrievalDispatch) {
+        this.retrievalDispatch = retrievalDispatch == null
+                ? new RetrievalDispatchProperties()
+                : retrievalDispatch;
     }
 
     /**
@@ -209,6 +231,96 @@ public class QuerySearchProperties {
          */
         public void setExpectedDimensions(int expectedDimensions) {
             this.expectedDimensions = expectedDimensions;
+        }
+    }
+
+    /**
+     * 召回调度配置。
+     *
+     * 职责：控制统一 dispatcher 的并发上限、分组上限和超时预算
+     *
+     * @author xiexu
+     */
+    public static class RetrievalDispatchProperties {
+
+        private int maxConcurrency = 4;
+
+        private int maxConcurrencyPerGroup = 2;
+
+        private long channelTimeoutMillis = 8_000L;
+
+        private long totalDeadlineMillis = 12_000L;
+
+        /**
+         * 获取最大并发数。
+         *
+         * @return 最大并发数
+         */
+        public int getMaxConcurrency() {
+            return maxConcurrency;
+        }
+
+        /**
+         * 设置最大并发数。
+         *
+         * @param maxConcurrency 最大并发数
+         */
+        public void setMaxConcurrency(int maxConcurrency) {
+            this.maxConcurrency = maxConcurrency;
+        }
+
+        /**
+         * 获取单组最大并发数。
+         *
+         * @return 单组最大并发数
+         */
+        public int getMaxConcurrencyPerGroup() {
+            return maxConcurrencyPerGroup;
+        }
+
+        /**
+         * 设置单组最大并发数。
+         *
+         * @param maxConcurrencyPerGroup 单组最大并发数
+         */
+        public void setMaxConcurrencyPerGroup(int maxConcurrencyPerGroup) {
+            this.maxConcurrencyPerGroup = maxConcurrencyPerGroup;
+        }
+
+        /**
+         * 获取单通道超时毫秒。
+         *
+         * @return 单通道超时毫秒
+         */
+        public long getChannelTimeoutMillis() {
+            return channelTimeoutMillis;
+        }
+
+        /**
+         * 设置单通道超时毫秒。
+         *
+         * @param channelTimeoutMillis 单通道超时毫秒
+         */
+        public void setChannelTimeoutMillis(long channelTimeoutMillis) {
+            this.channelTimeoutMillis = channelTimeoutMillis;
+        }
+
+        /**
+         * 获取总截止毫秒。
+         *
+         * @return 总截止毫秒
+         */
+        public long getTotalDeadlineMillis() {
+            return totalDeadlineMillis;
+        }
+
+        /**
+         * 设置总截止毫秒。
+         *
+         * @param totalDeadlineMillis 总截止毫秒
+         */
+        public void setTotalDeadlineMillis(long totalDeadlineMillis) {
+            this.totalDeadlineMillis = totalDeadlineMillis;
         }
     }
 }

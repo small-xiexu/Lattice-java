@@ -17,7 +17,6 @@ import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import com.xbk.lattice.llm.service.LlmRouteResolution;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,7 +39,6 @@ import java.util.Set;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class ArticleCorrectionService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

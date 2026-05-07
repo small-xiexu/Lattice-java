@@ -11,7 +11,6 @@ import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.redis.AbstractRedisJsonStore;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -26,7 +25,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 @ConditionalOnProperty(prefix = "lattice.compiler.working-set", name = "store", havingValue = "redis")
 public class RedisCompileWorkingSetStore extends AbstractRedisJsonStore implements CompileWorkingSetStore {
 

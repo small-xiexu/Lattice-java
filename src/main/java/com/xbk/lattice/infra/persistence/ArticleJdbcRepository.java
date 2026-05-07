@@ -5,16 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xbk.lattice.article.service.ArticleMarkdownSupport;
-import org.postgresql.util.PGobject;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.context.annotation.Profile;
+import com.xbk.lattice.infra.persistence.mapper.ArticleMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
-import java.sql.Array;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,20 +23,29 @@ import java.util.Optional;
  * @author xiexu
  */
 @Repository
-@Profile("jdbc")
 public class ArticleJdbcRepository {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
 
-    private final JdbcTemplate jdbcTemplate;
+    private final ArticleMapper articleMapper;
 
     /**
      * 创建 Article JDBC 仓储。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @param articleMapper 文章 Mapper
      */
-    public ArticleJdbcRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    @Autowired
+    public ArticleJdbcRepository(ArticleMapper articleMapper) {
+        this.articleMapper = articleMapper;
+    }
+
+    /**
+     * 创建测试替身使用的 Article 仓储。
+     *
+     * @param ignored 旧测试替身占位参数
+     */
+    protected ArticleJdbcRepository(Object ignored) {
+        this.articleMapper = null;
     }
 
     /**
@@ -55,75 +61,7 @@ public class ArticleJdbcRepository {
         );
         String searchText = buildArticleSearchText(normalizedArticleRecord);
         String refkeyText = buildRefkeyText(normalizedArticleRecord);
-        String sql = """
-                insert into articles (
-                    source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
-                    source_paths, metadata_json, summary, referential_keywords, depends_on,
-                    related, confidence, review_status, search_text, search_tsv, refkey_text
-                )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, to_tsvector('simple'::regconfig, ?), ?)
-                on conflict (article_key) do update
-                set source_id = excluded.source_id,
-                    concept_id = excluded.concept_id,
-                    title = excluded.title,
-                    content = excluded.content,
-                    lifecycle = excluded.lifecycle,
-                    compiled_at = excluded.compiled_at,
-                    source_paths = excluded.source_paths,
-                    metadata_json = excluded.metadata_json,
-                    summary = excluded.summary,
-                    referential_keywords = excluded.referential_keywords,
-                    depends_on = excluded.depends_on,
-                    related = excluded.related,
-                    confidence = excluded.confidence,
-                    review_status = excluded.review_status,
-                    search_text = excluded.search_text,
-                    search_tsv = excluded.search_tsv,
-                    refkey_text = excluded.refkey_text,
-                    updated_at = CURRENT_TIMESTAMP
-                """;
-        jdbcTemplate.update(connection -> {
-            Array sourcePathsArray = connection.createArrayOf(
-                    "text",
-                    normalizedArticleRecord.getSourcePaths().toArray(new String[0])
-            );
-            Array referentialKeywordsArray = connection.createArrayOf(
-                    "text",
-                    normalizedArticleRecord.getReferentialKeywords().toArray(new String[0])
-            );
-            Array dependsOnArray = connection.createArrayOf(
-                    "text",
-                    normalizedArticleRecord.getDependsOn().toArray(new String[0])
-            );
-            Array relatedArray = connection.createArrayOf(
-                    "text",
-                    normalizedArticleRecord.getRelated().toArray(new String[0])
-            );
-            PGobject metadataJsonObject = new PGobject();
-            metadataJsonObject.setType("jsonb");
-            metadataJsonObject.setValue(normalizedArticleRecord.getMetadataJson());
-
-            java.sql.PreparedStatement preparedStatement = connection.prepareStatement(sql);
-            preparedStatement.setObject(1, normalizedArticleRecord.getSourceId());
-            preparedStatement.setString(2, normalizedArticleRecord.getArticleKey());
-            preparedStatement.setString(3, normalizedArticleRecord.getConceptId());
-            preparedStatement.setString(4, normalizedArticleRecord.getTitle());
-            preparedStatement.setString(5, normalizedArticleRecord.getContent());
-            preparedStatement.setString(6, normalizedArticleRecord.getLifecycle());
-            preparedStatement.setObject(7, normalizedArticleRecord.getCompiledAt());
-            preparedStatement.setArray(8, sourcePathsArray);
-            preparedStatement.setObject(9, metadataJsonObject);
-            preparedStatement.setString(10, normalizedArticleRecord.getSummary());
-            preparedStatement.setArray(11, referentialKeywordsArray);
-            preparedStatement.setArray(12, dependsOnArray);
-            preparedStatement.setArray(13, relatedArray);
-            preparedStatement.setString(14, normalizedArticleRecord.getConfidence());
-            preparedStatement.setString(15, normalizedArticleRecord.getReviewStatus());
-            preparedStatement.setString(16, searchText);
-            preparedStatement.setString(17, searchText);
-            preparedStatement.setString(18, refkeyText);
-            return preparedStatement;
-        });
+        articleMapper.upsert(normalizedArticleRecord, searchText, refkeyText);
     }
 
     /**
@@ -133,20 +71,7 @@ public class ArticleJdbcRepository {
      * @return 文章记录
      */
     public Optional<ArticleRecord> findByConceptId(String conceptId) {
-        String sql = """
-                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at, created_at, updated_at,
-                       source_paths, metadata_json, summary, referential_keywords, depends_on,
-                       related, confidence, review_status
-                from articles
-                where concept_id = ?
-                order by updated_at desc, article_key asc
-                limit 1
-                """;
-        List<ArticleRecord> articleRecords = jdbcTemplate.query(sql, this::mapArticleRecord, conceptId);
-        if (articleRecords.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(articleRecords.get(0));
+        return Optional.ofNullable(articleMapper.findByConceptId(conceptId));
     }
 
     /**
@@ -156,18 +81,7 @@ public class ArticleJdbcRepository {
      * @return 文章记录
      */
     public Optional<ArticleRecord> findByArticleKey(String articleKey) {
-        String sql = """
-                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at, created_at, updated_at,
-                       source_paths, metadata_json, summary, referential_keywords, depends_on,
-                       related, confidence, review_status
-                from articles
-                where article_key = ?
-                """;
-        List<ArticleRecord> articleRecords = jdbcTemplate.query(sql, this::mapArticleRecord, articleKey);
-        if (articleRecords.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(articleRecords.get(0));
+        return Optional.ofNullable(articleMapper.findByArticleKey(articleKey));
     }
 
     /**
@@ -178,19 +92,7 @@ public class ArticleJdbcRepository {
      * @return 文章记录
      */
     public Optional<ArticleRecord> findBySourceIdAndConceptId(Long sourceId, String conceptId) {
-        String sql = """
-                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at, created_at, updated_at,
-                       source_paths, metadata_json, summary, referential_keywords, depends_on,
-                       related, confidence, review_status
-                from articles
-                where source_id = ?
-                  and concept_id = ?
-                """;
-        List<ArticleRecord> articleRecords = jdbcTemplate.query(sql, this::mapArticleRecord, sourceId, conceptId);
-        if (articleRecords.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(articleRecords.get(0));
+        return Optional.ofNullable(articleMapper.findBySourceIdAndConceptId(sourceId, conceptId));
     }
 
     /**
@@ -201,22 +103,7 @@ public class ArticleJdbcRepository {
      * @param correctionSummary 纠错摘要
      */
     public void appendUpstreamCorrection(String conceptId, String fromConceptId, String correctionSummary) {
-        String sql = """
-                update articles
-                set metadata_json = jsonb_set(
-                    coalesce(metadata_json::jsonb, '{}'::jsonb),
-                    '{upstream_corrections}',
-                    coalesce(metadata_json::jsonb->'upstream_corrections', '[]'::jsonb)
-                        || jsonb_build_array(jsonb_build_object(
-                            'from', ?,
-                            'summary', ?,
-                            'marked_at', to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
-                        ))
-                ),
-                    updated_at = CURRENT_TIMESTAMP
-                where concept_id = ?
-        """;
-        jdbcTemplate.update(sql, fromConceptId, correctionSummary, conceptId);
+        articleMapper.appendUpstreamCorrection(conceptId, fromConceptId, correctionSummary);
     }
 
     /**
@@ -270,19 +157,7 @@ public class ArticleJdbcRepository {
      * @return 下游文章列表
      */
     public List<ArticleRecord> findWithUpstreamCorrections(String fromConceptId) {
-        String sql = """
-                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at, created_at, updated_at,
-                       source_paths, metadata_json, summary, referential_keywords, depends_on,
-                       related, confidence, review_status
-                from articles
-                where exists (
-                    select 1
-                    from jsonb_array_elements(coalesce(metadata_json::jsonb->'upstream_corrections', '[]'::jsonb)) as elem
-                    where elem->>'from' = ?
-                )
-                order by concept_id asc
-        """;
-        return jdbcTemplate.query(sql, this::mapArticleRecord, fromConceptId);
+        return articleMapper.findWithUpstreamCorrections(fromConceptId);
     }
 
     /**
@@ -295,15 +170,7 @@ public class ArticleJdbcRepository {
         if (upstreamArticle == null) {
             return List.of();
         }
-        String sql = """
-                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at, created_at, updated_at,
-                       source_paths, metadata_json, summary, referential_keywords, depends_on,
-                       related, confidence, review_status
-                from articles
-                where metadata_json::text like '%upstream_corrections%'
-                order by source_id asc nulls first, article_key asc
-                """;
-        List<ArticleRecord> candidates = jdbcTemplate.query(sql, this::mapArticleRecord);
+        List<ArticleRecord> candidates = articleMapper.findUpstreamCorrectionCandidates();
         List<ArticleRecord> matchedRecords = new ArrayList<ArticleRecord>();
         for (ArticleRecord candidate : candidates) {
             if (containsUpstreamCorrection(candidate.getMetadataJson(), upstreamArticle)) {
@@ -320,21 +187,7 @@ public class ArticleJdbcRepository {
      * @param fromConceptId 上游概念标识
      */
     public void clearUpstreamCorrection(String downstreamConceptId, String fromConceptId) {
-        String sql = """
-                update articles
-                set metadata_json = jsonb_set(
-                    coalesce(metadata_json::jsonb, '{}'::jsonb),
-                    '{upstream_corrections}',
-                    (
-                        select coalesce(jsonb_agg(elem), '[]'::jsonb)
-                        from jsonb_array_elements(coalesce(metadata_json::jsonb->'upstream_corrections', '[]'::jsonb)) as elem
-                        where elem->>'from' <> ?
-                    )
-                ),
-                    updated_at = CURRENT_TIMESTAMP
-                where concept_id = ?
-        """;
-        jdbcTemplate.update(sql, fromConceptId, downstreamConceptId);
+        articleMapper.clearUpstreamCorrection(downstreamConceptId, fromConceptId);
     }
 
     /**
@@ -379,87 +232,33 @@ public class ArticleJdbcRepository {
      * @return 文章记录列表
      */
     public List<ArticleRecord> findAll() {
-        String sql = """
-                select source_id, article_key, concept_id, title, content, lifecycle, compiled_at, created_at, updated_at,
-                       source_paths, metadata_json, summary, referential_keywords, depends_on,
-                       related, confidence, review_status
-                from articles
-                order by source_id asc nulls first, updated_at desc, article_key asc
-                """;
-        return jdbcTemplate.query(sql, this::mapArticleRecord);
+        return articleMapper.findAll();
+    }
+
+    /**
+     * 批量标记热点待抽检文章。
+     *
+     * @param articleKeys 热点文章唯一键
+     * @param riskReason 风险原因
+     * @return 更新记录数
+     */
+    public int markHotspotPendingVerification(List<String> articleKeys, String riskReason) {
+        if (articleKeys == null || articleKeys.isEmpty()) {
+            return 0;
+        }
+        List<String> normalizedArticleKeys = normalizeKeys(articleKeys);
+        if (normalizedArticleKeys.isEmpty()) {
+            return 0;
+        }
+        String normalizedRiskReason = normalizeRiskReason(riskReason);
+        return articleMapper.markHotspotPendingVerification(normalizedArticleKeys, normalizedRiskReason);
     }
 
     /**
      * 清空全部文章与级联受管数据。
      */
     public void deleteAll() {
-        jdbcTemplate.execute("TRUNCATE TABLE articles CASCADE");
-    }
-
-    /**
-     * 映射单行文章记录。
-     *
-     * @param resultSet 结果集
-     * @param rowNum 行号
-     * @return 文章记录
-     * @throws SQLException SQL 异常
-     */
-    private ArticleRecord mapArticleRecord(ResultSet resultSet, int rowNum) throws SQLException {
-        OffsetDateTime compiledAt = resultSet.getObject("compiled_at", OffsetDateTime.class);
-        List<String> sourcePaths = readSourcePaths(resultSet);
-        Object sourceId = resultSet.getObject("source_id");
-        return new ArticleRecord(
-                sourceId == null ? null : resultSet.getLong("source_id"),
-                resultSet.getString("article_key"),
-                resultSet.getString("concept_id"),
-                resultSet.getString("title"),
-                resultSet.getString("content"),
-                resultSet.getString("lifecycle"),
-                compiledAt,
-                sourcePaths,
-                resultSet.getString("metadata_json"),
-                resultSet.getString("summary"),
-                readTextArray(resultSet, "referential_keywords"),
-                readTextArray(resultSet, "depends_on"),
-                readTextArray(resultSet, "related"),
-                resultSet.getString("confidence"),
-                resultSet.getString("review_status"),
-                resultSet.getObject("created_at", OffsetDateTime.class),
-                resultSet.getObject("updated_at", OffsetDateTime.class)
-        );
-    }
-
-    /**
-     * 读取来源路径数组。
-     *
-     * @param resultSet 结果集
-     * @return 来源路径列表
-     * @throws SQLException SQL 异常
-     */
-    private List<String> readSourcePaths(ResultSet resultSet) throws SQLException {
-        return readTextArray(resultSet, "source_paths");
-    }
-
-    /**
-     * 读取文本数组字段。
-     *
-     * @param resultSet 结果集
-     * @param columnName 列名
-     * @return 文本数组
-     * @throws SQLException SQL 异常
-     */
-    private List<String> readTextArray(ResultSet resultSet, String columnName) throws SQLException {
-        Array array = resultSet.getArray(columnName);
-        if (array == null) {
-            return List.of();
-        }
-
-        Object[] values = (Object[]) array.getArray();
-        List<String> sourcePaths = new ArrayList<String>();
-        for (Object value : values) {
-            sourcePaths.add(String.valueOf(value));
-        }
-        return sourcePaths;
+        articleMapper.deleteAll();
     }
 
     /**
@@ -501,6 +300,36 @@ public class ArticleJdbcRepository {
      */
     private String safeText(String value) {
         return value == null ? "" : value;
+    }
+
+    /**
+     * 归一文章唯一键列表。
+     *
+     * @param articleKeys 原始文章唯一键
+     * @return 去重后的文章唯一键
+     */
+    private List<String> normalizeKeys(List<String> articleKeys) {
+        LinkedHashSet<String> normalizedKeys = new LinkedHashSet<String>();
+        for (String articleKey : articleKeys) {
+            if (articleKey == null || articleKey.isBlank()) {
+                continue;
+            }
+            normalizedKeys.add(articleKey.trim());
+        }
+        return new ArrayList<String>(normalizedKeys);
+    }
+
+    /**
+     * 归一风险原因。
+     *
+     * @param riskReason 原始风险原因
+     * @return 风险原因
+     */
+    private String normalizeRiskReason(String riskReason) {
+        if (riskReason == null || riskReason.isBlank()) {
+            return "hotspot_unverified";
+        }
+        return riskReason.trim();
     }
 
     private ObjectNode readMetadata(String metadataJson) {

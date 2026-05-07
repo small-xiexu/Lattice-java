@@ -50,6 +50,14 @@ public class ArticleRecord {
 
     private final String reviewStatus;
 
+    private final String riskLevel;
+
+    private final List<String> riskReasons;
+
+    private final boolean hotspot;
+
+    private final boolean requiresResultVerification;
+
     /**
      * 创建文章记录。
      *
@@ -86,6 +94,10 @@ public class ArticleRecord {
                 Collections.<String>emptyList(),
                 "medium",
                 "pending",
+                "low",
+                Collections.<String>emptyList(),
+                false,
+                false,
                 null,
                 null
         );
@@ -139,6 +151,10 @@ public class ArticleRecord {
                 related,
                 confidence,
                 reviewStatus,
+                "low",
+                Collections.<String>emptyList(),
+                false,
+                false,
                 null,
                 null
         );
@@ -196,6 +212,10 @@ public class ArticleRecord {
                 related,
                 confidence,
                 reviewStatus,
+                "low",
+                Collections.<String>emptyList(),
+                false,
+                false,
                 null,
                 null
         );
@@ -222,6 +242,144 @@ public class ArticleRecord {
      * @param createdAt 首次入库时间
      * @param updatedAt 最近入库时间
      */
+    public ArticleRecord(
+            Long sourceId,
+            String articleKey,
+            String conceptId,
+            String title,
+            String content,
+            String lifecycle,
+            OffsetDateTime compiledAt,
+            List<String> sourcePaths,
+            String metadataJson,
+            String summary,
+            List<String> referentialKeywords,
+            List<String> dependsOn,
+            List<String> related,
+            String confidence,
+            String reviewStatus,
+            OffsetDateTime createdAt,
+            OffsetDateTime updatedAt
+    ) {
+        this(
+                sourceId,
+                articleKey,
+                conceptId,
+                title,
+                content,
+                lifecycle,
+                compiledAt,
+                sourcePaths,
+                metadataJson,
+                summary,
+                referentialKeywords,
+                dependsOn,
+                related,
+                confidence,
+                reviewStatus,
+                "low",
+                Collections.<String>emptyList(),
+                false,
+                false,
+                createdAt,
+                updatedAt
+        );
+    }
+
+    /**
+     * 创建文章记录。
+     *
+     * @param sourceId 资料源主键
+     * @param articleKey 文章唯一键
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param content 内容
+     * @param lifecycle 生命周期
+     * @param compiledAt 编译时间
+     * @param sourcePaths 来源路径
+     * @param metadataJson 元数据 JSON
+     * @param summary 摘要
+     * @param referentialKeywords 明确性关键词
+     * @param dependsOn 依赖概念
+     * @param related 相关概念
+     * @param confidence 置信度
+     * @param reviewStatus 审查状态
+     * @param riskLevel 风险等级
+     * @param riskReasons 风险原因
+     * @param hotspot 是否热点
+     * @param requiresResultVerification 是否需要结果抽检
+     */
+    public ArticleRecord(
+            Long sourceId,
+            String articleKey,
+            String conceptId,
+            String title,
+            String content,
+            String lifecycle,
+            OffsetDateTime compiledAt,
+            List<String> sourcePaths,
+            String metadataJson,
+            String summary,
+            List<String> referentialKeywords,
+            List<String> dependsOn,
+            List<String> related,
+            String confidence,
+            String reviewStatus,
+            String riskLevel,
+            List<String> riskReasons,
+            boolean hotspot,
+            boolean requiresResultVerification
+    ) {
+        this(
+                sourceId,
+                articleKey,
+                conceptId,
+                title,
+                content,
+                lifecycle,
+                compiledAt,
+                sourcePaths,
+                metadataJson,
+                summary,
+                referentialKeywords,
+                dependsOn,
+                related,
+                confidence,
+                reviewStatus,
+                riskLevel,
+                riskReasons,
+                hotspot,
+                requiresResultVerification,
+                null,
+                null
+        );
+    }
+
+    /**
+     * 创建文章记录。
+     *
+     * @param sourceId 资料源主键
+     * @param articleKey 文章唯一键
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param content 内容
+     * @param lifecycle 生命周期
+     * @param compiledAt 编译时间
+     * @param sourcePaths 来源路径
+     * @param metadataJson 元数据 JSON
+     * @param summary 摘要
+     * @param referentialKeywords 明确性关键词
+     * @param dependsOn 依赖概念
+     * @param related 相关概念
+     * @param confidence 置信度
+     * @param reviewStatus 审查状态
+     * @param riskLevel 风险等级
+     * @param riskReasons 风险原因
+     * @param hotspot 是否热点
+     * @param requiresResultVerification 是否需要结果抽检
+     * @param createdAt 首次入库时间
+     * @param updatedAt 最近入库时间
+     */
     @JsonCreator
     public ArticleRecord(
             @JsonProperty("sourceId") Long sourceId,
@@ -239,6 +397,10 @@ public class ArticleRecord {
             @JsonProperty("related") List<String> related,
             @JsonProperty("confidence") String confidence,
             @JsonProperty("reviewStatus") String reviewStatus,
+            @JsonProperty("riskLevel") String riskLevel,
+            @JsonProperty("riskReasons") List<String> riskReasons,
+            @JsonProperty("hotspot") boolean hotspot,
+            @JsonProperty("requiresResultVerification") boolean requiresResultVerification,
             @JsonProperty("createdAt") OffsetDateTime createdAt,
             @JsonProperty("updatedAt") OffsetDateTime updatedAt
     ) {
@@ -257,6 +419,10 @@ public class ArticleRecord {
         this.related = related;
         this.confidence = confidence;
         this.reviewStatus = reviewStatus;
+        this.riskLevel = normalizeRiskLevel(riskLevel);
+        this.riskReasons = normalizeRiskReasons(riskReasons);
+        this.hotspot = hotspot;
+        this.requiresResultVerification = requiresResultVerification;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -287,6 +453,10 @@ public class ArticleRecord {
                 Collections.<String>emptyList(),
                 "medium",
                 "pending",
+                "low",
+                Collections.<String>emptyList(),
+                false,
+                false,
                 null,
                 null
         );
@@ -446,6 +616,42 @@ public class ArticleRecord {
     }
 
     /**
+     * 获取风险等级。
+     *
+     * @return 风险等级
+     */
+    public String getRiskLevel() {
+        return riskLevel;
+    }
+
+    /**
+     * 获取风险原因。
+     *
+     * @return 风险原因
+     */
+    public List<String> getRiskReasons() {
+        return riskReasons;
+    }
+
+    /**
+     * 判断是否属于热点内容。
+     *
+     * @return 是否热点
+     */
+    public boolean isHotspot() {
+        return hotspot;
+    }
+
+    /**
+     * 判断是否需要结果抽检。
+     *
+     * @return 是否需要结果抽检
+     */
+    public boolean isRequiresResultVerification() {
+        return requiresResultVerification;
+    }
+
+    /**
      * 基于当前文章复制一份保留 source-aware 标识的新记录。
      *
      * @param title 标题
@@ -492,8 +698,26 @@ public class ArticleRecord {
                 related,
                 confidence,
                 reviewStatus,
+                riskLevel,
+                riskReasons,
+                hotspot,
+                requiresResultVerification,
                 createdAt,
                 updatedAt
         );
+    }
+
+    private String normalizeRiskLevel(String riskLevel) {
+        if (riskLevel == null || riskLevel.isBlank()) {
+            return "low";
+        }
+        return riskLevel.trim();
+    }
+
+    private List<String> normalizeRiskReasons(List<String> riskReasons) {
+        if (riskReasons == null || riskReasons.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return List.copyOf(riskReasons);
     }
 }

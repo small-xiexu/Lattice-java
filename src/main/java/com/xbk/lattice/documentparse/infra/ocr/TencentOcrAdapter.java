@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.documentparse.domain.model.ProviderConnection;
 import com.xbk.lattice.llm.service.LlmSecretCryptoService;
 import org.springframework.web.client.RestClient;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
@@ -15,7 +14,6 @@ import org.springframework.stereotype.Component;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class TencentOcrAdapter extends AbstractJsonBodyOcrProviderAdapter {
 
     /**

@@ -3,7 +3,6 @@ package com.xbk.lattice.source.service;
 import com.xbk.lattice.llm.service.LlmSecretCryptoService;
 import com.xbk.lattice.source.domain.SourceCredential;
 import com.xbk.lattice.source.infra.SourceCredentialJdbcRepository;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -20,7 +19,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class SourceCredentialService {
 
     private final SourceCredentialJdbcRepository sourceCredentialJdbcRepository;

@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.SourceFileMapper">
+
+    <resultMap id="SourceFileRecordResultMap" type="com.xbk.lattice.infra.persistence.SourceFileRecord">
+        <constructor>
+            <arg column="id" javaType="java.lang.Long"/>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="file_path" javaType="java.lang.String"/>
+            <arg column="relative_path" javaType="java.lang.String"/>
+            <arg column="source_sync_run_id" javaType="java.lang.Long"/>
+            <arg column="content_preview" javaType="java.lang.String"/>
+            <arg column="format" javaType="java.lang.String"/>
+            <arg column="file_size" javaType="_long"/>
+            <arg column="content_text" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="is_verbatim" javaType="_boolean"/>
+            <arg column="raw_path" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="LexicalSearchRecordResultMap" type="com.xbk.lattice.infra.persistence.LexicalSearchRecord">
+        <constructor>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="item_key" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="content" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="source_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="chunk_index" javaType="java.lang.Integer"/>
+            <arg column="verbatim" javaType="java.lang.Boolean"/>
+            <arg column="score" javaType="_double"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="SourceFileColumns">
+        id, source_id, file_path, relative_path, source_sync_run_id, content_preview,
+        format, file_size, content_text, metadata_json::text as metadata_json,
+        is_verbatim, raw_path
+    </sql>
+
+    <select id="upsert" resultMap="SourceFileRecordResultMap">
+        insert into source_files (
+            source_id, file_path, relative_path, source_sync_run_id, content_preview,
+            format, file_size, content_text, metadata_json, is_verbatim, raw_path,
+            file_path_norm, search_tsv
+        )
+        values (
+            #{record.sourceId},
+            #{record.filePath},
+            #{record.relativePath},
+            #{record.sourceSyncRunId},
+            #{record.contentPreview},
+            #{record.format},
+            #{record.fileSize},
+            #{record.contentText}::text,
+            #{record.metadataJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{record.verbatim},
+            #{record.rawPath},
+            #{filePathNorm},
+            to_tsvector('simple'::regconfig, #{searchText})
+        )
+        on conflict (source_id, relative_path) do update
+        set file_path = excluded.file_path,
+            source_sync_run_id = excluded.source_sync_run_id,
+            content_preview = excluded.content_preview,
+            format = excluded.format,
+            file_size = excluded.file_size,
+            content_text = excluded.content_text,
+            metadata_json = excluded.metadata_json,
+            is_verbatim = excluded.is_verbatim,
+            raw_path = excluded.raw_path,
+            file_path_norm = excluded.file_path_norm,
+            search_tsv = excluded.search_tsv,
+            indexed_at = CURRENT_TIMESTAMP
+        returning <include refid="SourceFileColumns"/>
+    </select>
+
+    <select id="findByPath" resultMap="SourceFileRecordResultMap">
+        select <include refid="SourceFileColumns"/>
+        from source_files
+        where file_path = #{filePath} or relative_path = #{filePath}
+        order by indexed_at desc, id desc
+        limit 1
+    </select>
+
+    <select id="findBySourceIdAndRelativePath" resultMap="SourceFileRecordResultMap">
+        select <include refid="SourceFileColumns"/>
+        from source_files
+        where source_id = #{sourceId}
+          and relative_path = #{relativePath}
+    </select>
+
+    <select id="findAll" resultMap="SourceFileRecordResultMap">
+        select <include refid="SourceFileColumns"/>
+        from source_files
+        order by source_id asc nulls first, relative_path asc nulls first, file_path asc
+    </select>
+
+    <select id="findBySourceId" resultMap="SourceFileRecordResultMap">
+        select <include refid="SourceFileColumns"/>
+        from source_files
+        where source_id = #{sourceId}
+        order by relative_path asc, id asc
+    </select>
+
+    <select id="findByIds" resultMap="SourceFileRecordResultMap">
+        select <include refid="SourceFileColumns"/>
+        from source_files
+        where id in
+        <foreach collection="sourceFileIds" item="sourceFileId" open="(" separator="," close=")">
+            #{sourceFileId}
+        </foreach>
+    </select>
+
+    <select id="searchLexical" resultMap="LexicalSearchRecordResultMap">
+        with query as (
+            select plainto_tsquery(cast(#{tsConfig} as regconfig), #{question}) as tsq
+        )
+        select sf.source_id,
+               sf.file_path as item_key,
+               sf.file_path as concept_id,
+               sf.relative_path as title,
+               sf.content_text as content,
+               sf.metadata_json::text as metadata_json,
+               array[sf.file_path]::text[] as source_paths,
+               null::integer as chunk_index,
+               sf.is_verbatim as verbatim,
+               ts_rank_cd(sf.search_tsv, query.tsq)
+               <foreach collection="likeTokens" item="likeToken">
+                   + case when sf.file_path_norm like #{likeToken} then 4.0 else 0 end
+                   + case when lower(sf.content_preview) like #{likeToken} then 1.5 else 0 end
+                   + case when lower(sf.content_text) like #{likeToken} then 1.0 else 0 end
+               </foreach>
+               as score
+        from source_files sf
+        cross join query
+        where sf.search_tsv @@ query.tsq
+        <foreach collection="likeTokens" item="likeToken">
+           or sf.file_path_norm like #{likeToken}
+           or lower(sf.content_preview) like #{likeToken}
+           or lower(sf.content_text) like #{likeToken}
+        </foreach>
+        order by score desc, sf.indexed_at desc, sf.relative_path asc, sf.file_path asc
+        limit #{limit}
+    </select>
+
+    <select id="findLegacyDefaultSourceId" resultType="java.lang.Long">
+        select id
+        from knowledge_sources
+        where source_code = 'legacy-default'
+        order by id asc
+        limit 1
+    </select>
+
+    <insert id="insertLegacyDefaultSource">
+        insert into knowledge_sources (
+            source_code,
+            name,
+            source_type,
+            content_profile,
+            status,
+            visibility,
+            default_sync_mode,
+            config_json,
+            metadata_json
+        )
+        values (
+            'legacy-default',
+            'Legacy Default Source',
+            'UPLOAD',
+            'DOCUMENT',
+            'ACTIVE',
+            'NORMAL',
+            'FULL',
+            '{}'::jsonb,
+            '{"legacyDefault":true}'::jsonb
+        )
+        on conflict (source_code) do nothing
+    </insert>
+</mapper>

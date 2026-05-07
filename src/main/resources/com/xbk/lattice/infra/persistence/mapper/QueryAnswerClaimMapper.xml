@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.QueryAnswerClaimMapper">
+
+    <select id="insert" resultType="java.lang.Long">
+        insert into query_answer_claims (
+            audit_id, claim_index, claim_text, claim_status, citation_count
+        )
+        values (
+            #{record.auditId},
+            #{record.claimIndex},
+            #{record.claimText},
+            #{record.claimStatus},
+            #{record.citationCount}
+        )
+        returning claim_id
+    </select>
+</mapper>

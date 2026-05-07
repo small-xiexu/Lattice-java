@@ -21,9 +21,13 @@ public final class QueryGraphStateKeys {
 
     public static final String QUERY_INTENT = "queryIntent";
 
+    public static final String ANSWER_SHAPE = "answerShape";
+
     public static final String REWRITE_AUDIT_REF = "rewriteAuditRef";
 
     public static final String RETRIEVAL_STRATEGY_REF = "retrievalStrategyRef";
+
+    public static final String RETRIEVAL_CHANNEL_RUNS_REF = "retrievalChannelRunsRef";
 
     public static final String RETRIEVAL_AUDIT_REF = "retrievalAuditRef";
 
@@ -52,6 +56,10 @@ public final class QueryGraphStateKeys {
     public static final String SOURCE_HITS_REF = "sourceHitsRef";
 
     public static final String SOURCE_CHUNK_HITS_REF = "sourceChunkHitsRef";
+
+    public static final String FACT_CARD_HITS_REF = "factCardHitsRef";
+
+    public static final String FACT_CARD_VECTOR_HITS_REF = "factCardVectorHitsRef";
 
     public static final String CONTRIBUTION_HITS_REF = "contributionHitsRef";
 

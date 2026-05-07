@@ -8,7 +8,6 @@ import com.xbk.lattice.infra.persistence.QueryAnswerClaimJdbcRepository;
 import com.xbk.lattice.infra.persistence.QueryAnswerClaimRecord;
 import com.xbk.lattice.query.domain.AnswerOutcome;
 import com.xbk.lattice.query.domain.GenerationMode;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,7 +23,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class QueryAnswerAuditPersistenceService {
 
     private final QueryAnswerAuditJdbcRepository queryAnswerAuditJdbcRepository;

@@ -27,6 +27,8 @@ public class QueryRetrievalRunView {
 
     private final String questionTypeTag;
 
+    private final String answerShape;
+
     private final String retrievalMode;
 
     private final boolean rewriteApplied;
@@ -38,6 +40,14 @@ public class QueryRetrievalRunView {
     private final int fusedHitCount;
 
     private final int channelCount;
+
+    private final int factCardHitCount;
+
+    private final int sourceChunkHitCount;
+
+    private final String coverageStatus;
+
+    private final String channelRunSummaryJson;
 
     private final OffsetDateTime createdAt;
 
@@ -52,12 +62,16 @@ public class QueryRetrievalRunView {
      * @param versionTag 版本标签
      * @param strategyTag 策略标签
      * @param questionTypeTag 问题类型标签
+     * @param answerShape 答案形态
      * @param retrievalMode 检索模式
      * @param rewriteApplied 是否改写
      * @param rewriteAuditRef 改写审计引用
      * @param retrievalStrategyRef 检索策略引用
      * @param fusedHitCount 融合命中数
      * @param channelCount 通道数
+     * @param factCardHitCount Fact Card 命中数
+     * @param sourceChunkHitCount Source Chunk 命中数
+     * @param coverageStatus 覆盖状态
      * @param createdAt 创建时间
      */
     public QueryRetrievalRunView(
@@ -69,12 +83,86 @@ public class QueryRetrievalRunView {
             String versionTag,
             String strategyTag,
             String questionTypeTag,
+            String answerShape,
             String retrievalMode,
             boolean rewriteApplied,
             String rewriteAuditRef,
             String retrievalStrategyRef,
             int fusedHitCount,
             int channelCount,
+            int factCardHitCount,
+            int sourceChunkHitCount,
+            String coverageStatus,
+            OffsetDateTime createdAt
+    ) {
+        this(
+                runId,
+                queryId,
+                question,
+                normalizedQuestion,
+                retrievalQuestion,
+                versionTag,
+                strategyTag,
+                questionTypeTag,
+                answerShape,
+                retrievalMode,
+                rewriteApplied,
+                rewriteAuditRef,
+                retrievalStrategyRef,
+                fusedHitCount,
+                channelCount,
+                factCardHitCount,
+                sourceChunkHitCount,
+                coverageStatus,
+                "{}",
+                createdAt
+        );
+    }
+
+    /**
+     * 创建 Query 检索审计主记录视图。
+     *
+     * @param runId 主键
+     * @param queryId 查询标识
+     * @param question 原始问题
+     * @param normalizedQuestion 归一化问题
+     * @param retrievalQuestion 实际检索问题
+     * @param versionTag 版本标签
+     * @param strategyTag 策略标签
+     * @param questionTypeTag 问题类型标签
+     * @param answerShape 答案形态
+     * @param retrievalMode 检索模式
+     * @param rewriteApplied 是否改写
+     * @param rewriteAuditRef 改写审计引用
+     * @param retrievalStrategyRef 检索策略引用
+     * @param fusedHitCount 融合命中数
+     * @param channelCount 通道数
+     * @param factCardHitCount Fact Card 命中数
+     * @param sourceChunkHitCount Source Chunk 命中数
+     * @param coverageStatus 覆盖状态
+     * @param channelRunSummaryJson 通道运行摘要 JSON
+     * @param createdAt 创建时间
+     */
+    public QueryRetrievalRunView(
+            Long runId,
+            String queryId,
+            String question,
+            String normalizedQuestion,
+            String retrievalQuestion,
+            String versionTag,
+            String strategyTag,
+            String questionTypeTag,
+            String answerShape,
+            String retrievalMode,
+            boolean rewriteApplied,
+            String rewriteAuditRef,
+            String retrievalStrategyRef,
+            int fusedHitCount,
+            int channelCount,
+            int factCardHitCount,
+            int sourceChunkHitCount,
+            String coverageStatus,
+            String channelRunSummaryJson,
             OffsetDateTime createdAt
     ) {
         this.runId = runId;
@@ -85,12 +173,17 @@ public class QueryRetrievalRunView {
         this.versionTag = versionTag;
         this.strategyTag = strategyTag;
         this.questionTypeTag = questionTypeTag;
+        this.answerShape = answerShape;
         this.retrievalMode = retrievalMode;
         this.rewriteApplied = rewriteApplied;
         this.rewriteAuditRef = rewriteAuditRef;
         this.retrievalStrategyRef = retrievalStrategyRef;
         this.fusedHitCount = fusedHitCount;
         this.channelCount = channelCount;
+        this.factCardHitCount = factCardHitCount;
+        this.sourceChunkHitCount = sourceChunkHitCount;
+        this.coverageStatus = coverageStatus;
+        this.channelRunSummaryJson = channelRunSummaryJson;
         this.createdAt = createdAt;
     }
 
@@ -167,6 +260,15 @@ public class QueryRetrievalRunView {
     }
 
     /**
+     * 获取答案形态。
+     *
+     * @return 答案形态
+     */
+    public String getAnswerShape() {
+        return answerShape;
+    }
+
+    /**
      * 获取检索模式。
      *
      * @return 检索模式
@@ -218,6 +320,42 @@ public class QueryRetrievalRunView {
      */
     public int getChannelCount() {
         return channelCount;
+    }
+
+    /**
+     * 获取 Fact Card 命中数。
+     *
+     * @return Fact Card 命中数
+     */
+    public int getFactCardHitCount() {
+        return factCardHitCount;
+    }
+
+    /**
+     * 获取 Source Chunk 命中数。
+     *
+     * @return Source Chunk 命中数
+     */
+    public int getSourceChunkHitCount() {
+        return sourceChunkHitCount;
+    }
+
+    /**
+     * 获取覆盖状态。
+     *
+     * @return 覆盖状态
+     */
+    public String getCoverageStatus() {
+        return coverageStatus;
+    }
+
+    /**
+     * 获取通道运行摘要 JSON。
+     *
+     * @return 通道运行摘要 JSON
+     */
+    public String getChannelRunSummaryJson() {
+        return channelRunSummaryJson;
     }
 
     /**

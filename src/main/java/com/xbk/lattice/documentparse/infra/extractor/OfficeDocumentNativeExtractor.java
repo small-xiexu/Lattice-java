@@ -9,7 +9,6 @@ import com.xbk.lattice.documentparse.extractor.PptTextExtractor;
 import com.xbk.lattice.documentparse.extractor.SourceExtractionResult;
 import com.xbk.lattice.documentparse.extractor.WordTextExtractor;
 import com.xbk.lattice.documentparse.port.NativeExtractor;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -25,7 +24,6 @@ import java.util.Set;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class OfficeDocumentNativeExtractor implements NativeExtractor {
 
     private static final Set<String> SUPPORTED_FORMATS = new HashSet<String>(Arrays.asList(
@@ -115,7 +113,7 @@ public class OfficeDocumentNativeExtractor implements NativeExtractor {
                 parseRequest.getRelativePath(),
                 extractedContent.trim(),
                 "",
-                "",
+                extractionResult.getStructuredContentJson(),
                 parseRequest.getFormat(),
                 parseRequest.getFileSize(),
                 DocumentParseMode.OFFICE_EXTRACT,

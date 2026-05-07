@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.llm.infra.mapper.AgentModelBindingMapper">
+
+    <resultMap id="AgentModelBindingResultMap" type="com.xbk.lattice.llm.domain.AgentModelBinding">
+        <constructor>
+            <arg column="id" javaType="java.lang.Long"/>
+            <arg column="scene" javaType="java.lang.String"/>
+            <arg column="agent_role" javaType="java.lang.String"/>
+            <arg column="primary_model_profile_id" javaType="java.lang.Long"/>
+            <arg column="fallback_model_profile_id" javaType="java.lang.Long"/>
+            <arg column="route_label" javaType="java.lang.String"/>
+            <arg column="enabled" javaType="_boolean"/>
+            <arg column="remarks" javaType="java.lang.String"/>
+            <arg column="created_by" javaType="java.lang.String"/>
+            <arg column="updated_by" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="updated_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="AgentModelBindingColumns">
+        id, scene, agent_role, primary_model_profile_id, fallback_model_profile_id,
+        route_label, enabled, remarks, created_by, updated_by, created_at, updated_at
+    </sql>
+
+    <select id="insert" resultType="java.lang.Long">
+        insert into agent_model_bindings (
+            scene, agent_role, primary_model_profile_id, fallback_model_profile_id,
+            route_label, enabled, remarks, created_by, updated_by
+        )
+        values (
+            #{binding.scene},
+            #{binding.agentRole},
+            #{binding.primaryModelProfileId},
+            #{binding.fallbackModelProfileId},
+            #{binding.routeLabel},
+            #{binding.enabled},
+            #{binding.remarks},
+            #{binding.createdBy},
+            #{binding.updatedBy}
+        )
+        returning id
+    </select>
+
+    <update id="update">
+        update agent_model_bindings
+        set scene = #{binding.scene},
+            agent_role = #{binding.agentRole},
+            primary_model_profile_id = #{binding.primaryModelProfileId},
+            fallback_model_profile_id = #{binding.fallbackModelProfileId},
+            route_label = #{binding.routeLabel},
+            enabled = #{binding.enabled},
+            remarks = #{binding.remarks},
+            updated_by = #{binding.updatedBy},
+            updated_at = current_timestamp
+        where id = #{binding.id}
+    </update>
+
+    <select id="findAll" resultMap="AgentModelBindingResultMap">
+        select <include refid="AgentModelBindingColumns"/>
+        from agent_model_bindings
+        order by scene asc, agent_role asc
+    </select>
+
+    <select id="findEnabledByScene" resultMap="AgentModelBindingResultMap">
+        select <include refid="AgentModelBindingColumns"/>
+        from agent_model_bindings
+        where scene = #{scene}
+          and enabled = true
+        order by agent_role asc
+    </select>
+
+    <select id="findById" resultMap="AgentModelBindingResultMap">
+        select <include refid="AgentModelBindingColumns"/>
+        from agent_model_bindings
+        where id = #{id}
+    </select>
+
+    <delete id="deleteById">
+        delete from agent_model_bindings
+        where id = #{id}
+    </delete>
+</mapper>

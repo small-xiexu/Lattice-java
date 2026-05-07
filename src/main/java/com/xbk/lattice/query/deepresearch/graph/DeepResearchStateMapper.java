@@ -1,6 +1,5 @@
 package com.xbk.lattice.query.deepresearch.graph;
 
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -16,7 +15,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class DeepResearchStateMapper {
 
     /**

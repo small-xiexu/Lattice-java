@@ -7,7 +7,6 @@ import com.xbk.lattice.documentparse.domain.model.ProviderConnection;
 import com.xbk.lattice.documentparse.domain.model.ProviderProbeResult;
 import com.xbk.lattice.documentparse.port.OcrProviderAdapter;
 import com.xbk.lattice.documentparse.service.DocumentParseRoutePolicyResolver;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -21,7 +20,6 @@ import java.util.List;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class OcrProviderRegistry {
 
     private final List<OcrProviderAdapter> ocrProviderAdapters;

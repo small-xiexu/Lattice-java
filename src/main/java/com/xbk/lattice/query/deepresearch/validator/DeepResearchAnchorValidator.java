@@ -2,7 +2,6 @@ package com.xbk.lattice.query.deepresearch.validator;
 
 import com.xbk.lattice.query.evidence.domain.EvidenceAnchor;
 import com.xbk.lattice.query.evidence.domain.EvidenceAnchorSourceType;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -17,7 +16,6 @@ import java.security.NoSuchAlgorithmException;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class DeepResearchAnchorValidator {
 
     /**

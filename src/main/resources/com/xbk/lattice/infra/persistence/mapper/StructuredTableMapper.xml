@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.StructuredTableMapper">
+
+    <resultMap id="StructuredTableRecordResultMap" type="com.xbk.lattice.infra.persistence.StructuredTableRecord">
+        <constructor>
+            <arg column="id" javaType="java.lang.Long"/>
+            <arg column="source_file_id" javaType="java.lang.Long"/>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="source_path" javaType="java.lang.String"/>
+            <arg column="table_name" javaType="java.lang.String"/>
+            <arg column="sheet_name" javaType="java.lang.String"/>
+            <arg column="format" javaType="java.lang.String"/>
+            <arg column="header_row_number" javaType="_int"/>
+            <arg column="row_count" javaType="_int"/>
+            <arg column="column_count" javaType="_int"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="StructuredTableRowRecordResultMap" type="com.xbk.lattice.infra.persistence.StructuredTableRowRecord">
+        <constructor>
+            <arg column="id" javaType="java.lang.Long"/>
+            <arg column="table_id" javaType="java.lang.Long"/>
+            <arg column="row_number" javaType="_int"/>
+            <arg column="row_text" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="StructuredTableCellRecordResultMap" type="com.xbk.lattice.infra.persistence.StructuredTableCellRecord">
+        <constructor>
+            <arg column="id" javaType="java.lang.Long"/>
+            <arg column="table_id" javaType="java.lang.Long"/>
+            <arg column="row_id" javaType="java.lang.Long"/>
+            <arg column="row_number" javaType="_int"/>
+            <arg column="column_index" javaType="_int"/>
+            <arg column="column_name" javaType="java.lang.String"/>
+            <arg column="cell_value" javaType="java.lang.String"/>
+            <arg column="normalized_value" javaType="java.lang.String"/>
+            <arg column="value_type" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="StructuredTableRowShellResultMap" type="com.xbk.lattice.infra.persistence.StructuredTableRowShell">
+        <constructor>
+            <arg resultMap="StructuredTableRecordResultMap" columnPrefix="table_"/>
+            <arg resultMap="StructuredTableRowRecordResultMap" columnPrefix="row_"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="StructuredTableGroupCountRecordResultMap"
+               type="com.xbk.lattice.infra.persistence.StructuredTableGroupCountRecord">
+        <constructor>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="table_id" javaType="java.lang.Long"/>
+            <arg column="source_path" javaType="java.lang.String"/>
+            <arg column="table_name" javaType="java.lang.String"/>
+            <arg column="sheet_name" javaType="java.lang.String"/>
+            <arg column="column_name" javaType="java.lang.String"/>
+            <arg column="cell_value" javaType="java.lang.String"/>
+            <arg column="normalized_value" javaType="java.lang.String"/>
+            <arg column="row_count" javaType="_long"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="StructuredTableColumns">
+        id, source_file_id, source_id, source_path, table_name, sheet_name, format,
+        header_row_number, row_count, column_count, metadata_json::text as metadata_json
+    </sql>
+
+    <sql id="StructuredTableRowColumns">
+        id, table_id, row_number, row_text, metadata_json::text as metadata_json
+    </sql>
+
+    <sql id="StructuredTableCellColumns">
+        id, table_id, row_id, row_number, column_index, column_name, cell_value,
+        normalized_value, value_type, metadata_json::text as metadata_json
+    </sql>
+
+    <delete id="deleteBySourceFileId">
+        delete from structured_tables
+        where source_file_id = #{sourceFileId}
+    </delete>
+
+    <select id="insertTable" resultType="java.lang.Long">
+        insert into structured_tables (
+            source_file_id, source_id, source_path, table_name, sheet_name, format,
+            header_row_number, row_count, column_count, metadata_json, source_path_norm, search_tsv
+        )
+        values (
+            #{record.sourceFileId},
+            #{record.sourceId},
+            #{record.sourcePath},
+            #{record.tableName},
+            #{record.sheetName},
+            #{record.format},
+            #{record.headerRowNumber},
+            #{record.rowCount},
+            #{record.columnCount},
+            #{record.metadataJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{sourcePathNorm},
+            to_tsvector('simple'::regconfig, #{searchText})
+        )
+        returning id
+    </select>
+
+    <select id="insertRow" resultType="java.lang.Long">
+        insert into structured_table_rows (
+            table_id, row_number, row_text, metadata_json, search_tsv
+        )
+        values (
+            #{record.tableId},
+            #{record.rowNumber},
+            #{record.rowText},
+            #{record.metadataJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            to_tsvector('simple'::regconfig, #{searchText})
+        )
+        returning id
+    </select>
+
+    <insert id="insertCell">
+        insert into structured_table_cells (
+            table_id, row_id, row_number, column_index, column_name, cell_value,
+            normalized_value, value_type, metadata_json, column_name_norm, search_tsv
+        )
+        values (
+            #{record.tableId},
+            #{record.rowId},
+            #{record.rowNumber},
+            #{record.columnIndex},
+            #{record.columnName},
+            #{record.cellValue},
+            #{record.normalizedValue},
+            #{record.valueType},
+            #{record.metadataJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{columnNameNorm},
+            to_tsvector('simple'::regconfig, #{searchText})
+        )
+    </insert>
+
+    <select id="findTablesBySourceFileId" resultMap="StructuredTableRecordResultMap">
+        select <include refid="StructuredTableColumns"/>
+        from structured_tables
+        where source_file_id = #{sourceFileId}
+        order by id asc
+    </select>
+
+    <select id="findRowsByTableId" resultMap="StructuredTableRowRecordResultMap">
+        select <include refid="StructuredTableRowColumns"/>
+        from structured_table_rows
+        where table_id = #{tableId}
+        order by row_number asc, id asc
+    </select>
+
+    <select id="findCellsByTableId" resultMap="StructuredTableCellRecordResultMap">
+        select <include refid="StructuredTableCellColumns"/>
+        from structured_table_cells
+        where table_id = #{tableId}
+        order by row_number asc, column_index asc, id asc
+    </select>
+
+    <select id="findCellsByColumnValue" resultMap="StructuredTableCellRecordResultMap">
+        select stc.id, stc.table_id, stc.row_id, stc.row_number, stc.column_index,
+               stc.column_name, stc.cell_value, stc.normalized_value, stc.value_type,
+               stc.metadata_json::text as metadata_json
+        from structured_table_cells stc
+        join structured_tables st on st.id = stc.table_id
+        where st.source_file_id = #{sourceFileId}
+          and lower(stc.column_name) = lower(#{columnName})
+          and stc.normalized_value = #{normalizedValue}
+        order by st.table_name asc, stc.row_number asc, stc.column_index asc
+    </select>
+
+    <select id="findRowsByFilters" resultMap="StructuredTableRowShellResultMap">
+        select st.id as table_id,
+               st.source_file_id as table_source_file_id,
+               st.source_id as table_source_id,
+               st.source_path as table_source_path,
+               st.table_name as table_table_name,
+               st.sheet_name as table_sheet_name,
+               st.format as table_format,
+               st.header_row_number as table_header_row_number,
+               st.row_count as table_row_count,
+               st.column_count as table_column_count,
+               st.metadata_json::text as table_metadata_json,
+               str.id as row_id,
+               str.table_id as row_table_id,
+               str.row_number as row_row_number,
+               str.row_text as row_row_text,
+               str.metadata_json::text as row_metadata_json
+        from structured_table_rows str
+        join structured_tables st on st.id = str.table_id
+        where 1 = 1
+        <foreach collection="filters" item="filter">
+            and exists (
+                select 1
+                from structured_table_cells filter_cell
+                where filter_cell.row_id = str.id
+                  and filter_cell.column_name_norm = #{filter.columnNameNorm}
+                  and filter_cell.normalized_value = #{filter.normalizedValue}
+            )
+        </foreach>
+        order by st.source_path asc, st.table_name asc, str.row_number asc
+        limit #{limit}
+    </select>
+
+    <select id="countRowsByFilters" resultType="_long">
+        select count(*)
+        from structured_table_rows str
+        where 1 = 1
+        <foreach collection="filters" item="filter">
+            and exists (
+                select 1
+                from structured_table_cells filter_cell
+                where filter_cell.row_id = str.id
+                  and filter_cell.column_name_norm = #{filter.columnNameNorm}
+                  and filter_cell.normalized_value = #{filter.normalizedValue}
+            )
+        </foreach>
+    </select>
+
+    <select id="groupCountByField" resultMap="StructuredTableGroupCountRecordResultMap">
+        select group_cell.column_name,
+               group_cell.cell_value,
+               group_cell.normalized_value,
+               min(st.source_id) as source_id,
+               min(st.id) as table_id,
+               min(st.source_path) as source_path,
+               min(st.table_name) as table_name,
+               min(st.sheet_name) as sheet_name,
+               count(*) as row_count
+        from structured_table_rows str
+        join structured_tables st on st.id = str.table_id
+        join structured_table_cells group_cell on group_cell.row_id = str.id
+        where group_cell.column_name_norm = #{groupByFieldNorm}
+        <foreach collection="filters" item="filter">
+            and exists (
+                select 1
+                from structured_table_cells filter_cell
+                where filter_cell.row_id = str.id
+                  and filter_cell.column_name_norm = #{filter.columnNameNorm}
+                  and filter_cell.normalized_value = #{filter.normalizedValue}
+            )
+        </foreach>
+        group by group_cell.column_name, group_cell.cell_value, group_cell.normalized_value
+        order by row_count desc, group_cell.cell_value asc
+        limit #{limit}
+    </select>
+
+    <select id="findCellsByRowIds" resultMap="StructuredTableCellRecordResultMap">
+        select <include refid="StructuredTableCellColumns"/>
+        from structured_table_cells
+        where row_id in
+        <foreach collection="rowIds" item="rowId" open="(" separator="," close=")">
+            #{rowId}
+        </foreach>
+        order by row_number asc, column_index asc
+    </select>
+</mapper>

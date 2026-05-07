@@ -6,7 +6,6 @@ import com.xbk.lattice.llm.domain.LlmProviderConnection;
 import com.xbk.lattice.llm.infra.AgentModelBindingJdbcRepository;
 import com.xbk.lattice.llm.infra.LlmModelProfileJdbcRepository;
 import com.xbk.lattice.llm.infra.LlmProviderConnectionJdbcRepository;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +20,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class LlmConfigAdminService {
 
     private final LlmProviderConnectionJdbcRepository llmProviderConnectionJdbcRepository;

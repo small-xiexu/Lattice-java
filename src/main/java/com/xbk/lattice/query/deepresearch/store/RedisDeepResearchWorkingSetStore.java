@@ -12,7 +12,6 @@ import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import com.xbk.lattice.query.evidence.domain.ProjectionCandidate;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -25,7 +24,6 @@ import java.util.List;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 @ConditionalOnProperty(prefix = "lattice.deep-research.working-set", name = "store", havingValue = "redis")
 public class RedisDeepResearchWorkingSetStore extends AbstractRedisJsonStore implements DeepResearchWorkingSetStore {
 

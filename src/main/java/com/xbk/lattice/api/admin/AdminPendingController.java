@@ -5,7 +5,6 @@ import com.xbk.lattice.api.query.PendingQueryCorrectionRequest;
 import com.xbk.lattice.api.query.PendingQueryStatusResponse;
 import com.xbk.lattice.infra.persistence.PendingQueryRecord;
 import com.xbk.lattice.query.service.PendingQueryManager;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,7 +23,6 @@ import java.util.List;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 @RequestMapping("/api/v1/admin/pending")
 public class AdminPendingController {
 

@@ -11,8 +11,8 @@ import com.xbk.lattice.query.domain.AnswerOutcome;
 import com.xbk.lattice.query.domain.GenerationMode;
 import com.xbk.lattice.query.domain.ModelExecutionStatus;
 import com.xbk.lattice.query.domain.QueryAnswerPayload;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -34,7 +34,7 @@ import java.util.regex.Pattern;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
+@Slf4j
 public class AnswerGenerationService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -56,7 +56,7 @@ public class AnswerGenerationService {
             4. 每个关键结论段落末尾必须追加至少一个可解析引用
             5. 文章引用格式只能是 [[article-key]] 或 [[article-key|显示标签]]
             6. 源文件引用格式只能是 [→ relative/path/File.java] 或 [→ relative/path/File.java, section]
-            7. 优先引用 ARTICLE / SOURCE / CONTRIBUTION 中直接可证实的信息
+            7. 优先引用 CONTRIBUTION / FACT_CARD / SOURCE 中直接可证实的信息；FACT_CARD 用于组织结构化事实，最终引用尽量落到对应 SOURCE 原文
             8. 如果信息不足，要明确指出缺口，不要编造；此时 answerOutcome 必须为 INSUFFICIENT_EVIDENCE 或 PARTIAL_ANSWER
             9. 没有相关知识时 answerOutcome 必须为 NO_RELEVANT_KNOWLEDGE，answerCacheable 必须为 false
             10. 只有在 answerOutcome=SUCCESS 且答案可稳定复用时，answerCacheable 才能为 true
@@ -66,8 +66,11 @@ public class AnswerGenerationService {
             14. 字段、枚举、状态码、配置值这类查值题优先用表格或逐项列表，并在每个数据行末尾追加可解析引用
             15. 如果证据明确给出了“从旧结论修正为新结论”“X 不适用”“X 与当前接口无关”这类结论，必须优先回答最新修正后的结论，不要改写成第三种未被证实的新说法
             16. 对命中数、接口路径、配置值、枚举值、状态取值、批次顺序、是否一致这类精确查值题，优先使用证据里最贴题的原始事实句，而不是宽泛背景总结
-            17. 如果 ARTICLE 证据不够直接，但 SOURCE / CONTRIBUTION 证据已经包含精确值或精确结论，应直接使用这些证据，不要轻易回答“证据不足”
+            17. 如果 ARTICLE 证据不够直接，但 FACT_CARD / SOURCE / CONTRIBUTION 证据已经包含精确值或精确结论，应直接使用这些证据，不要轻易回答“证据不足”
             18. 对精确查值 / 精确结论题，answerMarkdown 默认先给 1-2 句直接答案；只有在问题明确要求“展开说明 / 对比明细 / 完整列表”时，才继续补充背景或分点解释
+            19. 对显式点名路径、URL、配置键、字段名等标识的问题，不要引入用户未点名且非回答必需的其他标识；证据中的废弃示例或反例可概括为“其他标识”，不要原样复述
+            20. 如果证据给出了接口/URL path 对应的 HTTP 方法，回答该 path 时必须同时保留方法和 path，例如 POST /example/path
+            21. 数值、金额、比例、公式类问题必须保留证据中的原始算式和未截断数值；如需给常用展示值，可同时给四舍五入值，但不要只输出四舍五入结果
             """;
 
     private static final String SYSTEM_QUERY_REVISE = """
@@ -109,6 +112,16 @@ public class AnswerGenerationService {
     private static final String FALLBACK_REASON_REWRITE_FAILED = "REWRITE_FAILED";
 
     private static final String FALLBACK_REASON_DETERMINISTIC_EXACT_LOOKUP_PREFERRED = "DETERMINISTIC_EXACT_LOOKUP_PREFERRED";
+
+    private static final int PROMPT_USER_PROMPT_CHAR_LIMIT = 48000;
+
+    private static final int PROMPT_EVIDENCE_SECTION_HIT_LIMIT = 6;
+
+    private static final int PROMPT_EVIDENCE_CONTENT_CHAR_LIMIT = 1200;
+
+    private static final int PROMPT_EVIDENCE_METADATA_CHAR_LIMIT = 800;
+
+    private static final String PROMPT_TRUNCATED_SUFFIX = "... [truncated]";
 
     private final LlmGateway llmGateway;
 
@@ -588,6 +601,8 @@ public class AnswerGenerationService {
             List<QueryArticleHit> queryArticleHits
     ) {
         String normalizedAnswer = removeOvercautiousEvidenceCaveats(answerMarkdown, question);
+        normalizedAnswer = removeUnrequestedPathExamples(normalizedAnswer, question);
+        normalizedAnswer = ensureRequestedPathHttpMethods(normalizedAnswer, question, queryArticleHits);
         return attachDefaultCitationWhenMissing(normalizedAnswer, question, queryArticleHits);
     }
 
@@ -612,6 +627,15 @@ public class AnswerGenerationService {
         String normalizedAnswer = lowerCase(answerMarkdown);
         if (normalizedAnswer.contains("当前证据不足") || normalizedAnswer.contains("暂无法确认")) {
             return answerOutcome;
+        }
+        if (looksLikeExactLookupQuestion(question)) {
+            List<QueryArticleHit> fallbackHits = selectFallbackEvidenceHits(question, queryArticleHits);
+            if (!fallbackHits.isEmpty()
+                    && isDirectFallbackAnswerable(question, fallbackHits.get(0))
+                    && coversExactLookupAnswerText(answerMarkdown, question)
+                    && isExactLookupAnswerGroundedByFocusedEvidence(question, fallbackHits, answerMarkdown)) {
+                return AnswerOutcome.SUCCESS;
+            }
         }
         if (!looksLikeEnumerationQuestion(question) && !looksLikeFlowQuestion(question)) {
             return answerOutcome;
@@ -650,6 +674,150 @@ public class AnswerGenerationService {
         normalizedAnswer = removeOvercautiousIntroParagraph(normalizedAnswer, question);
         normalizedAnswer = removeOvercautiousGapSection(normalizedAnswer, question);
         return removeUnsupportedDetailCaveatParagraphs(normalizedAnswer, question);
+    }
+
+    /**
+     * 对显式 path 题补齐证据里给出的 HTTP 方法。
+     *
+     * @param answerMarkdown 答案正文
+     * @param question 用户问题
+     * @param queryArticleHits 查询命中
+     * @return 补齐后的答案正文
+     */
+    private String ensureRequestedPathHttpMethods(
+            String answerMarkdown,
+            String question,
+            List<QueryArticleHit> queryArticleHits
+    ) {
+        if (answerMarkdown == null || answerMarkdown.isBlank()) {
+            return answerMarkdown;
+        }
+        List<String> requestedPaths = extractEvidencePaths(List.of(question));
+        if (requestedPaths.isEmpty()) {
+            return answerMarkdown;
+        }
+        String patchedAnswer = answerMarkdown;
+        for (String requestedPath : requestedPaths) {
+            String httpMethod = findHttpMethodForPath(requestedPath, queryArticleHits);
+            if (httpMethod.isBlank() || containsHttpMethodPath(patchedAnswer, httpMethod, requestedPath)) {
+                continue;
+            }
+            patchedAnswer = patchFirstRequestedPathWithMethod(patchedAnswer, requestedPath, httpMethod);
+        }
+        return patchedAnswer;
+    }
+
+    /**
+     * 在证据中查找指定 path 对应的 HTTP 方法。
+     *
+     * @param requestedPath 被询问的 path
+     * @param queryArticleHits 查询命中
+     * @return HTTP 方法；无命中返回空串
+     */
+    private String findHttpMethodForPath(String requestedPath, List<QueryArticleHit> queryArticleHits) {
+        if (requestedPath == null || requestedPath.isBlank() || queryArticleHits == null || queryArticleHits.isEmpty()) {
+            return "";
+        }
+        for (QueryArticleHit queryArticleHit : queryArticleHits) {
+            String content = queryArticleHit == null ? "" : queryArticleHit.getContent();
+            String httpMethod = findHttpMethodForPathInText(requestedPath, content);
+            if (!httpMethod.isBlank()) {
+                return httpMethod;
+            }
+        }
+        return "";
+    }
+
+    /**
+     * 在文本中查找 path 附近的 HTTP 方法。
+     *
+     * @param requestedPath 被询问的 path
+     * @param text 证据文本
+     * @return HTTP 方法；无命中返回空串
+     */
+    private String findHttpMethodForPathInText(String requestedPath, String text) {
+        if (requestedPath == null || requestedPath.isBlank() || text == null || text.isBlank()) {
+            return "";
+        }
+        String[] lines = text.split("\\R");
+        for (String line : lines) {
+            if (!lowerCase(line).contains(lowerCase(requestedPath))) {
+                continue;
+            }
+            String httpMethod = extractHttpMethod(line);
+            if (!httpMethod.isBlank()) {
+                return httpMethod;
+            }
+        }
+        int pathIndex = lowerCase(text).indexOf(lowerCase(requestedPath));
+        if (pathIndex < 0) {
+            return "";
+        }
+        int startIndex = Math.max(0, pathIndex - 80);
+        int endIndex = Math.min(text.length(), pathIndex + requestedPath.length() + 80);
+        return extractHttpMethod(text.substring(startIndex, endIndex));
+    }
+
+    /**
+     * 从片段中提取 HTTP 方法。
+     *
+     * @param text 文本片段
+     * @return HTTP 方法；无命中返回空串
+     */
+    private String extractHttpMethod(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        Matcher matcher = Pattern.compile("(?i)(?<![A-Za-z])(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)(?![A-Za-z])")
+                .matcher(text);
+        if (!matcher.find()) {
+            return "";
+        }
+        return matcher.group(1).toUpperCase(Locale.ROOT);
+    }
+
+    /**
+     * 判断答案是否已经包含 method + path。
+     *
+     * @param answerMarkdown 答案正文
+     * @param httpMethod HTTP 方法
+     * @param requestedPath 被询问的 path
+     * @return 已包含返回 true
+     */
+    private boolean containsHttpMethodPath(String answerMarkdown, String httpMethod, String requestedPath) {
+        String normalizedAnswer = lowerCase(answerMarkdown);
+        String normalizedMethodPath = lowerCase(httpMethod + " " + requestedPath);
+        return normalizedAnswer.contains(normalizedMethodPath);
+    }
+
+    /**
+     * 把答案中第一次出现的 path 补成 method + path。
+     *
+     * @param answerMarkdown 答案正文
+     * @param requestedPath 被询问的 path
+     * @param httpMethod HTTP 方法
+     * @return 补齐后的答案正文
+     */
+    private String patchFirstRequestedPathWithMethod(
+            String answerMarkdown,
+            String requestedPath,
+            String httpMethod
+    ) {
+        String normalizedAnswer = lowerCase(answerMarkdown);
+        String normalizedPath = lowerCase(requestedPath);
+        int pathIndex = normalizedAnswer.indexOf(normalizedPath);
+        if (pathIndex < 0) {
+            return answerMarkdown;
+        }
+        int methodStartIndex = Math.max(0, pathIndex - httpMethod.length() - 8);
+        String nearbyPrefix = lowerCase(answerMarkdown.substring(methodStartIndex, pathIndex));
+        if (nearbyPrefix.contains(lowerCase(httpMethod))) {
+            return answerMarkdown;
+        }
+        return answerMarkdown.substring(0, pathIndex)
+                + httpMethod
+                + " "
+                + answerMarkdown.substring(pathIndex);
     }
 
     /**
@@ -1194,7 +1362,7 @@ public class AnswerGenerationService {
         if (bestHit == null) {
             return defaultCitation == null ? "" : defaultCitation;
         }
-        String citationLiteral = resolveConclusionCitationLiteral(bestHit);
+        String citationLiteral = resolveConclusionCitationLiteral(bestHit, queryArticleHits);
         return citationLiteral.isBlank() ? (defaultCitation == null ? "" : defaultCitation) : citationLiteral;
     }
 
@@ -1451,14 +1619,14 @@ public class AnswerGenerationService {
     private String defaultCitationLiteral(String question, List<QueryArticleHit> queryArticleHits) {
         List<QueryArticleHit> fallbackHits = selectFallbackEvidenceHits(question, queryArticleHits);
         for (QueryArticleHit fallbackHit : fallbackHits) {
-            String citationLiteral = resolveConclusionCitationLiteral(fallbackHit);
+            String citationLiteral = resolveConclusionCitationLiteral(fallbackHit, queryArticleHits);
             if (!citationLiteral.isBlank()) {
                 return citationLiteral;
             }
         }
         if (queryArticleHits != null) {
             for (QueryArticleHit queryArticleHit : queryArticleHits) {
-                String citationLiteral = resolveConclusionCitationLiteral(queryArticleHit);
+                String citationLiteral = resolveConclusionCitationLiteral(queryArticleHit, queryArticleHits);
                 if (!citationLiteral.isBlank()) {
                     return citationLiteral;
                 }
@@ -1700,8 +1868,27 @@ public class AnswerGenerationService {
             return null;
         }
         List<QueryArticleHit> fallbackHits = selectFallbackEvidenceHits(question, queryArticleHits);
-        AnswerOutcome answerOutcome = inferFallbackEvidenceOutcome(question, fallbackHits);
+        AnswerOutcome answerOutcome = inferUnstructuredMarkdownAnswerOutcome(question, normalizedMarkdown, fallbackHits);
         return QueryAnswerPayload.llm(SensitiveTextMasker.mask(normalizedMarkdown.trim()), answerOutcome, false);
+    }
+
+    /**
+     * 根据自由文本答案自身覆盖度和 fallback 证据推导答案语义。
+     *
+     * @param question 用户问题
+     * @param normalizedMarkdown 归一后的 Markdown
+     * @param fallbackHits fallback 证据
+     * @return 答案语义
+     */
+    private AnswerOutcome inferUnstructuredMarkdownAnswerOutcome(
+            String question,
+            String normalizedMarkdown,
+            List<QueryArticleHit> fallbackHits
+    ) {
+        if (coversExactLookupUnstructuredAnswer(normalizedMarkdown, question)) {
+            return AnswerOutcome.SUCCESS;
+        }
+        return inferFallbackEvidenceOutcome(question, fallbackHits);
     }
 
     /**
@@ -1723,6 +1910,10 @@ public class AnswerGenerationService {
             return coversRequestedReferentialIdentifiers(normalizedPayload, question)
                     && countEnumerationFactLines(normalizedPayload) >= 1;
         }
+        if (looksLikeExactLookupQuestion(question)
+                && (!looksLikeEnumerationQuestion(question) || containsRequestedExactPathIdentifier(question))) {
+            return coversExactLookupUnstructuredAnswer(normalizedPayload, question);
+        }
         if (looksLikeEnumerationQuestion(question)) {
             return countEnumerationFactLines(normalizedPayload) >= 2
                     || coversRequestedQuestionAnchors(normalizedPayload, question);
@@ -1734,6 +1925,63 @@ public class AnswerGenerationService {
             return containsStatusSignal(lowerCase(normalizedPayload));
         }
         return false;
+    }
+
+    /**
+     * 判断自由文本是否已经覆盖精确查值题的关键标识和问题维度。
+     *
+     * @param markdown 模型 Markdown
+     * @param question 用户问题
+     * @return 覆盖返回 true
+     */
+    private boolean coversExactLookupUnstructuredAnswer(String markdown, String question) {
+        if (!containsSourceCitationLiteral(markdown)) {
+            return false;
+        }
+        return coversExactLookupAnswerText(markdown, question);
+    }
+
+    /**
+     * 判断答案正文是否覆盖精确查值题的关键标识和问题维度。
+     *
+     * @param markdown 答案 Markdown
+     * @param question 用户问题
+     * @return 覆盖返回 true
+     */
+    private boolean coversExactLookupAnswerText(String markdown, String question) {
+        if (!coversRequestedReferentialIdentifiers(markdown, question)
+                && !coversRequestedQuestionAnchors(markdown, question)) {
+            return false;
+        }
+        String normalizedMarkdown = lowerCase(stripEmbeddedCitationLiterals(markdown));
+        if (looksLikePathQuestion(question)
+                && !containsPathSignal(normalizedMarkdown)) {
+            return false;
+        }
+        if (looksLikeRuleConstraintQuestion(question)
+                && !containsRuleConstraintSignal(normalizedMarkdown)
+                && !containsStrongConstraintSignal(normalizedMarkdown)) {
+            return false;
+        }
+        if (looksLikeChangeTrackingQuestion(question)
+                && !containsChangeTrackingSignal(normalizedMarkdown)
+                && !containsStrongConstraintSignal(normalizedMarkdown)) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * 判断 Markdown 是否包含源文件式 citation，避免把普通内部文章引用误当作完整模型答案。
+     *
+     * @param markdown Markdown 文本
+     * @return 包含源文件引用返回 true
+     */
+    private boolean containsSourceCitationLiteral(String markdown) {
+        if (markdown == null || markdown.isBlank()) {
+            return false;
+        }
+        return SOURCE_CITATION_PATTERN.matcher(markdown).find();
     }
 
     /**
@@ -2162,8 +2410,10 @@ public class AnswerGenerationService {
         if (preferredOutcome == AnswerOutcome.PARTIAL_ANSWER && evidenceOutcome == AnswerOutcome.SUCCESS) {
             return AnswerOutcome.SUCCESS;
         }
-        if (preferredOutcome == AnswerOutcome.PARTIAL_ANSWER && evidenceOutcome == AnswerOutcome.NO_RELEVANT_KNOWLEDGE) {
-            return AnswerOutcome.PARTIAL_ANSWER;
+        if (preferredOutcome == AnswerOutcome.PARTIAL_ANSWER
+                && evidenceOutcome == AnswerOutcome.NO_RELEVANT_KNOWLEDGE
+                && (looksLikeStrictExactIdentifierQuestion(question) || looksLikeRequiredFacetQuestion(question))) {
+            return AnswerOutcome.NO_RELEVANT_KNOWLEDGE;
         }
         return preferredOutcome;
     }
@@ -2177,6 +2427,9 @@ public class AnswerGenerationService {
      */
     private AnswerOutcome inferFallbackEvidenceOutcome(String question, List<QueryArticleHit> fallbackHits) {
         if (fallbackHits == null || fallbackHits.isEmpty()) {
+            return AnswerOutcome.NO_RELEVANT_KNOWLEDGE;
+        }
+        if (looksLikeRequiredFacetQuestion(question) && !coversRequiredQuestionFacets(question, fallbackHits)) {
             return AnswerOutcome.NO_RELEVANT_KNOWLEDGE;
         }
         List<String> comparisonOptions = extractComparisonOptions(question);
@@ -2230,6 +2483,10 @@ public class AnswerGenerationService {
         if (queryArticleHit == null) {
             return false;
         }
+        if (looksLikeRequiredFacetQuestion(question)
+                && !coversRequiredQuestionFacets(question, List.of(queryArticleHit))) {
+            return false;
+        }
         List<String> queryTokens = extractQueryTokens(question);
         if (looksLikeStatusQuestion(question)) {
             String statusSnippet = selectQuestionFocusedFallbackSnippet(
@@ -2244,12 +2501,143 @@ public class AnswerGenerationService {
             if (containsFlowSignal(flowSnippet)) {
                 return true;
             }
+            if (containsFlowSignalInFallbackLines(queryArticleHit)) {
+                return true;
+            }
             return containsFlowSignal(extractDescription(queryArticleHit.getMetadataJson()));
         }
         if (!selectMatchedLines(queryArticleHit.getContent(), queryTokens).isEmpty()) {
             return true;
         }
         return !extractDescription(queryArticleHit.getMetadataJson()).isEmpty();
+    }
+
+    /**
+     * 判断命中正文里是否存在通用流程/链路事实句。
+     *
+     * @param queryArticleHit 查询命中
+     * @return 存在返回 true
+     */
+    private boolean containsFlowSignalInFallbackLines(QueryArticleHit queryArticleHit) {
+        if (queryArticleHit == null) {
+            return false;
+        }
+        for (String contentLine : selectFallbackContentLines(queryArticleHit.getContent())) {
+            String normalizedLine = normalizeFallbackLineCandidate(contentLine);
+            if (!normalizedLine.isBlank() && containsFlowSignal(normalizedLine)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断问题是否含有必须同时覆盖的通用技术焦点。
+     *
+     * @param question 用户问题
+     * @return 需要覆盖返回 true
+     */
+    private boolean looksLikeRequiredFacetQuestion(String question) {
+        return extractRequiredQuestionFacets(question).size() >= 2;
+    }
+
+    /**
+     * 判断 fallback 证据是否覆盖问题中的必要技术焦点。
+     *
+     * @param question 用户问题
+     * @param fallbackHits fallback 证据
+     * @return 覆盖返回 true
+     */
+    private boolean coversRequiredQuestionFacets(String question, List<QueryArticleHit> fallbackHits) {
+        List<String> requiredFacets = extractRequiredQuestionFacets(question);
+        if (requiredFacets.isEmpty()) {
+            return true;
+        }
+        String evidenceText = lowerCase(joinHitTexts(fallbackHits));
+        for (String requiredFacet : requiredFacets) {
+            if (!evidenceText.contains(requiredFacet)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 提取问题中需要被证据共同覆盖的通用技术焦点。
+     *
+     * @param question 用户问题
+     * @return 技术焦点
+     */
+    private List<String> extractRequiredQuestionFacets(String question) {
+        List<String> facets = new ArrayList<String>();
+        String normalizedQuestion = lowerCase(question);
+        if (!containsMultiFacetQuestionSignal(normalizedQuestion)) {
+            return facets;
+        }
+        for (String token : QueryTokenExtractor.extract(question)) {
+            String normalizedToken = lowerCase(token);
+            if (!looksLikeRequiredTechnicalFacet(normalizedToken) || facets.contains(normalizedToken)) {
+                continue;
+            }
+            facets.add(normalizedToken);
+            if (facets.size() >= 4) {
+                break;
+            }
+        }
+        return facets;
+    }
+
+    /**
+     * 判断问题是否包含多焦点提问信号。
+     *
+     * @param normalizedQuestion 归一化问题
+     * @return 包含返回 true
+     */
+    private boolean containsMultiFacetQuestionSignal(String normalizedQuestion) {
+        return normalizedQuestion.contains("分别")
+                || normalizedQuestion.contains("各自")
+                || normalizedQuestion.contains("和")
+                || normalizedQuestion.contains("以及")
+                || normalizedQuestion.contains("、")
+                || normalizedQuestion.contains("/");
+    }
+
+    /**
+     * 判断 token 是否像必须被证据覆盖的技术焦点。
+     *
+     * @param token token
+     * @return 是技术焦点返回 true
+     */
+    private boolean looksLikeRequiredTechnicalFacet(String token) {
+        if (token == null || token.isBlank() || token.length() < 2) {
+            return false;
+        }
+        if (token.matches("\\d+")) {
+            return false;
+        }
+        if (!token.matches("[a-z0-9._/-]+")) {
+            return false;
+        }
+        return !isGenericTechnicalFacet(token);
+    }
+
+    /**
+     * 判断 token 是否只是泛化技术类型词，不应作为强制焦点。
+     *
+     * @param token token
+     * @return 泛化词返回 true
+     */
+    private boolean isGenericTechnicalFacet(String token) {
+        return "api".equals(token)
+                || "http".equals(token)
+                || "https".equals(token)
+                || "path".equals(token)
+                || "url".equals(token)
+                || "json".equals(token)
+                || "xml".equals(token)
+                || "yaml".equals(token)
+                || "yml".equals(token)
+                || "sql".equals(token);
     }
 
     /**
@@ -2273,24 +2661,26 @@ public class AnswerGenerationService {
             return answerPayload;
         }
         String normalizedAnswer = lowerCase(answerPayload.getAnswerMarkdown());
-        boolean overcautiousAnswer = answerPayload.getAnswerOutcome() != AnswerOutcome.SUCCESS
-                || normalizedAnswer.contains("当前证据不足")
-                || normalizedAnswer.contains("暂无法确认")
-                || normalizedAnswer.contains("无法根据当前证据确定")
-                || normalizedAnswer.contains("没有直接给出")
-                || normalizedAnswer.contains("未直接给出")
-                || normalizedAnswer.contains("未提供");
-        if (overcautiousAnswer) {
-            return buildDeterministicFallbackPayload(
-                    question,
-                    queryArticleHits,
-                    AnswerOutcome.SUCCESS,
-                    GenerationMode.FALLBACK,
-                    ModelExecutionStatus.DEGRADED,
-                    FALLBACK_REASON_DETERMINISTIC_EXACT_LOOKUP_PREFERRED
-            );
+        ExactLookupPreferenceReason preferenceReason = ExactLookupPreferenceReason.NONE;
+        ExactLookupGroundingStatus groundingStatus = ExactLookupGroundingStatus.GROUNDED;
+        if (answerPayload.getAnswerOutcome() != AnswerOutcome.SUCCESS) {
+            preferenceReason = ExactLookupPreferenceReason.OUTCOME_NOT_SUCCESS;
         }
-        if (!isExactLookupAnswerGroundedByFocusedEvidence(question, fallbackHits, answerPayload.getAnswerMarkdown())) {
+        else if (containsOvercautiousExactLookupPhrase(normalizedAnswer)) {
+            preferenceReason = ExactLookupPreferenceReason.OVERCAUTIOUS_PHRASE;
+        }
+        else {
+            groundingStatus = evaluateExactLookupAnswerGrounding(
+                    question,
+                    fallbackHits,
+                    answerPayload.getAnswerMarkdown()
+            );
+            if (groundingStatus != ExactLookupGroundingStatus.GROUNDED) {
+                preferenceReason = ExactLookupPreferenceReason.GROUNDING_MISMATCH;
+            }
+        }
+        if (preferenceReason != ExactLookupPreferenceReason.NONE) {
+            logExactLookupPreference(preferenceReason, groundingStatus);
             return buildDeterministicFallbackPayload(
                     question,
                     queryArticleHits,
@@ -2301,6 +2691,41 @@ public class AnswerGenerationService {
             );
         }
         return answerPayload;
+    }
+
+    /**
+     * 判断模型答案是否带有精确题常见的过度保守表达。
+     *
+     * @param normalizedAnswer 归一化答案
+     * @return 命中返回 true
+     */
+    private boolean containsOvercautiousExactLookupPhrase(String normalizedAnswer) {
+        if (normalizedAnswer == null || normalizedAnswer.isBlank()) {
+            return false;
+        }
+        return normalizedAnswer.contains("当前证据不足")
+                || normalizedAnswer.contains("暂无法确认")
+                || normalizedAnswer.contains("无法根据当前证据确定")
+                || normalizedAnswer.contains("没有直接给出")
+                || normalizedAnswer.contains("未直接给出")
+                || normalizedAnswer.contains("未提供");
+    }
+
+    /**
+     * 记录精确查值题偏向 deterministic fallback 的通用原因。
+     *
+     * @param preferenceReason 偏向 fallback 的原因
+     * @param groundingStatus grounding 判定状态
+     */
+    private void logExactLookupPreference(
+            ExactLookupPreferenceReason preferenceReason,
+            ExactLookupGroundingStatus groundingStatus
+    ) {
+        log.info(
+                "query_exact_lookup_deterministic_preferred reason: {}, groundingStatus: {}",
+                preferenceReason,
+                groundingStatus
+        );
     }
 
     /**
@@ -2316,8 +2741,25 @@ public class AnswerGenerationService {
             List<QueryArticleHit> fallbackHits,
             String answerMarkdown
     ) {
+        return evaluateExactLookupAnswerGrounding(question, fallbackHits, answerMarkdown)
+                == ExactLookupGroundingStatus.GROUNDED;
+    }
+
+    /**
+     * 判断精确查值题的模型答案是否覆盖了证据里的关键形态，并返回通用失败原因。
+     *
+     * @param question 用户问题
+     * @param fallbackHits fallback 命中
+     * @param answerMarkdown 模型答案
+     * @return grounding 判定状态
+     */
+    private ExactLookupGroundingStatus evaluateExactLookupAnswerGrounding(
+            String question,
+            List<QueryArticleHit> fallbackHits,
+            String answerMarkdown
+    ) {
         if (answerMarkdown == null || answerMarkdown.isBlank() || fallbackHits == null || fallbackHits.isEmpty()) {
-            return true;
+            return ExactLookupGroundingStatus.GROUNDED;
         }
         List<String> queryTokens = extractQueryTokens(question);
         List<String> focusSnippets = new ArrayList<String>();
@@ -2344,63 +2786,66 @@ public class AnswerGenerationService {
             }
         }
         if (focusSnippets.isEmpty()) {
-            return true;
+            return ExactLookupGroundingStatus.GROUNDED;
         }
         String normalizedQuestion = lowerCase(question);
         String normalizedAnswer = lowerCase(answerMarkdown);
         if ((normalizedQuestion.contains("路径") || normalizedQuestion.contains("接口"))
                 && containsAnySnippetToken(focusSnippets, "/")
                 && !coversRequiredPathShape(question, normalizedAnswer, focusSnippets)) {
-            return false;
+            return ExactLookupGroundingStatus.MISSING_PATH_SHAPE;
         }
         if ((normalizedQuestion.contains("命中数") || looksLikeNumericQuestion(question))
                 && containsAnySnippetDigit(focusSnippets)
                 && !normalizedAnswer.matches("(?s).*\\d.*")) {
-            return false;
+            return ExactLookupGroundingStatus.MISSING_DIGIT;
         }
         if (looksLikeNumericQuestion(question)
                 && !coversRequiredNumericShape(normalizedQuestion, normalizedAnswer, focusSnippets)) {
-            return false;
+            return ExactLookupGroundingStatus.MISSING_NUMERIC_SHAPE;
         }
         if (expectsBatchOrOrdinalAnswer(normalizedQuestion)
                 && containsAnyBatchOrOrdinalSignal(focusSnippets)
                 && !containsBatchOrOrdinalSignal(normalizedAnswer)) {
-            return false;
+            return ExactLookupGroundingStatus.MISSING_BATCH_OR_ORDINAL;
         }
         if (looksLikeStatusQuestion(question)
                 && containsAnyStatusSignal(focusSnippets)
                 && !containsStatusSignal(normalizedAnswer)) {
-            return false;
+            return ExactLookupGroundingStatus.MISSING_STATUS;
         }
         if (looksLikeFlowQuestion(question)
                 && containsAnyFlowTransitionSignal(focusSnippets)
                 && !containsFlowTransitionSignal(answerMarkdown)) {
-            return false;
+            return ExactLookupGroundingStatus.MISSING_FLOW;
         }
         if (normalizedQuestion.contains("结论")
                 && containsAnyCorrectionOrStatusSignal(focusSnippets)
                 && !containsCorrectionOrStatusSignal(normalizedAnswer)) {
-            return false;
+            return ExactLookupGroundingStatus.MISSING_CORRECTION_OR_STATUS;
         }
         if (looksLikeRuleConstraintQuestion(question)
                 && containsAnyStrongConstraintSignal(focusSnippets)
                 && !containsStrongConstraintSignal(normalizedAnswer)) {
-            return false;
+            return ExactLookupGroundingStatus.MISSING_STRONG_CONSTRAINT;
         }
         if (looksLikeRuleConstraintQuestion(question)
                 && containsAnyRuleConstraintSignal(focusSnippets)
                 && !containsRuleConstraintSignal(normalizedAnswer)) {
-            return false;
+            return ExactLookupGroundingStatus.MISSING_RULE_CONSTRAINT;
         }
         if (looksLikeChangeTrackingQuestion(question)
                 && !coversChangeTrackingAnswer(question, normalizedAnswer, focusSnippets)) {
-            return false;
+            return ExactLookupGroundingStatus.MISSING_CHANGE_TRACKING;
+        }
+        if (coversRequestedPathContractAnswer(question, normalizedAnswer, focusSnippets)) {
+            return ExactLookupGroundingStatus.GROUNDED;
         }
         if (looksLikeCompoundExactLookupQuestion(question)
                 && !coversMultipleEvidenceDimensions(question, normalizedAnswer, focusSnippets)) {
-            return false;
+            return ExactLookupGroundingStatus.MISSING_COMPOUND_DIMENSIONS;
         }
-        return true;
+        return ExactLookupGroundingStatus.GROUNDED;
     }
 
     /**
@@ -2441,6 +2886,10 @@ public class AnswerGenerationService {
      * @return 覆盖足够返回 true
      */
     private boolean coversRequiredPathShape(String question, String normalizedAnswer, List<String> focusSnippets) {
+        List<String> requestedPaths = extractRequestedPathIdentifiers(question);
+        if (!requestedPaths.isEmpty()) {
+            return coversRequestedPaths(normalizedAnswer, requestedPaths);
+        }
         List<String> evidencePaths = extractEvidencePaths(focusSnippets);
         if (evidencePaths.isEmpty()) {
             return normalizedAnswer.contains("/");
@@ -2456,6 +2905,28 @@ public class AnswerGenerationService {
             }
         }
         return false;
+    }
+
+    /**
+     * 判断答案是否覆盖用户问题中显式点名的路径。
+     *
+     * @param normalizedAnswer 归一化答案
+     * @param requestedPaths 用户点名路径
+     * @return 覆盖返回 true
+     */
+    private boolean coversRequestedPaths(String normalizedAnswer, List<String> requestedPaths) {
+        if (requestedPaths == null || requestedPaths.isEmpty()) {
+            return true;
+        }
+        if (normalizedAnswer == null || normalizedAnswer.isBlank()) {
+            return false;
+        }
+        for (String requestedPath : requestedPaths) {
+            if (!normalizedAnswer.contains(lowerCase(requestedPath))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -2558,6 +3029,89 @@ public class AnswerGenerationService {
             }
         }
         return paths;
+    }
+
+    /**
+     * 删除显式路径契约题答案中未被用户点名的反例路径，避免把证据里的旁路示例扩写进最终结论。
+     *
+     * @param answerMarkdown 答案 Markdown
+     * @param question 用户问题
+     * @return 清理后的答案 Markdown
+     */
+    private String removeUnrequestedPathExamples(String answerMarkdown, String question) {
+        if (answerMarkdown == null || answerMarkdown.isBlank() || !requiresPathContractCompanion(question)) {
+            return answerMarkdown;
+        }
+        List<String> requestedPaths = extractRequestedPathIdentifiers(question);
+        if (requestedPaths.isEmpty()) {
+            return answerMarkdown;
+        }
+        List<String> answerPaths = extractEvidencePaths(List.of(stripEmbeddedCitationLiterals(answerMarkdown)));
+        if (answerPaths.isEmpty()) {
+            return answerMarkdown;
+        }
+        String cleanedAnswer = answerMarkdown;
+        for (String answerPath : answerPaths) {
+            if (!containsIdentifierIgnoreCase(requestedPaths, answerPath)) {
+                cleanedAnswer = removeUnrequestedPathClause(cleanedAnswer, answerPath);
+            }
+        }
+        String normalizedCleanedAnswer = normalizeAfterUnrequestedPathRemoval(cleanedAnswer);
+        if (normalizedCleanedAnswer.isBlank()) {
+            return answerMarkdown;
+        }
+        String normalizedAnswer = lowerCase(stripEmbeddedCitationLiterals(normalizedCleanedAnswer));
+        if (!coversRequestedPaths(normalizedAnswer, requestedPaths)) {
+            return answerMarkdown;
+        }
+        if (!coversRequestedPathContractAnswer(question, normalizedAnswer, List.of(answerMarkdown))) {
+            return answerMarkdown;
+        }
+        return normalizedCleanedAnswer;
+    }
+
+    /**
+     * 删除包含未点名 path 的否定或示例从句。
+     *
+     * @param answerMarkdown 答案 Markdown
+     * @param unrequestedPath 未点名 path
+     * @return 删除后的答案 Markdown
+     */
+    private String removeUnrequestedPathClause(String answerMarkdown, String unrequestedPath) {
+        if (answerMarkdown == null || answerMarkdown.isBlank()
+                || unrequestedPath == null || unrequestedPath.isBlank()) {
+            return answerMarkdown;
+        }
+        String quotedPath = "`?" + Pattern.quote(unrequestedPath) + "`?";
+        String cleanedAnswer = answerMarkdown;
+        cleanedAnswer = cleanedAnswer.replaceAll(
+                "，?(?:不得|不要|不能|不应|不宜|不建议)[^。；\\n]*" + quotedPath + "[^。；\\n]*(?=[。；\\n])",
+                ""
+        );
+        cleanedAnswer = cleanedAnswer.replaceAll(
+                "，?(?:废弃|作废|反例|示例)[^。；\\n]*" + quotedPath + "[^。；\\n]*(?=[。；\\n])",
+                ""
+        );
+        return cleanedAnswer;
+    }
+
+    /**
+     * 清理删除未点名 path 从句后留下的重复标点和空白。
+     *
+     * @param answerMarkdown 答案 Markdown
+     * @return 归一化答案
+     */
+    private String normalizeAfterUnrequestedPathRemoval(String answerMarkdown) {
+        if (answerMarkdown == null || answerMarkdown.isBlank()) {
+            return "";
+        }
+        return answerMarkdown
+                .replaceAll("；\\s*；+", "；")
+                .replaceAll("，\\s*，+", "，")
+                .replaceAll("；\\s*。", "。")
+                .replaceAll("，\\s*。", "。")
+                .replaceAll("\\s{2,}", " ")
+                .trim();
     }
 
     /**
@@ -2881,6 +3435,9 @@ public class AnswerGenerationService {
         if (normalizedAnswer == null || normalizedAnswer.isBlank()) {
             return false;
         }
+        if (coversRequestedPathContractAnswer(question, normalizedAnswer, focusSnippets)) {
+            return true;
+        }
         if (!containsChangeTrackingSignal(normalizedAnswer)) {
             return false;
         }
@@ -2894,6 +3451,24 @@ public class AnswerGenerationService {
         }
         String normalizedAnswerWithoutCitation = lowerCase(stripEmbeddedCitationLiterals(normalizedAnswer));
         return countMatchedReusableAnchors(normalizedAnswerWithoutCitation, reusableAnchors) >= 1;
+    }
+
+    /**
+     * 判断显式 path 契约题是否已覆盖用户真正询问的 path 与可变更性。
+     *
+     * @param question 用户问题
+     * @param normalizedAnswer 归一化答案
+     * @param focusSnippets 贴题证据句
+     * @return 覆盖返回 true
+     */
+    private boolean coversRequestedPathContractAnswer(
+            String question,
+            String normalizedAnswer,
+            List<String> focusSnippets
+    ) {
+        return requiresPathContractCompanion(question)
+                && coversRequiredPathShape(question, normalizedAnswer, focusSnippets)
+                && (containsPathContractSignal(normalizedAnswer) || containsStrongConstraintSignal(normalizedAnswer));
     }
 
     /**
@@ -2933,20 +3508,15 @@ public class AnswerGenerationService {
                 promptBuilder,
                 "CONTRIBUTION EVIDENCE",
                 sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.CONTRIBUTION), queryTokens),
+                queryArticleHits,
                 question,
                 queryTokens
         );
         appendEvidenceSection(
                 promptBuilder,
-                "ARTICLE EVIDENCE",
-                sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.ARTICLE), queryTokens),
-                question,
-                queryTokens
-        );
-        appendEvidenceSection(
-                promptBuilder,
-                "GRAPH EVIDENCE",
-                sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.GRAPH), queryTokens),
+                "STRUCTURED FACT CARD EVIDENCE",
+                sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.FACT_CARD), queryTokens),
+                queryArticleHits,
                 question,
                 queryTokens
         );
@@ -2954,6 +3524,23 @@ public class AnswerGenerationService {
                 promptBuilder,
                 "SOURCE EVIDENCE",
                 sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.SOURCE), queryTokens),
+                queryArticleHits,
+                question,
+                queryTokens
+        );
+        appendEvidenceSection(
+                promptBuilder,
+                "GRAPH EVIDENCE",
+                sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.GRAPH), queryTokens),
+                queryArticleHits,
+                question,
+                queryTokens
+        );
+        appendEvidenceSection(
+                promptBuilder,
+                "ARTICLE EVIDENCE",
+                sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.ARTICLE), queryTokens),
+                queryArticleHits,
                 question,
                 queryTokens
         );
@@ -2989,20 +3576,15 @@ public class AnswerGenerationService {
                 promptBuilder,
                 "CONTRIBUTION EVIDENCE",
                 sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.CONTRIBUTION), queryTokens),
+                queryArticleHits,
                 question,
                 queryTokens
         );
         appendEvidenceSection(
                 promptBuilder,
-                "ARTICLE EVIDENCE",
-                sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.ARTICLE), queryTokens),
-                question,
-                queryTokens
-        );
-        appendEvidenceSection(
-                promptBuilder,
-                "GRAPH EVIDENCE",
-                sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.GRAPH), queryTokens),
+                "STRUCTURED FACT CARD EVIDENCE",
+                sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.FACT_CARD), queryTokens),
+                queryArticleHits,
                 question,
                 queryTokens
         );
@@ -3010,6 +3592,23 @@ public class AnswerGenerationService {
                 promptBuilder,
                 "SOURCE EVIDENCE",
                 sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.SOURCE), queryTokens),
+                queryArticleHits,
+                question,
+                queryTokens
+        );
+        appendEvidenceSection(
+                promptBuilder,
+                "GRAPH EVIDENCE",
+                sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.GRAPH), queryTokens),
+                queryArticleHits,
+                question,
+                queryTokens
+        );
+        appendEvidenceSection(
+                promptBuilder,
+                "ARTICLE EVIDENCE",
+                sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.ARTICLE), queryTokens),
+                queryArticleHits,
                 question,
                 queryTokens
         );
@@ -3045,20 +3644,15 @@ public class AnswerGenerationService {
                 promptBuilder,
                 "CONTRIBUTION EVIDENCE",
                 sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.CONTRIBUTION), queryTokens),
+                queryArticleHits,
                 question,
                 queryTokens
         );
         appendEvidenceSection(
                 promptBuilder,
-                "ARTICLE EVIDENCE",
-                sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.ARTICLE), queryTokens),
-                question,
-                queryTokens
-        );
-        appendEvidenceSection(
-                promptBuilder,
-                "GRAPH EVIDENCE",
-                sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.GRAPH), queryTokens),
+                "STRUCTURED FACT CARD EVIDENCE",
+                sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.FACT_CARD), queryTokens),
+                queryArticleHits,
                 question,
                 queryTokens
         );
@@ -3066,6 +3660,23 @@ public class AnswerGenerationService {
                 promptBuilder,
                 "SOURCE EVIDENCE",
                 sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.SOURCE), queryTokens),
+                queryArticleHits,
+                question,
+                queryTokens
+        );
+        appendEvidenceSection(
+                promptBuilder,
+                "GRAPH EVIDENCE",
+                sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.GRAPH), queryTokens),
+                queryArticleHits,
+                question,
+                queryTokens
+        );
+        appendEvidenceSection(
+                promptBuilder,
+                "ARTICLE EVIDENCE",
+                sortPromptEvidenceHits(question, groupedHits.get(QueryEvidenceType.ARTICLE), queryTokens),
+                queryArticleHits,
                 question,
                 queryTokens
         );
@@ -3085,9 +3696,27 @@ public class AnswerGenerationService {
             groupedHits.put(queryEvidenceType, new ArrayList<QueryArticleHit>());
         }
         for (QueryArticleHit queryArticleHit : queryArticleHits) {
-            groupedHits.get(queryArticleHit.getEvidenceType()).add(queryArticleHit);
+            QueryEvidenceType evidenceType = resolvePromptEvidenceType(queryArticleHit);
+            groupedHits.get(evidenceType).add(queryArticleHit);
         }
         return groupedHits;
+    }
+
+    /**
+     * 解析 Prompt 中使用的证据分组类型。
+     *
+     * @param queryArticleHit 查询命中
+     * @return Prompt 证据类型
+     */
+    private QueryEvidenceType resolvePromptEvidenceType(QueryArticleHit queryArticleHit) {
+        if (queryArticleHit == null) {
+            return QueryEvidenceType.ARTICLE;
+        }
+        if (queryArticleHit.getEvidenceType() == QueryEvidenceType.FACT_CARD
+                && FactCardReviewUsagePolicy.isBackgroundOnly(queryArticleHit.getReviewStatus())) {
+            return QueryEvidenceType.ARTICLE;
+        }
+        return queryArticleHit.getEvidenceType();
     }
 
     /**
@@ -3101,6 +3730,7 @@ public class AnswerGenerationService {
             StringBuilder promptBuilder,
             String sectionTitle,
             List<QueryArticleHit> queryArticleHits,
+            List<QueryArticleHit> citationCandidateHits,
             String question,
             List<String> queryTokens
     ) {
@@ -3109,22 +3739,188 @@ public class AnswerGenerationService {
             promptBuilder.append("- NONE").append("\n\n");
             return;
         }
+        int appendedHitCount = 0;
         for (QueryArticleHit queryArticleHit : queryArticleHits) {
-            promptBuilder.append("- title: ").append(queryArticleHit.getTitle()).append("\n");
-            promptBuilder.append("  id: ").append(queryArticleHit.getConceptId()).append("\n");
-            promptBuilder.append("  sources: ").append(String.join(", ", queryArticleHit.getSourcePaths())).append("\n");
-            promptBuilder.append("  citation: ").append(resolveCitationLiteral(queryArticleHit)).append("\n");
+            if (appendedHitCount >= PROMPT_EVIDENCE_SECTION_HIT_LIMIT) {
+                promptBuilder.append("- OMITTED: evidence section hit limit reached").append("\n");
+                break;
+            }
+            if (isPromptEvidenceBudgetExhausted(promptBuilder)) {
+                promptBuilder.append("- OMITTED: prompt evidence budget exhausted").append("\n");
+                break;
+            }
             List<String> focusSnippets = buildPromptFocusSnippets(question, queryTokens, queryArticleHit);
-            if (!focusSnippets.isEmpty()) {
-                promptBuilder.append("  focus_snippets:").append("\n");
+            boolean fullyAppended = appendPromptLineWithinBudget(
+                    promptBuilder,
+                    "- title: " + normalizePromptInlineText(queryArticleHit.getTitle())
+            );
+            fullyAppended = fullyAppended && appendPromptLineWithinBudget(
+                    promptBuilder,
+                    "  id: " + normalizePromptInlineText(queryArticleHit.getConceptId())
+            );
+            fullyAppended = fullyAppended && appendPromptLineWithinBudget(
+                    promptBuilder,
+                    "  sources: " + normalizePromptInlineText(String.join(", ", queryArticleHit.getSourcePaths()))
+            );
+            fullyAppended = fullyAppended && appendPromptLineWithinBudget(
+                    promptBuilder,
+                    "  citation: " + resolveCitationLiteral(queryArticleHit, citationCandidateHits)
+            );
+            if (fullyAppended && !focusSnippets.isEmpty()) {
+                fullyAppended = appendPromptLineWithinBudget(promptBuilder, "  focus_snippets:");
                 for (String focusSnippet : focusSnippets) {
-                    promptBuilder.append("    - ").append(focusSnippet).append("\n");
+                    if (!fullyAppended) {
+                        break;
+                    }
+                    fullyAppended = appendPromptLineWithinBudget(promptBuilder, "    - " + focusSnippet);
                 }
             }
-            promptBuilder.append("  content: ").append(sanitizeEvidenceContentForPrompt(queryArticleHit.getContent())).append("\n");
-            promptBuilder.append("  metadata: ").append(SensitiveTextMasker.mask(queryArticleHit.getMetadataJson())).append("\n");
+            String evidenceContent = buildBoundedPromptEvidenceContent(queryTokens, queryArticleHit, focusSnippets);
+            fullyAppended = fullyAppended && appendPromptLineWithinBudget(promptBuilder, "  content: " + evidenceContent);
+            String metadata = truncatePromptText(
+                    normalizePromptInlineText(SensitiveTextMasker.mask(queryArticleHit.getMetadataJson())),
+                    PROMPT_EVIDENCE_METADATA_CHAR_LIMIT
+            );
+            fullyAppended = fullyAppended && appendPromptLineWithinBudget(promptBuilder, "  metadata: " + metadata);
+            appendedHitCount++;
+            if (!fullyAppended) {
+                promptBuilder.append("- OMITTED: prompt evidence budget exhausted").append("\n");
+                break;
+            }
         }
         promptBuilder.append("\n");
+    }
+
+    /**
+     * 判断回答 Prompt 的证据预算是否已经耗尽。
+     *
+     * @param promptBuilder Prompt 构建器
+     * @return 耗尽返回 true
+     */
+    private boolean isPromptEvidenceBudgetExhausted(StringBuilder promptBuilder) {
+        return promptBuilder.length() >= PROMPT_USER_PROMPT_CHAR_LIMIT;
+    }
+
+    /**
+     * 在 Prompt 剩余预算内追加一行。
+     *
+     * @param promptBuilder Prompt 构建器
+     * @param line 待追加行
+     * @return 完整追加返回 true，被截断或跳过返回 false
+     */
+    private boolean appendPromptLineWithinBudget(StringBuilder promptBuilder, String line) {
+        int remainingBudget = PROMPT_USER_PROMPT_CHAR_LIMIT - promptBuilder.length();
+        if (remainingBudget <= 0) {
+            return false;
+        }
+        String safeLine = line == null ? "" : line;
+        int requiredLength = safeLine.length() + 1;
+        if (requiredLength <= remainingBudget) {
+            promptBuilder.append(safeLine).append("\n");
+            return true;
+        }
+        if (remainingBudget <= PROMPT_TRUNCATED_SUFFIX.length() + 8) {
+            return false;
+        }
+        promptBuilder.append(truncatePromptText(safeLine, remainingBudget - 1)).append("\n");
+        return false;
+    }
+
+    /**
+     * 构建单条命中的有界证据正文。
+     *
+     * @param queryTokens 查询 token
+     * @param queryArticleHit 查询命中
+     * @param focusSnippets 贴题证据句
+     * @return 有界证据正文
+     */
+    private String buildBoundedPromptEvidenceContent(
+            List<String> queryTokens,
+            QueryArticleHit queryArticleHit,
+            List<String> focusSnippets
+    ) {
+        List<String> candidateParts = new ArrayList<String>();
+        if (focusSnippets != null) {
+            for (String focusSnippet : focusSnippets) {
+                appendDistinctPromptEvidencePart(candidateParts, focusSnippet);
+            }
+        }
+        String fallbackSnippet = selectFallbackEvidenceSnippet(queryArticleHit, queryTokens);
+        appendDistinctPromptEvidencePart(candidateParts, fallbackSnippet);
+        if (candidateParts.isEmpty()) {
+            String boundedContent = sanitizeEvidenceContentForPrompt(
+                    queryArticleHit.getContent(),
+                    PROMPT_EVIDENCE_CONTENT_CHAR_LIMIT
+            );
+            return normalizePromptInlineText(boundedContent);
+        }
+        String focusedContent = String.join(" | ", candidateParts);
+        if (focusedContent.length() >= PROMPT_EVIDENCE_CONTENT_CHAR_LIMIT) {
+            return truncatePromptText(focusedContent, PROMPT_EVIDENCE_CONTENT_CHAR_LIMIT);
+        }
+        int contextBudget = PROMPT_EVIDENCE_CONTENT_CHAR_LIMIT - focusedContent.length() - " | context: ".length();
+        if (contextBudget > 120) {
+            String boundedContent = normalizePromptInlineText(sanitizeEvidenceContentForPrompt(queryArticleHit.getContent(), contextBudget));
+            if (!boundedContent.isBlank()) {
+                focusedContent = focusedContent + " | context: " + boundedContent;
+            }
+        }
+        return truncatePromptText(focusedContent, PROMPT_EVIDENCE_CONTENT_CHAR_LIMIT);
+    }
+
+    /**
+     * 追加去重后的 Prompt 证据片段。
+     *
+     * @param candidateParts 候选片段
+     * @param rawPart 原始片段
+     */
+    private void appendDistinctPromptEvidencePart(List<String> candidateParts, String rawPart) {
+        String normalizedPart = normalizePromptInlineText(rawPart);
+        if (normalizedPart.isBlank()) {
+            return;
+        }
+        for (String candidatePart : candidateParts) {
+            if (candidatePart.equals(normalizedPart)) {
+                return;
+            }
+        }
+        candidateParts.add(normalizedPart);
+    }
+
+    /**
+     * 把 Prompt 证据文本归一化为单行。
+     *
+     * @param text 原始文本
+     * @return 单行文本
+     */
+    private String normalizePromptInlineText(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        return text.replace("\r", " ")
+                .replace("\n", " ")
+                .replaceAll("\\s{2,}", " ")
+                .trim();
+    }
+
+    /**
+     * 按字符上限截断 Prompt 文本。
+     *
+     * @param text 原始文本
+     * @param limit 字符上限
+     * @return 截断后的文本
+     */
+    private String truncatePromptText(String text, int limit) {
+        if (text == null || text.isBlank() || limit <= 0) {
+            return "";
+        }
+        if (text.length() <= limit) {
+            return text;
+        }
+        if (limit <= PROMPT_TRUNCATED_SUFFIX.length()) {
+            return text.substring(0, limit);
+        }
+        return text.substring(0, limit - PROMPT_TRUNCATED_SUFFIX.length()) + PROMPT_TRUNCATED_SUFFIX;
     }
 
     /**
@@ -3154,7 +3950,7 @@ public class AnswerGenerationService {
                 continue;
             }
             promptBuilder.append("- title: ").append(queryArticleHit.getTitle()).append("\n");
-            promptBuilder.append("  citation: ").append(resolveCitationLiteral(queryArticleHit)).append("\n");
+            promptBuilder.append("  citation: ").append(resolveCitationLiteral(queryArticleHit, sortedHits)).append("\n");
             promptBuilder.append("  snippets:").append("\n");
             for (String focusSnippet : focusSnippets) {
                 promptBuilder.append("    - ").append(focusSnippet).append("\n");
@@ -3315,10 +4111,11 @@ public class AnswerGenerationService {
         markdownBuilder.append("## 修订说明").append("\n");
         markdownBuilder.append("- 原答案摘要：").append(extractEvidenceSnippet(currentAnswer)).append("\n");
         markdownBuilder.append("- 纠正输入：").append(SensitiveTextMasker.mask(correction == null ? "" : correction.trim())).append("\n\n");
-        appendFallbackSection(markdownBuilder, "用户反馈证据", groupedHits.get(QueryEvidenceType.CONTRIBUTION), queryTokens);
-        appendFallbackSection(markdownBuilder, "文章证据", groupedHits.get(QueryEvidenceType.ARTICLE), queryTokens);
-        appendFallbackSection(markdownBuilder, "图谱证据", groupedHits.get(QueryEvidenceType.GRAPH), queryTokens);
-        appendFallbackSection(markdownBuilder, "源文件证据", groupedHits.get(QueryEvidenceType.SOURCE), queryTokens);
+        appendFallbackSection(markdownBuilder, "用户反馈证据", groupedHits.get(QueryEvidenceType.CONTRIBUTION), queryArticleHits, queryTokens);
+        appendFallbackSection(markdownBuilder, "结构化证据卡", groupedHits.get(QueryEvidenceType.FACT_CARD), queryArticleHits, queryTokens);
+        appendFallbackSection(markdownBuilder, "源文件证据", groupedHits.get(QueryEvidenceType.SOURCE), queryArticleHits, queryTokens);
+        appendFallbackSection(markdownBuilder, "图谱证据", groupedHits.get(QueryEvidenceType.GRAPH), queryArticleHits, queryTokens);
+        appendFallbackSection(markdownBuilder, "文章背景证据", groupedHits.get(QueryEvidenceType.ARTICLE), queryArticleHits, queryTokens);
         return markdownBuilder.toString().trim();
     }
 
@@ -3333,6 +4130,7 @@ public class AnswerGenerationService {
             StringBuilder markdownBuilder,
             String title,
             List<QueryArticleHit> queryArticleHits,
+            List<QueryArticleHit> citationCandidateHits,
             List<String> queryTokens
     ) {
         if (queryArticleHits == null || queryArticleHits.isEmpty()) {
@@ -3347,7 +4145,7 @@ public class AnswerGenerationService {
             markdownBuilder.append("：")
                     .append(SensitiveTextMasker.mask(selectFallbackEvidenceSnippet(queryArticleHit, queryTokens)))
                     .append(" ")
-                    .append(resolveCitationLiteral(queryArticleHit))
+                    .append(resolveCitationLiteral(queryArticleHit, citationCandidateHits))
                     .append("\n");
         }
         markdownBuilder.append("\n");
@@ -3413,7 +4211,7 @@ public class AnswerGenerationService {
             markdownBuilder.append("：")
                     .append(SensitiveTextMasker.mask(snippet))
                     .append(" ")
-                    .append(resolveCitationLiteral(fallbackHit))
+                    .append(resolveCitationLiteral(fallbackHit, fallbackHits))
                     .append("\n");
         }
         markdownBuilder.append("\n");
@@ -3610,16 +4408,24 @@ public class AnswerGenerationService {
         if (!comparisonDifferenceLines.isEmpty()) {
             return comparisonDifferenceLines;
         }
+        if (containsRequestedExactPathIdentifier(question)) {
+            List<String> exactPathLines = buildExactPathConclusionLines(question, fallbackHits, queryTokens);
+            if (!exactPathLines.isEmpty() && coversRequiredExactPathConclusion(question, exactPathLines)) {
+                return exactPathLines;
+            }
+        }
         List<String> exactStructuredListLines = buildExactStructuredListConclusionLines(question, fallbackHits);
         if (!exactStructuredListLines.isEmpty()) {
             return exactStructuredListLines;
         }
         List<String> aggregatedConclusionLines = buildAggregatedEvidenceConclusionLines(question, fallbackHits, queryTokens);
-        if (!aggregatedConclusionLines.isEmpty()) {
+        if (!aggregatedConclusionLines.isEmpty()
+                && (!containsRequestedExactPathIdentifier(question)
+                || coversRequiredExactPathConclusion(question, aggregatedConclusionLines))) {
             return aggregatedConclusionLines;
         }
         List<String> exactPathLines = buildExactPathConclusionLines(question, fallbackHits, queryTokens);
-        if (!exactPathLines.isEmpty()) {
+        if (!exactPathLines.isEmpty() && coversRequiredExactPathConclusion(question, exactPathLines)) {
             return exactPathLines;
         }
         if (looksLikeSetupChecklistQuestion(question)) {
@@ -3669,6 +4475,56 @@ public class AnswerGenerationService {
     }
 
     /**
+     * 判断精确路径结论是否覆盖问题需要的契约维度。
+     *
+     * @param question 用户问题
+     * @param exactPathLines 精确路径结论行
+     * @return 覆盖返回 true
+     */
+    private boolean coversRequiredExactPathConclusion(String question, List<String> exactPathLines) {
+        if (!requiresPathContractCompanion(question)) {
+            return true;
+        }
+        if (exactPathLines == null || exactPathLines.isEmpty()) {
+            return false;
+        }
+        for (String exactPathLine : exactPathLines) {
+            if (containsPathContractSignal(exactPathLine)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断问题是否显式点名了需要解释的路径标识。
+     *
+     * @param question 用户问题
+     * @return 点名路径标识返回 true
+     */
+    private boolean containsRequestedExactPathIdentifier(String question) {
+        return !extractRequestedPathIdentifiers(question).isEmpty();
+    }
+
+    /**
+     * 提取问题中显式点名的路径标识。
+     *
+     * @param question 用户问题
+     * @return 路径标识
+     */
+    private List<String> extractRequestedPathIdentifiers(String question) {
+        List<String> requestedPaths = new ArrayList<String>();
+        for (String requestedIdentifier : extractRequestedReferentialIdentifiers(question)) {
+            if (requestedIdentifier.contains("/")
+                    && containsExactIdentifierSignal(requestedIdentifier)
+                    && !requestedPaths.contains(requestedIdentifier)) {
+                requestedPaths.add(requestedIdentifier);
+            }
+        }
+        return requestedPaths;
+    }
+
+    /**
      * 为接口路径题优先选择最像真实 path 的证据句。
      *
      * @param question 用户问题
@@ -3687,24 +4543,252 @@ public class AnswerGenerationService {
         QueryArticleHit bestHit = null;
         String bestSnippet = "";
         int bestScore = Integer.MIN_VALUE;
+        List<EvidenceLineMatch> requestedPathMatches = new ArrayList<EvidenceLineMatch>();
+        List<EvidenceLineMatch> fallbackPathMatches = new ArrayList<EvidenceLineMatch>();
         for (QueryArticleHit fallbackHit : fallbackHits) {
-            List<String> snippets = selectQuestionFocusedFallbackSnippets(question, fallbackHit, queryTokens, 3);
+            List<String> snippets = selectExactPathCandidateLines(question, fallbackHit, queryTokens);
             for (String snippet : snippets) {
-                if (!containsPathSignal(snippet) || looksLikePathHeaderLine(snippet)) {
+                boolean pathContractSnippet = requiresPathContractCompanion(question) && containsPathContractSignal(snippet);
+                if ((!containsPathSignal(snippet) && !pathContractSnippet) || looksLikePathHeaderLine(snippet)) {
+                    continue;
+                }
+                if (containsRequestedExactPathIdentifier(question)
+                        && introducesUnrequestedPathForExactPathQuestion(question, snippet)) {
                     continue;
                 }
                 int snippetScore = scoreQuestionFocusedFallbackLine(question, snippet, snippet, queryTokens);
-                if (snippetScore > bestScore) {
-                    bestScore = snippetScore;
-                    bestHit = fallbackHit;
-                    bestSnippet = snippet;
+                EvidenceLineMatch evidenceLineMatch = new EvidenceLineMatch(fallbackHit, snippet, snippetScore);
+                if (containsRequestedExactIdentifier(snippet, question)) {
+                    requestedPathMatches.add(evidenceLineMatch);
                 }
+                else {
+                    fallbackPathMatches.add(evidenceLineMatch);
+                }
+            }
+        }
+        List<EvidenceLineMatch> primaryMatches = requestedPathMatches.isEmpty() ? fallbackPathMatches : requestedPathMatches;
+        for (EvidenceLineMatch primaryMatch : primaryMatches) {
+            if (primaryMatch.getScore() > bestScore) {
+                bestScore = primaryMatch.getScore();
+                bestHit = primaryMatch.getQueryArticleHit();
+                bestSnippet = primaryMatch.getLine();
             }
         }
         if (bestHit == null || bestSnippet.isBlank()) {
             return List.of();
         }
-        return List.of("当前可确认的信息是：" + bestSnippet + " " + joinConclusionCitations(List.of(bestHit)));
+        List<String> conclusionLines = new ArrayList<String>();
+        Set<String> selectedSemanticKeys = new LinkedHashSet<String>();
+        appendAggregatedConclusionLine(
+                question,
+                new EvidenceLineMatch(bestHit, bestSnippet, bestScore),
+                conclusionLines,
+                selectedSemanticKeys
+        );
+        for (EvidenceLineMatch companionMatch : selectExactPathCompanionMatches(
+                question,
+                fallbackHits,
+                queryTokens,
+                selectedSemanticKeys
+        )) {
+            appendAggregatedConclusionLine(question, companionMatch, conclusionLines, selectedSemanticKeys);
+            if (conclusionLines.size() >= desiredFallbackConclusionSnippetCount(question)) {
+                break;
+            }
+        }
+        return conclusionLines;
+    }
+
+    /**
+     * 为显式 path 题收集候选行；除贴题摘句外，全篇补扫点名 path 与 path 契约行。
+     *
+     * @param question 用户问题
+     * @param fallbackHit fallback 命中
+     * @param queryTokens 查询 token
+     * @return 候选行
+     */
+    private List<String> selectExactPathCandidateLines(
+            String question,
+            QueryArticleHit fallbackHit,
+            List<String> queryTokens
+    ) {
+        List<String> candidates = new ArrayList<String>();
+        if (fallbackHit == null) {
+            return candidates;
+        }
+        candidates.addAll(selectQuestionFocusedFallbackSnippets(question, fallbackHit, queryTokens, 3));
+        if (!containsRequestedExactPathIdentifier(question)) {
+            return candidates;
+        }
+        for (String rawLine : selectFallbackContentLines(fallbackHit.getContent())) {
+            String normalizedLine = normalizeFallbackLineCandidate(rawLine);
+            if (normalizedLine.isBlank() || candidates.contains(normalizedLine)) {
+                continue;
+            }
+            if (containsRequestedExactIdentifier(normalizedLine, question)
+                    || containsPathContractSignal(normalizedLine)) {
+                candidates.add(normalizedLine);
+            }
+        }
+        return candidates;
+    }
+
+    /**
+     * 为路径精确题补足同问题里的规则、变更或状态维度，避免只返回路径值。
+     *
+     * @param question 用户问题
+     * @param fallbackHits fallback 证据
+     * @param queryTokens 查询 token
+     * @param selectedSemanticKeys 已选语义键
+     * @return 补充事实
+     */
+    private List<EvidenceLineMatch> selectExactPathCompanionMatches(
+            String question,
+            List<QueryArticleHit> fallbackHits,
+            List<String> queryTokens,
+            Set<String> selectedSemanticKeys
+    ) {
+        if (fallbackHits == null || fallbackHits.isEmpty()) {
+            return List.of();
+        }
+        List<EvidenceLineMatch> companionMatches = new ArrayList<EvidenceLineMatch>();
+        int hitLimit = Math.min(8, fallbackHits.size());
+        for (int hitIndex = 0; hitIndex < hitLimit; hitIndex++) {
+            QueryArticleHit fallbackHit = fallbackHits.get(hitIndex);
+            List<String> rawLines = new ArrayList<String>();
+            rawLines.addAll(selectFallbackContentLines(fallbackHit.getContent()));
+            if (requiresPathContractCompanion(question)) {
+                rawLines.addAll(selectPathContractCandidateLines(fallbackHit));
+            }
+            for (String rawLine : rawLines) {
+                String normalizedLine = normalizeFallbackLineCandidate(rawLine);
+                if (normalizedLine.isBlank() || !isExactPathCompanionLine(question, normalizedLine)) {
+                    continue;
+                }
+                String semanticKey = aggregatedEvidenceSemanticKey(question, normalizedLine);
+                if (!semanticKey.isBlank()
+                        && selectedSemanticKeys != null
+                        && selectedSemanticKeys.contains(semanticKey)) {
+                    continue;
+                }
+                int score = scoreQuestionFocusedFallbackLine(question, rawLine, normalizedLine, queryTokens);
+                companionMatches.add(new EvidenceLineMatch(fallbackHit, normalizedLine, score));
+            }
+        }
+        companionMatches.sort((leftMatch, rightMatch) -> Integer.compare(rightMatch.getScore(), leftMatch.getScore()));
+        return companionMatches;
+    }
+
+    /**
+     * 判断候选行是否能补充路径题里的规则、变更或状态维度。
+     *
+     * @param question 用户问题
+     * @param normalizedLine 归一化候选行
+     * @return 可作为补充返回 true
+     */
+    private boolean isExactPathCompanionLine(String question, String normalizedLine) {
+        if (normalizedLine == null || normalizedLine.isBlank()) {
+            return false;
+        }
+        if (requiresPathContractCompanion(question)
+                && !containsPathContractSignal(normalizedLine)
+                && !containsRequestedExactIdentifier(normalizedLine, question)) {
+            return false;
+        }
+        if (requiresPathContractCompanion(question) && containsPathContractSignal(normalizedLine)) {
+            return !introducesUnrequestedPathForExactPathQuestion(question, normalizedLine);
+        }
+        boolean requiredByRule = looksLikeRuleConstraintQuestion(question)
+                && (containsRuleConstraintSignal(normalizedLine) || containsStrongConstraintSignal(normalizedLine));
+        boolean requiredByChange = looksLikeChangeTrackingQuestion(question)
+                && (containsChangeTrackingSignal(normalizedLine) || containsStrongConstraintSignal(normalizedLine));
+        boolean requiredByStatus = looksLikeStatusQuestion(question)
+                && containsStatusSignal(lowerCase(normalizedLine));
+        if (!requiredByRule && !requiredByChange && !requiredByStatus) {
+            return false;
+        }
+        return !introducesUnrequestedPathForExactPathQuestion(question, normalizedLine);
+    }
+
+    /**
+     * 判断显式路径题是否需要优先补充接口契约类证据。
+     *
+     * @param question 用户问题
+     * @return 需要契约证据返回 true
+     */
+    private boolean requiresPathContractCompanion(String question) {
+        if (!containsRequestedExactPathIdentifier(question) || !looksLikePathQuestion(question)) {
+            return false;
+        }
+        String normalizedQuestion = lowerCase(question);
+        return normalizedQuestion.contains("path")
+                || normalizedQuestion.contains("路径")
+                || normalizedQuestion.contains("改")
+                || normalizedQuestion.contains("变")
+                || normalizedQuestion.contains("一致")
+                || normalizedQuestion.contains("兼容")
+                || normalizedQuestion.contains("契约");
+    }
+
+    /**
+     * 判断候选句是否表达 path / URL / endpoint 契约或兼容性约束。
+     *
+     * @param normalizedLine 归一化候选句
+     * @return 命中契约信号返回 true
+     */
+    private boolean containsPathContractSignal(String normalizedLine) {
+        if (normalizedLine == null || normalizedLine.isBlank()) {
+            return false;
+        }
+        String lowerCaseLine = lowerCase(normalizedLine);
+        boolean containsPathWord = lowerCaseLine.contains("path")
+                || lowerCaseLine.contains("路径")
+                || lowerCaseLine.contains("url")
+                || lowerCaseLine.contains("endpoint")
+                || lowerCaseLine.contains("接口契约")
+                || lowerCaseLine.contains("接口路径");
+        if (!containsPathWord) {
+            return false;
+        }
+        return lowerCaseLine.contains("一致")
+                || lowerCaseLine.contains("兼容")
+                || lowerCaseLine.contains("保持")
+                || lowerCaseLine.contains("不变")
+                || lowerCaseLine.contains("原路径")
+                || lowerCaseLine.contains("旧路径")
+                || lowerCaseLine.contains("沿用")
+                || lowerCaseLine.contains("对齐")
+                || lowerCaseLine.contains("不得")
+                || lowerCaseLine.contains("不能")
+                || lowerCaseLine.contains("不允许")
+                || lowerCaseLine.contains("不可")
+                || lowerCaseLine.contains("必须")
+                || lowerCaseLine.contains("契约")
+                || lowerCaseLine.contains("字节级");
+    }
+
+    /**
+     * 判断补充行是否引入了与用户点名路径无关的其他路径。
+     *
+     * @param question 用户问题
+     * @param normalizedLine 归一化候选行
+     * @return 引入无关路径返回 true
+     */
+    private boolean introducesUnrequestedPathForExactPathQuestion(String question, String normalizedLine) {
+        List<String> requestedPaths = extractRequestedPathIdentifiers(question);
+        if (requestedPaths.isEmpty()) {
+            return false;
+        }
+        List<String> evidencePaths = extractEvidencePaths(List.of(normalizedLine));
+        if (evidencePaths.isEmpty()) {
+            return false;
+        }
+        for (String evidencePath : evidencePaths) {
+            if (!containsIdentifierIgnoreCase(requestedPaths, evidencePath)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -3729,7 +4813,8 @@ public class AnswerGenerationService {
             return List.of();
         }
         int desiredCount = Math.max(2, desiredFallbackConclusionSnippetCount(question));
-        if (looksLikePathQuestion(question) && looksLikeRuleConstraintQuestion(question)) {
+        if (looksLikePathQuestion(question)
+                && (looksLikeRuleConstraintQuestion(question) || requiresPathContractCompanion(question))) {
             desiredCount = Math.max(3, desiredCount);
         }
         List<EvidenceLineMatch> rankedMatches = collectRankedEvidenceLineMatches(
@@ -3778,6 +4863,7 @@ public class AnswerGenerationService {
                 || normalizedQuestion.contains("三个")
                 || normalizedQuestion.contains("命中数")
                 || normalizedQuestion.contains("批")
+                || requiresPathContractCompanion(question)
                 || (looksLikePathQuestion(question) && looksLikeRuleConstraintQuestion(question));
     }
 
@@ -4010,8 +5096,14 @@ public class AnswerGenerationService {
             return false;
         }
         String normalizedQuestion = lowerCase(question);
-        if (looksLikePathQuestion(question) && looksLikeRuleConstraintQuestion(question)) {
-            return containsPathSignal(snippet)
+            if (looksLikePathQuestion(question)
+                    && (looksLikeRuleConstraintQuestion(question) || requiresPathContractCompanion(question))) {
+                if (containsRequestedExactPathIdentifier(question)
+                        && introducesUnrequestedPathForExactPathQuestion(question, snippet)) {
+                    return false;
+                }
+                return containsPathSignal(snippet)
+                        || containsRequestedExactIdentifier(snippet, question)
                     || containsStrongConstraintSignal(snippet)
                     || containsRuleConstraintSignal(snippet)
                     || containsChangeTrackingSignal(snippet);
@@ -4079,7 +5171,8 @@ public class AnswerGenerationService {
         if (!identifiers.isEmpty()) {
             return String.join("|", identifiers);
         }
-        if (looksLikePathQuestion(question) && looksLikeRuleConstraintQuestion(question)) {
+        if (looksLikePathQuestion(question)
+                && (looksLikeRuleConstraintQuestion(question) || requiresPathContractCompanion(question))) {
             if (containsStrongConstraintSignal(snippet)) {
                 return "strong-constraint";
             }
@@ -4283,30 +5376,18 @@ public class AnswerGenerationService {
         }
         String citationLiteral = joinConclusionCitations(List.of(primaryHit));
         String content = primaryHit.getContent();
-        List<String> requestFields = extractMarkdownFieldDefinitionRows(
-                content,
-                "### 1.1 字段通用属性",
-                "### 1.2"
-        );
-        List<String> responseFields = extractMarkdownFieldDefinitionRows(
-                content,
-                "### 2.1 字段通用属性",
-                "### 2.2"
-        );
-        if (requestFields.isEmpty() && responseFields.isEmpty()) {
+        List<FieldDefinitionTableSummary> tableSummaries = extractFieldDefinitionTableSummaries(content);
+        if (tableSummaries.isEmpty()) {
             return List.of();
         }
-        List<String> transactionTypeMappings = extractTransactionTypeMappings(content);
+        List<String> codeMappings = extractCodeMappings(content);
         List<String> conclusionLines = new ArrayList<String>();
         List<String> datasetSignals = new ArrayList<String>();
-        if (!requestFields.isEmpty()) {
-            datasetSignals.add("入参 `requestData`");
+        for (FieldDefinitionTableSummary tableSummary : tableSummaries) {
+            datasetSignals.add(tableSummary.getDisplayName());
         }
-        if (!responseFields.isEmpty()) {
-            datasetSignals.add("出参 `responseData`");
-        }
-        if (!transactionTypeMappings.isEmpty()) {
-            datasetSignals.add("`transactionType` 编码对照");
+        if (!codeMappings.isEmpty()) {
+            datasetSignals.add("编码对照");
         }
         if (!datasetSignals.isEmpty()) {
             conclusionLines.add("该资料给出了"
@@ -4314,27 +5395,18 @@ public class AnswerGenerationService {
                     + "等结构化字段定义。 "
                     + citationLiteral);
         }
-        if (!requestFields.isEmpty()) {
-            conclusionLines.add("入参 `requestData` 共 "
-                    + requestFields.size()
+        for (FieldDefinitionTableSummary tableSummary : tableSummaries) {
+            conclusionLines.add(tableSummary.getDisplayName()
+                    + "共 "
+                    + tableSummary.getFieldDefinitions().size()
                     + " 个字段："
-                    + String.join("；", requestFields)
+                    + String.join("；", tableSummary.getFieldDefinitions())
                     + "。 "
                     + citationLiteral);
         }
-        if (!responseFields.isEmpty()) {
-            conclusionLines.add("出参 `responseData` 共 "
-                    + responseFields.size()
-                    + " 个字段"
-                    + responseFieldNumberNote(content)
-                    + "："
-                    + String.join("；", responseFields)
-                    + "。 "
-                    + citationLiteral);
-        }
-        if (!transactionTypeMappings.isEmpty()) {
-            conclusionLines.add("`transactionType` 编码包括："
-                    + String.join("；", transactionTypeMappings)
+        if (!codeMappings.isEmpty()) {
+            conclusionLines.add("编码对照包括："
+                    + String.join("；", codeMappings)
                     + "。 "
                     + citationLiteral);
         }
@@ -4398,6 +5470,22 @@ public class AnswerGenerationService {
     }
 
     /**
+     * 判断问题是否带有必须命中的精确标识。
+     *
+     * @param question 用户问题
+     * @return 严格精确标识题返回 true
+     */
+    private boolean looksLikeStrictExactIdentifierQuestion(String question) {
+        List<String> requestedIdentifiers = extractRequestedReferentialIdentifiers(question);
+        for (String requestedIdentifier : requestedIdentifiers) {
+            if (containsExactIdentifierSignal(requestedIdentifier)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * 判断是否为显式点名多个标识并询问定义/含义的题目。
      *
      * @param question 用户问题
@@ -4431,6 +5519,11 @@ public class AnswerGenerationService {
         List<String> requestedIdentifiers = new ArrayList<String>();
         if (question == null || question.isBlank()) {
             return requestedIdentifiers;
+        }
+        for (String requestedPath : extractEvidencePaths(List.of(question))) {
+            if (!containsIdentifierIgnoreCase(requestedIdentifiers, requestedPath)) {
+                requestedIdentifiers.add(requestedPath);
+            }
         }
         Matcher identifierMatcher = EXPLICIT_IDENTIFIER_PATTERN.matcher(question);
         while (identifierMatcher.find()) {
@@ -4489,6 +5582,23 @@ public class AnswerGenerationService {
                 "markdown",
                 "md"
         ).contains(normalizedIdentifier);
+    }
+
+    /**
+     * 判断标识是否包含路径、配置键、字段键等精确信号。
+     *
+     * @param identifier 标识
+     * @return 包含精确信号返回 true
+     */
+    private boolean containsExactIdentifierSignal(String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            return false;
+        }
+        return identifier.contains("_")
+                || identifier.contains("-")
+                || identifier.contains("=")
+                || identifier.contains("/")
+                || identifier.contains(".");
     }
 
     /**
@@ -5014,6 +6124,47 @@ public class AnswerGenerationService {
         }
     }
 
+    /**
+     * 字段定义表摘要。
+     *
+     * @author xiexu
+     */
+    private static final class FieldDefinitionTableSummary {
+
+        private final String displayName;
+
+        private final List<String> fieldDefinitions;
+
+        /**
+         * 创建字段定义表摘要。
+         *
+         * @param displayName 显示名称
+         * @param fieldDefinitions 字段定义
+         */
+        private FieldDefinitionTableSummary(String displayName, List<String> fieldDefinitions) {
+            this.displayName = displayName == null ? "" : displayName;
+            this.fieldDefinitions = fieldDefinitions == null ? List.of() : List.copyOf(fieldDefinitions);
+        }
+
+        /**
+         * 获取显示名称。
+         *
+         * @return 显示名称
+         */
+        private String getDisplayName() {
+            return displayName;
+        }
+
+        /**
+         * 获取字段定义。
+         *
+         * @return 字段定义
+         */
+        private List<String> getFieldDefinitions() {
+            return fieldDefinitions;
+        }
+    }
+
     private boolean looksLikeSpreadsheetFieldDefinitionQuestion(String question, QueryArticleHit primaryHit) {
         if (question == null || question.isBlank() || primaryHit == null) {
             return false;
@@ -5028,26 +6179,80 @@ public class AnswerGenerationService {
                 || normalizedQuestion.contains("哪些"))) {
             return false;
         }
-        String content = lowerCase(primaryHit.getContent());
-        return content.contains("requestdata")
-                && content.contains("responsedata")
-                && content.contains("字段通用属性")
-                && content.contains("transactiontype");
+        return !extractFieldDefinitionTableSummaries(primaryHit.getContent()).isEmpty();
     }
 
-    private List<String> extractMarkdownFieldDefinitionRows(
-            String content,
-            String startMarker,
-            String endMarker
+    /**
+     * 从 Markdown 表格中抽取字段定义表摘要。
+     *
+     * @param content 证据正文
+     * @return 字段定义表摘要
+     */
+    private List<FieldDefinitionTableSummary> extractFieldDefinitionTableSummaries(String content) {
+        if (content == null || content.isBlank()) {
+            return List.of();
+        }
+        List<FieldDefinitionTableSummary> tableSummaries = new ArrayList<FieldDefinitionTableSummary>();
+        String currentHeading = "";
+        List<String> currentRows = new ArrayList<String>();
+        for (String rawLine : content.split("\\R")) {
+            String normalizedLine = rawLine == null ? "" : rawLine.trim();
+            if (normalizedLine.startsWith("#")) {
+                addFieldDefinitionTableSummary(tableSummaries, currentHeading, currentRows);
+                String headingCandidate = cleanupHeadingLine(normalizedLine);
+                if (!isGenericFieldDefinitionSubheading(headingCandidate) || currentHeading.isBlank()) {
+                    currentHeading = headingCandidate;
+                }
+                currentRows = new ArrayList<String>();
+                continue;
+            }
+            if (normalizedLine.startsWith("|")) {
+                currentRows.add(normalizedLine);
+                continue;
+            }
+            if (!currentRows.isEmpty() && !normalizedLine.isBlank()) {
+                addFieldDefinitionTableSummary(tableSummaries, currentHeading, currentRows);
+                currentRows = new ArrayList<String>();
+            }
+        }
+        addFieldDefinitionTableSummary(tableSummaries, currentHeading, currentRows);
+        return tableSummaries;
+    }
+
+    /**
+     * 添加字段定义表摘要。
+     *
+     * @param tableSummaries 表摘要列表
+     * @param heading 表格附近标题
+     * @param rawRows 原始表格行
+     */
+    private void addFieldDefinitionTableSummary(
+            List<FieldDefinitionTableSummary> tableSummaries,
+            String heading,
+            List<String> rawRows
     ) {
-        String section = extractMarkdownSection(content, startMarker, endMarker);
-        if (section.isBlank()) {
+        List<String> fieldDefinitions = extractFieldDefinitionRows(rawRows);
+        if (fieldDefinitions.isEmpty()) {
+            return;
+        }
+        String displayName = resolveFieldDefinitionTableName(heading, tableSummaries.size() + 1);
+        tableSummaries.add(new FieldDefinitionTableSummary(displayName, fieldDefinitions));
+    }
+
+    /**
+     * 从表格行抽取字段定义行。
+     *
+     * @param rawRows 原始表格行
+     * @return 字段定义行
+     */
+    private List<String> extractFieldDefinitionRows(List<String> rawRows) {
+        if (rawRows == null || rawRows.isEmpty()) {
             return List.of();
         }
         List<String> fieldDefinitions = new ArrayList<String>();
-        for (String rawLine : section.split("\\R")) {
+        for (String rawLine : rawRows) {
             List<String> cells = splitMarkdownTableRow(rawLine);
-            if (cells.size() < 5 || !cells.get(0).matches("\\d+")) {
+            if (!looksLikeNumberedFieldDefinitionRow(cells)) {
                 continue;
             }
             String fieldName = cleanupMarkdownTableCell(cells.get(1));
@@ -5070,15 +6275,103 @@ public class AnswerGenerationService {
         return fieldDefinitions;
     }
 
-    private List<String> extractTransactionTypeMappings(String content) {
-        String section = extractMarkdownSection(content, "## 3. 交易类型 transactionType 对照表", "## 4.");
-        if (section.isBlank()) {
+    /**
+     * 判断是否为编号字段定义表格行。
+     *
+     * @param cells 单元格
+     * @return 是字段定义行返回 true
+     */
+    private boolean looksLikeNumberedFieldDefinitionRow(List<String> cells) {
+        return cells != null
+                && cells.size() >= 5
+                && cleanupMarkdownTableCell(cells.get(0)).matches("\\d+")
+                && !cleanupMarkdownTableCell(cells.get(1)).isBlank();
+    }
+
+    /**
+     * 解析字段定义表显示名称。
+     *
+     * @param heading 表格附近标题
+     * @param tableIndex 表格序号
+     * @return 显示名称
+     */
+    private String resolveFieldDefinitionTableName(String heading, int tableIndex) {
+        String normalizedHeading = cleanupHeadingLine(heading);
+        List<String> identifiers = extractBacktickIdentifiers(normalizedHeading);
+        if (!identifiers.isEmpty()) {
+            return "字段组 `" + identifiers.get(0) + "` ";
+        }
+        Matcher latinIdentifierMatcher = Pattern.compile("([A-Za-z][A-Za-z0-9_]{2,})").matcher(normalizedHeading);
+        if (latinIdentifierMatcher.find()) {
+            return "字段组 `" + latinIdentifierMatcher.group(1) + "` ";
+        }
+        if (!normalizedHeading.isBlank()) {
+            return "字段组“" + normalizedHeading + "” ";
+        }
+        return "第 " + tableIndex + " 个字段组 ";
+    }
+
+    /**
+     * 清理 Markdown 标题行。
+     *
+     * @param heading 标题行
+     * @return 清理后的标题
+     */
+    private String cleanupHeadingLine(String heading) {
+        if (heading == null || heading.isBlank()) {
+            return "";
+        }
+        return heading.replaceFirst("^#+\\s*", "").trim();
+    }
+
+    /**
+     * 提取反引号包裹的标识。
+     *
+     * @param value 原始文本
+     * @return 标识列表
+     */
+    private List<String> extractBacktickIdentifiers(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        Matcher matcher = Pattern.compile("`([^`]+)`").matcher(value);
+        List<String> identifiers = new ArrayList<String>();
+        while (matcher.find()) {
+            String identifier = matcher.group(1).trim();
+            if (!identifier.isBlank()) {
+                identifiers.add(identifier);
+            }
+        }
+        return identifiers;
+    }
+
+    /**
+     * 判断是否为字段定义表的通用子标题。
+     *
+     * @param heading 标题
+     * @return 通用子标题返回 true
+     */
+    private boolean isGenericFieldDefinitionSubheading(String heading) {
+        String normalizedHeading = lowerCase(heading);
+        return normalizedHeading.contains("字段通用属性")
+                || normalizedHeading.contains("通用属性")
+                || normalizedHeading.contains("字段属性");
+    }
+
+    /**
+     * 从证据正文中抽取通用编码对照。
+     *
+     * @param content 证据正文
+     * @return 编码对照
+     */
+    private List<String> extractCodeMappings(String content) {
+        if (content == null || content.isBlank()) {
             return List.of();
         }
         List<String> mappings = new ArrayList<String>();
-        for (String rawLine : section.split("\\R")) {
+        for (String rawLine : content.split("\\R")) {
             List<String> cells = splitMarkdownTableRow(rawLine);
-            if (cells.size() < 2 || !cells.get(0).matches("\\d+")) {
+            if (!looksLikeCodeMappingRow(cells)) {
                 continue;
             }
             mappings.add("`" + cleanupMarkdownTableCell(cells.get(0)) + "`=" + cleanupMarkdownTableCell(cells.get(1)));
@@ -5086,30 +6379,22 @@ public class AnswerGenerationService {
         return mappings;
     }
 
-    private String responseFieldNumberNote(String content) {
-        String normalizedContent = content == null ? "" : content;
-        if (normalizedContent.contains("编号为1-12、14、15、16，缺失13号编号")) {
-            return "（编号 1-12、14、15、16，缺失 13 号编号）";
+    /**
+     * 判断是否为编码对照行。
+     *
+     * @param cells 单元格
+     * @return 是编码对照返回 true
+     */
+    private boolean looksLikeCodeMappingRow(List<String> cells) {
+        if (cells == null || cells.size() != 2) {
+            return false;
         }
-        return "";
-    }
-
-    private String extractMarkdownSection(String content, String startMarker, String endMarker) {
-        if (content == null || content.isBlank() || startMarker == null || startMarker.isBlank()) {
-            return "";
+        String code = cleanupMarkdownTableCell(cells.get(0));
+        String meaning = cleanupMarkdownTableCell(cells.get(1));
+        if (code.isBlank() || meaning.isBlank()) {
+            return false;
         }
-        int startIndex = content.indexOf(startMarker);
-        if (startIndex < 0) {
-            return "";
-        }
-        int contentStartIndex = startIndex + startMarker.length();
-        int endIndex = endMarker == null || endMarker.isBlank()
-                ? -1
-                : content.indexOf(endMarker, contentStartIndex);
-        if (endIndex < 0) {
-            endIndex = content.length();
-        }
-        return content.substring(contentStartIndex, endIndex);
+        return code.matches("[A-Za-z0-9_-]{1,12}") && containsHanText(meaning);
     }
 
     private List<String> splitMarkdownTableRow(String rawLine) {
@@ -5377,7 +6662,7 @@ public class AnswerGenerationService {
         }
         List<String> citationLiterals = new ArrayList<String>();
         for (QueryArticleHit fallbackHit : fallbackHits) {
-            String citationLiteral = resolveConclusionCitationLiteral(fallbackHit);
+            String citationLiteral = resolveConclusionCitationLiteral(fallbackHit, fallbackHits);
             if (citationLiteral.isBlank() || citationLiterals.contains(citationLiteral)) {
                 continue;
             }
@@ -5397,9 +6682,13 @@ public class AnswerGenerationService {
         if (queryArticleHits == null || queryArticleHits.isEmpty()) {
             return List.of();
         }
+        List<QueryArticleHit> comparisonHits = selectComparisonFallbackEvidenceHits(question, queryArticleHits);
+        if (!comparisonHits.isEmpty()) {
+            return enrichPathContractCompanionHits(question, comparisonHits, queryArticleHits);
+        }
         List<QueryArticleHit> complementaryHits = selectComplementaryEvidenceByQuestionTokens(question, queryArticleHits);
         if (!complementaryHits.isEmpty()) {
-            return complementaryHits;
+            return enrichPathContractCompanionHits(question, complementaryHits, queryArticleHits);
         }
         List<QueryArticleHit> sortedAllRelevantHits = deduplicateSortedFallbackEvidenceHits(
                 question,
@@ -5416,15 +6705,112 @@ public class AnswerGenerationService {
                 )
         );
         if (preferredArticleHits.isEmpty()) {
-            return allRelevantHits;
+            return enrichPathContractCompanionHits(question, allRelevantHits, queryArticleHits);
         }
         List<QueryArticleHit> retainedArticleHits = shouldAggregateEvidenceConclusion(question)
                 ? preferredArticleHits
                 : retainDirectStructuredEvidence(question, preferredArticleHits);
         if (shouldPreferMixedEvidence(question, retainedArticleHits, allRelevantHits)) {
-            return allRelevantHits;
+            return enrichPathContractCompanionHits(question, allRelevantHits, queryArticleHits);
         }
-        return retainedArticleHits;
+        return enrichPathContractCompanionHits(question, retainedArticleHits, queryArticleHits);
+    }
+
+    /**
+     * 为二选一 / 对比题保留两侧选项各自命中的证据，避免全局问题 token 过滤掉其中一侧。
+     *
+     * @param question 用户问题
+     * @param queryArticleHits 查询命中
+     * @return 对比证据
+     */
+    private List<QueryArticleHit> selectComparisonFallbackEvidenceHits(
+            String question,
+            List<QueryArticleHit> queryArticleHits
+    ) {
+        List<String> comparisonOptions = extractComparisonOptions(question);
+        if (comparisonOptions.size() < 2) {
+            return List.of();
+        }
+        String leftOption = comparisonOptions.get(0);
+        String rightOption = comparisonOptions.get(1);
+        List<QueryArticleHit> comparisonHits = new ArrayList<QueryArticleHit>();
+        boolean hasLeftHit = false;
+        boolean hasRightHit = false;
+        for (QueryArticleHit queryArticleHit : queryArticleHits) {
+            String matchedOption = matchComparisonOption(queryArticleHit, leftOption, rightOption);
+            if (matchedOption.isBlank()) {
+                continue;
+            }
+            addDistinctFallbackHit(comparisonHits, queryArticleHit);
+            if (leftOption.equals(matchedOption)) {
+                hasLeftHit = true;
+            }
+            if (rightOption.equals(matchedOption)) {
+                hasRightHit = true;
+            }
+        }
+        return hasLeftHit && hasRightHit ? comparisonHits : List.of();
+    }
+
+    /**
+     * 为显式 path 契约题补充同源或异源的 path 契约证据。
+     *
+     * @param question 用户问题
+     * @param selectedHits 已选证据
+     * @param candidateHits 候选证据
+     * @return 补充后的证据
+     */
+    private List<QueryArticleHit> enrichPathContractCompanionHits(
+            String question,
+            List<QueryArticleHit> selectedHits,
+            List<QueryArticleHit> candidateHits
+    ) {
+        if (!requiresPathContractCompanion(question) || candidateHits == null || candidateHits.isEmpty()) {
+            return selectedHits == null ? List.of() : selectedHits;
+        }
+        List<QueryArticleHit> enrichedHits = new ArrayList<QueryArticleHit>();
+        if (selectedHits != null) {
+            enrichedHits.addAll(selectedHits);
+        }
+        if (containsPathContractEvidence(enrichedHits)) {
+            return enrichedHits;
+        }
+        List<QueryArticleHit> sortedCandidates = sortFallbackEvidenceHits(question, candidateHits);
+        for (QueryArticleHit candidateHit : sortedCandidates) {
+            if (!containsPathContractEvidence(List.of(candidateHit))) {
+                continue;
+            }
+            addDistinctFallbackHit(question, enrichedHits, candidateHit);
+            return enrichedHits;
+        }
+        return enrichedHits;
+    }
+
+    /**
+     * 判断命中集合是否含有 path 契约证据。
+     *
+     * @param queryArticleHits 查询命中
+     * @return 包含返回 true
+     */
+    private boolean containsPathContractEvidence(List<QueryArticleHit> queryArticleHits) {
+        if (queryArticleHits == null || queryArticleHits.isEmpty()) {
+            return false;
+        }
+        for (QueryArticleHit queryArticleHit : queryArticleHits) {
+            if (queryArticleHit == null) {
+                continue;
+            }
+            if (containsPathContractSignal(extractDescription(queryArticleHit.getMetadataJson()))) {
+                return true;
+            }
+            for (String contentLine : selectFallbackContentLines(queryArticleHit.getContent())) {
+                String normalizedLine = normalizeFallbackLineCandidate(contentLine);
+                if (containsPathContractSignal(normalizedLine)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -5439,7 +6825,6 @@ public class AnswerGenerationService {
             List<QueryArticleHit> queryArticleHits
     ) {
         if (extractComparisonOptions(question).size() >= 2
-                || looksLikeStructuredFactQuestion(question)
                 || shouldAggregateEvidenceConclusion(question)) {
             return List.of();
         }
@@ -5453,11 +6838,33 @@ public class AnswerGenerationService {
         );
         List<QueryArticleHit> candidates = sortedHits.isEmpty() ? queryArticleHits : sortedHits;
         List<QueryArticleHit> selectedHits = new ArrayList<QueryArticleHit>();
+        QueryArticleHit firstSourceHit = firstSourceHit(candidates);
+        if (firstSourceHit != null) {
+            addDistinctFallbackHit(question, selectedHits, firstSourceHit);
+        }
         for (String highSignalToken : highSignalTokens) {
             QueryArticleHit tokenHit = findHitContainingAny(candidates, List.of(highSignalToken));
-            addDistinctFallbackHit(selectedHits, tokenHit);
+            addDistinctFallbackHit(question, selectedHits, tokenHit);
         }
         return selectedHits.size() >= 2 ? selectedHits : List.of();
+    }
+
+    /**
+     * 取第一条原文证据，避免 fallback 只保留摘要卡片而丢掉同源原文。
+     *
+     * @param queryArticleHits 查询命中
+     * @return 原文命中
+     */
+    private QueryArticleHit firstSourceHit(List<QueryArticleHit> queryArticleHits) {
+        if (queryArticleHits == null || queryArticleHits.isEmpty()) {
+            return null;
+        }
+        for (QueryArticleHit queryArticleHit : queryArticleHits) {
+            if (queryArticleHit != null && queryArticleHit.getEvidenceType() == QueryEvidenceType.SOURCE) {
+                return queryArticleHit;
+            }
+        }
+        return null;
     }
 
     /**
@@ -5478,6 +6885,31 @@ public class AnswerGenerationService {
         }
         selectedHits.add(fallbackHit);
     }
+
+    /**
+     * 按问题感知去重追加 fallback 证据。
+     *
+     * @param question 用户问题
+     * @param selectedHits 已选证据
+     * @param fallbackHit 待追加证据
+     */
+    private void addDistinctFallbackHit(
+            String question,
+            List<QueryArticleHit> selectedHits,
+            QueryArticleHit fallbackHit
+    ) {
+        if (fallbackHit == null) {
+            return;
+        }
+        String canonicalKey = fallbackEvidenceCanonicalKey(question, fallbackHit);
+        for (QueryArticleHit selectedHit : selectedHits) {
+            if (fallbackEvidenceCanonicalKey(question, selectedHit).equals(canonicalKey)) {
+                return;
+            }
+        }
+        selectedHits.add(fallbackHit);
+    }
+
 
     /**
      * 判断当前问题是否应优先采用更贴题的 source/graph 证据，而不是固定优先 article 摘要。
@@ -5590,7 +7022,87 @@ public class AnswerGenerationService {
             }
             filteredHits.add(queryArticleHit);
         }
+        if (filteredHits.isEmpty()) {
+            filteredHits.addAll(selectQuestionScoredFallbackEvidenceHits(queryArticleHits, question, preferArticleEvidence));
+        }
         return filteredHits;
+    }
+
+    /**
+     * 当问题 token 与证据表述没有直接重叠时，使用通用候选句分值补选证据。
+     *
+     * @param queryArticleHits 查询命中
+     * @param question 用户问题
+     * @param preferArticleEvidence 是否仅保留 article / contribution 级证据
+     * @return 补选证据
+     */
+    private List<QueryArticleHit> selectQuestionScoredFallbackEvidenceHits(
+            List<QueryArticleHit> queryArticleHits,
+            String question,
+            boolean preferArticleEvidence
+    ) {
+        List<QueryArticleHit> scoredHits = new ArrayList<QueryArticleHit>();
+        if (queryArticleHits == null || queryArticleHits.isEmpty()) {
+            return scoredHits;
+        }
+        List<String> queryTokens = extractQueryTokens(question);
+        for (QueryArticleHit queryArticleHit : queryArticleHits) {
+            if (queryArticleHit == null) {
+                continue;
+            }
+            if (preferArticleEvidence
+                    && queryArticleHit.getEvidenceType() != QueryEvidenceType.ARTICLE
+                    && queryArticleHit.getEvidenceType() != QueryEvidenceType.CONTRIBUTION) {
+                continue;
+            }
+            if (requiresRequestedIdentifierCoverage(question)
+                    && !hitContainsRequestedIdentifier(question, queryArticleHit)) {
+                continue;
+            }
+            int score = scoreQuestionFocusedFallbackHit(question, queryArticleHit, queryTokens);
+            if (score >= 20) {
+                addDistinctFallbackHit(scoredHits, queryArticleHit);
+            }
+        }
+        return scoredHits;
+    }
+
+    /**
+     * 判断问题是否点名了需要在证据里覆盖的英文或结构化标识。
+     *
+     * @param question 用户问题
+     * @return 需要覆盖返回 true
+     */
+    private boolean requiresRequestedIdentifierCoverage(String question) {
+        return !extractRequestedReferentialIdentifiers(question).isEmpty();
+    }
+
+    /**
+     * 判断命中是否覆盖问题里点名的标识。
+     *
+     * @param question 用户问题
+     * @param queryArticleHit 查询命中
+     * @return 覆盖返回 true
+     */
+    private boolean hitContainsRequestedIdentifier(String question, QueryArticleHit queryArticleHit) {
+        if (queryArticleHit == null) {
+            return false;
+        }
+        String haystack = String.join(
+                " ",
+                lowerCase(queryArticleHit.getArticleKey()),
+                lowerCase(queryArticleHit.getConceptId()),
+                lowerCase(queryArticleHit.getTitle()),
+                lowerCase(extractDescription(queryArticleHit.getMetadataJson())),
+                lowerCase(queryArticleHit.getContent()),
+                lowerCase(String.join(" ", queryArticleHit.getSourcePaths()))
+        );
+        for (String requestedIdentifier : extractRequestedReferentialIdentifiers(question)) {
+            if (!requestedIdentifier.isBlank() && haystack.contains(lowerCase(requestedIdentifier))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -5718,6 +7230,10 @@ public class AnswerGenerationService {
         }
         List<String> rawCandidates = new ArrayList<String>();
         rawCandidates.addAll(selectMatchedLines(queryArticleHit.getContent(), queryTokens));
+        rawCandidates.addAll(selectStructuredJsonValueLines(queryArticleHit.getContent()));
+        if (requiresPathContractCompanion(question)) {
+            rawCandidates.addAll(selectPathContractCandidateLines(queryArticleHit));
+        }
         if (looksLikeStructuredFactQuestion(question)
                 || looksLikeStatusQuestion(question)
                 || looksLikeCapabilityQuestion(question)
@@ -5873,6 +7389,7 @@ public class AnswerGenerationService {
         }
         List<String> rawCandidates = new ArrayList<String>();
         rawCandidates.addAll(selectMatchedLines(queryArticleHit.getContent(), queryTokens));
+        rawCandidates.addAll(selectStructuredJsonValueLines(queryArticleHit.getContent()));
         if (looksLikeStructuredFactQuestion(question)
                 || looksLikeStatusQuestion(question)
                 || looksLikeCapabilityQuestion(question)
@@ -5883,6 +7400,10 @@ public class AnswerGenerationService {
         Map<String, Integer> scoredCandidates = new LinkedHashMap<String, Integer>();
         Map<String, Integer> scoredFactCandidates = new LinkedHashMap<String, Integer>();
         Map<String, Integer> scoredStatusCandidates = new LinkedHashMap<String, Integer>();
+        Map<String, Integer> scoredPolicyCandidates = new LinkedHashMap<String, Integer>();
+        Map<String, Integer> scoredOrdinalCandidates = new LinkedHashMap<String, Integer>();
+        Map<String, Integer> scoredFlowCandidates = new LinkedHashMap<String, Integer>();
+        Map<String, Integer> scoredExactIdentifierCandidates = new LinkedHashMap<String, Integer>();
         for (String rawCandidate : rawCandidates) {
             String normalizedCandidate = normalizeFallbackLineCandidate(rawCandidate);
             if (normalizedCandidate.isEmpty()) {
@@ -5900,10 +7421,40 @@ public class AnswerGenerationService {
                     && containsStatusSignal(lowerCase(normalizedCandidate))) {
                 mergeCandidateScore(scoredStatusCandidates, normalizedCandidate, candidateScore);
             }
+            if ((looksLikeRuleConstraintQuestion(question)
+                    && (containsRuleConstraintSignal(normalizedCandidate)
+                    || containsStrongConstraintSignal(normalizedCandidate)
+                    || containsChangeTrackingSignal(normalizedCandidate)
+                    || containsComparisonSignal(normalizedCandidate)))
+                    || (requiresPathContractCompanion(question) && containsPathContractSignal(normalizedCandidate))) {
+                mergeCandidateScore(scoredPolicyCandidates, normalizedCandidate, candidateScore);
+            }
+            if (expectsBatchOrOrdinalAnswer(lowerCase(question))
+                    && containsBatchOrOrdinalSignal(normalizedCandidate)) {
+                mergeCandidateScore(scoredOrdinalCandidates, normalizedCandidate, candidateScore);
+            }
+            if (looksLikeFlowQuestion(question) && containsFlowSignal(normalizedCandidate)) {
+                mergeCandidateScore(scoredFlowCandidates, normalizedCandidate, candidateScore);
+            }
+            if (containsRequestedExactIdentifier(normalizedCandidate, question)) {
+                mergeCandidateScore(scoredExactIdentifierCandidates, normalizedCandidate, candidateScore);
+            }
         }
         Map<String, Integer> preferredCandidates;
-        if (looksLikeStatusQuestion(question) && !scoredStatusCandidates.isEmpty()) {
+        if (!scoredExactIdentifierCandidates.isEmpty()) {
+            preferredCandidates = mergePreferredCandidates(scoredExactIdentifierCandidates, scoredPolicyCandidates);
+        }
+        else if (expectsBatchOrOrdinalAnswer(lowerCase(question)) && !scoredOrdinalCandidates.isEmpty()) {
+            preferredCandidates = scoredOrdinalCandidates;
+        }
+        else if (looksLikeRuleConstraintQuestion(question) && !scoredPolicyCandidates.isEmpty()) {
+            preferredCandidates = scoredPolicyCandidates;
+        }
+        else if (looksLikeStatusQuestion(question) && !scoredStatusCandidates.isEmpty()) {
             preferredCandidates = scoredStatusCandidates;
+        }
+        else if (looksLikeFlowQuestion(question) && !scoredFlowCandidates.isEmpty()) {
+            preferredCandidates = scoredFlowCandidates;
         }
         else if (looksLikeEnumerationQuestion(question) && !looksLikeStructuredFactQuestion(question)) {
             preferredCandidates = scoredCandidates;
@@ -5923,7 +7474,7 @@ public class AnswerGenerationService {
             }
             return Integer.compare(leftEntry.getKey().length(), rightEntry.getKey().length());
         });
-        if (limit > 1 && looksLikeStructuredFactQuestion(question)) {
+        if (limit > 1 && shouldUseCoverageAwareFallbackSnippets(question)) {
             List<String> focusTokens = extractStructuredFactFocusTokens(question);
             return selectCoverageAwareStructuredFactSnippets(question, rankedCandidates, focusTokens, limit);
         }
@@ -5935,6 +7486,53 @@ public class AnswerGenerationService {
             }
         }
         return snippets;
+    }
+
+    /**
+     * 为显式 path 契约题补充全篇契约候选，避免长文档前部的相邻接口列表截断后续约束行。
+     *
+     * @param queryArticleHit 查询命中
+     * @return path 契约候选行
+     */
+    private List<String> selectPathContractCandidateLines(QueryArticleHit queryArticleHit) {
+        if (queryArticleHit == null) {
+            return List.of();
+        }
+        List<String> candidates = new ArrayList<String>();
+        String description = extractDescription(queryArticleHit.getMetadataJson());
+        if (containsPathContractSignal(description)) {
+            candidates.add(description);
+        }
+        for (String contentLine : selectFallbackContentLines(queryArticleHit.getContent())) {
+            String normalizedLine = normalizeFallbackLineCandidate(contentLine);
+            if (!normalizedLine.isBlank() && containsPathContractSignal(normalizedLine)) {
+                candidates.add(normalizedLine);
+            }
+        }
+        return candidates;
+    }
+
+    /**
+     * 合并主候选和补充候选，保留主候选优先顺序。
+     *
+     * @param primaryCandidates 主候选
+     * @param secondaryCandidates 补充候选
+     * @return 合并后的候选
+     */
+    private Map<String, Integer> mergePreferredCandidates(
+            Map<String, Integer> primaryCandidates,
+            Map<String, Integer> secondaryCandidates
+    ) {
+        Map<String, Integer> mergedCandidates = new LinkedHashMap<String, Integer>();
+        if (primaryCandidates != null) {
+            mergedCandidates.putAll(primaryCandidates);
+        }
+        if (secondaryCandidates != null) {
+            for (Map.Entry<String, Integer> secondaryCandidate : secondaryCandidates.entrySet()) {
+                mergeCandidateScore(mergedCandidates, secondaryCandidate.getKey(), secondaryCandidate.getValue().intValue());
+            }
+        }
+        return mergedCandidates;
     }
 
     /**
@@ -6099,6 +7697,20 @@ public class AnswerGenerationService {
     }
 
     /**
+     * 判断 fallback 摘句是否需要覆盖多种问题维度。
+     *
+     * @param question 用户问题
+     * @return 需要覆盖多维度返回 true
+     */
+    private boolean shouldUseCoverageAwareFallbackSnippets(String question) {
+        return looksLikeStructuredFactQuestion(question)
+                || looksLikeRuleConstraintQuestion(question)
+                || requiresPathContractCompanion(question)
+                || looksLikeChangeTrackingQuestion(question)
+                || expectsBatchOrOrdinalAnswer(lowerCase(question));
+    }
+
+    /**
      * 判断问题是否要求指定证据形态。
      *
      * @param question 用户问题
@@ -6111,7 +7723,12 @@ public class AnswerGenerationService {
             return looksLikeNumericQuestion(question);
         }
         if ("status".equals(shape)) {
-            return normalizedQuestion.contains("结论") || looksLikeStatusQuestion(question);
+            return normalizedQuestion.contains("结论")
+                    || normalizedQuestion.contains("流量")
+                    || normalizedQuestion.contains("调整")
+                    || normalizedQuestion.contains("修正")
+                    || normalizedQuestion.contains("降级")
+                    || looksLikeStatusQuestion(question);
         }
         if ("ordinal".equals(shape)) {
             return expectsBatchOrOrdinalAnswer(normalizedQuestion);
@@ -6120,7 +7737,7 @@ public class AnswerGenerationService {
             return looksLikePathQuestion(question);
         }
         if ("rule".equals(shape)) {
-            return looksLikeRuleConstraintQuestion(question);
+            return looksLikeRuleConstraintQuestion(question) || requiresPathContractCompanion(question);
         }
         if ("change".equals(shape)) {
             return looksLikeChangeTrackingQuestion(question);
@@ -6155,7 +7772,9 @@ public class AnswerGenerationService {
             return containsPathSignal(candidate);
         }
         if ("rule".equals(shape)) {
-            return containsRuleConstraintSignal(candidate) || containsStrongConstraintSignal(candidate);
+            return containsRuleConstraintSignal(candidate)
+                    || containsStrongConstraintSignal(candidate)
+                    || containsPathContractSignal(candidate);
         }
         if ("change".equals(shape)) {
             return containsChangeTrackingSignal(candidate);
@@ -6288,6 +7907,15 @@ public class AnswerGenerationService {
         if (looksLikeChangeTrackingQuestion(question) && containsAssignmentLikeMappingSignal(normalizedLine)) {
             score += 26;
         }
+        if (requiresPathContractCompanion(question) && containsPathContractSignal(normalizedLine)) {
+            score += 56;
+            if (containsStrongConstraintSignal(normalizedLine)) {
+                score += 20;
+            }
+            if (containsRuleConstraintSignal(normalizedLine)) {
+                score += 12;
+            }
+        }
         if (looksLikeNumericQuestion(question) && looksLikeAdjacentEnumerationNoise(normalizedLine, question)) {
             score -= 18;
         }
@@ -6311,6 +7939,9 @@ public class AnswerGenerationService {
                 && containsPathSignal(normalizedLine)
                 && containsStructuredLabelSignal(normalizedLine)) {
             score += 24;
+        }
+        if (containsRequestedExactIdentifier(normalizedLine, question)) {
+            score += 80;
         }
         if (startsWithDirectStructuredFactAssignment(normalizedLine)) {
             score += 8;
@@ -6391,6 +8022,27 @@ public class AnswerGenerationService {
     }
 
     /**
+     * 判断候选行是否覆盖了用户问题里显式点名的精确标识。
+     *
+     * @param normalizedLine 候选行
+     * @param question 用户问题
+     * @return 覆盖返回 true
+     */
+    private boolean containsRequestedExactIdentifier(String normalizedLine, String question) {
+        if (normalizedLine == null || normalizedLine.isBlank()) {
+            return false;
+        }
+        String lowerCaseLine = lowerCase(normalizedLine);
+        for (String requestedIdentifier : extractRequestedReferentialIdentifiers(question)) {
+            if (containsExactIdentifierSignal(requestedIdentifier)
+                    && lowerCaseLine.contains(lowerCase(requestedIdentifier))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * 判断当前问题是否更像配置/阈值/参数类精确值问题。
      *
      * @param question 用户问题
@@ -6427,8 +8079,6 @@ public class AnswerGenerationService {
         return looksLikeStructuredFactQuestion(question)
                 || looksLikeRuleConstraintQuestion(question)
                 || looksLikeChangeTrackingQuestion(question)
-                || normalizedQuestion.contains("第几批")
-                || normalizedQuestion.contains("哪一批")
                 || normalizedQuestion.contains("是否一致")
                 || normalizedQuestion.contains("是否生效")
                 || normalizedQuestion.contains("是否启用");
@@ -6702,7 +8352,6 @@ public class AnswerGenerationService {
                 || normalizedQuestion.contains("改为")
                 || normalizedQuestion.contains("变成")
                 || normalizedQuestion.contains("删除")
-                || normalizedQuestion.contains("迁移后")
                 || normalizedQuestion.contains("承接");
     }
 
@@ -6952,13 +8601,14 @@ public class AnswerGenerationService {
         if (normalizedLine == null || normalizedLine.isBlank()) {
             return false;
         }
-        return normalizedLine.contains("/")
-                || normalizedLine.contains("post ")
-                || normalizedLine.contains("get ")
-                || normalizedLine.contains("put ")
-                || normalizedLine.contains("delete ")
-                || normalizedLine.contains("http://")
-                || normalizedLine.contains("https://");
+        String lowerCaseLine = lowerCase(normalizedLine);
+        return !extractEvidencePaths(List.of(normalizedLine)).isEmpty()
+                || lowerCaseLine.contains("post ")
+                || lowerCaseLine.contains("get ")
+                || lowerCaseLine.contains("put ")
+                || lowerCaseLine.contains("delete ")
+                || lowerCaseLine.contains("http://")
+                || lowerCaseLine.contains("https://");
     }
 
     /**
@@ -7152,7 +8802,7 @@ public class AnswerGenerationService {
             return false;
         }
         String normalizedValue = lowerCase(value);
-        return normalizedValue.matches("(?s).*第[一二三四五六七八九十0-9]+[批阶段步项条个]?.*")
+        return normalizedValue.matches("(?s).*(?:第[一二三四五六七八九十0-9]+[批阶段步项条个]?|[一二三四五六七八九十0-9]+[批阶段步项条个]?).*")
                 || normalizedValue.contains("批次")
                 || normalizedValue.contains("顺序");
     }
@@ -7879,10 +9529,36 @@ public class AnswerGenerationService {
             return canonicalKey;
         }
         QueryEvidenceType evidenceType = queryArticleHit.getEvidenceType();
-        if (evidenceType == QueryEvidenceType.ARTICLE || evidenceType == QueryEvidenceType.SOURCE) {
+        if (evidenceType == QueryEvidenceType.ARTICLE
+                || evidenceType == QueryEvidenceType.CONTRIBUTION
+                || evidenceType == QueryEvidenceType.FACT_CARD
+                || evidenceType == QueryEvidenceType.SOURCE) {
+            String identityKey = fallbackEvidenceIdentityKey(queryArticleHit);
+            if (!identityKey.isBlank()) {
+                return canonicalKey + "#" + evidenceType.name() + "#" + identityKey;
+            }
             return canonicalKey + "#" + evidenceType.name();
         }
         return canonicalKey;
+    }
+
+    /**
+     * 计算同源文档内可区分章节、条目或卡片的细粒度身份。
+     *
+     * @param queryArticleHit 查询命中
+     * @return 细粒度身份键
+     */
+    private String fallbackEvidenceIdentityKey(QueryArticleHit queryArticleHit) {
+        if (queryArticleHit == null) {
+            return "";
+        }
+        if (queryArticleHit.getArticleKey() != null && !queryArticleHit.getArticleKey().isBlank()) {
+            return queryArticleHit.getArticleKey();
+        }
+        if (queryArticleHit.getConceptId() != null && !queryArticleHit.getConceptId().isBlank()) {
+            return queryArticleHit.getConceptId();
+        }
+        return queryArticleHit.getTitle() == null ? "" : queryArticleHit.getTitle();
     }
 
     /**
@@ -7897,6 +9573,9 @@ public class AnswerGenerationService {
         }
         if (queryArticleHit.getEvidenceType() == QueryEvidenceType.CONTRIBUTION) {
             return 120;
+        }
+        if (queryArticleHit.getEvidenceType() == QueryEvidenceType.FACT_CARD) {
+            return 115;
         }
         if (queryArticleHit.getEvidenceType() == QueryEvidenceType.ARTICLE) {
             return 100;
@@ -7944,7 +9623,7 @@ public class AnswerGenerationService {
      * @return 摘要文本
      */
     private String extractEvidenceSnippet(String content) {
-        String normalizedContent = sanitizeEvidenceContentForPrompt(content);
+        String normalizedContent = sanitizeEvidenceContentForPrompt(content, 180 + PROMPT_TRUNCATED_SUFFIX.length());
         if (normalizedContent.length() <= 180) {
             return normalizedContent;
         }
@@ -7958,6 +9637,17 @@ public class AnswerGenerationService {
      * @return 清理后的正文
      */
     private String sanitizeEvidenceContentForPrompt(String content) {
+        return sanitizeEvidenceContentForPrompt(content, 0);
+    }
+
+    /**
+     * 清理证据正文中的纯媒体行，并按需限制累计字符数。
+     *
+     * @param content 原始正文
+     * @param maxChars 最大字符数；小于等于 0 时不限制
+     * @return 清理后的正文
+     */
+    private String sanitizeEvidenceContentForPrompt(String content, int maxChars) {
         String bodyContent = ArticleMarkdownSupport.extractBody(content);
         if (bodyContent == null || bodyContent.isBlank()) {
             return "";
@@ -7969,7 +9659,22 @@ public class AnswerGenerationService {
             if (isNonTextMediaLine(normalizedLine)) {
                 continue;
             }
-            keptLines.add(rawLine);
+            if (maxChars <= 0) {
+                keptLines.add(rawLine);
+                continue;
+            }
+            String currentText = String.join("\n", keptLines);
+            int separatorLength = currentText.isBlank() ? 0 : 1;
+            int remainingChars = maxChars - currentText.length() - separatorLength;
+            if (remainingChars <= 0) {
+                break;
+            }
+            if (rawLine.length() <= remainingChars) {
+                keptLines.add(rawLine);
+            } else {
+                keptLines.add(truncatePromptText(rawLine, remainingChars));
+                break;
+            }
         }
         return SensitiveTextMasker.mask(String.join("\n", keptLines).trim());
     }
@@ -8054,6 +9759,10 @@ public class AnswerGenerationService {
         }
         if (normalizedLine.startsWith("|") && normalizedLine.endsWith("|")) {
             return SensitiveTextMasker.mask(normalizeMarkdownTableRow(normalizedLine));
+        }
+        String structuredJsonLine = normalizeStructuredJsonLine(normalizedLine);
+        if (!structuredJsonLine.isBlank()) {
+            return SensitiveTextMasker.mask(structuredJsonLine);
         }
         if (lowerCaseLine.startsWith("summary:")
                 || lowerCaseLine.startsWith("description:")
@@ -8149,6 +9858,101 @@ public class AnswerGenerationService {
             return baseSentence;
         }
         return String.join("；", normalizedCells);
+    }
+
+    /**
+     * 将 JSON 行归一成可读事实句，避免 fallback 直接展示内部结构。
+     *
+     * @param normalizedLine 候选行
+     * @return 可读事实句；非 JSON 返回空串
+     */
+    private String normalizeStructuredJsonLine(String normalizedLine) {
+        if (normalizedLine == null || normalizedLine.isBlank()) {
+            return "";
+        }
+        String trimmedLine = normalizedLine.trim();
+        if (!(trimmedLine.startsWith("{") || trimmedLine.startsWith("["))) {
+            return "";
+        }
+        List<String> valueLines = selectStructuredJsonValueLines(trimmedLine);
+        if (valueLines.isEmpty()) {
+            return "";
+        }
+        return String.join("；", valueLines.subList(0, Math.min(4, valueLines.size())));
+    }
+
+    /**
+     * 从结构化 JSON 中提取可读的字符串值，作为通用证据候选。
+     *
+     * @param content 原始内容
+     * @return 可读值列表
+     */
+    private List<String> selectStructuredJsonValueLines(String content) {
+        List<String> valueLines = new ArrayList<String>();
+        if (content == null || content.isBlank()) {
+            return valueLines;
+        }
+        String trimmedContent = content.trim();
+        if (!(trimmedContent.startsWith("{") || trimmedContent.startsWith("["))) {
+            return valueLines;
+        }
+        JsonNode jsonNode = readJsonNode(trimmedContent);
+        if (jsonNode == null) {
+            return valueLines;
+        }
+        collectStructuredJsonValueLines(jsonNode, valueLines);
+        return valueLines;
+    }
+
+    /**
+     * 递归收集 JSON 字符串叶子节点。
+     *
+     * @param jsonNode JSON 节点
+     * @param valueLines 输出值
+     */
+    private void collectStructuredJsonValueLines(JsonNode jsonNode, List<String> valueLines) {
+        if (jsonNode == null || valueLines.size() >= 24) {
+            return;
+        }
+        if (jsonNode.isTextual()) {
+            String textValue = normalizeFallbackLineCandidate(jsonNode.asText());
+            if (!textValue.isBlank()) {
+                addDistinctStructuredJsonValue(valueLines, textValue);
+            }
+            return;
+        }
+        if (jsonNode.isNumber() || jsonNode.isBoolean()) {
+            addDistinctStructuredJsonValue(valueLines, jsonNode.asText());
+            return;
+        }
+        if (jsonNode.isObject()) {
+            jsonNode.fields().forEachRemaining(entry -> collectStructuredJsonValueLines(entry.getValue(), valueLines));
+            return;
+        }
+        if (jsonNode.isArray()) {
+            for (JsonNode childNode : jsonNode) {
+                collectStructuredJsonValueLines(childNode, valueLines);
+                if (valueLines.size() >= 24) {
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * 去重追加 JSON 值候选。
+     *
+     * @param valueLines 已收集值
+     * @param textValue 候选值
+     */
+    private void addDistinctStructuredJsonValue(List<String> valueLines, String textValue) {
+        String normalizedValue = textValue == null ? "" : textValue.trim();
+        if (normalizedValue.isBlank() || normalizedValue.length() > 260) {
+            return;
+        }
+        if (!valueLines.contains(normalizedValue)) {
+            valueLines.add(normalizedValue);
+        }
     }
 
     /**
@@ -8456,14 +10260,48 @@ public class AnswerGenerationService {
     }
 
     /**
+     * 解析证据对应的引用文本，并让结构化卡片优先回落到同源 source chunk。
+     *
+     * @param queryArticleHit 证据命中
+     * @param candidateHits 同批候选命中
+     * @return 引用文本
+     */
+    private String resolveCitationLiteral(QueryArticleHit queryArticleHit, List<QueryArticleHit> candidateHits) {
+        if (queryArticleHit != null && queryArticleHit.getEvidenceType() == QueryEvidenceType.FACT_CARD) {
+            String sourceCitationLiteral = resolveFactCardSourceCitationLiteral(queryArticleHit, candidateHits);
+            if (!sourceCitationLiteral.isBlank()) {
+                return sourceCitationLiteral;
+            }
+        }
+        return resolveCitationLiteral(queryArticleHit);
+    }
+
+    /**
      * 为结论段挑选更稳定的 citation 形式。
      *
      * @param queryArticleHit 证据命中
      * @return citation 文本
      */
     private String resolveConclusionCitationLiteral(QueryArticleHit queryArticleHit) {
+        return resolveConclusionCitationLiteral(queryArticleHit, List.of());
+    }
+
+    /**
+     * 为结论段挑选更稳定的 citation 形式，fact card 优先引用同源 source chunk。
+     *
+     * @param queryArticleHit 证据命中
+     * @param candidateHits 同批候选命中
+     * @return citation 文本
+     */
+    private String resolveConclusionCitationLiteral(QueryArticleHit queryArticleHit, List<QueryArticleHit> candidateHits) {
         if (queryArticleHit == null) {
             return "";
+        }
+        if (queryArticleHit.getEvidenceType() == QueryEvidenceType.FACT_CARD) {
+            String sourceCitationLiteral = resolveFactCardSourceCitationLiteral(queryArticleHit, candidateHits);
+            if (!sourceCitationLiteral.isBlank()) {
+                return sourceCitationLiteral;
+            }
         }
         if (queryArticleHit.getEvidenceType() == QueryEvidenceType.ARTICLE) {
             String articleCitationLiteral = resolveArticleCitationLiteral(queryArticleHit);
@@ -8476,6 +10314,144 @@ public class AnswerGenerationService {
             return sourceCitationLiteral;
         }
         return resolveArticleCitationLiteral(queryArticleHit);
+    }
+
+    /**
+     * 为 fact card 查找同批 source chunk 的引用。
+     *
+     * @param factCardHit fact card 命中
+     * @param candidateHits 同批候选命中
+     * @return source 引用文本
+     */
+    private String resolveFactCardSourceCitationLiteral(
+            QueryArticleHit factCardHit,
+            List<QueryArticleHit> candidateHits
+    ) {
+        QueryArticleHit sourceHit = findFactCardSourceHit(factCardHit, candidateHits);
+        String sourceCitationLiteral = resolveSourceCitationLiteral(sourceHit);
+        if (!sourceCitationLiteral.isBlank()) {
+            return sourceCitationLiteral;
+        }
+        return resolveSourceCitationLiteral(factCardHit);
+    }
+
+    /**
+     * 查找与 fact card 同源且内容相近的 source hit。
+     *
+     * @param factCardHit fact card 命中
+     * @param candidateHits 同批候选命中
+     * @return source 命中
+     */
+    private QueryArticleHit findFactCardSourceHit(QueryArticleHit factCardHit, List<QueryArticleHit> candidateHits) {
+        if (factCardHit == null || candidateHits == null || candidateHits.isEmpty()) {
+            return null;
+        }
+        QueryArticleHit bestHit = null;
+        int bestScore = Integer.MIN_VALUE;
+        for (QueryArticleHit candidateHit : candidateHits) {
+            if (candidateHit == null || candidateHit.getEvidenceType() != QueryEvidenceType.SOURCE) {
+                continue;
+            }
+            int score = scoreFactCardSourceHit(factCardHit, candidateHit);
+            if (score > bestScore) {
+                bestScore = score;
+                bestHit = candidateHit;
+            }
+        }
+        return bestScore > 0 ? bestHit : null;
+    }
+
+    /**
+     * 计算 source hit 与 fact card 的同源贴合分。
+     *
+     * @param factCardHit fact card 命中
+     * @param sourceHit source 命中
+     * @return 贴合分
+     */
+    private int scoreFactCardSourceHit(QueryArticleHit factCardHit, QueryArticleHit sourceHit) {
+        int score = 0;
+        if (hasSharedSourcePath(factCardHit, sourceHit)) {
+            score += 24;
+        }
+        List<String> factTokens = QueryTokenExtractor.extract(joinHitText(factCardHit));
+        String sourceHaystack = lowerCase(joinHitText(sourceHit));
+        for (String factToken : factTokens) {
+            String normalizedToken = lowerCase(factToken);
+            if (normalizedToken.length() >= 2 && sourceHaystack.contains(normalizedToken)) {
+                score += normalizedToken.matches(".*[0-9=_./-].*") ? 8 : 3;
+            }
+        }
+        return score;
+    }
+
+    /**
+     * 拼接命中的标题与内容，兼容可空字段。
+     *
+     * @param queryArticleHit 查询命中
+     * @return 可用于匹配的文本
+     */
+    private String joinHitText(QueryArticleHit queryArticleHit) {
+        if (queryArticleHit == null) {
+            return "";
+        }
+        return lowerCase(queryArticleHit.getTitle()) + " " + lowerCase(queryArticleHit.getContent());
+    }
+
+    /**
+     * 拼接多条命中的标题、正文与来源路径。
+     *
+     * @param queryArticleHits 查询命中
+     * @return 可用于匹配的文本
+     */
+    private String joinHitTexts(List<QueryArticleHit> queryArticleHits) {
+        if (queryArticleHits == null || queryArticleHits.isEmpty()) {
+            return "";
+        }
+        StringBuilder textBuilder = new StringBuilder();
+        for (QueryArticleHit queryArticleHit : queryArticleHits) {
+            if (queryArticleHit == null) {
+                continue;
+            }
+            textBuilder.append(' ')
+                    .append(queryArticleHit.getTitle())
+                    .append(' ')
+                    .append(queryArticleHit.getContent())
+                    .append(' ')
+                    .append(queryArticleHit.getMetadataJson());
+            if (queryArticleHit.getSourcePaths() != null) {
+                textBuilder.append(' ')
+                        .append(String.join(" ", queryArticleHit.getSourcePaths()));
+            }
+        }
+        return textBuilder.toString();
+    }
+
+    /**
+     * 判断两条命中是否共享源文件路径。
+     *
+     * @param leftHit 左侧命中
+     * @param rightHit 右侧命中
+     * @return 共享源文件返回 true
+     */
+    private boolean hasSharedSourcePath(QueryArticleHit leftHit, QueryArticleHit rightHit) {
+        if (leftHit == null
+                || rightHit == null
+                || leftHit.getSourcePaths() == null
+                || rightHit.getSourcePaths() == null) {
+            return false;
+        }
+        for (String leftPath : leftHit.getSourcePaths()) {
+            String normalizedLeftPath = normalizeSourceCitationTarget(leftPath);
+            if (normalizedLeftPath.isBlank()) {
+                continue;
+            }
+            for (String rightPath : rightHit.getSourcePaths()) {
+                if (normalizedLeftPath.equals(normalizeSourceCitationTarget(rightPath))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -8536,6 +10512,106 @@ public class AnswerGenerationService {
         }
         return ARTICLE_CITATION_PATTERN.matcher(answerMarkdown).find()
                 || SOURCE_CITATION_PATTERN.matcher(answerMarkdown).find();
+    }
+
+    /**
+     * 精确查值题偏向 deterministic fallback 的通用原因。
+     *
+     * 职责：标识模型答案为什么没有被直接保留为 LLM 成功结果
+     *
+     * @author xiexu
+     */
+    private enum ExactLookupPreferenceReason {
+
+        /**
+         * 不需要 deterministic fallback。
+         */
+        NONE,
+
+        /**
+         * 模型答案语义不是成功。
+         */
+        OUTCOME_NOT_SUCCESS,
+
+        /**
+         * 模型答案包含过度保守表达。
+         */
+        OVERCAUTIOUS_PHRASE,
+
+        /**
+         * 模型答案未覆盖贴题证据形态。
+         */
+        GROUNDING_MISMATCH
+    }
+
+    /**
+     * 精确查值题答案 grounding 判定状态。
+     *
+     * 职责：给通用 grounding 保护提供可观测的失败分类
+     *
+     * @author xiexu
+     */
+    private enum ExactLookupGroundingStatus {
+
+        /**
+         * 答案覆盖了当前问题所需的贴题证据形态。
+         */
+        GROUNDED,
+
+        /**
+         * 缺少必要路径形态。
+         */
+        MISSING_PATH_SHAPE,
+
+        /**
+         * 缺少数字。
+         */
+        MISSING_DIGIT,
+
+        /**
+         * 缺少必要数值形态。
+         */
+        MISSING_NUMERIC_SHAPE,
+
+        /**
+         * 缺少批次或序号形态。
+         */
+        MISSING_BATCH_OR_ORDINAL,
+
+        /**
+         * 缺少状态形态。
+         */
+        MISSING_STATUS,
+
+        /**
+         * 缺少流程形态。
+         */
+        MISSING_FLOW,
+
+        /**
+         * 缺少修正或状态结论形态。
+         */
+        MISSING_CORRECTION_OR_STATUS,
+
+        /**
+         * 缺少强约束形态。
+         */
+        MISSING_STRONG_CONSTRAINT,
+
+        /**
+         * 缺少规则约束形态。
+         */
+        MISSING_RULE_CONSTRAINT,
+
+        /**
+         * 缺少变更跟踪形态。
+         */
+        MISSING_CHANGE_TRACKING,
+
+        /**
+         * 缺少复合精确题的多维证据覆盖。
+         */
+        MISSING_COMPOUND_DIMENSIONS
     }
 
     /**

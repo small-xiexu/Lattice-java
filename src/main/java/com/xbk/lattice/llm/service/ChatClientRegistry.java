@@ -17,7 +17,6 @@ import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.openai.api.ResponseFormat;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.BufferingClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -55,7 +54,6 @@ import java.util.concurrent.ConcurrentMap;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class ChatClientRegistry {
 
     private static final ProxySelector NO_PROXY_SELECTOR = new ProxySelector() {

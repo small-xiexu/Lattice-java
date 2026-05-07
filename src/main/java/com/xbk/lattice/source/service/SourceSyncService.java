@@ -4,7 +4,6 @@ import com.xbk.lattice.source.domain.KnowledgeSource;
 import com.xbk.lattice.source.domain.SourceSyncRun;
 import com.xbk.lattice.source.infra.KnowledgeSourceJdbcRepository;
 import com.xbk.lattice.source.infra.SourceSyncRunJdbcRepository;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,7 +18,6 @@ import java.util.List;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class SourceSyncService {
 
     private final SourceSyncRunJdbcRepository sourceSyncRunJdbcRepository;

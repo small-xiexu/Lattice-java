@@ -4,7 +4,6 @@ import com.xbk.lattice.article.service.ArticleIdentityResolver;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -22,7 +21,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class AdminArticleQueryService {
 
     private final ArticleJdbcRepository articleJdbcRepository;
@@ -73,16 +71,73 @@ public class AdminArticleQueryService {
      * @return 匹配文章
      */
     public List<ArticleRecord> list(String query, String lifecycle, Long sourceId) {
+        return list(query, lifecycle, sourceId, null);
+    }
+
+    /**
+     * 查询管理侧文章列表。
+     *
+     * @param query 关键字
+     * @param lifecycle 生命周期
+     * @param sourceId 资料源主键
+     * @param reviewStatus 复核状态
+     * @return 匹配文章
+     */
+    public List<ArticleRecord> list(String query, String lifecycle, Long sourceId, String reviewStatus) {
+        return list(query, lifecycle, sourceId, reviewStatus, null, null, null, null);
+    }
+
+    /**
+     * 查询管理侧文章列表。
+     *
+     * @param query 关键字
+     * @param lifecycle 生命周期
+     * @param sourceId 资料源主键
+     * @param reviewStatus 复核状态
+     * @param riskLevel 风险等级
+     * @param riskReason 风险原因
+     * @param hotspot 是否热点
+     * @param requiresResultVerification 是否需要结果抽检
+     * @return 匹配文章
+     */
+    public List<ArticleRecord> list(
+            String query,
+            String lifecycle,
+            Long sourceId,
+            String reviewStatus,
+            String riskLevel,
+            String riskReason,
+            Boolean hotspot,
+            Boolean requiresResultVerification
+    ) {
         List<ArticleRecord> allArticles = articleJdbcRepository.findAll();
         List<ArticleRecord> matchedArticles = new ArrayList<ArticleRecord>();
         String normalizedQuery = normalize(query);
         String normalizedLifecycle = normalize(lifecycle);
+        String normalizedReviewStatus = normalize(reviewStatus);
+        String normalizedRiskLevel = normalize(riskLevel);
+        String normalizedRiskReason = normalize(riskReason);
 
         for (ArticleRecord articleRecord : allArticles) {
             if (!matchesSourceId(articleRecord, sourceId)) {
                 continue;
             }
             if (!matchesLifecycle(articleRecord, normalizedLifecycle)) {
+                continue;
+            }
+            if (!matchesReviewStatus(articleRecord, normalizedReviewStatus)) {
+                continue;
+            }
+            if (!matchesRiskLevel(articleRecord, normalizedRiskLevel)) {
+                continue;
+            }
+            if (!matchesRiskReason(articleRecord, normalizedRiskReason)) {
+                continue;
+            }
+            if (!matchesBoolean(articleRecord.isHotspot(), hotspot)) {
+                continue;
+            }
+            if (!matchesBoolean(articleRecord.isRequiresResultVerification(), requiresResultVerification)) {
                 continue;
             }
             if (!matchesQuery(articleRecord, normalizedQuery)) {
@@ -148,6 +203,70 @@ public class AdminArticleQueryService {
         }
         return articleRecord.getLifecycle() != null
                 && articleRecord.getLifecycle().toLowerCase(Locale.ROOT).equals(normalizedLifecycle);
+    }
+
+    /**
+     * 判断是否匹配复核状态筛选。
+     *
+     * @param articleRecord 文章记录
+     * @param normalizedReviewStatus 规范化复核状态
+     * @return 是否匹配
+     */
+    private boolean matchesReviewStatus(ArticleRecord articleRecord, String normalizedReviewStatus) {
+        if (normalizedReviewStatus == null) {
+            return true;
+        }
+        return articleRecord.getReviewStatus() != null
+                && articleRecord.getReviewStatus().toLowerCase(Locale.ROOT).equals(normalizedReviewStatus);
+    }
+
+    /**
+     * 判断是否匹配风险等级筛选。
+     *
+     * @param articleRecord 文章记录
+     * @param normalizedRiskLevel 规范化风险等级
+     * @return 是否匹配
+     */
+    private boolean matchesRiskLevel(ArticleRecord articleRecord, String normalizedRiskLevel) {
+        if (normalizedRiskLevel == null) {
+            return true;
+        }
+        return articleRecord.getRiskLevel() != null
+                && articleRecord.getRiskLevel().toLowerCase(Locale.ROOT).equals(normalizedRiskLevel);
+    }
+
+    /**
+     * 判断是否匹配风险原因筛选。
+     *
+     * @param articleRecord 文章记录
+     * @param normalizedRiskReason 规范化风险原因
+     * @return 是否匹配
+     */
+    private boolean matchesRiskReason(ArticleRecord articleRecord, String normalizedRiskReason) {
+        if (normalizedRiskReason == null) {
+            return true;
+        }
+        List<String> riskReasons = articleRecord.getRiskReasons();
+        if (riskReasons == null || riskReasons.isEmpty()) {
+            return false;
+        }
+        for (String riskReason : riskReasons) {
+            if (riskReason != null && riskReason.toLowerCase(Locale.ROOT).equals(normalizedRiskReason)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断是否匹配布尔筛选。
+     *
+     * @param actual 实际值
+     * @param expected 期望值
+     * @return 是否匹配
+     */
+    private boolean matchesBoolean(boolean actual, Boolean expected) {
+        return expected == null || actual == expected.booleanValue();
     }
 
     /**

@@ -2,7 +2,7 @@ package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.domain.MergedConcept;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
-import org.springframework.context.annotation.Profile;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -19,12 +19,14 @@ import java.util.concurrent.Executors;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
+@Slf4j
 public class SynthesisArtifactsService {
 
     private static final String COMPILE_SCENE = "compile";
 
     private static final String WRITER_ROLE = "writer";
+
+    private static final long NANOS_PER_MILLISECOND = 1_000_000L;
 
     private final LlmGateway llmGateway;
 
@@ -122,9 +124,12 @@ public class SynthesisArtifactsService {
             String systemPrompt,
             String conceptSummary
     ) {
+        long startedAtNanos = System.nanoTime();
         String content = tryGenerateArtifact(scopeId, artifactType, systemPrompt, conceptSummary);
+        boolean fallbackUsed = false;
         if (content == null || content.isBlank()) {
             content = buildFallbackArtifact(title, conceptSummary);
+            fallbackUsed = true;
         }
         synthesisArtifactStore.save(new SynthesisArtifactRecord(
                 artifactType,
@@ -132,6 +137,14 @@ public class SynthesisArtifactsService {
                 content,
                 OffsetDateTime.now()
         ));
+        log.info(
+                "compile synthesis artifact generated. scopeId: {}, artifactType: {}, durationMs: {}, fallbackUsed: {}, conceptSummaryChars: {}",
+                scopeId,
+                artifactType,
+                elapsedMillis(startedAtNanos),
+                fallbackUsed,
+                conceptSummary.length()
+        );
     }
 
     /**
@@ -168,6 +181,12 @@ public class SynthesisArtifactsService {
             );
         }
         catch (RuntimeException ex) {
+            log.warn(
+                    "compile synthesis artifact llm generation failed. scopeId: {}, artifactType: {}, error: {}",
+                    scopeId,
+                    artifactType,
+                    ex.toString()
+            );
             return null;
         }
     }
@@ -201,5 +220,15 @@ public class SynthesisArtifactsService {
      */
     private String buildFallbackArtifact(String title, String conceptSummary) {
         return "# " + title + "\n\n" + conceptSummary;
+    }
+
+    /**
+     * 计算耗时毫秒数。
+     *
+     * @param startedAtNanos 起始纳秒时间
+     * @return 耗时毫秒数
+     */
+    private long elapsedMillis(long startedAtNanos) {
+        return Math.max(0L, (System.nanoTime() - startedAtNanos) / NANOS_PER_MILLISECOND);
     }
 }

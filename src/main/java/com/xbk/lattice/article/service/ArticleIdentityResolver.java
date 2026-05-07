@@ -2,7 +2,6 @@ package com.xbk.lattice.article.service;
 
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -15,7 +14,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class ArticleIdentityResolver {
 
     private final ArticleJdbcRepository articleJdbcRepository;

@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.SourceFileChunkMapper">
+
+    <resultMap id="SourceFileChunkRecordResultMap" type="com.xbk.lattice.infra.persistence.SourceFileChunkRecord">
+        <constructor>
+            <arg column="source_file_id" javaType="java.lang.Long"/>
+            <arg column="file_path" javaType="java.lang.String"/>
+            <arg column="chunk_index" javaType="_int"/>
+            <arg column="chunk_text" javaType="java.lang.String"/>
+            <arg column="is_verbatim" javaType="_boolean"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="LexicalSearchRecordResultMap" type="com.xbk.lattice.infra.persistence.LexicalSearchRecord">
+        <constructor>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="item_key" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="content" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="source_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="chunk_index" javaType="java.lang.Integer"/>
+            <arg column="verbatim" javaType="java.lang.Boolean"/>
+            <arg column="score" javaType="_double"/>
+        </constructor>
+    </resultMap>
+
+    <delete id="deleteByFilePath">
+        delete from source_file_chunks
+        where file_path = #{filePath}
+    </delete>
+
+    <delete id="deleteBySourceFileId">
+        delete from source_file_chunks
+        where source_file_id = #{sourceFileId}
+    </delete>
+
+    <insert id="insert">
+        insert into source_file_chunks (
+            source_file_id, file_path, chunk_index, chunk_text, is_verbatim,
+            file_path_norm, search_tsv
+        )
+        values (
+            #{record.sourceFileId},
+            #{record.filePath},
+            #{record.chunkIndex},
+            #{record.chunkText},
+            #{record.verbatim},
+            #{filePathNorm},
+            to_tsvector('simple'::regconfig, #{searchText})
+        )
+    </insert>
+
+    <update id="truncateAll">
+        truncate table source_file_chunks restart identity
+    </update>
+
+    <select id="countAll" resultType="_int">
+        select count(*)
+        from source_file_chunks
+    </select>
+
+    <select id="findAll" resultMap="SourceFileChunkRecordResultMap">
+        select source_file_id, file_path, chunk_index, chunk_text, is_verbatim
+        from source_file_chunks
+        order by file_path, chunk_index
+    </select>
+
+    <select id="findByFilePaths" resultMap="SourceFileChunkRecordResultMap">
+        select source_file_id, file_path, chunk_index, chunk_text, is_verbatim
+        from source_file_chunks
+        where file_path in
+        <foreach collection="filePaths" item="filePath" open="(" separator="," close=")">
+            #{filePath}
+        </foreach>
+        order by file_path, chunk_index
+    </select>
+
+    <select id="searchLexical" resultMap="LexicalSearchRecordResultMap">
+        with query as (
+            select plainto_tsquery(cast(#{tsConfig} as regconfig), #{question}) as tsq
+        )
+        select null::bigint as source_id,
+               concat(sfc.file_path, '#', sfc.chunk_index) as item_key,
+               sfc.file_path as concept_id,
+               sfc.file_path as title,
+               sfc.chunk_text as content,
+               concat(
+                   '{"filePath":"',
+                   replace(coalesce(sfc.file_path, ''), '"', '\"'),
+                   '","chunkIndex":',
+                   sfc.chunk_index,
+                   ',"verbatim":',
+                   sfc.is_verbatim,
+                   '}'
+               ) as metadata_json,
+               array[sfc.file_path]::text[] as source_paths,
+               sfc.chunk_index,
+               sfc.is_verbatim as verbatim,
+               ts_rank_cd(sfc.search_tsv, query.tsq)
+               <foreach collection="likeTokens" item="likeToken">
+                   + case when sfc.file_path_norm like #{likeToken} then 1.5 else 0 end
+                   + case when lower(sfc.chunk_text) like #{likeToken} then 3.0 else 0 end
+               </foreach>
+               <foreach collection="assignmentTokens" item="assignmentToken">
+                   + case when lower(sfc.chunk_text) like #{assignmentToken} then 4.0 else 0 end
+               </foreach>
+               as score
+        from source_file_chunks sfc
+        cross join query
+        where sfc.search_tsv @@ query.tsq
+        <foreach collection="likeTokens" item="likeToken">
+           or sfc.file_path_norm like #{likeToken}
+           or lower(sfc.chunk_text) like #{likeToken}
+        </foreach>
+        order by score desc, sfc.indexed_at desc, sfc.file_path asc, sfc.chunk_index asc
+        limit #{limit}
+    </select>
+
+    <select id="findNeighborChunks" resultMap="LexicalSearchRecordResultMap">
+        select null::bigint as source_id,
+               concat(sfc.file_path, '#', sfc.chunk_index) as item_key,
+               sfc.file_path as concept_id,
+               sfc.file_path as title,
+               sfc.chunk_text as content,
+               concat(
+                   '{"filePath":"',
+                   replace(coalesce(sfc.file_path, ''), '"', '\"'),
+                   '","chunkIndex":',
+                   sfc.chunk_index,
+                   ',"verbatim":',
+                   sfc.is_verbatim,
+                   '}'
+               ) as metadata_json,
+               array[sfc.file_path]::text[] as source_paths,
+               sfc.chunk_index,
+               sfc.is_verbatim as verbatim,
+               (1.0 / (1 + abs(sfc.chunk_index - #{chunkIndex}))) as score
+        from source_file_chunks sfc
+        where sfc.file_path = #{filePath}
+          and sfc.chunk_index between #{startIndex} and #{endIndex}
+          and sfc.chunk_index &lt;&gt; #{chunkIndex}
+        order by abs(sfc.chunk_index - #{chunkIndex}), sfc.chunk_index asc
+        limit #{limit}
+    </select>
+</mapper>

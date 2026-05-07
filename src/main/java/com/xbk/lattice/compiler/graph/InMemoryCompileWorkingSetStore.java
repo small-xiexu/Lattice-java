@@ -7,7 +7,6 @@ import com.xbk.lattice.compiler.domain.RawSource;
 import com.xbk.lattice.compiler.domain.SourceBatch;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -25,7 +24,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 @ConditionalOnProperty(
         prefix = "lattice.compiler.working-set",
         name = "store",

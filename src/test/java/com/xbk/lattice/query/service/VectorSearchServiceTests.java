@@ -13,10 +13,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 向量检索服务测试
@@ -42,7 +47,7 @@ class VectorSearchServiceTests {
                 new FixedEmbeddingModel(createEmbedding(0.1F, 1536))
         );
 
-        assertThat(vectorSearchService.search("退款状态是什么", 5)).isEmpty();
+        assertThat(vectorSearchService.search(executionContext("退款状态是什么"))).isEmpty();
     }
 
     /**
@@ -52,6 +57,7 @@ class VectorSearchServiceTests {
     void shouldReturnNearestVectorHitsWhenCapabilitiesAvailable() {
         QuerySearchProperties querySearchProperties = new QuerySearchProperties();
         querySearchProperties.getVector().setEnabled(true);
+        querySearchProperties.getVector().setExpectedDimensions(1536);
 
         FakeArticleVectorJdbcRepository articleVectorJdbcRepository = new FakeArticleVectorJdbcRepository();
         articleVectorJdbcRepository.setQueryResults(List.of(
@@ -72,7 +78,7 @@ class VectorSearchServiceTests {
                 new FixedEmbeddingModel(createEmbedding(0.1F, 1536))
         );
 
-        List<QueryArticleHit> hits = vectorSearchService.search("退款状态是什么", 5);
+        List<QueryArticleHit> hits = vectorSearchService.search(executionContext("退款状态是什么"));
 
         assertThat(hits).hasSize(1);
         assertThat(hits.get(0).getConceptId()).isEqualTo("refund-status");
@@ -81,10 +87,10 @@ class VectorSearchServiceTests {
     }
 
     /**
-     * 验证 embedding 调用失败时，会自动降级为空结果而不是中断主链。
+     * 验证 embedding 调用失败时，会把异常交给 dispatcher 记录通道失败。
      */
     @Test
-    void shouldGracefullyFallbackWhenEmbeddingFails() {
+    void shouldThrowWhenEmbeddingFailsInDispatcherContext() {
         QuerySearchProperties querySearchProperties = new QuerySearchProperties();
         querySearchProperties.getVector().setEnabled(true);
 
@@ -95,14 +101,16 @@ class VectorSearchServiceTests {
                 new FixedEmbeddingModel(new IllegalStateException("embedding failed"))
         );
 
-        assertThat(vectorSearchService.search("退款状态是什么", 5)).isEmpty();
+        assertThatThrownBy(() -> vectorSearchService.search(executionContext("退款状态是什么")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("embedding failed");
     }
 
     /**
-     * 验证查询向量维度不匹配时，会自动降级为空结果。
+     * 验证查询向量维度不匹配时，会把异常交给 dispatcher 记录通道失败。
      */
     @Test
-    void shouldFallbackWhenEmbeddingDimensionsMismatch() {
+    void shouldThrowWhenEmbeddingDimensionsMismatch() {
         QuerySearchProperties querySearchProperties = new QuerySearchProperties();
         querySearchProperties.getVector().setEnabled(true);
         querySearchProperties.getVector().setExpectedDimensions(1536);
@@ -126,7 +134,9 @@ class VectorSearchServiceTests {
                 new FixedEmbeddingModel(new float[]{0.1F, 0.2F, 0.3F})
         );
 
-        assertThat(vectorSearchService.search("退款状态是什么", 5)).isEmpty();
+        assertThatThrownBy(() -> vectorSearchService.search(executionContext("退款状态是什么")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("dimensions");
         assertThat(articleVectorJdbcRepository.getLastQueryEmbedding()).isNull();
     }
 
@@ -150,10 +160,40 @@ class VectorSearchServiceTests {
                 fixedEmbeddingModel
         );
 
-        vectorSearchService.search("退款状态是什么", 5);
+        vectorSearchService.search(executionContext("退款状态是什么"));
 
         assertThat(fixedEmbeddingModel.getLastRequestedModel()).isEqualTo("text-embedding-3-large");
         assertThat(fixedEmbeddingModel.getLastRequestedDimensions()).isEqualTo(3072);
+    }
+
+    /**
+     * 创建检索执行上下文。
+     *
+     * @param question 查询问题
+     * @return 检索执行上下文
+     */
+    private RetrievalExecutionContext executionContext(String question) {
+        Map<String, Double> weights = new LinkedHashMap<String, Double>();
+        weights.put(RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR, 1.0D);
+        Set<String> enabledChannels = new LinkedHashSet<String>();
+        enabledChannels.add(RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR);
+        RetrievalStrategy retrievalStrategy = new RetrievalStrategy(
+                question,
+                QueryIntent.GENERAL,
+                false,
+                5,
+                weights,
+                enabledChannels
+        );
+        RetrievalQueryContext retrievalQueryContext = new RetrievalQueryContext(
+                "query-vector-test",
+                question,
+                question,
+                QueryRewriteResult.unchanged(question),
+                QueryIntent.GENERAL,
+                retrievalStrategy
+        );
+        return new RetrievalExecutionContext(retrievalQueryContext, 5);
     }
 
     /**

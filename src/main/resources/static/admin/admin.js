@@ -680,17 +680,19 @@
     }
 
     async function saveRetrievalConfig() {
-        const payload = {
+        const payload = buildRetrievalConfigPayload({
             parallelEnabled: document.getElementById("retrieval-config-parallel-enabled").checked,
             ftsWeight: parseOptionalDecimal(document.getElementById("retrieval-config-fts-weight").value),
             sourceWeight: parseOptionalDecimal(document.getElementById("retrieval-config-source-weight").value),
+            factCardWeight: parseOptionalDecimal(document.getElementById("retrieval-config-fact-card-weight").value),
             contributionWeight: parseOptionalDecimal(document.getElementById("retrieval-config-contribution-weight").value),
             articleVectorWeight: parseOptionalDecimal(document.getElementById("retrieval-config-article-vector-weight").value),
             chunkVectorWeight: parseOptionalDecimal(document.getElementById("retrieval-config-chunk-vector-weight").value),
             rrfK: parseOptionalInteger(document.getElementById("retrieval-config-rrf-k").value)
-        };
+        });
         if (payload.ftsWeight === null
                 || payload.sourceWeight === null
+                || payload.factCardWeight === null
                 || payload.contributionWeight === null
                 || payload.articleVectorWeight === null
                 || payload.chunkVectorWeight === null) {
@@ -721,10 +723,33 @@
         document.getElementById("retrieval-config-parallel-enabled").checked = !!result.parallelEnabled;
         document.getElementById("retrieval-config-fts-weight").value = result.ftsWeight;
         document.getElementById("retrieval-config-source-weight").value = result.sourceWeight;
+        document.getElementById("retrieval-config-fact-card-weight").value = result.factCardWeight;
         document.getElementById("retrieval-config-contribution-weight").value = result.contributionWeight;
         document.getElementById("retrieval-config-article-vector-weight").value = result.articleVectorWeight;
         document.getElementById("retrieval-config-chunk-vector-weight").value = result.chunkVectorWeight;
         document.getElementById("retrieval-config-rrf-k").value = result.rrfK;
+    }
+
+    function buildRetrievalConfigPayload(visibleValues) {
+        const current = state.retrievalConfig || {};
+        return {
+            parallelEnabled: visibleValues.parallelEnabled,
+            rewriteEnabled: current.rewriteEnabled !== undefined ? !!current.rewriteEnabled : true,
+            intentAwareVectorEnabled: current.intentAwareVectorEnabled !== undefined
+                    ? !!current.intentAwareVectorEnabled
+                    : true,
+            ftsWeight: visibleValues.ftsWeight,
+            refkeyWeight: current.refkeyWeight !== undefined ? Number(current.refkeyWeight) : 1.45,
+            articleChunkWeight: current.articleChunkWeight !== undefined ? Number(current.articleChunkWeight) : 1.25,
+            sourceWeight: visibleValues.sourceWeight,
+            sourceChunkWeight: current.sourceChunkWeight !== undefined ? Number(current.sourceChunkWeight) : 1.3,
+            factCardWeight: visibleValues.factCardWeight,
+            contributionWeight: visibleValues.contributionWeight,
+            graphWeight: current.graphWeight !== undefined ? Number(current.graphWeight) : 1.2,
+            articleVectorWeight: visibleValues.articleVectorWeight,
+            chunkVectorWeight: visibleValues.chunkVectorWeight,
+            rrfK: visibleValues.rrfK
+        };
     }
 
     function fillVectorConfigForm(result) {

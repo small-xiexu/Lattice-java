@@ -3,7 +3,6 @@ package com.xbk.lattice.api.admin;
 import com.xbk.lattice.admin.service.AdminVectorIndexMaintenanceService;
 import com.xbk.lattice.query.service.QueryVectorConfigService;
 import com.xbk.lattice.query.service.QueryVectorConfigState;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -20,7 +19,6 @@ import org.springframework.util.StringUtils;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 @RequestMapping("/api/v1/admin/vector")
 public class AdminVectorIndexController {
 

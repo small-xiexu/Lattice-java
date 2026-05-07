@@ -3,6 +3,7 @@ package com.xbk.lattice.governance;
 import com.xbk.lattice.api.query.QueryResponse;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
+import com.xbk.lattice.infra.persistence.AnswerFeedbackJdbcRepository;
 import com.xbk.lattice.infra.persistence.ContributionJdbcRepository;
 import com.xbk.lattice.infra.persistence.ContributionRecord;
 import com.xbk.lattice.infra.persistence.PendingQueryRecord;
@@ -36,7 +37,9 @@ class StatusServiceTests {
         StatusService statusService = new StatusService(
                 new FakeArticleJdbcRepository(List.of(
                         article("payment-timeout", "passed"),
-                        article("refund-manual-review", "needs_human_review")
+                        article("refund-manual-review", "needs_human_review"),
+                        riskArticle("conflicting-answer", "passed", "high", List.of("source_conflict"), false, false),
+                        riskArticle("reported-hotspot", "passed", "medium", List.of("user_reported"), true, true)
                 )),
                 new FakeSourceFileJdbcRepository(List.of(
                         new SourceFileRecord("payment/a.md", "a", "md", 1),
@@ -50,20 +53,27 @@ class StatusServiceTests {
                 new FixedPendingQueryManager(List.of(
                         pending("query-1"),
                         pending("query-2")
-                ))
+                )),
+                new FixedAnswerFeedbackJdbcRepository(3)
         );
 
         StatusSnapshot snapshot = statusService.snapshot();
 
-        assertThat(snapshot.getArticleCount()).isEqualTo(2);
+        assertThat(snapshot.getArticleCount()).isEqualTo(4);
         assertThat(snapshot.getSourceFileCount()).isEqualTo(3);
         assertThat(snapshot.getContributionCount()).isEqualTo(2);
         assertThat(snapshot.getPendingQueryCount()).isEqualTo(2);
         assertThat(snapshot.getReviewPendingArticleCount()).isEqualTo(1);
+        assertThat(snapshot.getHighRiskArticleCount()).isEqualTo(1);
+        assertThat(snapshot.getHotspotPendingVerificationCount()).isEqualTo(1);
+        assertThat(snapshot.getUserReportedAnswerCount()).isEqualTo(1);
+        assertThat(snapshot.getAnswerFeedbackPendingCount()).isEqualTo(3);
     }
 
     private ArticleRecord article(String conceptId, String reviewStatus) {
         return new ArticleRecord(
+                null,
+                conceptId,
                 conceptId,
                 conceptId,
                 "# " + conceptId,
@@ -77,6 +87,37 @@ class StatusServiceTests {
                 List.of(),
                 "high",
                 reviewStatus
+        );
+    }
+
+    private ArticleRecord riskArticle(
+            String conceptId,
+            String reviewStatus,
+            String riskLevel,
+            List<String> riskReasons,
+            boolean hotspot,
+            boolean requiresResultVerification
+    ) {
+        return new ArticleRecord(
+                null,
+                conceptId,
+                conceptId,
+                conceptId,
+                "# " + conceptId,
+                "active",
+                OffsetDateTime.now(),
+                List.of("payment/a.md"),
+                "{}",
+                "summary",
+                List.of("keyword"),
+                List.of(),
+                List.of(),
+                "high",
+                reviewStatus,
+                riskLevel,
+                riskReasons,
+                hotspot,
+                requiresResultVerification
         );
     }
 
@@ -182,6 +223,24 @@ class StatusServiceTests {
         @Override
         public List<PendingQueryRecord> listPendingQueries() {
             return records;
+        }
+    }
+
+    private static class FixedAnswerFeedbackJdbcRepository extends AnswerFeedbackJdbcRepository {
+
+        private final int pendingCount;
+
+        private FixedAnswerFeedbackJdbcRepository(int pendingCount) {
+            super(new JdbcTemplate());
+            this.pendingCount = pendingCount;
+        }
+
+        @Override
+        public int countByStatus(String status) {
+            if (AnswerFeedbackService.STATUS_PENDING.equalsIgnoreCase(status)) {
+                return pendingCount;
+            }
+            return 0;
         }
     }
 }

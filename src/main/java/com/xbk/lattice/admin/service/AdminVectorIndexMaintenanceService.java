@@ -19,7 +19,6 @@ import com.xbk.lattice.query.service.VectorSchemaInspection;
 import com.xbk.lattice.query.service.VectorSchemaInspector;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,7 +35,6 @@ import java.util.Optional;
  */
 @Slf4j
 @Service
-@Profile("jdbc")
 public class AdminVectorIndexMaintenanceService {
 
     private final SearchCapabilityService searchCapabilityService;

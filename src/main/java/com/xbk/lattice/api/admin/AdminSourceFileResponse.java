@@ -23,6 +23,8 @@ public class AdminSourceFileResponse {
 
     private final String parseProvider;
 
+    private final String contentPreview;
+
     public AdminSourceFileResponse(
             Long id,
             Long sourceId,
@@ -30,7 +32,8 @@ public class AdminSourceFileResponse {
             String format,
             long fileSize,
             String parseMode,
-            String parseProvider
+            String parseProvider,
+            String contentPreview
     ) {
         this.id = id;
         this.sourceId = sourceId;
@@ -39,6 +42,7 @@ public class AdminSourceFileResponse {
         this.fileSize = fileSize;
         this.parseMode = parseMode;
         this.parseProvider = parseProvider;
+        this.contentPreview = contentPreview;
     }
 
     public Long getId() {
@@ -67,5 +71,9 @@ public class AdminSourceFileResponse {
 
     public String getParseProvider() {
         return parseProvider;
+    }
+
+    public String getContentPreview() {
+        return contentPreview;
     }
 }

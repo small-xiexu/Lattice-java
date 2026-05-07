@@ -4,7 +4,6 @@ import com.xbk.lattice.governance.InspectService;
 import com.xbk.lattice.governance.InspectionAnswerImportService;
 import com.xbk.lattice.governance.InspectionImportResult;
 import com.xbk.lattice.governance.InspectionReport;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 @RequestMapping("/api/v1/admin/inspect")
 public class AdminInspectController {
 

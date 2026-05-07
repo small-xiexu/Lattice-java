@@ -3,7 +3,6 @@ package com.xbk.lattice.query.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.api.query.QueryResponse;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -17,7 +16,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class RedisQueryCacheStore implements QueryCacheStore {
 
     private final RedisKeyValueStore redisKeyValueStore;

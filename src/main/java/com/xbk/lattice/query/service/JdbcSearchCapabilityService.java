@@ -1,7 +1,6 @@
 package com.xbk.lattice.query.service;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -14,7 +13,6 @@ import org.springframework.stereotype.Service;
  */
 @Slf4j
 @Service
-@Profile("jdbc")
 public class JdbcSearchCapabilityService implements SearchCapabilityService {
 
     private final JdbcTemplate jdbcTemplate;
@@ -148,6 +146,30 @@ public class JdbcSearchCapabilityService implements SearchCapabilityService {
         }
         catch (RuntimeException ex) {
             log.warn("Failed to inspect article_chunk_vector_index availability", ex);
+            return false;
+        }
+    }
+
+    /**
+     * 返回事实证据卡向量索引表是否可用。
+     *
+     * @return 是否可用
+     */
+    @Override
+    public boolean hasFactCardVectorIndex() {
+        if (jdbcTemplate == null) {
+            return false;
+        }
+
+        try {
+            Boolean available = jdbcTemplate.queryForObject(
+                    "select to_regclass(current_schema() || '.fact_card_vector_index') is not null",
+                    Boolean.class
+            );
+            return Boolean.TRUE.equals(available);
+        }
+        catch (RuntimeException ex) {
+            log.warn("Failed to inspect fact_card_vector_index availability", ex);
             return false;
         }
     }

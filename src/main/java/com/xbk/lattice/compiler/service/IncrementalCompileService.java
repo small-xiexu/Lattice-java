@@ -97,6 +97,8 @@ public class IncrementalCompileService {
 
     private RepoSnapshotService repoSnapshotService;
 
+    private FactCardGenerationService factCardGenerationService;
+
     /**
      * 创建增量编译服务。
      *
@@ -328,6 +330,15 @@ public class IncrementalCompileService {
      */
     public void setRepoSnapshotService(RepoSnapshotService repoSnapshotService) {
         this.repoSnapshotService = repoSnapshotService;
+    }
+
+    /**
+     * 注入事实证据卡生成服务。
+     *
+     * @param factCardGenerationService 事实证据卡生成服务
+     */
+    public void setFactCardGenerationService(FactCardGenerationService factCardGenerationService) {
+        this.factCardGenerationService = factCardGenerationService;
     }
 
     /**
@@ -611,12 +622,41 @@ public class IncrementalCompileService {
         }
 
         for (RawSource rawSource : rawSources) {
+            Long sourceFileId = resolveSourceFileId(rawSource);
             sourceFileChunkJdbcRepository.replaceChunksFromContent(
+                    sourceFileId,
                     rawSource.getRelativePath(),
                     rawSource.getContent(),
                     rawSource.isVerbatim()
             );
+            rebuildFactCards(sourceFileId);
         }
+    }
+
+    /**
+     * 基于最新 source chunks 重建事实证据卡。
+     *
+     * @param sourceFileId 源文件主键
+     */
+    private void rebuildFactCards(Long sourceFileId) {
+        if (factCardGenerationService == null || sourceFileId == null) {
+            return;
+        }
+        factCardGenerationService.rebuildForSourceFile(sourceFileId);
+    }
+
+    /**
+     * 解析源文件主键。
+     *
+     * @param rawSource 原始源文件
+     * @return 源文件主键
+     */
+    private Long resolveSourceFileId(RawSource rawSource) {
+        Optional<SourceFileRecord> sourceFileRecord = findExistingSourceFileRecord(rawSource);
+        if (sourceFileRecord.isEmpty()) {
+            return null;
+        }
+        return sourceFileRecord.orElseThrow().getId();
     }
 
     /**

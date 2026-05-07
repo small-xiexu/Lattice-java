@@ -1,11 +1,8 @@
 package com.xbk.lattice.infra.persistence;
 
-import org.springframework.context.annotation.Profile;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.xbk.lattice.infra.persistence.mapper.CompileJobStepMapper;
 import org.springframework.stereotype.Repository;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -17,18 +14,17 @@ import java.util.List;
  * @author xiexu
  */
 @Repository
-@Profile("jdbc")
 public class CompileJobStepJdbcRepository {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final CompileJobStepMapper compileJobStepMapper;
 
     /**
      * 创建编译步骤 JDBC 仓储。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @param compileJobStepMapper 编译步骤 Mapper
      */
-    public CompileJobStepJdbcRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public CompileJobStepJdbcRepository(CompileJobStepMapper compileJobStepMapper) {
+        this.compileJobStepMapper = compileJobStepMapper;
     }
 
     /**
@@ -37,28 +33,7 @@ public class CompileJobStepJdbcRepository {
      * @param compileJobStepRecord 步骤记录
      */
     public void createRunningStep(CompileJobStepRecord compileJobStepRecord) {
-        jdbcTemplate.update(
-                """
-                        insert into compile_job_steps (
-                            job_id, step_execution_id, step_name, agent_role, model_route, sequence_no,
-                            status, summary, input_summary, output_summary, error_message, started_at, finished_at
-                        )
-                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                compileJobStepRecord.getJobId(),
-                compileJobStepRecord.getStepExecutionId(),
-                compileJobStepRecord.getStepName(),
-                compileJobStepRecord.getAgentRole(),
-                compileJobStepRecord.getModelRoute(),
-                compileJobStepRecord.getSequenceNo(),
-                compileJobStepRecord.getStatus(),
-                compileJobStepRecord.getSummary(),
-                compileJobStepRecord.getInputSummary(),
-                compileJobStepRecord.getOutputSummary(),
-                compileJobStepRecord.getErrorMessage(),
-                compileJobStepRecord.getStartedAt(),
-                compileJobStepRecord.getFinishedAt()
-        );
+        compileJobStepMapper.createRunningStep(compileJobStepRecord);
     }
 
     /**
@@ -77,23 +52,7 @@ public class CompileJobStepJdbcRepository {
             String outputSummary,
             OffsetDateTime finishedAt
     ) {
-        jdbcTemplate.update(
-                """
-                        update compile_job_steps
-                        set status = 'succeeded',
-                            summary = ?,
-                            output_summary = ?,
-                            error_message = null,
-                            finished_at = ?
-                        where step_execution_id = ?
-                          and sequence_no = ?
-                        """,
-                summary,
-                outputSummary,
-                finishedAt,
-                stepExecutionId,
-                sequenceNo
-        );
+        compileJobStepMapper.markSucceeded(stepExecutionId, sequenceNo, summary, outputSummary, finishedAt);
     }
 
     /**
@@ -112,22 +71,7 @@ public class CompileJobStepJdbcRepository {
             String errorMessage,
             OffsetDateTime finishedAt
     ) {
-        jdbcTemplate.update(
-                """
-                        update compile_job_steps
-                        set status = 'failed',
-                            summary = ?,
-                            error_message = ?,
-                            finished_at = ?
-                        where step_execution_id = ?
-                          and sequence_no = ?
-                        """,
-                summary,
-                errorMessage,
-                finishedAt,
-                stepExecutionId,
-                sequenceNo
-        );
+        compileJobStepMapper.markFailed(stepExecutionId, sequenceNo, summary, errorMessage, finishedAt);
     }
 
     /**
@@ -137,35 +81,6 @@ public class CompileJobStepJdbcRepository {
      * @return 步骤记录列表
      */
     public List<CompileJobStepRecord> findByJobId(String jobId) {
-        return jdbcTemplate.query(
-                """
-                        select job_id, step_execution_id, step_name, agent_role, model_route,
-                               sequence_no, status, summary, input_summary,
-                               output_summary, error_message, started_at, finished_at
-                        from compile_job_steps
-                        where job_id = ?
-                        order by sequence_no asc
-                        """,
-                this::mapCompileJobStepRecord,
-                jobId
-        );
-    }
-
-    private CompileJobStepRecord mapCompileJobStepRecord(ResultSet resultSet, int rowNum) throws SQLException {
-        return new CompileJobStepRecord(
-                resultSet.getString("job_id"),
-                resultSet.getString("step_execution_id"),
-                resultSet.getString("step_name"),
-                resultSet.getString("agent_role"),
-                resultSet.getString("model_route"),
-                resultSet.getInt("sequence_no"),
-                resultSet.getString("status"),
-                resultSet.getString("summary"),
-                resultSet.getString("input_summary"),
-                resultSet.getString("output_summary"),
-                resultSet.getString("error_message"),
-                resultSet.getObject("started_at", OffsetDateTime.class),
-                resultSet.getObject("finished_at", OffsetDateTime.class)
-        );
+        return compileJobStepMapper.findByJobId(jobId);
     }
 }

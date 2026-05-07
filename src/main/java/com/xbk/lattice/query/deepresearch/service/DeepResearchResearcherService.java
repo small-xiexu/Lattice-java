@@ -18,7 +18,7 @@ import com.xbk.lattice.query.service.KnowledgeSearchService;
 import com.xbk.lattice.query.service.QueryArticleHit;
 import com.xbk.lattice.query.service.QueryEvidenceRelevanceSupport;
 import com.xbk.lattice.query.service.QueryEvidenceType;
-import org.springframework.context.annotation.Profile;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -36,8 +36,8 @@ import java.util.regex.Pattern;
  *
  * @author xiexu
  */
+@Slf4j
 @Service
-@Profile("jdbc")
 public class DeepResearchResearcherService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -90,19 +90,24 @@ public class DeepResearchResearcherService {
         EvidenceCard evidenceCard = new EvidenceCard();
         evidenceCard.setEvidenceId(executionContext.nextEvidenceId());
         evidenceCard.setLayerIndex(layerIndex);
-        evidenceCard.setTaskId(task.getTaskId());
-        evidenceCard.setScope(task.getQuestion());
+        evidenceCard.setTaskId(resolveTaskId(task));
+        evidenceCard.setScope(resolveTaskQuestion(task));
+        List<EvidenceCard> effectivePreferredCards = preferredCards == null ? List.of() : preferredCards;
         if (executionContext.isTimedOut()) {
             evidenceCard.getGaps().add("overall_timeout");
             return evidenceCard;
         }
         if (task != null
                 && task.getTaskType() == com.xbk.lattice.query.deepresearch.domain.ResearchTaskType.SYNTHESIS
-                && !preferredCards.isEmpty()) {
-            appendSynthesisPlaceholder(evidenceCard, preferredCards);
+                && !effectivePreferredCards.isEmpty()) {
+            appendSynthesisPlaceholder(evidenceCard, effectivePreferredCards);
             return evidenceCard;
         }
-        List<QueryArticleHit> hits = filterRelevantHits(task, knowledgeSearchService.search(task.getQuestion(), 5));
+        List<QueryArticleHit> searchHits = searchSafely(task, evidenceCard);
+        if (searchHits.isEmpty() && evidenceCard.getGaps().contains("retrieval_failed")) {
+            return evidenceCard;
+        }
+        List<QueryArticleHit> hits = filterRelevantHits(task, searchHits);
         if (hits.isEmpty()) {
             evidenceCard.getGaps().add("no_relevant_hits");
             evidenceCard.getFollowUps().add("broaden_query_or_refine_task");
@@ -115,7 +120,7 @@ public class DeepResearchResearcherService {
                     : hit.getArticleKey();
             evidenceCard.getSelectedArticleKeys().add(articleKey);
         }
-        String answerSummary = buildAnswerSummary(queryId, task, hits, executionContext);
+        String answerSummary = buildAnswerSummary(queryId, task, hits, executionContext, evidenceCard);
         if (answerSummary.isBlank()) {
             evidenceCard.getGaps().add("insufficient_grounding");
             evidenceCard.getFollowUps().add("retry_structured_fact_extraction");
@@ -137,10 +142,60 @@ public class DeepResearchResearcherService {
         if (previousLayerSummary != null && previousLayerSummary.getSummaryMarkdown() != null) {
             evidenceCard.getRelatedLeads().add("previous-layer:" + previousLayerSummary.getLayerIndex());
         }
-        for (EvidenceCard preferredCard : preferredCards) {
+        for (EvidenceCard preferredCard : effectivePreferredCards) {
             evidenceCard.getRelatedLeads().add(preferredCard.getEvidenceId());
         }
         return evidenceCard;
+    }
+
+    /**
+     * 返回任务标识，缺失时给出稳定占位值。
+     *
+     * @param task 研究任务
+     * @return 任务标识
+     */
+    private String resolveTaskId(ResearchTask task) {
+        if (task == null || task.getTaskId() == null || task.getTaskId().isBlank()) {
+            return "deep_research_task";
+        }
+        return task.getTaskId();
+    }
+
+    /**
+     * 返回任务问题，缺失时给出空字符串。
+     *
+     * @param task 研究任务
+     * @return 任务问题
+     */
+    private String resolveTaskQuestion(ResearchTask task) {
+        if (task == null || task.getQuestion() == null) {
+            return "";
+        }
+        return task.getQuestion();
+    }
+
+    /**
+     * 安全执行任务级检索，避免单通道异常拖垮整轮 Deep Research。
+     *
+     * @param task 研究任务
+     * @param evidenceCard 证据卡
+     * @return 检索命中
+     */
+    private List<QueryArticleHit> searchSafely(ResearchTask task, EvidenceCard evidenceCard) {
+        if (knowledgeSearchService == null) {
+            evidenceCard.getGaps().add("retrieval_unavailable");
+            evidenceCard.getFollowUps().add("retry_with_available_retrieval_channels");
+            return List.of();
+        }
+        try {
+            return knowledgeSearchService.search(resolveTaskQuestion(task), 5);
+        }
+        catch (RuntimeException exception) {
+            log.warn("Deep Research task retrieval failed. taskId: {}", resolveTaskId(task), exception);
+            evidenceCard.getGaps().add("retrieval_failed");
+            evidenceCard.getFollowUps().add("retry_with_available_retrieval_channels");
+            return List.of();
+        }
     }
 
     /**
@@ -343,7 +398,14 @@ public class DeepResearchResearcherService {
         StructuredEvidenceBundle structuredEvidenceBundle = parseStructuredEvidence(answerSummary);
         if (!structuredEvidenceBundle.isValid()) {
             evidenceCard.getFollowUps().add("schema_repair_attempted");
-            String repairedSummary = buildRepairSummary(queryId, task, hits, answerSummary, executionContext);
+            String repairedSummary = buildRepairSummary(
+                    queryId,
+                    task,
+                    hits,
+                    answerSummary,
+                    evidenceCard,
+                    executionContext
+            );
             structuredEvidenceBundle = parseStructuredEvidence(repairedSummary);
         }
         if (structuredEvidenceBundle.isValid()) {
@@ -361,6 +423,7 @@ public class DeepResearchResearcherService {
             ResearchTask task,
             List<QueryArticleHit> hits,
             String invalidSummary,
+            EvidenceCard evidenceCard,
             DeepResearchExecutionContext executionContext
     ) {
         if (!executionContext.tryAcquireLlmCall()) {
@@ -369,16 +432,24 @@ public class DeepResearchResearcherService {
         String repairPrompt = "请把以下 Deep Research 研究结果修复为 JSON Schema："
                 + "{\"evidenceAnchors\":[],\"factFindings\":[]}。原始输出："
                 + (invalidSummary == null ? "" : invalidSummary);
-        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
-                queryId,
-                ExecutionLlmSnapshotService.DEEP_RESEARCH_SCENE,
-                ExecutionLlmSnapshotService.ROLE_RESEARCHER,
-                repairPrompt,
-                hits
-        );
-        return answerPayload == null || answerPayload.getAnswerMarkdown() == null
-                ? ""
-                : answerPayload.getAnswerMarkdown();
+        try {
+            QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                    queryId,
+                    ExecutionLlmSnapshotService.DEEP_RESEARCH_SCENE,
+                    ExecutionLlmSnapshotService.ROLE_RESEARCHER,
+                    repairPrompt,
+                    hits
+            );
+            return answerPayload == null || answerPayload.getAnswerMarkdown() == null
+                    ? ""
+                    : answerPayload.getAnswerMarkdown();
+        }
+        catch (RuntimeException exception) {
+            log.warn("Deep Research schema repair failed. taskId: {}", resolveTaskId(task), exception);
+            evidenceCard.getGaps().add("schema_repair_failed");
+            evidenceCard.getFollowUps().add("retry_structured_fact_extraction");
+            return "";
+        }
     }
 
     private StructuredEvidenceBundle parseStructuredEvidence(String answerSummary) {
@@ -480,24 +551,49 @@ public class DeepResearchResearcherService {
             String queryId,
             ResearchTask task,
             List<QueryArticleHit> hits,
-            DeepResearchExecutionContext executionContext
+            DeepResearchExecutionContext executionContext,
+            EvidenceCard evidenceCard
     ) {
         if (!executionContext.tryAcquireLlmCall()) {
-            if (hits.isEmpty()) {
-                return "";
-            }
-            return hits.get(0).getTitle() + "：" + extractSnippet(hits.get(0).getContent());
+            return fallbackSummaryFromHits(hits);
         }
-        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
-                queryId,
-                ExecutionLlmSnapshotService.DEEP_RESEARCH_SCENE,
-                ExecutionLlmSnapshotService.ROLE_RESEARCHER,
-                task.getQuestion(),
-                hits
-        );
-        return answerPayload == null || answerPayload.getAnswerMarkdown() == null
-                ? ""
-                : answerPayload.getAnswerMarkdown();
+        if (answerGenerationService == null) {
+            evidenceCard.getGaps().add("answer_generation_unavailable");
+            evidenceCard.getFollowUps().add("fallback_to_retrieved_evidence");
+            return fallbackSummaryFromHits(hits);
+        }
+        try {
+            QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                    queryId,
+                    ExecutionLlmSnapshotService.DEEP_RESEARCH_SCENE,
+                    ExecutionLlmSnapshotService.ROLE_RESEARCHER,
+                    resolveTaskQuestion(task),
+                    hits
+            );
+            return answerPayload == null || answerPayload.getAnswerMarkdown() == null
+                    ? ""
+                    : answerPayload.getAnswerMarkdown();
+        }
+        catch (RuntimeException exception) {
+            log.warn("Deep Research task answer generation failed. taskId: {}", resolveTaskId(task), exception);
+            evidenceCard.getGaps().add("answer_generation_failed");
+            evidenceCard.getFollowUps().add("fallback_to_retrieved_evidence");
+            return fallbackSummaryFromHits(hits);
+        }
+    }
+
+    /**
+     * 从已有检索命中生成最小降级摘要。
+     *
+     * @param hits 检索命中
+     * @return 降级摘要
+     */
+    private String fallbackSummaryFromHits(List<QueryArticleHit> hits) {
+        if (hits == null || hits.isEmpty()) {
+            return "";
+        }
+        QueryArticleHit firstHit = hits.get(0);
+        return firstHit.getTitle() + "：" + extractEvidenceSnippet(firstHit);
     }
 
     private void appendFindings(
@@ -595,6 +691,10 @@ public class DeepResearchResearcherService {
                     String focusedClaimSnippet = extractFocusedClaimSnippet(hit, claimText);
                     if (!focusedClaimSnippet.isBlank()) {
                         return focusedClaimSnippet;
+                    }
+                    String focusedEvidenceSnippet = extractEvidenceSnippet(hit);
+                    if (looksLikeLowValueEvidenceSnippet(claimText) && !focusedEvidenceSnippet.isBlank()) {
+                        return focusedEvidenceSnippet;
                     }
                     return claimText;
                 }
@@ -847,7 +947,7 @@ public class DeepResearchResearcherService {
         if (content == null || content.isBlank()) {
             return "";
         }
-        String normalized = content.trim().replaceAll("\\s+", " ");
+        String normalized = sanitizeEvidenceBody(content).trim().replaceAll("\\s+", " ");
         if (normalized.length() <= 180) {
             return normalized;
         }
@@ -894,15 +994,54 @@ public class DeepResearchResearcherService {
         if (hit == null) {
             return "";
         }
-        String bodySnippet = extractSnippet(sanitizeEvidenceBody(hit.getContent()));
-        if (!bodySnippet.isBlank()) {
-            return bodySnippet;
+        String focusedSnippet = extractFocusedQuestionSnippet(hit);
+        if (!focusedSnippet.isBlank()) {
+            return focusedSnippet;
         }
         String summary = extractArticleSummary(hit.getContent());
         if (summary != null && !summary.isBlank()) {
             return summary;
         }
+        String bodySnippet = extractSnippet(hit.getContent());
+        if (!bodySnippet.isBlank()) {
+            return bodySnippet;
+        }
         return "";
+    }
+
+    private String extractFocusedQuestionSnippet(QueryArticleHit hit) {
+        List<String> focusTokens = extractHardFactTokens(
+                (hit.getTitle() == null ? "" : hit.getTitle()) + " " + buildEvidenceText(hit)
+        );
+        if (focusTokens.isEmpty()) {
+            return "";
+        }
+        String body = sanitizeEvidenceBody(hit.getContent());
+        for (String focusToken : focusTokens) {
+            String focusedBodySnippet = extractSentenceContainingToken(body, focusToken);
+            if (!focusedBodySnippet.isBlank() && !looksLikeLowValueEvidenceSnippet(focusedBodySnippet)) {
+                return focusedBodySnippet;
+            }
+        }
+        String summary = extractArticleSummary(hit.getContent());
+        for (String focusToken : focusTokens) {
+            String focusedSummarySnippet = extractSentenceContainingToken(summary, focusToken);
+            if (!focusedSummarySnippet.isBlank() && !looksLikeLowValueEvidenceSnippet(focusedSummarySnippet)) {
+                return focusedSummarySnippet;
+            }
+        }
+        return "";
+    }
+
+    private boolean looksLikeLowValueEvidenceSnippet(String snippet) {
+        if (snippet == null || snippet.isBlank()) {
+            return true;
+        }
+        String normalizedSnippet = snippet.trim();
+        String lowerCaseSnippet = normalizedSnippet.toLowerCase(Locale.ROOT);
+        return lowerCaseSnippet.contains("目录")
+                || lowerCaseSnippet.contains("table of contents")
+                || normalizedSnippet.matches("(?s).*\\[[^\\]]+]\\(#[^)]+\\).*");
     }
 
     private String sanitizeEvidenceBody(String content) {
@@ -910,14 +1049,40 @@ public class DeepResearchResearcherService {
         if (normalizedContent.isBlank()) {
             return normalizedContent;
         }
-        return normalizedContent
+        String strippedBody = normalizedContent
                 .replaceAll("\\[\\[[^\\]]+]]", "")
                 .replaceAll("\\[→\\s*[^\\]]+]", "")
                 .replaceAll("\\[[^\\]]*编译[^\\]]*]", "")
                 .replaceAll("(?m)^#+\\s*", "")
-                .replace('|', ' ')
-                .replaceAll("\\s{2,}", " ")
-                .trim();
+                .replace('|', ' ');
+        StringBuilder bodyBuilder = new StringBuilder();
+        for (String rawLine : strippedBody.split("\\R")) {
+            String normalizedLine = rawLine == null ? "" : rawLine.trim();
+            if (normalizedLine.isEmpty() || looksLikeTableOfContentsLine(normalizedLine)) {
+                continue;
+            }
+            if (bodyBuilder.length() > 0) {
+                bodyBuilder.append(' ');
+            }
+            bodyBuilder.append(normalizedLine);
+        }
+        return bodyBuilder.toString().replaceAll("\\s{2,}", " ").trim();
+    }
+
+    private boolean looksLikeTableOfContentsLine(String normalizedLine) {
+        if (normalizedLine == null || normalizedLine.isBlank()) {
+            return false;
+        }
+        String compactLine = normalizedLine.trim();
+        if ("目录".equals(compactLine) || compactLine.matches("^[-+*]?\\s*目录\\s*$")) {
+            return true;
+        }
+        if (compactLine.matches("^[-+*]\\s*\\[[^\\]]+]\\(#[^)]+\\).*$")) {
+            return true;
+        }
+        return compactLine.matches("^\\d+(?:\\.\\d+)*\\s+.+$")
+                && compactLine.contains("#")
+                && compactLine.contains("-");
     }
 
     private double normalizeConfidence(double score) {

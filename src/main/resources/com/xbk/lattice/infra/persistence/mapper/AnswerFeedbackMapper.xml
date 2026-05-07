@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.AnswerFeedbackMapper">
+
+    <resultMap id="AnswerFeedbackRecordResultMap" type="com.xbk.lattice.infra.persistence.AnswerFeedbackRecord">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+            <arg column="query_id" javaType="java.lang.String"/>
+            <arg column="question" javaType="java.lang.String"/>
+            <arg column="answer_summary" javaType="java.lang.String"/>
+            <arg column="feedback_type" javaType="java.lang.String"/>
+            <arg column="comment" javaType="java.lang.String"/>
+            <arg column="article_keys" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="source_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="reported_by" javaType="java.lang.String"/>
+            <arg column="status" javaType="java.lang.String"/>
+            <arg column="resolution_comment" javaType="java.lang.String"/>
+            <arg column="handled_by" javaType="java.lang.String"/>
+            <arg column="handled_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="created_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="updated_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="AnswerFeedbackColumns">
+        id, query_id, question, answer_summary, feedback_type, comment,
+        article_keys, source_paths, reported_by, status, resolution_comment,
+        handled_by, handled_at, created_at, updated_at, metadata_json::text as metadata_json
+    </sql>
+
+    <select id="insert" resultType="java.lang.Long">
+        insert into pending_answer_feedback (
+            query_id, question, answer_summary, feedback_type, comment, article_keys,
+            source_paths, reported_by, status, resolution_comment, handled_by, handled_at,
+            created_at, updated_at, metadata_json
+        )
+        values (
+            #{record.queryId},
+            #{record.question},
+            #{record.answerSummary},
+            #{record.feedbackType},
+            #{record.comment},
+            #{record.articleKeys,typeHandler=com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler},
+            #{record.sourcePaths,typeHandler=com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler},
+            #{record.reportedBy},
+            #{record.status},
+            #{record.resolutionComment},
+            #{record.handledBy},
+            #{record.handledAt},
+            #{record.createdAt},
+            #{record.updatedAt},
+            #{record.metadataJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler}
+        )
+        returning id
+    </select>
+
+    <select id="findById" resultMap="AnswerFeedbackRecordResultMap">
+        select <include refid="AnswerFeedbackColumns"/>
+        from pending_answer_feedback
+        where id = #{id}
+    </select>
+
+    <select id="findAll" resultMap="AnswerFeedbackRecordResultMap">
+        select <include refid="AnswerFeedbackColumns"/>
+        from pending_answer_feedback
+        <where>
+            <if test="status != null">
+                upper(status) = upper(#{status})
+            </if>
+        </where>
+        order by created_at desc, id desc
+        limit #{limit}
+    </select>
+
+    <update id="updateStatus">
+        update pending_answer_feedback
+        set status = #{status},
+            resolution_comment = #{resolutionComment},
+            handled_by = #{handledBy},
+            handled_at = #{handledAt},
+            updated_at = CURRENT_TIMESTAMP
+        where id = #{id}
+    </update>
+
+    <select id="countByStatus" resultType="_int">
+        select count(*)
+        from pending_answer_feedback
+        where upper(status) = upper(#{status})
+    </select>
+</mapper>

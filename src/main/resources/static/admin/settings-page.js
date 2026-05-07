@@ -566,17 +566,19 @@
     }
 
     async function saveRetrievalConfig() {
-        const payload = {
+        const payload = buildRetrievalConfigPayload({
             parallelEnabled: document.getElementById("retrieval-config-parallel-enabled").checked,
             ftsWeight: parseOptionalDecimal(document.getElementById("retrieval-config-fts-weight").value),
             sourceWeight: parseOptionalDecimal(document.getElementById("retrieval-config-source-weight").value),
+            factCardWeight: parseOptionalDecimal(document.getElementById("retrieval-config-fact-card-weight").value),
             contributionWeight: parseOptionalDecimal(document.getElementById("retrieval-config-contribution-weight").value),
             articleVectorWeight: parseOptionalDecimal(document.getElementById("retrieval-config-article-vector-weight").value),
             chunkVectorWeight: parseOptionalDecimal(document.getElementById("retrieval-config-chunk-vector-weight").value),
             rrfK: parseOptionalInteger(document.getElementById("retrieval-config-rrf-k").value)
-        };
+        });
         if (payload.ftsWeight === null
                 || payload.sourceWeight === null
+                || payload.factCardWeight === null
                 || payload.contributionWeight === null
                 || payload.articleVectorWeight === null
                 || payload.chunkVectorWeight === null) {
@@ -610,6 +612,28 @@
             renderResultError("retrieval-config-result", "保存检索配置失败", error);
             showError("保存检索配置失败", error);
         }
+    }
+
+    function buildRetrievalConfigPayload(visibleValues) {
+        const current = state.retrievalConfig || {};
+        return {
+            parallelEnabled: visibleValues.parallelEnabled,
+            rewriteEnabled: current.rewriteEnabled !== undefined ? !!current.rewriteEnabled : true,
+            intentAwareVectorEnabled: current.intentAwareVectorEnabled !== undefined
+                    ? !!current.intentAwareVectorEnabled
+                    : true,
+            ftsWeight: visibleValues.ftsWeight,
+            refkeyWeight: current.refkeyWeight !== undefined ? Number(current.refkeyWeight) : 1.45,
+            articleChunkWeight: current.articleChunkWeight !== undefined ? Number(current.articleChunkWeight) : 1.25,
+            sourceWeight: visibleValues.sourceWeight,
+            sourceChunkWeight: current.sourceChunkWeight !== undefined ? Number(current.sourceChunkWeight) : 1.3,
+            factCardWeight: visibleValues.factCardWeight,
+            contributionWeight: visibleValues.contributionWeight,
+            graphWeight: current.graphWeight !== undefined ? Number(current.graphWeight) : 1.2,
+            articleVectorWeight: visibleValues.articleVectorWeight,
+            chunkVectorWeight: visibleValues.chunkVectorWeight,
+            rrfK: visibleValues.rrfK
+        };
     }
 
     async function refreshVectorMaintenanceAfterMutation(successMessage) {
@@ -1403,6 +1427,10 @@
         document.getElementById("retrieval-config-parallel-enabled").checked = !!effectiveConfig.parallelEnabled;
         document.getElementById("retrieval-config-fts-weight").value = renderNumberField(effectiveConfig.ftsWeight, "1.0");
         document.getElementById("retrieval-config-source-weight").value = renderNumberField(effectiveConfig.sourceWeight, "1.0");
+        document.getElementById("retrieval-config-fact-card-weight").value = renderNumberField(
+                effectiveConfig.factCardWeight,
+                "1.4"
+        );
         document.getElementById("retrieval-config-contribution-weight").value = renderNumberField(
                 effectiveConfig.contributionWeight,
                 "1.0"
@@ -1429,7 +1457,9 @@
             return;
         }
         const vectorWeight = Number(settings.articleVectorWeight || 0) + Number(settings.chunkVectorWeight || 0);
-        const textWeight = Number(settings.ftsWeight || 0) + Number(settings.sourceWeight || 0);
+        const textWeight = Number(settings.ftsWeight || 0)
+                + Number(settings.sourceWeight || 0)
+                + Number(settings.factCardWeight || 0);
         container.innerHTML = [
             renderMetricCard(
                     "并行检索",
@@ -1440,7 +1470,9 @@
             renderMetricCard(
                     "文本侧权重",
                     textWeight.toFixed(1),
-                    "FTS " + renderNumberValue(settings.ftsWeight) + " / 来源命中 " + renderNumberValue(settings.sourceWeight),
+                    "FTS " + renderNumberValue(settings.ftsWeight)
+                            + " / 来源 " + renderNumberValue(settings.sourceWeight)
+                            + " / 证据卡 " + renderNumberValue(settings.factCardWeight),
                     "info"
             ),
             renderMetricCard(

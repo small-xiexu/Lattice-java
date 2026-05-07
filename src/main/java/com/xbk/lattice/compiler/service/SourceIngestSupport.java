@@ -16,16 +16,19 @@ import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
+import com.xbk.lattice.infra.persistence.StructuredTableJdbcRepository;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
-import org.springframework.context.annotation.Profile;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 编译源数据支撑服务
@@ -35,7 +38,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class SourceIngestSupport {
 
     private final IngestNode ingestNode;
@@ -55,6 +57,10 @@ public class SourceIngestSupport {
     private final CompilationWalStore compilationWalStore;
 
     private final IncrementalCompileService incrementalCompileService;
+
+    private FactCardGenerationService factCardGenerationService;
+
+    private StructuredTableJdbcRepository structuredTableJdbcRepository;
 
     /**
      * 创建编译源数据支撑服务。
@@ -110,6 +116,27 @@ public class SourceIngestSupport {
                 articleVectorIndexService,
                 documentParseApplicationService
         );
+    }
+
+    /**
+     * 注入事实证据卡生成服务。
+     *
+     * @param factCardGenerationService 事实证据卡生成服务
+     */
+    @Autowired(required = false)
+    public void setFactCardGenerationService(FactCardGenerationService factCardGenerationService) {
+        this.factCardGenerationService = factCardGenerationService;
+        this.incrementalCompileService.setFactCardGenerationService(factCardGenerationService);
+    }
+
+    /**
+     * 注入结构化表格仓储。
+     *
+     * @param structuredTableJdbcRepository 结构化表格仓储
+     */
+    @Autowired(required = false)
+    public void setStructuredTableJdbcRepository(StructuredTableJdbcRepository structuredTableJdbcRepository) {
+        this.structuredTableJdbcRepository = structuredTableJdbcRepository;
     }
 
     /**
@@ -181,7 +208,7 @@ public class SourceIngestSupport {
      * @return 分批结果
      */
     public Map<String, List<SourceBatch>> splitBatches(Map<String, List<RawSource>> groupedSources) {
-        Map<String, List<SourceBatch>> sourceBatches = new java.util.LinkedHashMap<String, List<SourceBatch>>();
+        Map<String, List<SourceBatch>> sourceBatches = new LinkedHashMap<String, List<SourceBatch>>();
         for (Map.Entry<String, List<RawSource>> entry : groupedSources.entrySet()) {
             sourceBatches.put(entry.getKey(), batchSplitNode.split(entry.getKey(), entry.getValue()));
         }
@@ -284,7 +311,7 @@ public class SourceIngestSupport {
      */
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Long> persistSourceFiles(List<RawSource> rawSources, Long sourceId, Long sourceSyncRunId) {
-        Map<String, Long> sourceFileIdsByPath = new java.util.LinkedHashMap<String, Long>();
+        Map<String, Long> sourceFileIdsByPath = new LinkedHashMap<String, Long>();
         for (RawSource rawSource : rawSources) {
             Long effectiveSourceId = rawSource.getSourceId() == null ? sourceId : rawSource.getSourceId();
             SourceFileRecord persistedRecord = sourceFileJdbcRepository.upsert(new SourceFileRecord(
@@ -302,8 +329,16 @@ public class SourceIngestSupport {
                     rawSource.getRawPath()
             ));
             sourceFileIdsByPath.put(rawSource.getRelativePath(), persistedRecord.getId());
+            persistStructuredTables(persistedRecord);
         }
         return sourceFileIdsByPath;
+    }
+
+    private void persistStructuredTables(SourceFileRecord persistedRecord) {
+        if (structuredTableJdbcRepository == null) {
+            return;
+        }
+        structuredTableJdbcRepository.replaceTablesFromSourceFile(persistedRecord);
     }
 
     /**
@@ -341,13 +376,26 @@ public class SourceIngestSupport {
                     rawSource.getContent(),
                     rawSource.isVerbatim()
             );
+            rebuildFactCards(sourceFileId);
         }
+    }
+
+    /**
+     * 基于最新 source chunks 重建事实证据卡。
+     *
+     * @param sourceFileId 源文件主键
+     */
+    private void rebuildFactCards(Long sourceFileId) {
+        if (factCardGenerationService == null || sourceFileId == null) {
+            return;
+        }
+        factCardGenerationService.rebuildForSourceFile(sourceFileId);
     }
 
     private Long resolveSourceFileId(RawSource rawSource) {
         Long sourceId = rawSource.getSourceId();
         if (sourceId != null) {
-            java.util.Optional<SourceFileRecord> sourceFileRecord = sourceFileJdbcRepository.findBySourceIdAndRelativePath(
+            Optional<SourceFileRecord> sourceFileRecord = sourceFileJdbcRepository.findBySourceIdAndRelativePath(
                     sourceId,
                     rawSource.getRelativePath()
             );

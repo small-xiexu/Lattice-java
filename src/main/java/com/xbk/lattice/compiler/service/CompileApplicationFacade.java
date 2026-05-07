@@ -1,7 +1,6 @@
 package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.infra.persistence.CompileJobRecord;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Files;
@@ -15,7 +14,6 @@ import java.nio.file.Path;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class CompileApplicationFacade {
 
     private final CompileJobService compileJobService;

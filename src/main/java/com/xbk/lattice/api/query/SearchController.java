@@ -2,7 +2,6 @@ package com.xbk.lattice.api.query;
 
 import com.xbk.lattice.query.service.KnowledgeSearchService;
 import com.xbk.lattice.query.service.QueryArticleHit;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -19,7 +18,6 @@ import java.util.List;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 @RequestMapping("/api/v1/search")
 public class SearchController {
 

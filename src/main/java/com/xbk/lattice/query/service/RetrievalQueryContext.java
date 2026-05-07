@@ -1,5 +1,7 @@
 package com.xbk.lattice.query.service;
 
+import com.xbk.lattice.query.evidence.domain.AnswerShape;
+
 /**
  * 检索查询上下文
  *
@@ -19,7 +21,38 @@ public class RetrievalQueryContext {
 
     private final QueryIntent queryIntent;
 
+    private final AnswerShape answerShape;
+
     private final RetrievalStrategy retrievalStrategy;
+
+    /**
+     * 创建检索查询上下文。
+     *
+     * @param queryId 查询标识
+     * @param originalQuestion 原始问题
+     * @param normalizedQuestion 归一化问题
+     * @param queryRewriteResult 查询改写结果
+     * @param queryIntent 查询意图
+     * @param answerShape 答案形态
+     * @param retrievalStrategy 检索策略
+     */
+    public RetrievalQueryContext(
+            String queryId,
+            String originalQuestion,
+            String normalizedQuestion,
+            QueryRewriteResult queryRewriteResult,
+            QueryIntent queryIntent,
+            AnswerShape answerShape,
+            RetrievalStrategy retrievalStrategy
+    ) {
+        this.queryId = queryId;
+        this.originalQuestion = originalQuestion;
+        this.normalizedQuestion = normalizedQuestion;
+        this.queryRewriteResult = queryRewriteResult;
+        this.queryIntent = queryIntent == null ? QueryIntent.GENERAL : queryIntent;
+        this.answerShape = answerShape == null ? AnswerShape.GENERAL : answerShape;
+        this.retrievalStrategy = retrievalStrategy;
+    }
 
     /**
      * 创建检索查询上下文。
@@ -39,12 +72,36 @@ public class RetrievalQueryContext {
             QueryIntent queryIntent,
             RetrievalStrategy retrievalStrategy
     ) {
-        this.queryId = queryId;
-        this.originalQuestion = originalQuestion;
-        this.normalizedQuestion = normalizedQuestion;
-        this.queryRewriteResult = queryRewriteResult;
-        this.queryIntent = queryIntent == null ? QueryIntent.GENERAL : queryIntent;
-        this.retrievalStrategy = retrievalStrategy;
+        this(
+                queryId,
+                originalQuestion,
+                normalizedQuestion,
+                queryRewriteResult,
+                queryIntent,
+                AnswerShape.GENERAL,
+                retrievalStrategy
+        );
+    }
+
+    /**
+     * 创建检索查询上下文。
+     *
+     * @param originalQuestion 原始问题
+     * @param normalizedQuestion 归一化问题
+     * @param queryRewriteResult 查询改写结果
+     * @param queryIntent 查询意图
+     * @param answerShape 答案形态
+     * @param retrievalStrategy 检索策略
+     */
+    public RetrievalQueryContext(
+            String originalQuestion,
+            String normalizedQuestion,
+            QueryRewriteResult queryRewriteResult,
+            QueryIntent queryIntent,
+            AnswerShape answerShape,
+            RetrievalStrategy retrievalStrategy
+    ) {
+        this(null, originalQuestion, normalizedQuestion, queryRewriteResult, queryIntent, answerShape, retrievalStrategy);
     }
 
     /**
@@ -63,7 +120,7 @@ public class RetrievalQueryContext {
             QueryIntent queryIntent,
             RetrievalStrategy retrievalStrategy
     ) {
-        this(null, originalQuestion, normalizedQuestion, queryRewriteResult, queryIntent, retrievalStrategy);
+        this(null, originalQuestion, normalizedQuestion, queryRewriteResult, queryIntent, AnswerShape.GENERAL, retrievalStrategy);
     }
 
     /**
@@ -109,6 +166,15 @@ public class RetrievalQueryContext {
      */
     public QueryIntent getQueryIntent() {
         return queryIntent;
+    }
+
+    /**
+     * 返回答案形态。
+     *
+     * @return 答案形态
+     */
+    public AnswerShape getAnswerShape() {
+        return answerShape;
     }
 
     /**

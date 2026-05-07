@@ -1,7 +1,6 @@
 package com.xbk.lattice.source.service;
 
 import com.xbk.lattice.source.domain.BundleSummary;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -29,7 +28,6 @@ import java.util.stream.Stream;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class BundleFeatureExtractor {
 
     private static final int MAX_SAMPLE_PATHS = 20;
@@ -95,7 +93,7 @@ public class BundleFeatureExtractor {
         String pathFingerprint = hash(String.join("\n", relativePaths));
         String contentFingerprint = hash(String.join("\n", contentParts));
         String manifestHash = hash(String.join("\n", manifestParts));
-        String displayName = resolveDisplayName(stagingDir, topLevelNames, titleHints);
+        String displayName = resolveDisplayName(stagingDir, relativePaths, topLevelNames, titleHints);
         String summaryText = buildSummaryText(displayName, topLevelNames, signatureFiles, keywordList, contentProfile);
 
         BundleSummary bundleSummary = new BundleSummary(
@@ -290,15 +288,44 @@ public class BundleFeatureExtractor {
         return "MIXED";
     }
 
-    private String resolveDisplayName(Path stagingDir, Set<String> topLevelNames, List<String> titleHints) {
+    /**
+     * 解析资料包展示名称。
+     *
+     * @param stagingDir staging 目录
+     * @param relativePaths 相对路径列表
+     * @param topLevelNames 顶层名称集合
+     * @param titleHints 文档标题提示
+     * @return 展示名称
+     */
+    private String resolveDisplayName(
+            Path stagingDir,
+            List<String> relativePaths,
+            Set<String> topLevelNames,
+            List<String> titleHints
+    ) {
+        if (!topLevelNames.isEmpty()) {
+            String topLevelName = topLevelNames.iterator().next();
+            return relativePaths.contains(topLevelName) ? stripFileExtension(topLevelName) : topLevelName;
+        }
         if (!titleHints.isEmpty()) {
             return titleHints.get(0);
         }
-        if (!topLevelNames.isEmpty()) {
-            return topLevelNames.iterator().next();
-        }
         Path fileName = stagingDir.getFileName();
         return fileName == null ? "upload" : fileName.toString();
+    }
+
+    /**
+     * 去掉文件扩展名。
+     *
+     * @param fileName 文件名
+     * @return 去掉扩展名后的名称
+     */
+    private String stripFileExtension(String fileName) {
+        int dotIndex = fileName.lastIndexOf('.');
+        if (dotIndex <= 0) {
+            return fileName;
+        }
+        return fileName.substring(0, dotIndex);
     }
 
     private String buildSummaryText(

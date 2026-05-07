@@ -3,7 +3,6 @@ package com.xbk.lattice.query.service;
 import com.xbk.lattice.infra.persistence.LexicalSearchRecord;
 import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -19,7 +18,6 @@ import java.util.Set;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class SourceChunkFtsSearchService {
 
     private static final int NEIGHBOR_CHUNK_RADIUS = 1;

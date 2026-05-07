@@ -3,11 +3,6 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
     password: ${SPRING_DATASOURCE_PASSWORD:postgres}
-  flyway:
-    enabled: ${SPRING_FLYWAY_ENABLED:true}
-    schemas: ${SPRING_FLYWAY_SCHEMAS:lattice}
-    default-schema: ${SPRING_FLYWAY_DEFAULT_SCHEMA:lattice}
-    create-schemas: true
   web:
     resources:
       chain:

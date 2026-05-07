@@ -58,6 +58,15 @@ class AnswerGenerationServiceTests {
                                 3.0
                         ),
                         new QueryArticleHit(
+                                QueryEvidenceType.FACT_CARD,
+                                "fact-card:100:0:fact_enum:abc12345",
+                                "Fact Card",
+                                "settle_window=45m 表示结算窗口为 45 分钟。",
+                                "{\"cardType\":\"FACT_ENUM\",\"answerShape\":\"ENUM\",\"sourceChunkIds\":[31]}",
+                                List.of("payment/context.md"),
+                                2.5
+                        ),
+                        new QueryArticleHit(
                                 QueryEvidenceType.SOURCE,
                                 "payment/context.md#0",
                                 "payment/context.md",
@@ -95,14 +104,23 @@ class AnswerGenerationServiceTests {
         assertThat(recordingLlmClient.getLastSystemPrompt()).contains("answerMarkdown");
         assertThat(recordingLlmClient.getLastSystemPrompt()).contains("只能输出 JSON");
         assertThat(recordingLlmClient.getLastSystemPrompt()).contains("精确标识类知识");
-        assertThat(recordingLlmClient.getLastUserPrompt()).contains("ARTICLE EVIDENCE");
-        assertThat(recordingLlmClient.getLastUserPrompt()).contains("Payment Routing");
-        assertThat(recordingLlmClient.getLastUserPrompt()).contains("SOURCE EVIDENCE");
-        assertThat(recordingLlmClient.getLastUserPrompt()).contains("payment/context.md");
-        assertThat(recordingLlmClient.getLastUserPrompt()).contains("GRAPH EVIDENCE");
-        assertThat(recordingLlmClient.getLastUserPrompt()).contains("RoutePlanner");
-        assertThat(recordingLlmClient.getLastUserPrompt()).contains("CONTRIBUTION EVIDENCE");
-        assertThat(recordingLlmClient.getLastUserPrompt()).contains("refund-manual-review 表示退款请求进入人工复核队列");
+        String userPrompt = recordingLlmClient.getLastUserPrompt();
+        int contributionSectionIndex = userPrompt.indexOf("CONTRIBUTION EVIDENCE");
+        int factCardSectionIndex = userPrompt.indexOf("STRUCTURED FACT CARD EVIDENCE");
+        int sourceSectionIndex = userPrompt.indexOf("SOURCE EVIDENCE");
+        int graphSectionIndex = userPrompt.indexOf("GRAPH EVIDENCE");
+        int articleSectionIndex = userPrompt.indexOf("ARTICLE EVIDENCE");
+        assertThat(contributionSectionIndex).isLessThan(factCardSectionIndex);
+        assertThat(factCardSectionIndex).isLessThan(sourceSectionIndex);
+        assertThat(sourceSectionIndex).isLessThan(graphSectionIndex);
+        assertThat(graphSectionIndex).isLessThan(articleSectionIndex);
+        assertThat(userPrompt).contains("Payment Routing");
+        assertThat(userPrompt).contains("settle_window=45m 表示结算窗口为 45 分钟");
+        assertThat(userPrompt.indexOf("citation: [→ payment/context.md]", factCardSectionIndex))
+                .isLessThan(sourceSectionIndex);
+        assertThat(userPrompt).contains("payment/context.md");
+        assertThat(userPrompt).contains("RoutePlanner");
+        assertThat(userPrompt).contains("refund-manual-review 表示退款请求进入人工复核队列");
     }
 
     /**
@@ -464,10 +482,10 @@ class AnswerGenerationServiceTests {
         );
 
         assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
-        assertThat(answerPayload.getAnswerMarkdown()).contains("入参 `requestData` 共 13 个字段");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("字段组 `requestData` 共 13 个字段");
         assertThat(answerPayload.getAnswerMarkdown()).contains("`transactionType`（string/3，交易类型");
         assertThat(answerPayload.getAnswerMarkdown()).contains("`goodsTag`（string/16，易百新增字段");
-        assertThat(answerPayload.getAnswerMarkdown()).contains("出参 `responseData` 共 15 个字段");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("字段组 `responseData` 共 15 个字段");
         assertThat(answerPayload.getAnswerMarkdown()).contains("`tenderCode`（string/8，易百新增字段");
         assertThat(answerPayload.getAnswerMarkdown()).contains("`01`=查余额");
         assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("同一份资料还给出");
@@ -1230,6 +1248,277 @@ class AnswerGenerationServiceTests {
     }
 
     /**
+     * 验证路径精确题 fallback 会优先覆盖用户点名路径及 path 约束，而不是被相邻路径列表抢占。
+     */
+    @Test
+    void shouldPreferRequestedPathAndConstraintInFallbackAnswer() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "/api/v2/demo/request/return 这个是什么接口？迁移后对外 path 可以改吗？",
+                buildExactPathContractEvidence(),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("/api/v2/demo/request/return");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("一次性支付退款");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("path");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("完全一致");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("批量接口");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("删除/禁用");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("/api/v2/demo/request/card/refund/check");
+    }
+
+    /**
+     * 验证精确路径题会保留同一文件内不同章节的互补证据。
+     */
+    @Test
+    void shouldKeepComplementaryArticleSectionsForExactPathFallback() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "/api/v2/demo/request/return 这个是什么接口？迁移后对外 path 可以改吗？",
+                buildSameSourceExactPathContractEvidence(),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("/api/v2/demo/request/return");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("一次性支付退款");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("path");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("完全一致");
+    }
+
+    /**
+     * 验证显式路径题能识别“原路径 / 旧路径 / 作废”这类通用迁移契约表达。
+     */
+    @Test
+    void shouldUseOriginalPathContractInsteadOfAdjacentPathListForExactPathQuestion() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "/api/v2/demo/request/return 这个是什么接口？迁移后对外 path 可以改吗？",
+                buildOriginalPathContractEvidence(),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("/api/v2/demo/request/return");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("一次性支付退款");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("原路径");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("作废");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("批量接口");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("/api/v2/demo/request/card/refund/check");
+    }
+
+    /**
+     * 验证长文档前部的相邻接口列表不会截断后续权威 path 契约句。
+     */
+    @Test
+    void shouldScanFullDocumentForPathContractWhenEarlyMatchedLinesAreAdjacentList() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "/api/v2/demo/request/return 这个是什么接口？它迁移后对外 path 可以改吗？",
+                buildLongSourcePathContractEvidence(),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("/api/v2/demo/request/return");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("一次性支付退款");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("path");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("完全一致");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("/api/v2/demo/request/card/refund/check");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("/api/v1/demo");
+    }
+
+    /**
+     * 验证真实融合命中形态下，精确路径题不会被高分相邻路径 chunk 抢占。
+     */
+    @Test
+    void shouldPreferRequestedPathContractAcrossMixedFusedHits() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "/api/v2/demo/request/return 这个是什么接口？它迁移后对外 path 可以改吗？",
+                buildMixedFusedPathContractEvidence(),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("/api/v2/demo/request/return");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("一次性支付退款");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("path");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("完全一致");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("批量接口");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("/api/v2/demo/request/card/refund/check");
+    }
+
+    /**
+     * 验证结构化模型答案覆盖点名 path 与 path 契约时，不会被精确查值保护误降级。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldKeepStructuredLlmAnswerForPathContractQuestion() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                {
+                  "answerMarkdown":"`/api/v2/demo/request/return` 是一次性支付退款接口；迁移后对外 API path、请求参数、响应参数必须与旧接口完全一致，不能自行修改。[→ docs/interface-contract.md]",
+                  "answerOutcome":"PARTIAL_ANSWER",
+                  "answerCacheable":false
+                }
+                """);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "/api/v2/demo/request/return 这个是什么接口？迁移后对外 path 可以改吗？",
+                buildMixedFusedPathContractEvidence()
+        );
+
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.LLM);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SUCCESS);
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("/api/v2/demo/request/return");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("path");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("完全一致");
+    }
+
+    /**
+     * 验证精确路径契约题不会要求模型复述证据旁边的辅助 MQ / 类名信息。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldKeepPathContractAnswerWithoutAdjacentAuxiliaryFacts() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                {
+                  "answerMarkdown":"`/api/v2/demo/request/return` 是一次性支付退款接口；迁移后对外 API path 与旧接口完全一致，上游只需要调整调用地址，不建议修改为其他路径。[→ docs/interface-contract.md]",
+                  "answerOutcome":"SUCCESS",
+                  "answerCacheable":true
+                }
+                """);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "/api/v2/demo/request/return 这个是什么接口？它迁移后对外 path 可以改吗？",
+                buildMixedFusedPathContractEvidence()
+        );
+
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.LLM);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SUCCESS);
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("/api/v2/demo/request/return");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("完全一致");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("MQ");
+    }
+
+    /**
+     * 验证显式路径契约题会清理模型复述的未点名反例路径。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldRemoveUnrequestedPathExamplesFromPathContractAnswer() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                {
+                  "answerMarkdown":"`/api/v2/demo/request/return` 是一次性支付退款接口；迁移后对外 API path 与旧接口完全一致，不得发明 `/api/v1/demo/*`、`/api/v1/legacy/*` 等其他路径。[→ docs/interface-contract.md]",
+                  "answerOutcome":"SUCCESS",
+                  "answerCacheable":true
+                }
+                """);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "/api/v2/demo/request/return 这个是什么接口？它迁移后对外 path 可以改吗？",
+                buildMixedFusedPathContractEvidence()
+        );
+
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.LLM);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SUCCESS);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("/api/v2/demo/request/return");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("完全一致");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("/api/v1/demo");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("/api/v1/legacy");
+    }
+
+    /**
+     * 验证模型偶发输出带引用 Markdown 时，精确路径题仍可复用为 LLM 成功答案。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldReuseGroundedMarkdownForExactPathQuestion() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                ## 结论
+
+                `/api/v2/demo/request/return` 是一次性支付退款接口；迁移后对外 API path 需要与旧接口完全一致，不能自行改为其他路径。[→ docs/interface-contract.md]
+                """);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "/api/v2/demo/request/return 这个是什么接口？迁移后对外 path 可以改吗？",
+                buildExactPathContractEvidence()
+        );
+
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.LLM);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SUCCESS);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("/api/v2/demo/request/return");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("API path");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("[→ docs/interface-contract.md]");
+    }
+
+    /**
+     * 验证接口 path 答案会保留证据中的 HTTP 方法。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldPreserveHttpMethodForRequestedPathAnswer() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                {
+                  "answerMarkdown":"`/api/v2/demo/request/return` 是一次性支付退款接口。[→ docs/interface-contract.md]",
+                  "answerOutcome":"SUCCESS",
+                  "answerCacheable":true
+                }
+                """);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "/api/v2/demo/request/return 是什么接口？",
+                List.of(
+                        new QueryArticleHit(
+                                QueryEvidenceType.SOURCE,
+                                1L,
+                                null,
+                                "docs/interface-contract.md#0",
+                                "docs/interface-contract.md",
+                                """
+                                | 接口路径 | 方法 | 说明 |
+                                | --- | --- | --- |
+                                | `/api/v2/demo/request/return` | POST | 一次性支付退款 |
+                                """,
+                                "{\"filePath\":\"docs/interface-contract.md\"}",
+                                List.of("docs/interface-contract.md"),
+                                4.0D
+                        )
+                )
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("POST /api/v2/demo/request/return");
+        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.LLM);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SUCCESS);
+    }
+
+    /**
      * 验证 no-knowledge fallback 在没有直接相关命中时，不会再夹带无关引用或参考区块。
      */
     @Test
@@ -1247,6 +1536,65 @@ class AnswerGenerationServiceTests {
         assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("## 参考说明");
         assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("[[");
         assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("[→");
+    }
+
+    /**
+     * 验证精确标识类 no-hit 问题不会因为弱相关证据而生成成功答案。
+     */
+    @Test
+    void shouldRejectWeakEvidenceWhenExactIdentifierIsMissing() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "请查询一个不存在的内部配置项 xbk_nonexistent_config_key_20260506 的取值和负责人。",
+                List.of(new QueryArticleHit(
+                        QueryEvidenceType.ARTICLE,
+                        "coupon-refund",
+                        "优惠退款说明",
+                        "当优惠券不存在或不可用时，系统不会继续进行取值，负责人需要人工排查。",
+                        "{\"description\":\"退款异常说明\"}",
+                        List.of("docs/refund.md"),
+                        5.0D
+                )),
+                AnswerOutcome.PARTIAL_ANSWER
+        );
+
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.NO_RELEVANT_KNOWLEDGE);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("当前未找到与该问题直接相关的知识。");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("负责人需要人工排查");
+    }
+
+    /**
+     * 验证多焦点配置题不会因为无关 key/value 片段被误判为可直接回答。
+     */
+    @Test
+    void shouldRejectWeakEvidenceWhenRequiredConfigFacetsAreMissing() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "当前项目本地开发默认使用哪个 PostgreSQL 和 Redis？端口、数据库名分别是什么？",
+                List.of(new QueryArticleHit(
+                        QueryEvidenceType.SOURCE,
+                        null,
+                        "scenarios.xlsx#975",
+                        "scenarios.xlsx",
+                        "scenarios.xlsx",
+                        """
+                                int merchantDiscount = 0;
+                                int platformDiscount = 0;
+                                POST /cashier/combinedOrderReformed -> 创建混合支付订单
+                                """,
+                        "{}",
+                        null,
+                        List.of("scenarios.xlsx"),
+                        12.0D
+                )),
+                AnswerOutcome.PARTIAL_ANSWER
+        );
+
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.NO_RELEVANT_KNOWLEDGE);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("当前未找到与该问题直接相关的知识。");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("merchantDiscount");
     }
 
     /**
@@ -1324,6 +1672,87 @@ class AnswerGenerationServiceTests {
         assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
         assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("[[payment/context.md#0]]");
         assertThat(answerPayload.getAnswerMarkdown()).contains("[→ payment/context.md]");
+    }
+
+    /**
+     * 验证 fallback 会把结构化证据卡作为高优先级证据使用。
+     */
+    @Test
+    void shouldPreferFactCardWhenBuildingFallbackAnswer() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "巡检项目有哪些",
+                List.of(
+                        new QueryArticleHit(
+                                QueryEvidenceType.ARTICLE,
+                                "ops-summary",
+                                "Ops Summary",
+                                "这是一段宽泛的运维说明。",
+                                "{}",
+                                List.of("ops/summary.md"),
+                                3.0D
+                        ),
+                        new QueryArticleHit(
+                                QueryEvidenceType.FACT_CARD,
+                                "fact-card:ops:enum",
+                                "巡检项目清单",
+                                "项目包括接口可用性、任务积压、告警确认。",
+                                "{\"cardType\":\"FACT_ENUM\",\"answerShape\":\"ENUM\",\"sourceChunkIds\":[31]}",
+                                List.of(),
+                                2.0D
+                        )
+                ),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("项目包括接口可用性、任务积压、告警确认");
+    }
+
+    /**
+     * 验证 fact card 兜底答案会优先引用同源 source chunk，而不是只停留在卡片过程证据。
+     */
+    @Test
+    void shouldPreferSourceCitationForFactCardFallbackAnswer() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "巡检项目有哪些",
+                List.of(
+                        new QueryArticleHit(
+                                QueryEvidenceType.ARTICLE,
+                                "ops-summary",
+                                "Ops Summary",
+                                "这是一段宽泛的运维说明。",
+                                "{}",
+                                List.of("ops/summary.md"),
+                                3.0D
+                        ),
+                        new QueryArticleHit(
+                                QueryEvidenceType.FACT_CARD,
+                                "fact-card:ops:enum",
+                                "巡检项目清单",
+                                "项目包括接口可用性、任务积压、告警确认。",
+                                "{\"cardType\":\"FACT_ENUM\",\"answerShape\":\"ENUM\",\"sourceChunkIds\":[31]}",
+                                List.of("ops/runbook.md"),
+                                2.0D
+                        ),
+                        new QueryArticleHit(
+                                QueryEvidenceType.SOURCE,
+                                "ops/runbook.md#0",
+                                "ops/runbook.md",
+                                "巡检项目包括接口可用性、任务积压、告警确认。",
+                                "{\"filePath\":\"ops/runbook.md\",\"chunkIndex\":0}",
+                                List.of("ops/runbook.md"),
+                                1.5D
+                        )
+                ),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("项目包括接口可用性、任务积压、告警确认");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("[→ ops/runbook.md]");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("[[fact-card:ops:enum]]");
     }
 
     /**
@@ -1548,8 +1977,8 @@ class AnswerGenerationServiceTests {
                                 如果你按当前仓库默认口径本地启动，这个项目真正需要你处理的事情只有 4 件：
                                 1. 准备好 `JDK 21`、`Maven`、`Docker`
                                 2. 确认现有 `PostgreSQL` 和 `Redis` 容器可用
-                                3. 在数据库里创建业务 schema：`lattice`
-                                4. 用 `jdbc` profile 启动 Spring Boot
+                                3. 手动执行 `src/main/resources/db/schema.sql` 初始化唯一业务 schema：`lattice`
+                                4. 启动 Spring Boot
                                 LATTICE_REDIS_HOST = 127.0.0.1，Redis 不在本机时
                                 """,
                         "{\"filePath\":\"项目启动配置清单.md\"}",
@@ -1643,6 +2072,114 @@ class AnswerGenerationServiceTests {
     }
 
     /**
+     * 验证 answer prompt 会限制单条长证据正文长度，同时保留贴题事实句。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldBoundLongEvidenceContentInAnswerPrompt() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                {
+                  "answerMarkdown":"- retryLimit 当前为 3 [→ ops/runtime.md]",
+                  "answerOutcome":"SUCCESS",
+                  "answerCacheable":true
+                }
+                """);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        String longEvidenceContent = "retryLimit = 3\n" + "background context ".repeat(2000);
+        answerGenerationService.generatePayload(
+                "retryLimit 当前配置是什么？",
+                List.of(new QueryArticleHit(
+                        QueryEvidenceType.SOURCE,
+                        "ops/runtime.md#0",
+                        "ops/runtime.md",
+                        longEvidenceContent,
+                        "{\"filePath\":\"ops/runtime.md\"}",
+                        List.of("ops/runtime.md"),
+                        2.0D
+                ))
+        );
+
+        String userPrompt = recordingLlmClient.getLastUserPrompt();
+        assertThat(userPrompt).contains("retryLimit = 3");
+        assertThat(userPrompt.length()).isLessThan(6000);
+        assertThat(userPrompt).doesNotContain("background context ".repeat(100));
+    }
+
+    /**
+     * 验证 deterministic fallback 会把结构化 JSON 证据转成可读事实，而不是直接暴露内部 JSON。
+     */
+    @Test
+    void shouldExposeStructuredJsonValuesInFallbackAnswer() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "promo_credit 和 platform_credit 分别是什么含义？",
+                List.of(new QueryArticleHit(
+                        QueryEvidenceType.FACT_CARD,
+                        "fact-card:generic:field-definition",
+                        "field definitions",
+                        """
+                                {
+                                  "items": [
+                                    {"field": "promo_credit", "raw": "promo_credit: loyalty credit amount"},
+                                    {"field": "platform_credit", "raw": "platform_credit: third-party credit amount"}
+                                  ]
+                                }
+                                """,
+                        "{\"cardType\":\"FACT_FIELD\",\"answerShape\":\"FIELD_DEFINITION\"}",
+                        List.of("generic-fields.md"),
+                        2.0D
+                )),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("loyalty credit amount");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("third-party credit amount");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("\"items\"");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("{\"field\"");
+    }
+
+    /**
+     * 验证数值 / 公式类证据会提示模型保留原始算式和未截断数值。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldTellAnswerModelToKeepOriginalFormulaAndUnroundedNumber() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                {
+                  "answerMarkdown":"- amount=100 按 tax=1.13 和 share=71% 计算为 100/1.13*71%=62.8319 [→ finance/formula.md]",
+                  "answerOutcome":"SUCCESS",
+                  "answerCacheable":true
+                }
+                """);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        answerGenerationService.generatePayload(
+                "amount=100 按 tax=1.13 和 share=71% 计算结果是多少？",
+                List.of(new QueryArticleHit(
+                        QueryEvidenceType.SOURCE,
+                        "finance/formula.md#0",
+                        "finance/formula.md",
+                        "公式：100/1.13*71%=62.8319，展示时可按需要四舍五入。",
+                        "{\"filePath\":\"finance/formula.md\"}",
+                        List.of("finance/formula.md"),
+                        2.0D
+                ))
+        );
+
+        assertThat(recordingLlmClient.getLastSystemPrompt()).contains("原始算式");
+        assertThat(recordingLlmClient.getLastSystemPrompt()).contains("未截断数值");
+        assertThat(recordingLlmClient.getLastUserPrompt()).contains("100/1.13*71%=62.8319");
+    }
+
+    /**
      * 验证 deterministic fallback 也会脱敏密钥类配置值。
      */
     @Test
@@ -1664,6 +2201,97 @@ class AnswerGenerationServiceTests {
 
         assertThat(answerPayload.getAnswerMarkdown()).contains("external.service.apiKey: <masked>");
         assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("plain-api-key-123456");
+    }
+
+    /**
+     * 验证多焦点查值 fallback 会优先保留覆盖完整的原文证据。
+     */
+    @Test
+    void shouldUseSourceEvidenceForMultiFocusFallbackAnswer() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "月汇总中 alpha 余额和 beta 余额的计算公式分别是什么？另外是否支持开具凭证？",
+                List.of(
+                        new QueryArticleHit(
+                                QueryEvidenceType.SOURCE,
+                                "docs/accounting.md#2",
+                                "docs/accounting.md",
+                                """
+                                        月汇总字段定义
+                                        alpha 余额 X=A+B-C-D
+                                        beta 余额 Y=E+F-G-H
+                                        附加说明：当前不支持开具凭证。
+                                        """,
+                                "{\"filePath\":\"docs/accounting.md\",\"chunkIndex\":2}",
+                                List.of("docs/accounting.md"),
+                                3.0D
+                        ),
+                        new QueryArticleHit(
+                                QueryEvidenceType.FACT_CARD,
+                                "fact-card:generic:summary",
+                                "结构化摘要",
+                                "月汇总记录了 alpha 和 beta 的余额口径。",
+                                "{\"cardType\":\"FACT_ENUM\"}",
+                                List.of("docs/accounting.md"),
+                                2.0D
+                        )
+                ),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("alpha 余额 X=A+B-C-D");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("beta 余额 Y=E+F-G-H");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("不支持开具凭证");
+    }
+
+    /**
+     * 验证 fallback 对批次顺序题会展开连续批次，而不是被泛化场景或接口事实抢占结论。
+     */
+    @Test
+    void shouldExpandBatchOrderFactsInFallbackAnswer() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "文档建议的灰度批次顺序是什么？请按第一批到第六批列出场景。",
+                List.of(
+                        new QueryArticleHit(
+                                QueryEvidenceType.SOURCE,
+                                "release-plan.md#batches",
+                                "release-plan.md",
+                                """
+                                        第一批：基础链路。
+                                        第二批：低流量渠道。
+                                        第三批：内部管理入口。
+                                        第四批：主流量渠道。
+                                        第五批：实体设备链路。
+                                        第六批：售后退款链路。
+                                        附录接口：batchDisable = 批量停用工具。
+                                        """,
+                                "{\"filePath\":\"release-plan.md\"}",
+                                List.of("release-plan.md"),
+                                2.0D
+                        ),
+                        new QueryArticleHit(
+                                QueryEvidenceType.ARTICLE,
+                                "generic-scene",
+                                "场景概览",
+                                "场景概览记录了主流量渠道、后台入口和附录接口。",
+                                "{}",
+                                List.of("release-overview.md"),
+                                3.0D
+                        )
+                ),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("第一批：基础链路");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("第二批：低流量渠道");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("第三批：内部管理入口");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("第四批：主流量渠道");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("第五批：实体设备链路");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("第六批：售后退款链路");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("batchDisable = 批量停用工具");
     }
 
     /**
@@ -1931,6 +2559,272 @@ class AnswerGenerationServiceTests {
     }
 
     /**
+     * 构造通用接口路径契约证据。
+     *
+     * @return 接口路径契约证据
+     */
+    private List<QueryArticleHit> buildExactPathContractEvidence() {
+        return List.of(
+                new QueryArticleHit(
+                        QueryEvidenceType.ARTICLE,
+                        "demo-refund",
+                        "退款链路",
+                        """
+                        3. **批量接口（A/B/C）确认无流量**
+                        controller = 删除/禁用接口、灰度切流配置
+                        8A：一次性支付退款（`/api/v2/demo/request/return`）
+                        8B：售后检查（`/api/v2/demo/request/card/refund/check`）
+                        """,
+                        "{\"description\":\"退款接口说明\"}",
+                        List.of("docs/interface-contract.md"),
+                        4.0D
+                ),
+                new QueryArticleHit(
+                        QueryEvidenceType.SOURCE,
+                        "docs/interface-contract.md#contract",
+                        "docs/interface-contract.md",
+                        """
+                        入口契约：迁移后 API path、请求参数、响应参数必须与旧接口完全一致，上游系统只改目标地址。
+                        | `/api/v2/demo/request/return` | POST | 一次性支付退款 | 已确认 |
+                        | `/api/v2/demo/request/card/refund/check` | POST | 售后检查 | 已确认 |
+                        """,
+                        "{\"filePath\":\"docs/interface-contract.md\"}",
+                        List.of("docs/interface-contract.md"),
+                        3.0D
+                )
+        );
+    }
+
+    /**
+     * 构造同源多章节接口路径契约证据。
+     *
+     * @return 同源多章节证据
+     */
+    private List<QueryArticleHit> buildSameSourceExactPathContractEvidence() {
+        return List.of(
+                new QueryArticleHit(
+                        QueryEvidenceType.ARTICLE,
+                        "demo-refund",
+                        "退款链路",
+                        """
+                        8A：一次性支付退款（`/api/v2/demo/request/return`）
+                        """,
+                        "{\"description\":\"退款接口说明\"}",
+                        List.of("docs/interface-contract.md"),
+                        4.0D
+                ),
+                new QueryArticleHit(
+                        QueryEvidenceType.ARTICLE,
+                        "demo-api-contract",
+                        "4.1 api service",
+                        """
+                        API 契约：所有对外 API 的 path、请求参数、响应参数必须与旧接口完全一致，上游系统仅需修改调用地址。
+                        """,
+                        "{\"description\":\"接口契约说明\"}",
+                        List.of("docs/interface-contract.md"),
+                        3.0D
+                )
+        );
+    }
+
+    /**
+     * 构造原路径契约表达证据。
+     *
+     * @return 原路径契约表达证据
+     */
+    private List<QueryArticleHit> buildOriginalPathContractEvidence() {
+        return List.of(
+                new QueryArticleHit(
+                        QueryEvidenceType.ARTICLE,
+                        1L,
+                        "demo-refund",
+                        "demo-refund",
+                        "退款链路",
+                        """
+                        3. **批量接口（A/B/C）确认无流量**
+                        8A：一次性支付退款（`/api/v2/demo/request/return`）
+                        8B：售后检查（`/api/v2/demo/request/card/refund/check`）
+                        """,
+                        "{\"description\":\"退款接口说明\"}",
+                        List.of("docs/interface-contract.md"),
+                        4.0D
+                ),
+                new QueryArticleHit(
+                        QueryEvidenceType.ARTICLE,
+                        1L,
+                        "demo-original-path-contract",
+                        "demo-original-path-contract",
+                        "接口契约",
+                        """
+                        对外接口路径（= FC 原路径）必须沿用旧路径；v1 规划路径全部作废，本文统一使用 FC 原路径。
+                        """,
+                        "{\"description\":\"接口契约说明\"}",
+                        List.of("docs/interface-contract.md"),
+                        3.0D
+                )
+        );
+    }
+
+    /**
+     * 构造长文档中的接口契约证据。
+     *
+     * @return 长文档接口契约证据
+     */
+    private List<QueryArticleHit> buildLongSourcePathContractEvidence() {
+        return List.of(
+                new QueryArticleHit(
+                        QueryEvidenceType.SOURCE,
+                        1L,
+                        "docs/interface-contract.md",
+                        "docs/interface-contract.md",
+                        "docs/interface-contract.md",
+                        """
+                        1. **渠道修正：当前批次确认有流量**
+                        2. **批量接口（A/B/C）确认无流量**
+                        3. **历史入口列表需要核对**
+                        4. **一次性支付退款补入清单**
+                        5. **售后检查补入清单**
+                        6. **运营后台入口低优先级**
+
+                        ## 入口契约
+                        核心设计原则为“入口防腐层原则”：所有对外 API 的 path、请求参数、响应参数必须与旧接口完全一致，上游系统仅需修改调用地址。
+
+                        ## 接口表
+                        | `/api/v2/demo/request/return` | POST | 一次性支付退款 | 已确认 |
+                        | `/api/v2/demo/request/card/refund/check` | POST | 售后检查 | 已确认 |
+                        """,
+                        "{\"filePath\":\"docs/interface-contract.md\"}",
+                        List.of("docs/interface-contract.md"),
+                        4.0D
+                )
+        );
+    }
+
+    /**
+     * 构造接近真实融合命中的通用接口契约证据。
+     *
+     * @return 融合命中证据
+     */
+    private List<QueryArticleHit> buildMixedFusedPathContractEvidence() {
+        return List.of(
+                new QueryArticleHit(
+                        QueryEvidenceType.ARTICLE,
+                        1L,
+                        "legacy-default--docs-demo-refund",
+                        "docs-demo-refund",
+                        "退款链路",
+                        """
+                        ---
+                        title: "退款链路"
+                        summary: "退款链路涵盖一次性支付退款、售后检查和异步回调三个子场景。"
+                        referential_keywords:
+                          - POST /api/v2/demo/request/return
+                          - POST /api/v2/demo/request/card/refund/check
+                        ---
+
+                        3. **批量接口（A/B/C）确认无流量**
+
+                        ## 子场景8A：一次性支付退款
+                        | 项目 | 值 |
+                        |------|-----|
+                        | 入口接口 | `POST /api/v2/demo/request/return` |
+                        | 业务含义 | 对一次性支付礼包进行退款 |
+
+                        ## 子场景8B：售后检查
+                        | 入口接口 | `POST /api/v2/demo/request/card/refund/check` |
+                        """,
+                        "{\"description\":\"退款接口说明\"}",
+                        List.of("docs/interface-contract.md"),
+                        4.0D
+                ),
+                new QueryArticleHit(
+                        QueryEvidenceType.ARTICLE,
+                        1L,
+                        "legacy-default--docs-demo-api-service",
+                        "docs-demo-api-service",
+                        "4.1 api service",
+                        """
+                        ---
+                        title: "4.1 api-service"
+                        summary: "对外暴露的 API 微服务，所有 API 遵循入口防腐层原则，与旧系统保持字节级兼容的 path、请求参数和响应参数。"
+                        referential_keywords:
+                          - "/api/v2/demo/request/add"
+                          - "/api/v2/demo/request/card/refund/check"
+                          - "/api/v2/demo/request/return"
+                        ---
+
+                        `api-service` 是迁移后的对外 API 微服务。核心设计原则为“入口防腐层原则”：所有对外 API 的 path、请求参数、响应参数必须与旧接口完全一致（字节级兼容），上游系统仅需修改调用地址。
+
+                        以下接口路径与方法必须严格与旧系统原路径一致，请求/响应保持字节级兼容。
+                        """,
+                        "{\"description\":\"接口契约说明\"}",
+                        List.of("docs/interface-contract.md"),
+                        3.5D
+                ),
+                new QueryArticleHit(
+                        QueryEvidenceType.FACT_CARD,
+                        1L,
+                        "fact-card:demo:compare",
+                        "fact-card:demo:compare",
+                        "结构化对照表",
+                        """
+                        | 接口路径（= 旧系统原路径） | 方法 | 说明 | 涉及场景 |
+                        | --- | --- | --- | --- |
+                        | `/api/v2/demo/request/add` | POST | 履约请求 | 1 |
+                        | `/api/v2/demo/request/card/refund/check` | POST | 售后检查 | 8B |
+                        | `/api/v2/demo/request/return` | POST | 一次性支付退款 | 8A |
+                        """,
+                        "{\"cardType\":\"FACT_COMPARE\"}",
+                        List.of("docs/interface-contract.md"),
+                        2.8D
+                ),
+                new QueryArticleHit(
+                        QueryEvidenceType.SOURCE,
+                        1L,
+                        "docs/interface-contract.md#chunk-early",
+                        "docs/interface-contract.md",
+                        "docs/interface-contract.md",
+                        """
+                        ---
+
+                        > 历史说明：早期批量接口 A/B/C 已确认无流量。
+
+                        ### 场景8：退款链路
+                        + **入口接口**：`POST /api/v2/demo/request/return`
+                        + **业务含义**：一次性支付退款。
+
+                        #### 子场景8B：售后检查
+                        + **入口接口**：`POST /api/v2/demo/request/card/refund/check`
+                        + **业务含义**：售后前置检查。
+                        """,
+                        "{\"filePath\":\"docs/interface-contract.md\",\"chunkIndex\":27}",
+                        List.of("docs/interface-contract.md"),
+                        5.0D
+                ),
+                new QueryArticleHit(
+                        QueryEvidenceType.SOURCE,
+                        1L,
+                        "docs/interface-contract.md#chunk-contract",
+                        "docs/interface-contract.md",
+                        "docs/interface-contract.md",
+                        """
+                        ## 4.1 api-service
+                        #### API 接口（按入口防腐层原则保持与旧系统完全一致）
+                        > 所有迁移后新接口的 path、请求参数、响应参数必须与下表“对应旧接口”列完全一致（字节级兼容），上游系统仅改调用地址。
+
+                        | 接口路径（= 旧系统原路径） | 方法 | 说明 | 涉及场景 |
+                        | --- | --- | --- | --- |
+                        | `/api/v2/demo/request/card/refund/check` | POST | 售后检查 | 8B |
+                        | `/api/v2/demo/request/return` | POST | 一次性支付退款 | 8A |
+                        """,
+                        "{\"filePath\":\"docs/interface-contract.md\",\"chunkIndex\":30}",
+                        List.of("docs/interface-contract.md"),
+                        4.0D
+                )
+        );
+    }
+
+    /**
      * 构造与 SAML 无关的 fallback 证据样例。
      *
      * @return 无关证据样例
@@ -2034,8 +2928,6 @@ class AnswerGenerationServiceTests {
                 ### 1.2 各渠道字段使用及枚举值对照表
 
                 ## 2. 出参 responseData 字段定义
-
-                出参共15个字段，编号为1-12、14、15、16，缺失13号编号。
 
                 ### 2.1 字段通用属性
 

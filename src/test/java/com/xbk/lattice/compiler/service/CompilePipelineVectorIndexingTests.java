@@ -44,13 +44,9 @@ import static org.assertj.core.api.Assertions.assertThat;
         com.xbk.lattice.LatticeApplication.class,
         CompilePipelineVectorIndexingTests.EmbeddingTestConfiguration.class
 }, properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b8_vector_compile_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b8_vector_compile_test",
-        "spring.flyway.default-schema=lattice_b8_vector_compile_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.llm.secret-encryption-key=test-phase8-key-0123456789abcdef",
@@ -108,15 +104,15 @@ class CompilePipelineVectorIndexingTests {
         compilePipelineService.compile(tempDir);
 
         Integer vectorCount = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_b8_vector_compile_test.article_vector_index",
+                "select count(*) from lattice.article_vector_index",
                 Integer.class
         );
         Integer chunkVectorCount = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_b8_vector_compile_test.article_chunk_vector_index",
+                "select count(*) from lattice.article_chunk_vector_index",
                 Integer.class
         );
         Long modelProfileId = jdbcTemplate.queryForObject(
-                "select model_profile_id from lattice_b8_vector_compile_test.article_vector_index where concept_id = 'payment-timeout'",
+                "select model_profile_id from lattice.article_vector_index where concept_id = 'payment-timeout'",
                 Long.class
         );
 
@@ -153,7 +149,7 @@ class CompilePipelineVectorIndexingTests {
         compilePipelineService.compile(tempDir);
 
         String beforeHash = jdbcTemplate.queryForObject(
-                "select content_hash from lattice_b8_vector_compile_test.article_vector_index where concept_id = 'payment-timeout'",
+                "select content_hash from lattice.article_vector_index where concept_id = 'payment-timeout'",
                 String.class
         );
 
@@ -173,15 +169,15 @@ class CompilePipelineVectorIndexingTests {
         compilePipelineService.incrementalCompile(tempDir);
 
         Integer vectorCount = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_b8_vector_compile_test.article_vector_index",
+                "select count(*) from lattice.article_vector_index",
                 Integer.class
         );
         Integer chunkVectorCount = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_b8_vector_compile_test.article_chunk_vector_index",
+                "select count(*) from lattice.article_chunk_vector_index",
                 Integer.class
         );
         String afterHash = jdbcTemplate.queryForObject(
-                "select content_hash from lattice_b8_vector_compile_test.article_vector_index where concept_id = 'payment-timeout'",
+                "select content_hash from lattice.article_vector_index where concept_id = 'payment-timeout'",
                 String.class
         );
 
@@ -221,11 +217,11 @@ class CompilePipelineVectorIndexingTests {
         compilePipelineService.compile(tempDir);
 
         Integer vectorCount = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_b8_vector_compile_test.article_vector_index",
+                "select count(*) from lattice.article_vector_index",
                 Integer.class
         );
         Integer chunkVectorCount = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_b8_vector_compile_test.article_chunk_vector_index",
+                "select count(*) from lattice.article_chunk_vector_index",
                 Integer.class
         );
 
@@ -240,13 +236,13 @@ class CompilePipelineVectorIndexingTests {
      */
     private void resetCompileTables() {
         queryCacheStore.evictAll();
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_compile_test.llm_model_profiles RESTART IDENTITY CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_compile_test.llm_provider_connections RESTART IDENTITY CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_compile_test.source_files CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_compile_test.synthesis_artifacts");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_compile_test.article_chunk_vector_index");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_compile_test.article_vector_index");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_compile_test.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.llm_model_profiles RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.llm_provider_connections RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_files CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.synthesis_artifacts");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.article_chunk_vector_index");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.article_vector_index");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
     }
 
     /**
@@ -266,7 +262,7 @@ class CompilePipelineVectorIndexingTests {
         String maskedApiKey = llmSecretCryptoService.mask("sk-test-openai");
         jdbcTemplate.update(
                 """
-                        insert into lattice_b8_vector_compile_test.llm_provider_connections (
+                        insert into lattice.llm_provider_connections (
                             id, connection_code, provider_type, base_url, api_key_ciphertext, api_key_mask, enabled, created_by, updated_by
                         ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
@@ -282,7 +278,7 @@ class CompilePipelineVectorIndexingTests {
         );
         jdbcTemplate.update(
                 """
-                        insert into lattice_b8_vector_compile_test.llm_model_profiles (
+                        insert into lattice.llm_model_profiles (
                             id, model_code, connection_id, model_name, model_kind, expected_dimensions,
                             supports_dimension_override, enabled, created_by, updated_by
                         ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -322,7 +318,7 @@ class CompilePipelineVectorIndexingTests {
                         from pg_attribute a
                         join pg_class c on c.oid = a.attrelid
                         join pg_namespace n on n.oid = c.relnamespace
-                        where n.nspname = 'lattice_b8_vector_compile_test'
+                        where n.nspname = 'lattice'
                           and c.relname = ?
                           and a.attname = 'embedding'
                           and a.attnum > 0

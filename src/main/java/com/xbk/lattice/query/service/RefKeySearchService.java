@@ -1,6 +1,6 @@
 package com.xbk.lattice.query.service;
 
-import org.springframework.context.annotation.Profile;
+import com.xbk.lattice.infra.persistence.LexicalSearchTokenBudget;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -18,7 +18,6 @@ import java.util.List;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class RefKeySearchService {
 
     private final JdbcTemplate jdbcTemplate;
@@ -47,6 +46,9 @@ public class RefKeySearchService {
         if (queryTokens.isEmpty()) {
             return List.of();
         }
+        List<String> likeTokens = LexicalSearchTokenBudget.selectLikeTokens(
+                LexicalSearchTokenBudget.normalize(queryTokens)
+        );
 
         List<Object> parameters = new ArrayList<Object>();
         StringBuilder sqlBuilder = new StringBuilder();
@@ -64,7 +66,7 @@ public class RefKeySearchService {
         appendTokenScore(
                 sqlBuilder,
                 parameters,
-                queryTokens,
+                likeTokens,
                 List.of("lower(a.refkey_text)", "lower(a.concept_id)", "lower(a.title)", "lower(a.metadata_json::text)"),
                 List.of(Double.valueOf(5.0D), Double.valueOf(4.0D), Double.valueOf(2.0D), Double.valueOf(1.0D))
         );
@@ -76,7 +78,7 @@ public class RefKeySearchService {
         appendTokenWhere(
                 sqlBuilder,
                 parameters,
-                queryTokens,
+                likeTokens,
                 List.of("lower(a.refkey_text)", "lower(a.concept_id)", "lower(a.title)", "lower(a.metadata_json::text)")
         );
         sqlBuilder.append("""
@@ -168,7 +170,23 @@ public class RefKeySearchService {
      * @return LIKE 模式
      */
     private String likePattern(String queryToken) {
-        return "%" + queryToken + "%";
+        return "%" + escapeLikePattern(queryToken) + "%";
+    }
+
+    /**
+     * 转义 LIKE 模式中的通配符。
+     *
+     * @param value 原始值
+     * @return 转义后的 LIKE 片段
+     */
+    private String escapeLikePattern(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        return value
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
     }
 
     /**

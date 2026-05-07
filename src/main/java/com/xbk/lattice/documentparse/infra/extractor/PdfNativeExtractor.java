@@ -6,7 +6,6 @@ import com.xbk.lattice.documentparse.domain.model.ParseRequest;
 import com.xbk.lattice.documentparse.extractor.PdfTextExtractor;
 import com.xbk.lattice.documentparse.extractor.SourceExtractionResult;
 import com.xbk.lattice.documentparse.port.NativeExtractor;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -19,7 +18,6 @@ import java.io.IOException;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class PdfNativeExtractor implements NativeExtractor {
 
     private final PdfTextExtractor pdfTextExtractor;

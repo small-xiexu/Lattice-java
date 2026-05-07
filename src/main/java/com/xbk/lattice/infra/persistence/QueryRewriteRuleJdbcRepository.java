@@ -1,7 +1,6 @@
 package com.xbk.lattice.infra.persistence;
 
-import org.springframework.context.annotation.Profile;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.xbk.lattice.infra.persistence.mapper.QueryRewriteRuleMapper;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -14,18 +13,17 @@ import java.util.List;
  * @author xiexu
  */
 @Repository
-@Profile("jdbc")
 public class QueryRewriteRuleJdbcRepository {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final QueryRewriteRuleMapper queryRewriteRuleMapper;
 
     /**
      * 创建 Query Rewrite 规则 JDBC 仓储。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @param queryRewriteRuleMapper Query Rewrite 规则 Mapper
      */
-    public QueryRewriteRuleJdbcRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public QueryRewriteRuleJdbcRepository(QueryRewriteRuleMapper queryRewriteRuleMapper) {
+        this.queryRewriteRuleMapper = queryRewriteRuleMapper;
     }
 
     /**
@@ -34,24 +32,6 @@ public class QueryRewriteRuleJdbcRepository {
      * @return 改写规则
      */
     public List<QueryRewriteRuleRecord> findActiveRules() {
-        if (jdbcTemplate == null) {
-            return List.of();
-        }
-        return jdbcTemplate.query(
-                """
-                        select id, rule_code, source_pattern, rewrite_text, scope, priority
-                        from query_rewrite_rules
-                        where enabled = true
-                        order by priority desc, id asc
-                        """,
-                (resultSet, rowNum) -> new QueryRewriteRuleRecord(
-                        resultSet.getLong("id"),
-                        resultSet.getString("rule_code"),
-                        resultSet.getString("source_pattern"),
-                        resultSet.getString("rewrite_text"),
-                        resultSet.getString("scope"),
-                        resultSet.getInt("priority")
-                )
-        );
+        return queryRewriteRuleMapper.findActiveRules();
     }
 }

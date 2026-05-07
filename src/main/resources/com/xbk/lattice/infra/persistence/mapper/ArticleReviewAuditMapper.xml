@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.ArticleReviewAuditMapper">
+
+    <resultMap id="ArticleReviewAuditRecordResultMap" type="com.xbk.lattice.infra.persistence.ArticleReviewAuditRecord">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="article_key" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="action" javaType="java.lang.String"/>
+            <arg column="previous_review_status" javaType="java.lang.String"/>
+            <arg column="next_review_status" javaType="java.lang.String"/>
+            <arg column="comment" javaType="java.lang.String"/>
+            <arg column="reviewed_by" javaType="java.lang.String"/>
+            <arg column="reviewed_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="ArticleReviewAuditColumns">
+        id, source_id, article_key, concept_id, action, previous_review_status,
+        next_review_status, comment, reviewed_by, reviewed_at, metadata_json::text as metadata_json
+    </sql>
+
+    <select id="insert" resultType="java.lang.Long">
+        insert into article_review_audits (
+            source_id, article_key, concept_id, action, previous_review_status,
+            next_review_status, comment, reviewed_by, reviewed_at, metadata_json
+        )
+        values (
+            #{record.sourceId},
+            #{record.articleKey},
+            #{record.conceptId},
+            #{record.action},
+            #{record.previousReviewStatus},
+            #{record.nextReviewStatus},
+            #{record.comment},
+            #{record.reviewedBy},
+            #{record.reviewedAt},
+            #{record.metadataJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler}
+        )
+        returning id
+    </select>
+
+    <select id="findByArticleKey" resultMap="ArticleReviewAuditRecordResultMap">
+        select <include refid="ArticleReviewAuditColumns"/>
+        from article_review_audits
+        where article_key = #{articleKey}
+        order by reviewed_at desc, id desc
+    </select>
+
+    <select id="findByConceptIdAndSourceId" resultMap="ArticleReviewAuditRecordResultMap">
+        select <include refid="ArticleReviewAuditColumns"/>
+        from article_review_audits
+        where concept_id = #{conceptId}
+          and (#{sourceId} is null or source_id = #{sourceId})
+        order by reviewed_at desc, id desc
+    </select>
+</mapper>

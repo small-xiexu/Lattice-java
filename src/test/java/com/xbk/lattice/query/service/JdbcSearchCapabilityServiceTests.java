@@ -16,13 +16,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b8_search_capability_test_v2",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b8_search_capability_test_v2",
-        "spring.flyway.default-schema=lattice_b8_search_capability_test_v2",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key"
 })
@@ -39,19 +35,9 @@ class JdbcSearchCapabilityServiceTests {
      */
     @Test
     void shouldDetectTextSearchConfigAndVectorCapabilities() {
-        jdbcTemplate.execute("CREATE EXTENSION IF NOT EXISTS vector");
+        jdbcTemplate.execute("CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public");
         jdbcTemplate.execute("DROP TEXT SEARCH CONFIGURATION IF EXISTS lattice_jieba_copy");
         jdbcTemplate.execute("CREATE TEXT SEARCH CONFIGURATION lattice_jieba_copy (COPY = simple)");
-        jdbcTemplate.execute("DROP TABLE IF EXISTS article_vector_index");
-        jdbcTemplate.execute("""
-                CREATE TABLE article_vector_index (
-                    concept_id VARCHAR(128) PRIMARY KEY,
-                    model_name VARCHAR(128) NOT NULL,
-                    content_hash VARCHAR(64) NOT NULL,
-                    embedding public.vector(1536) NOT NULL,
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-                """);
 
         assertThat(jdbcSearchCapabilityService.supportsTextSearchConfig("lattice_jieba_copy")).isTrue();
         assertThat(jdbcSearchCapabilityService.supportsTextSearchConfig("missing_cfg")).isFalse();
@@ -64,7 +50,6 @@ class JdbcSearchCapabilityServiceTests {
      */
     @AfterEach
     void tearDown() {
-        jdbcTemplate.execute("DROP TABLE IF EXISTS article_vector_index");
         jdbcTemplate.execute("DROP TEXT SEARCH CONFIGURATION IF EXISTS lattice_jieba_copy");
     }
 }

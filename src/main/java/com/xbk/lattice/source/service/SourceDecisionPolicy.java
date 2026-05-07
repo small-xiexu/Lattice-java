@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.source.domain.BundleSummary;
 import com.xbk.lattice.source.domain.KnowledgeSource;
 import com.xbk.lattice.source.domain.SourceDecisionResult;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -20,7 +19,6 @@ import java.util.Locale;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class SourceDecisionPolicy {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

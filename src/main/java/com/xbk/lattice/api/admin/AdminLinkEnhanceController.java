@@ -2,7 +2,6 @@ package com.xbk.lattice.api.admin;
 
 import com.xbk.lattice.governance.LinkEnhancementReport;
 import com.xbk.lattice.governance.LinkEnhancementService;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 @RequestMapping("/api/v1/admin/link-enhance")
 public class AdminLinkEnhanceController {
 

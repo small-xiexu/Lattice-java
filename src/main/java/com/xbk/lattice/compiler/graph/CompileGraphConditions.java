@@ -1,7 +1,6 @@
 package com.xbk.lattice.compiler.graph;
 
 import com.xbk.lattice.compiler.service.CompileOrchestrationModes;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
@@ -12,7 +11,6 @@ import org.springframework.stereotype.Component;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class CompileGraphConditions {
 
     /**

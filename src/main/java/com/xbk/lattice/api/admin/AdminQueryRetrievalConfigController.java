@@ -2,7 +2,6 @@ package com.xbk.lattice.api.admin;
 
 import com.xbk.lattice.query.service.QueryRetrievalSettingsService;
 import com.xbk.lattice.query.service.QueryRetrievalSettingsState;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,7 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 @RequestMapping("/api/v1/admin/query/retrieval")
 public class AdminQueryRetrievalConfigController {
 
@@ -60,6 +58,7 @@ public class AdminQueryRetrievalConfigController {
                 request.getArticleChunkWeight().doubleValue(),
                 request.getSourceWeight().doubleValue(),
                 request.getSourceChunkWeight().doubleValue(),
+                request.getFactCardWeight().doubleValue(),
                 request.getContributionWeight().doubleValue(),
                 request.getGraphWeight().doubleValue(),
                 request.getArticleVectorWeight().doubleValue(),
@@ -85,6 +84,7 @@ public class AdminQueryRetrievalConfigController {
                 state.getArticleChunkWeight(),
                 state.getSourceWeight(),
                 state.getSourceChunkWeight(),
+                state.getFactCardWeight(),
                 state.getContributionWeight(),
                 state.getGraphWeight(),
                 state.getArticleVectorWeight(),
@@ -116,6 +116,7 @@ public class AdminQueryRetrievalConfigController {
         validateWeight(request.getArticleChunkWeight(), "articleChunkWeight");
         validateWeight(request.getSourceWeight(), "sourceWeight");
         validateWeight(request.getSourceChunkWeight(), "sourceChunkWeight");
+        validateWeight(request.getFactCardWeight(), "factCardWeight");
         validateWeight(request.getContributionWeight(), "contributionWeight");
         validateWeight(request.getGraphWeight(), "graphWeight");
         validateWeight(request.getArticleVectorWeight(), "articleVectorWeight");

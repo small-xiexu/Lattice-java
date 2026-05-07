@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>邪修智库｜知识问答</title>
-    <link rel="stylesheet" href="/admin/admin.css?v=20260429-source-card-wrap-1">
+    <link rel="stylesheet" href="/admin/admin.css?v=20260505-answer-feedback-1">
 </head>
 <body>
 <div class="app-shell">
@@ -72,7 +72,7 @@
                         <div class="form-grid top-gap">
                             <label>
                                 <span>你的问题</span>
-                                <textarea id="ask-question" placeholder="例如：退款申请提交后多久会到账？"></textarea>
+                                <textarea id="ask-question" placeholder="例如：这份资料里的配置项如何生效？"></textarea>
                             </label>
                         </div>
                         <div class="button-row wrap top-gap">
@@ -105,6 +105,37 @@
                         <p>提交问题后，这里会优先显示这次回答最直接依赖的来源，以及是否已经形成稳定引用。</p>
                     </div>
                     <div id="ask-answer-metrics" class="metric-grid compact top-gap"></div>
+                    <section id="ask-feedback-panel" class="detail-section answer-feedback-panel top-gap">
+                        <div class="detail-section-header">
+                            <div>
+                                <h4>结果反馈</h4>
+                                <p class="detail-section-copy">把这次回答和引用来源送入治理队列。</p>
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <label>
+                                <span>结果判断</span>
+                                <select id="ask-feedback-type">
+                                    <option value="reliable">答案可靠</option>
+                                    <option value="answer_problem">答案有问题</option>
+                                    <option value="source_conflict">来源冲突</option>
+                                    <option value="needs_manual_confirmation">需要人工确认</option>
+                                </select>
+                            </label>
+                            <label>
+                                <span>反馈人</span>
+                                <input id="ask-feedback-reporter" type="text" placeholder="anonymous">
+                            </label>
+                            <label class="field-span-2">
+                                <span>补充说明</span>
+                                <textarea id="ask-feedback-comment" rows="3" placeholder="可填写这次结果哪里可靠、哪里不稳或需要核对什么"></textarea>
+                            </label>
+                        </div>
+                        <div class="button-row wrap">
+                            <button id="submit-answer-feedback" class="secondary-btn" type="button">提交反馈</button>
+                            <span id="ask-feedback-status" class="detail-note" aria-live="polite"></span>
+                        </div>
+                    </section>
                 </section>
 
                 <section id="ask-source-panel" class="panel" hidden>
@@ -123,6 +154,21 @@
                             <p class="item-summary">还没有引用来源，先提交一个问题。</p>
                         </div>
                     </div>
+                </section>
+
+                <section id="ask-retrieval-audit-panel" class="panel" hidden>
+                    <div class="panel-title-row">
+                        <div>
+                            <h2>检索审计</h2>
+                            <p>按 run、channel run、hit 三层查看本次检索状态。</p>
+                        </div>
+                    </div>
+                    <div id="ask-retrieval-audit-summary" class="help-inline-note top-gap">
+                        <strong>通道运行</strong>
+                        <p>提交问题后，这里会展示每个召回通道是成功、跳过、失败、超时还是零命中。</p>
+                    </div>
+                    <div id="ask-retrieval-channel-runs" class="query-audit-channel-grid top-gap"></div>
+                    <div id="ask-retrieval-channel-hits" class="table-shell top-gap"></div>
                 </section>
 
                 <section class="panel">
@@ -189,6 +235,6 @@
         </div>
     </div>
 </div>
-<script src="/admin/ask.js?v=20260429-submit-shortcut-1"></script>
+<script src="/admin/ask.js?v=20260505-answer-feedback-1"></script>
 </body>
 </html>

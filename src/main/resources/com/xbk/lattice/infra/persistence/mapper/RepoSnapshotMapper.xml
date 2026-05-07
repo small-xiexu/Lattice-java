@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.RepoSnapshotMapper">
+
+    <resultMap id="RepoSnapshotRecordResultMap" type="com.xbk.lattice.infra.persistence.RepoSnapshotRecord">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+            <arg column="created_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="trigger_event" javaType="java.lang.String"/>
+            <arg column="git_commit" javaType="java.lang.String"/>
+            <arg column="description" javaType="java.lang.String"/>
+            <arg column="article_count" javaType="_int"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="RepoSnapshotItemRecordResultMap" type="com.xbk.lattice.infra.persistence.RepoSnapshotItemRecord">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+            <arg column="snapshot_id" javaType="_long"/>
+            <arg column="entity_type" javaType="java.lang.String"/>
+            <arg column="entity_id" javaType="java.lang.String"/>
+            <arg column="content_hash" javaType="java.lang.String"/>
+            <arg column="payload_json" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <select id="insert" resultType="java.lang.Long">
+        insert into repo_snapshots (created_at, trigger_event, git_commit, description, article_count)
+        values (
+            #{record.createdAt},
+            #{record.triggerEvent},
+            #{record.gitCommit},
+            #{record.description},
+            #{record.articleCount}
+        )
+        returning id
+    </select>
+
+    <insert id="insertItem">
+        insert into repo_snapshot_items (snapshot_id, entity_type, entity_id, content_hash, payload)
+        values (
+            #{record.snapshotId},
+            #{record.entityType},
+            #{record.entityId},
+            #{record.contentHash},
+            #{record.payloadJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler}
+        )
+    </insert>
+
+    <select id="findRecent" resultMap="RepoSnapshotRecordResultMap">
+        select id, created_at, trigger_event, git_commit, description, article_count
+        from repo_snapshots
+        order by created_at desc, id desc
+        limit #{limit}
+    </select>
+
+    <select id="findById" resultMap="RepoSnapshotRecordResultMap">
+        select id, created_at, trigger_event, git_commit, description, article_count
+        from repo_snapshots
+        where id = #{snapshotId}
+    </select>
+
+    <select id="findItemsBySnapshotId" resultMap="RepoSnapshotItemRecordResultMap">
+        select id, snapshot_id, entity_type, entity_id, content_hash, payload::text as payload_json
+        from repo_snapshot_items
+        where snapshot_id = #{snapshotId}
+        order by entity_type asc, entity_id asc
+    </select>
+</mapper>

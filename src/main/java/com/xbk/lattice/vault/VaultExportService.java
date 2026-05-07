@@ -8,7 +8,6 @@ import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.ContributionJdbcRepository;
 import com.xbk.lattice.infra.persistence.ContributionRecord;
 import com.xbk.lattice.vault.snapshot.VaultGitService;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -35,7 +34,6 @@ import java.util.Set;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class VaultExportService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

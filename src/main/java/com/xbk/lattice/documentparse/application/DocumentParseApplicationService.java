@@ -4,7 +4,6 @@ import com.xbk.lattice.compiler.domain.RawSource;
 import com.xbk.lattice.documentparse.domain.DocumentParseResult;
 import com.xbk.lattice.documentparse.domain.model.ParseOutput;
 import com.xbk.lattice.documentparse.service.DocumentParseResultNormalizer;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -18,7 +17,6 @@ import java.nio.file.Path;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class DocumentParseApplicationService {
 
     private final ParseOrchestrator parseOrchestrator;

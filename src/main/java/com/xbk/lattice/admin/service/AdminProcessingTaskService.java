@@ -16,7 +16,6 @@ import com.xbk.lattice.source.domain.KnowledgeSource;
 import com.xbk.lattice.source.domain.SourceSyncRunDetail;
 import com.xbk.lattice.source.service.SourceService;
 import com.xbk.lattice.source.service.SourceUploadService;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.InvalidPathException;
@@ -39,7 +38,6 @@ import java.util.stream.Stream;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class AdminProcessingTaskService {
 
     private final SourceUploadService sourceUploadService;
@@ -111,9 +109,36 @@ public class AdminProcessingTaskService {
     }
 
     /**
+     * 查询指定资料源的处理历史。
+     *
+     * @param sourceId 资料源主键
+     * @param limit 返回数量
+     * @return 当前处理任务列表响应
+     */
+    public AdminProcessingTaskListResponse listProcessingTasksBySourceId(Long sourceId, int limit) {
+        if (sourceId == null) {
+            List<AdminProcessingTaskItemResponse> emptyItems = Collections.emptyList();
+            AdminProcessingTaskSummaryResponse summary = buildSummary(emptyItems);
+            return new AdminProcessingTaskListResponse(summary, emptyItems);
+        }
+        int resolvedLimit = Math.max(limit, 1);
+        List<AdminProcessingTaskItemResponse> mergedItems = new ArrayList<AdminProcessingTaskItemResponse>();
+        for (SourceSyncRunDetail sourceRun : sourceUploadService.listRunDetails(sourceId)) {
+            mergedItems.add(toSourceSyncTask(sourceRun));
+        }
+        for (CompileJobRecord compileJobRecord : compileJobService.listRecentStandaloneJobsBySourceId(sourceId, resolvedLimit)) {
+            mergedItems.add(toStandaloneCompileTask(compileJobRecord));
+        }
+        mergedItems.sort(new ProcessingTaskComparator());
+        AdminProcessingTaskSummaryResponse summary = buildSummary(mergedItems);
+        List<AdminProcessingTaskItemResponse> visibleItems = limitItems(mergedItems, resolvedLimit);
+        return new AdminProcessingTaskListResponse(summary, visibleItems);
+    }
+
+    /**
      * 收敛当前处理任务视图中的资料源同步记录。
      *
-     * 职责：同一资料源只保留最新一条同步 run，旧终态记录仍留在资料源同步历史中查看
+     * 职责：同一资料源只保留最新一条同步 run，旧终态记录仍留在资料源处理历史中查看
      *
      * @param recentRuns 最近同步运行详情
      * @return 收敛后的同步运行详情

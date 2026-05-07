@@ -1,5 +1,7 @@
 package com.xbk.lattice.api.admin;
 
+import java.util.List;
+
 /**
  * 管理侧 Query 检索审计 run 响应
  *
@@ -25,6 +27,8 @@ public class AdminQueryRetrievalAuditRunResponse {
 
     private final String questionTypeTag;
 
+    private final String answerShape;
+
     private final String retrievalMode;
 
     private final boolean rewriteApplied;
@@ -36,6 +40,16 @@ public class AdminQueryRetrievalAuditRunResponse {
     private final int fusedHitCount;
 
     private final int channelCount;
+
+    private final int factCardHitCount;
+
+    private final int sourceChunkHitCount;
+
+    private final String coverageStatus;
+
+    private final String channelRunSummaryJson;
+
+    private final List<AdminQueryRetrievalChannelRunResponse> channelRuns;
 
     private final String createdAt;
 
@@ -50,12 +64,18 @@ public class AdminQueryRetrievalAuditRunResponse {
      * @param versionTag 版本标签
      * @param strategyTag 策略标签
      * @param questionTypeTag 问题类型标签
+     * @param answerShape 答案形态
      * @param retrievalMode 检索模式
      * @param rewriteApplied 是否改写
      * @param rewriteAuditRef 改写审计引用
      * @param retrievalStrategyRef 检索策略引用
      * @param fusedHitCount 融合命中数
      * @param channelCount 通道数
+     * @param factCardHitCount Fact Card 命中数
+     * @param sourceChunkHitCount Source Chunk 命中数
+     * @param coverageStatus 覆盖状态
+     * @param channelRunSummaryJson 通道运行摘要 JSON
+     * @param channelRuns 通道运行摘要
      * @param createdAt 创建时间
      */
     public AdminQueryRetrievalAuditRunResponse(
@@ -67,12 +87,18 @@ public class AdminQueryRetrievalAuditRunResponse {
             String versionTag,
             String strategyTag,
             String questionTypeTag,
+            String answerShape,
             String retrievalMode,
             boolean rewriteApplied,
             String rewriteAuditRef,
             String retrievalStrategyRef,
             int fusedHitCount,
             int channelCount,
+            int factCardHitCount,
+            int sourceChunkHitCount,
+            String coverageStatus,
+            String channelRunSummaryJson,
+            List<AdminQueryRetrievalChannelRunResponse> channelRuns,
             String createdAt
     ) {
         this.runId = runId;
@@ -83,12 +109,18 @@ public class AdminQueryRetrievalAuditRunResponse {
         this.versionTag = versionTag;
         this.strategyTag = strategyTag;
         this.questionTypeTag = questionTypeTag;
+        this.answerShape = answerShape;
         this.retrievalMode = retrievalMode;
         this.rewriteApplied = rewriteApplied;
         this.rewriteAuditRef = rewriteAuditRef;
         this.retrievalStrategyRef = retrievalStrategyRef;
         this.fusedHitCount = fusedHitCount;
         this.channelCount = channelCount;
+        this.factCardHitCount = factCardHitCount;
+        this.sourceChunkHitCount = sourceChunkHitCount;
+        this.coverageStatus = coverageStatus;
+        this.channelRunSummaryJson = channelRunSummaryJson;
+        this.channelRuns = channelRuns == null ? List.of() : List.copyOf(channelRuns);
         this.createdAt = createdAt;
     }
 
@@ -165,6 +197,15 @@ public class AdminQueryRetrievalAuditRunResponse {
     }
 
     /**
+     * 获取答案形态。
+     *
+     * @return 答案形态
+     */
+    public String getAnswerShape() {
+        return answerShape;
+    }
+
+    /**
      * 获取检索模式。
      *
      * @return 检索模式
@@ -216,6 +257,51 @@ public class AdminQueryRetrievalAuditRunResponse {
      */
     public int getChannelCount() {
         return channelCount;
+    }
+
+    /**
+     * 获取 Fact Card 命中数。
+     *
+     * @return Fact Card 命中数
+     */
+    public int getFactCardHitCount() {
+        return factCardHitCount;
+    }
+
+    /**
+     * 获取 Source Chunk 命中数。
+     *
+     * @return Source Chunk 命中数
+     */
+    public int getSourceChunkHitCount() {
+        return sourceChunkHitCount;
+    }
+
+    /**
+     * 获取覆盖状态。
+     *
+     * @return 覆盖状态
+     */
+    public String getCoverageStatus() {
+        return coverageStatus;
+    }
+
+    /**
+     * 获取通道运行摘要 JSON。
+     *
+     * @return 通道运行摘要 JSON
+     */
+    public String getChannelRunSummaryJson() {
+        return channelRunSummaryJson;
+    }
+
+    /**
+     * 获取通道运行摘要。
+     *
+     * @return 通道运行摘要
+     */
+    public List<AdminQueryRetrievalChannelRunResponse> getChannelRuns() {
+        return channelRuns;
     }
 
     /**

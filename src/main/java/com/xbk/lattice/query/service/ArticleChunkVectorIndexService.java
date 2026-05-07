@@ -7,7 +7,6 @@ import com.xbk.lattice.infra.persistence.ArticleChunkVectorRecord;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -30,7 +29,6 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Service
-@Profile("jdbc")
 public class ArticleChunkVectorIndexService {
 
     private static final Pattern VECTOR_DIMENSIONS_PATTERN = Pattern.compile(".*vector\\((\\d+)\\)$");

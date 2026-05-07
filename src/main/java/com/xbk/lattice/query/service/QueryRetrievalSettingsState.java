@@ -23,6 +23,8 @@ public class QueryRetrievalSettingsState {
 
     public static final double DEFAULT_SOURCE_CHUNK_WEIGHT = 1.30D;
 
+    public static final double DEFAULT_FACT_CARD_WEIGHT = 1.40D;
+
     public static final double DEFAULT_CONTRIBUTION_WEIGHT = 1.0D;
 
     public static final double DEFAULT_GRAPH_WEIGHT = 1.20D;
@@ -48,6 +50,8 @@ public class QueryRetrievalSettingsState {
     private final double sourceWeight;
 
     private final double sourceChunkWeight;
+
+    private final double factCardWeight;
 
     private final double contributionWeight;
 
@@ -90,6 +94,7 @@ public class QueryRetrievalSettingsState {
                 DEFAULT_ARTICLE_CHUNK_WEIGHT,
                 sourceWeight,
                 DEFAULT_SOURCE_CHUNK_WEIGHT,
+                DEFAULT_FACT_CARD_WEIGHT,
                 contributionWeight,
                 graphWeight,
                 articleVectorWeight,
@@ -107,6 +112,7 @@ public class QueryRetrievalSettingsState {
      * @param articleChunkWeight Article Chunk lexical 权重
      * @param sourceWeight Source 文件级权重
      * @param sourceChunkWeight Source Chunk lexical 权重
+     * @param factCardWeight Fact Card lexical 权重
      * @param contributionWeight Contribution 权重
      * @param graphWeight Graph 权重
      * @param articleVectorWeight 文章向量权重
@@ -120,6 +126,7 @@ public class QueryRetrievalSettingsState {
             double articleChunkWeight,
             double sourceWeight,
             double sourceChunkWeight,
+            double factCardWeight,
             double contributionWeight,
             double graphWeight,
             double articleVectorWeight,
@@ -135,6 +142,7 @@ public class QueryRetrievalSettingsState {
                 articleChunkWeight,
                 sourceWeight,
                 sourceChunkWeight,
+                factCardWeight,
                 contributionWeight,
                 graphWeight,
                 articleVectorWeight,
@@ -154,6 +162,7 @@ public class QueryRetrievalSettingsState {
      * @param articleChunkWeight Article Chunk lexical 权重
      * @param sourceWeight Source 文件级权重
      * @param sourceChunkWeight Source Chunk lexical 权重
+     * @param factCardWeight Fact Card lexical 权重
      * @param contributionWeight Contribution 权重
      * @param graphWeight Graph 权重
      * @param articleVectorWeight 文章向量权重
@@ -169,6 +178,7 @@ public class QueryRetrievalSettingsState {
             double articleChunkWeight,
             double sourceWeight,
             double sourceChunkWeight,
+            double factCardWeight,
             double contributionWeight,
             double graphWeight,
             double articleVectorWeight,
@@ -183,6 +193,7 @@ public class QueryRetrievalSettingsState {
         this.articleChunkWeight = articleChunkWeight;
         this.sourceWeight = sourceWeight;
         this.sourceChunkWeight = sourceChunkWeight;
+        this.factCardWeight = factCardWeight;
         this.contributionWeight = contributionWeight;
         this.graphWeight = graphWeight;
         this.articleVectorWeight = articleVectorWeight;
@@ -220,6 +231,10 @@ public class QueryRetrievalSettingsState {
 
     public double getSourceChunkWeight() {
         return sourceChunkWeight;
+    }
+
+    public double getFactCardWeight() {
+        return factCardWeight;
     }
 
     public double getContributionWeight() {

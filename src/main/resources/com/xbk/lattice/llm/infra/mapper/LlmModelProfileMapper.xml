@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.llm.infra.mapper.LlmModelProfileMapper">
+
+    <resultMap id="LlmModelProfileResultMap" type="com.xbk.lattice.llm.domain.LlmModelProfile">
+        <constructor>
+            <arg column="id" javaType="java.lang.Long"/>
+            <arg column="model_code" javaType="java.lang.String"/>
+            <arg column="connection_id" javaType="java.lang.Long"/>
+            <arg column="model_name" javaType="java.lang.String"/>
+            <arg column="model_kind" javaType="java.lang.String"/>
+            <arg column="expected_dimensions" javaType="java.lang.Integer"/>
+            <arg column="supports_dimension_override" javaType="_boolean"/>
+            <arg column="temperature" javaType="java.math.BigDecimal"/>
+            <arg column="max_tokens" javaType="java.lang.Integer"/>
+            <arg column="timeout_seconds" javaType="java.lang.Integer"/>
+            <arg column="input_price_per_1k_tokens" javaType="java.math.BigDecimal"/>
+            <arg column="output_price_per_1k_tokens" javaType="java.math.BigDecimal"/>
+            <arg column="extra_options_json" javaType="java.lang.String"/>
+            <arg column="enabled" javaType="_boolean"/>
+            <arg column="remarks" javaType="java.lang.String"/>
+            <arg column="created_by" javaType="java.lang.String"/>
+            <arg column="updated_by" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="updated_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="LlmModelProfileColumns">
+        id, model_code, connection_id, model_name, model_kind, expected_dimensions,
+        supports_dimension_override, temperature, max_tokens, timeout_seconds,
+        input_price_per_1k_tokens, output_price_per_1k_tokens,
+        extra_options_json::text as extra_options_json, enabled, remarks, created_by, updated_by, created_at, updated_at
+    </sql>
+
+    <select id="insert" resultType="java.lang.Long">
+        insert into llm_model_profiles (
+            model_code, connection_id, model_name, model_kind, expected_dimensions,
+            supports_dimension_override, temperature, max_tokens, timeout_seconds,
+            input_price_per_1k_tokens, output_price_per_1k_tokens, extra_options_json,
+            enabled, remarks, created_by, updated_by
+        )
+        values (
+            #{modelProfile.modelCode},
+            #{modelProfile.connectionId},
+            #{modelProfile.modelName},
+            #{modelProfile.modelKind},
+            #{modelProfile.expectedDimensions},
+            #{modelProfile.supportsDimensionOverride},
+            #{modelProfile.temperature},
+            #{modelProfile.maxTokens},
+            #{modelProfile.timeoutSeconds},
+            #{modelProfile.inputPricePer1kTokens},
+            #{modelProfile.outputPricePer1kTokens},
+            #{modelProfile.extraOptionsJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{modelProfile.enabled},
+            #{modelProfile.remarks},
+            #{modelProfile.createdBy},
+            #{modelProfile.updatedBy}
+        )
+        returning id
+    </select>
+
+    <update id="update">
+        update llm_model_profiles
+        set model_code = #{modelProfile.modelCode},
+            connection_id = #{modelProfile.connectionId},
+            model_name = #{modelProfile.modelName},
+            model_kind = #{modelProfile.modelKind},
+            expected_dimensions = #{modelProfile.expectedDimensions},
+            supports_dimension_override = #{modelProfile.supportsDimensionOverride},
+            temperature = #{modelProfile.temperature},
+            max_tokens = #{modelProfile.maxTokens},
+            timeout_seconds = #{modelProfile.timeoutSeconds},
+            input_price_per_1k_tokens = #{modelProfile.inputPricePer1kTokens},
+            output_price_per_1k_tokens = #{modelProfile.outputPricePer1kTokens},
+            extra_options_json = #{modelProfile.extraOptionsJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            enabled = #{modelProfile.enabled},
+            remarks = #{modelProfile.remarks},
+            updated_by = #{modelProfile.updatedBy},
+            updated_at = current_timestamp
+        where id = #{modelProfile.id}
+    </update>
+
+    <select id="findAll" resultMap="LlmModelProfileResultMap">
+        select <include refid="LlmModelProfileColumns"/>
+        from llm_model_profiles
+        order by id desc
+    </select>
+
+    <select id="findById" resultMap="LlmModelProfileResultMap">
+        select <include refid="LlmModelProfileColumns"/>
+        from llm_model_profiles
+        where id = #{id}
+    </select>
+
+    <select id="findEnabledById" resultMap="LlmModelProfileResultMap">
+        select <include refid="LlmModelProfileColumns"/>
+        from llm_model_profiles
+        where id = #{id}
+          and enabled = true
+    </select>
+
+    <delete id="deleteById">
+        delete from llm_model_profiles
+        where id = #{id}
+    </delete>
+</mapper>

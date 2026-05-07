@@ -1,6 +1,5 @@
 package com.xbk.lattice.query.citation;
 
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -16,7 +15,6 @@ import java.util.regex.Pattern;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class CitationExtractor {
 
     private static final Pattern ARTICLE_PATTERN = Pattern.compile("\\[\\[(?!→\\s*)([^\\]|]+)(?:\\|[^\\]]+)?]]");
@@ -64,8 +62,8 @@ public class CitationExtractor {
                     || isStructuralBlock(contentBlock)) {
                 continue;
             }
-            List<String> claimCandidates = extractClaimCandidates(contentBlock);
-            for (String claimCandidate : claimCandidates) {
+            List<ClaimCandidate> claimCandidates = extractClaimCandidates(contentBlock);
+            for (ClaimCandidate claimCandidate : claimCandidates) {
                 ClaimSegment claimSegment = buildClaimSegment(claimIndex, claimCandidate, citationOrdinal);
                 if (claimSegment == null) {
                     continue;
@@ -98,6 +96,7 @@ public class CitationExtractor {
             List<Citation> citations,
             String paragraph,
             String claimText,
+            String contextWindow,
             int startOrdinal
     ) {
         int ordinal = startOrdinal;
@@ -109,7 +108,7 @@ public class CitationExtractor {
                     CitationSourceType.ARTICLE,
                     matcher.group(1).trim(),
                     claimText,
-                    paragraph
+                    contextWindow
             ));
             ordinal++;
         }
@@ -120,6 +119,7 @@ public class CitationExtractor {
             List<Citation> citations,
             String paragraph,
             String claimText,
+            String contextWindow,
             int startOrdinal
     ) {
         int ordinal = startOrdinal;
@@ -132,7 +132,7 @@ public class CitationExtractor {
                     CitationSourceType.SOURCE_FILE,
                     normalizeSourceTargetKey(rawTargetKey),
                     claimText,
-                    paragraph
+                    contextWindow
             ));
             ordinal++;
         }
@@ -151,8 +151,8 @@ public class CitationExtractor {
         return false;
     }
 
-    private List<String> extractClaimCandidates(String contentBlock) {
-        List<String> claimCandidates = new ArrayList<String>();
+    private List<ClaimCandidate> extractClaimCandidates(String contentBlock) {
+        List<ClaimCandidate> claimCandidates = new ArrayList<ClaimCandidate>();
         String[] lines = contentBlock.split("\\R");
         if (hasCitationTableClaims(lines)) {
             return extractTableClaimCandidates(lines);
@@ -163,26 +163,74 @@ public class CitationExtractor {
                 if (normalizedLine.isBlank() || isReferenceLine(normalizedLine) || isStructuralLine(normalizedLine)) {
                     continue;
                 }
-                claimCandidates.addAll(splitSentenceClaims(normalizedLine));
+                claimCandidates.addAll(toClaimCandidates(splitSentenceClaims(normalizedLine), normalizedLine));
             }
             return claimCandidates;
         }
-        return splitSentenceClaims(contentBlock);
+        return toClaimCandidates(splitSentenceClaims(contentBlock), contentBlock);
     }
 
-    private ClaimSegment buildClaimSegment(int claimIndex, String rawParagraph, int startOrdinal) {
+    private ClaimSegment buildClaimSegment(int claimIndex, ClaimCandidate claimCandidate, int startOrdinal) {
+        if (claimCandidate == null) {
+            return null;
+        }
+        return buildClaimSegment(
+                claimIndex,
+                claimCandidate.getText(),
+                claimCandidate.getContextWindow(),
+                startOrdinal
+        );
+    }
+
+    private ClaimSegment buildClaimSegment(
+            int claimIndex,
+            String rawParagraph,
+            String contextWindow,
+            int startOrdinal
+    ) {
         String normalizedParagraph = rawParagraph == null ? "" : rawParagraph.trim();
         if (normalizedParagraph.isBlank() || normalizedParagraph.startsWith("#")) {
             return null;
         }
+        String normalizedContextWindow = contextWindow == null || contextWindow.isBlank()
+                ? normalizedParagraph
+                : contextWindow.trim();
         String claimText = normalizeClaimText(stripCitationLiteral(normalizedParagraph));
-        if (claimText.isBlank()) {
+        if (claimText.isBlank() || isLowInformationTransitionClaim(claimText)) {
             return null;
         }
         List<Citation> citations = new ArrayList<Citation>();
-        int nextOrdinal = extractArticleCitations(citations, normalizedParagraph, claimText, startOrdinal);
-        extractSourceCitations(citations, normalizedParagraph, claimText, nextOrdinal);
+        int nextOrdinal = extractArticleCitations(
+                citations,
+                normalizedParagraph,
+                claimText,
+                normalizedContextWindow,
+                startOrdinal
+        );
+        extractSourceCitations(citations, normalizedParagraph, claimText, normalizedContextWindow, nextOrdinal);
         return new ClaimSegment(claimIndex, claimText, normalizedParagraph, citations);
+    }
+
+    /**
+     * 判断当前 claim 是否只是“具体来说 / 总结如下”等过渡文字。
+     *
+     * @param claimText claim 文本
+     * @return 低信息过渡句返回 true
+     */
+    private boolean isLowInformationTransitionClaim(String claimText) {
+        if (claimText == null || claimText.isBlank()) {
+            return true;
+        }
+        String normalizedClaim = claimText.replaceAll("[：:。；;，,\\s]+", "");
+        if (normalizedClaim.isBlank()) {
+            return true;
+        }
+        return normalizedClaim.equals("具体来说")
+                || normalizedClaim.equals("总结")
+                || normalizedClaim.equals("总结如下")
+                || normalizedClaim.equals("总体来说")
+                || normalizedClaim.equals("换句话说")
+                || normalizedClaim.equals("也就是说");
     }
 
     private boolean shouldSkipSection(String currentSection) {
@@ -295,8 +343,8 @@ public class CitationExtractor {
      * @param lines Markdown block 行
      * @return claim 候选
      */
-    private List<String> extractTableClaimCandidates(String[] lines) {
-        List<String> claimCandidates = new ArrayList<String>();
+    private List<ClaimCandidate> extractTableClaimCandidates(String[] lines) {
+        List<ClaimCandidate> claimCandidates = new ArrayList<ClaimCandidate>();
         List<String> headerCells = List.of();
         if (lines == null) {
             return claimCandidates;
@@ -315,7 +363,7 @@ public class CitationExtractor {
             }
             String tableClaim = buildTableClaimCandidate(headerCells, rowCells);
             if (!tableClaim.isBlank()) {
-                claimCandidates.add(tableClaim);
+                claimCandidates.add(new ClaimCandidate(tableClaim, normalizedLine));
             }
         }
         return claimCandidates;
@@ -466,6 +514,18 @@ public class CitationExtractor {
         return claimCandidates;
     }
 
+    private List<ClaimCandidate> toClaimCandidates(List<String> sentenceClaims, String contextWindow) {
+        List<ClaimCandidate> claimCandidates = new ArrayList<ClaimCandidate>();
+        if (sentenceClaims == null) {
+            return claimCandidates;
+        }
+        String normalizedContextWindow = contextWindow == null ? "" : contextWindow.replaceAll("\\R+", " ").trim();
+        for (String sentenceClaim : sentenceClaims) {
+            claimCandidates.add(new ClaimCandidate(sentenceClaim, normalizedContextWindow));
+        }
+        return claimCandidates;
+    }
+
     private void propagateFollowingCitationToPreviousClaims(List<String> claimCandidates) {
         if (claimCandidates == null || claimCandidates.size() <= 1) {
             return;
@@ -560,5 +620,25 @@ public class CitationExtractor {
         normalizedClaimText = normalizedClaimText.replaceFirst("^\\d+\\.\\s+", "");
         normalizedClaimText = normalizedClaimText.replaceAll("[。；;]+$", "");
         return normalizedClaimText.trim();
+    }
+
+    private static class ClaimCandidate {
+
+        private final String text;
+
+        private final String contextWindow;
+
+        private ClaimCandidate(String text, String contextWindow) {
+            this.text = text;
+            this.contextWindow = contextWindow;
+        }
+
+        private String getText() {
+            return text;
+        }
+
+        private String getContextWindow() {
+            return contextWindow;
+        }
     }
 }

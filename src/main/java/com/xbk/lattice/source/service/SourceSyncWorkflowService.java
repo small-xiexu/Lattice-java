@@ -8,7 +8,6 @@ import com.xbk.lattice.source.domain.KnowledgeSource;
 import com.xbk.lattice.source.domain.SourceMaterializationResult;
 import com.xbk.lattice.source.domain.SourceSyncRunDetail;
 import com.xbk.lattice.source.domain.SourceValidationResult;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -25,7 +24,6 @@ import java.util.Locale;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class SourceSyncWorkflowService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();

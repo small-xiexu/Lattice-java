@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.GraphRelationMapper">
+
+    <resultMap id="AstRelationResultMap" type="com.xbk.lattice.compiler.ast.domain.AstRelation">
+        <result column="src_id" property="srcId"/>
+        <result column="edge_type" property="edgeType"/>
+        <result column="dst_id" property="dstId"/>
+        <result column="source_ref" property="sourceRef"/>
+        <result column="source_start_line" property="sourceStartLine"/>
+        <result column="source_end_line" property="sourceEndLine"/>
+        <result column="confidence" property="confidence"/>
+        <result column="extractor" property="extractor"/>
+    </resultMap>
+
+    <delete id="deleteBySourceRef">
+        delete from graph_relations
+        where source_ref = #{sourceRef}
+    </delete>
+
+    <insert id="insert">
+        insert into graph_relations (
+            src_id, edge_type, dst_id, source_ref, source_start_line, source_end_line,
+            confidence, extractor, asserted_at, superseded_by, tombstoned
+        )
+        values (
+            #{relation.srcId},
+            #{relation.edgeType},
+            #{relation.dstId},
+            #{relation.sourceRef},
+            #{relation.sourceStartLine},
+            #{relation.sourceEndLine},
+            #{relation.confidence},
+            #{relation.extractor},
+            current_timestamp,
+            null,
+            false
+        )
+    </insert>
+
+    <select id="findActiveRelationsByEntityIds" resultMap="AstRelationResultMap">
+        select src_id, edge_type, dst_id, source_ref, source_start_line, source_end_line,
+               confidence, extractor
+        from graph_relations
+        where tombstoned = false
+          and superseded_by is null
+          and src_id in
+          <foreach collection="entityIds" item="entityId" open="(" separator="," close=")">
+              #{entityId}
+          </foreach>
+        order by confidence desc, id asc
+        limit #{limit}
+    </select>
+</mapper>

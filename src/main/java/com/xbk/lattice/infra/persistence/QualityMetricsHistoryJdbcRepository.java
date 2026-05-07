@@ -1,12 +1,8 @@
 package com.xbk.lattice.infra.persistence;
 
-import org.springframework.context.annotation.Profile;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.xbk.lattice.infra.persistence.mapper.QualityMetricsHistoryMapper;
 import org.springframework.stereotype.Repository;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
@@ -17,18 +13,17 @@ import java.util.List;
  * @author xiexu
  */
 @Repository
-@Profile("jdbc")
 public class QualityMetricsHistoryJdbcRepository {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final QualityMetricsHistoryMapper qualityMetricsHistoryMapper;
 
     /**
      * 创建质量指标历史仓储。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @param qualityMetricsHistoryMapper 质量指标历史 Mapper
      */
-    public QualityMetricsHistoryJdbcRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public QualityMetricsHistoryJdbcRepository(QualityMetricsHistoryMapper qualityMetricsHistoryMapper) {
+        this.qualityMetricsHistoryMapper = qualityMetricsHistoryMapper;
     }
 
     /**
@@ -37,26 +32,7 @@ public class QualityMetricsHistoryJdbcRepository {
      * @param record 历史记录
      */
     public void save(QualityMetricsHistoryRecord record) {
-        String sql = """
-                insert into quality_metrics_history (
-                    measured_at, total_articles, passed_articles, pending_articles, needs_review,
-                    contributions, source_count, review_pass_rate, grounding_rate, referential_rate
-                )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """;
-        jdbcTemplate.update(
-                sql,
-                record.getMeasuredAt(),
-                record.getTotalArticles(),
-                record.getPassedArticles(),
-                record.getPendingArticles(),
-                record.getNeedsReview(),
-                record.getContributions(),
-                record.getSourceCount(),
-                record.getReviewPassRate(),
-                record.getGroundingRate(),
-                record.getReferentialRate()
-        );
+        qualityMetricsHistoryMapper.save(record);
     }
 
     /**
@@ -66,29 +42,6 @@ public class QualityMetricsHistoryJdbcRepository {
      * @return 历史记录列表
      */
     public List<QualityMetricsHistoryRecord> findSince(int days) {
-        String sql = """
-                select id, measured_at, total_articles, passed_articles, pending_articles, needs_review,
-                       contributions, source_count, review_pass_rate, grounding_rate, referential_rate
-                from quality_metrics_history
-                where measured_at > current_timestamp - (? * interval '1 day')
-                order by measured_at desc, id desc
-                """;
-        return jdbcTemplate.query(sql, this::mapRecord, Math.max(days, 0));
-    }
-
-    private QualityMetricsHistoryRecord mapRecord(ResultSet resultSet, int rowNum) throws SQLException {
-        return new QualityMetricsHistoryRecord(
-                resultSet.getLong("id"),
-                resultSet.getObject("measured_at", OffsetDateTime.class),
-                resultSet.getInt("total_articles"),
-                resultSet.getInt("passed_articles"),
-                resultSet.getInt("pending_articles"),
-                resultSet.getInt("needs_review"),
-                resultSet.getInt("contributions"),
-                resultSet.getInt("source_count"),
-                resultSet.getDouble("review_pass_rate"),
-                resultSet.getDouble("grounding_rate"),
-                resultSet.getDouble("referential_rate")
-        );
+        return qualityMetricsHistoryMapper.findSince(Math.max(days, 0));
     }
 }

@@ -12,7 +12,6 @@ import com.xbk.lattice.source.service.SourceSyncWorkflowService;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.context.annotation.Profile;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -36,7 +35,6 @@ import java.util.Set;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 @RequestMapping("/api/v1/admin/sources")
 public class AdminSourceController {
 
@@ -236,7 +234,8 @@ public class AdminSourceController {
                     sourceFileRecord.getFormat(),
                     sourceFileRecord.getFileSize(),
                     metadataNode.path("parseMode").asText(null),
-                    metadataNode.path("parseProvider").asText(null)
+                    metadataNode.path("parseProvider").asText(null),
+                    sourceFileRecord.getContentPreview()
             ));
         }
         return responses;
@@ -335,6 +334,8 @@ public class AdminSourceController {
                 source.getId(),
                 source.getSourceCode(),
                 source.getName(),
+                resolveDisplayName(source),
+                resolvePrimaryDocumentTitle(source),
                 source.getSourceType(),
                 source.getContentProfile(),
                 source.getStatus(),
@@ -352,6 +353,8 @@ public class AdminSourceController {
                 source.getId(),
                 source.getSourceCode(),
                 source.getName(),
+                resolveDisplayName(source),
+                resolvePrimaryDocumentTitle(source),
                 source.getSourceType(),
                 source.getContentProfile(),
                 source.getStatus(),
@@ -366,6 +369,83 @@ public class AdminSourceController {
                 formatTime(source.getCreatedAt()),
                 formatTime(source.getUpdatedAt())
         );
+    }
+
+    /**
+     * 解析管理端展示名称。
+     *
+     * @param source 资料源
+     * @return 展示名称
+     */
+    private String resolveDisplayName(KnowledgeSource source) {
+        JsonNode metadataNode = readJson(source.getMetadataJson());
+        JsonNode bundleNode = metadataNode.path("bundleSummary");
+        String displayName = bundleNode.path("displayName").asText("");
+        String primaryDocumentTitle = resolveFirstText(bundleNode.path("titleHints"));
+        if (StringUtils.hasText(displayName) && !displayName.equals(primaryDocumentTitle)) {
+            return displayName;
+        }
+        String relativePath = resolveFirstText(bundleNode.path("relativePathsSample"));
+        String fileOrDirectoryName = resolveFileOrDirectoryDisplayName(relativePath);
+        if (StringUtils.hasText(fileOrDirectoryName)) {
+            return fileOrDirectoryName;
+        }
+        return source.getName();
+    }
+
+    /**
+     * 解析资料源中的主要文档标题。
+     *
+     * @param source 资料源
+     * @return 主要文档标题
+     */
+    private String resolvePrimaryDocumentTitle(KnowledgeSource source) {
+        JsonNode metadataNode = readJson(source.getMetadataJson());
+        JsonNode bundleNode = metadataNode.path("bundleSummary");
+        JsonNode titleHintsNode = bundleNode.path("titleHints");
+        String primaryDocumentTitle = resolveFirstText(titleHintsNode);
+        return StringUtils.hasText(primaryDocumentTitle) ? primaryDocumentTitle : null;
+    }
+
+    /**
+     * 解析数组中的第一个有效文本。
+     *
+     * @param arrayNode 数组节点
+     * @return 第一个有效文本
+     */
+    private String resolveFirstText(JsonNode arrayNode) {
+        if (!arrayNode.isArray()) {
+            return null;
+        }
+        for (JsonNode itemNode : arrayNode) {
+            String text = itemNode.asText("");
+            if (StringUtils.hasText(text)) {
+                return text.trim();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 从相对路径解析适合作为资料源名的文件或目录名。
+     *
+     * @param relativePath 相对路径
+     * @return 文件或目录展示名
+     */
+    private String resolveFileOrDirectoryDisplayName(String relativePath) {
+        if (!StringUtils.hasText(relativePath)) {
+            return null;
+        }
+        String normalizedPath = relativePath.trim().replace("\\", "/");
+        int separatorIndex = normalizedPath.indexOf('/');
+        if (separatorIndex >= 0) {
+            return normalizedPath.substring(0, separatorIndex);
+        }
+        int dotIndex = normalizedPath.lastIndexOf('.');
+        if (dotIndex <= 0) {
+            return normalizedPath;
+        }
+        return normalizedPath.substring(0, dotIndex);
     }
 
     private String formatTime(java.time.OffsetDateTime value) {
@@ -423,6 +503,10 @@ public class AdminSourceController {
 
         private String name;
 
+        private String displayName;
+
+        private String primaryDocumentTitle;
+
         private String sourceType;
 
         private String contentProfile;
@@ -459,6 +543,10 @@ public class AdminSourceController {
         private String sourceCode;
 
         private String name;
+
+        private String displayName;
+
+        private String primaryDocumentTitle;
 
         private String sourceType;
 

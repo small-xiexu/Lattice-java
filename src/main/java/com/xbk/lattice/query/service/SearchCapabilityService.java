@@ -41,6 +41,15 @@ public interface SearchCapabilityService {
     }
 
     /**
+     * 返回事实证据卡向量索引表是否可用。
+     *
+     * @return 是否可用
+     */
+    default boolean hasFactCardVectorIndex() {
+        return false;
+    }
+
+    /**
      * 返回默认禁用的能力探测实现。
      *
      * @return 禁用实现
@@ -96,6 +105,16 @@ public interface SearchCapabilityService {
              */
             @Override
             public boolean hasArticleChunkVectorIndex() {
+                return false;
+            }
+
+            /**
+             * 返回 fact card 向量索引表不可用。
+             *
+             * @return false
+             */
+            @Override
+            public boolean hasFactCardVectorIndex() {
                 return false;
             }
         };

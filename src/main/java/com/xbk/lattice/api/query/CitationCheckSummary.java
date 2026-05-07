@@ -22,6 +22,10 @@ public class CitationCheckSummary {
 
     private final boolean noCitation;
 
+    private final int claimCount;
+
+    private final int unsupportedClaimCount;
+
     /**
      * 创建 Citation 检查摘要。
      *
@@ -31,7 +35,6 @@ public class CitationCheckSummary {
      * @param coverageRate 引用覆盖率
      * @param noCitation 是否无引用
      */
-    @JsonCreator
     public CitationCheckSummary(
             @JsonProperty("verifiedCount") int verifiedCount,
             @JsonProperty("demotedCount") int demotedCount,
@@ -39,11 +42,37 @@ public class CitationCheckSummary {
             @JsonProperty("coverageRate") double coverageRate,
             @JsonProperty("noCitation") boolean noCitation
     ) {
+        this(verifiedCount, demotedCount, skippedCount, coverageRate, noCitation, 0, 0);
+    }
+
+    /**
+     * 创建 Citation 检查摘要。
+     *
+     * @param verifiedCount 已验证引用数
+     * @param demotedCount 已降级引用数
+     * @param skippedCount 已跳过引用数
+     * @param coverageRate 引用覆盖率
+     * @param noCitation 是否无引用
+     * @param claimCount claim 总数
+     * @param unsupportedClaimCount 不受支持 claim 数
+     */
+    @JsonCreator
+    public CitationCheckSummary(
+            @JsonProperty("verifiedCount") int verifiedCount,
+            @JsonProperty("demotedCount") int demotedCount,
+            @JsonProperty("skippedCount") int skippedCount,
+            @JsonProperty("coverageRate") double coverageRate,
+            @JsonProperty("noCitation") boolean noCitation,
+            @JsonProperty("claimCount") int claimCount,
+            @JsonProperty("unsupportedClaimCount") int unsupportedClaimCount
+    ) {
         this.verifiedCount = verifiedCount;
         this.demotedCount = demotedCount;
         this.skippedCount = skippedCount;
         this.coverageRate = coverageRate;
         this.noCitation = noCitation;
+        this.claimCount = claimCount;
+        this.unsupportedClaimCount = unsupportedClaimCount;
     }
 
     /**
@@ -89,5 +118,23 @@ public class CitationCheckSummary {
      */
     public boolean isNoCitation() {
         return noCitation;
+    }
+
+    /**
+     * 返回 claim 总数。
+     *
+     * @return claim 总数
+     */
+    public int getClaimCount() {
+        return claimCount;
+    }
+
+    /**
+     * 返回不受支持 claim 数。
+     *
+     * @return 不受支持 claim 数
+     */
+    public int getUnsupportedClaimCount() {
+        return unsupportedClaimCount;
     }
 }

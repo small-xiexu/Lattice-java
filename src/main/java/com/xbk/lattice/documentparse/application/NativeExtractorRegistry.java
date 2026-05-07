@@ -1,7 +1,6 @@
 package com.xbk.lattice.documentparse.application;
 
 import com.xbk.lattice.documentparse.port.NativeExtractor;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -16,7 +15,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class NativeExtractorRegistry {
 
     private final List<NativeExtractor> nativeExtractors;

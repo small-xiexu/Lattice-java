@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.GraphEntityMapper">
+
+    <resultMap id="AstEntityResultMap" type="com.xbk.lattice.compiler.ast.domain.AstEntity">
+        <id column="id" property="id"/>
+        <result column="canonical_name" property="canonicalName"/>
+        <result column="simple_name" property="simpleName"/>
+        <result column="entity_type" property="entityType"/>
+        <result column="system_label" property="systemLabel"/>
+        <result column="source_file_id" property="sourceFileId"/>
+        <result column="anchor_ref" property="anchorRef"/>
+        <result column="resolution_status" property="resolutionStatus"/>
+        <result column="metadata_json" property="metadataJson"/>
+    </resultMap>
+
+    <sql id="GraphEntityColumns">
+        id, canonical_name, simple_name, entity_type, system_label,
+        source_file_id, anchor_ref, resolution_status, metadata_json::text as metadata_json
+    </sql>
+
+    <delete id="deleteBySourceFileId">
+        delete from graph_entities
+        where source_file_id = #{sourceFileId}
+    </delete>
+
+    <insert id="upsert">
+        insert into graph_entities (
+            id, canonical_name, simple_name, entity_type, system_label,
+            source_file_id, anchor_ref, resolution_status, metadata_json
+        )
+        values (
+            #{entity.id},
+            #{entity.canonicalName},
+            #{entity.simpleName},
+            #{entity.entityType},
+            #{entity.systemLabel},
+            #{entity.sourceFileId},
+            #{entity.anchorRef},
+            #{entity.resolutionStatus},
+            #{entity.metadataJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler}
+        )
+        on conflict (id) do update
+        set canonical_name = excluded.canonical_name,
+            simple_name = excluded.simple_name,
+            entity_type = excluded.entity_type,
+            system_label = excluded.system_label,
+            source_file_id = excluded.source_file_id,
+            anchor_ref = excluded.anchor_ref,
+            resolution_status = excluded.resolution_status,
+            metadata_json = excluded.metadata_json
+    </insert>
+
+    <select id="searchByMentions" resultMap="AstEntityResultMap">
+        select <include refid="GraphEntityColumns"/>
+        from graph_entities
+        where
+        <foreach collection="mentions" item="mention" separator=" or ">
+            (lower(simple_name) like concat('%', lower(#{mention}), '%')
+             or lower(canonical_name) like concat('%', lower(#{mention}), '%'))
+        </foreach>
+        order by simple_name asc
+        limit #{limit}
+    </select>
+</mapper>

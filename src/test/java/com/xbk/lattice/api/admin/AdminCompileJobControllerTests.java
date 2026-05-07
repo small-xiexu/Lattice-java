@@ -40,13 +40,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b8_compile_job_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b8_compile_job_test",
-        "spring.flyway.default-schema=lattice_b8_compile_job_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.query.cache.store=in-memory",
@@ -187,7 +183,7 @@ class AdminCompileJobControllerTests {
         String jobId = extractJsonValue(responseBody, "jobId");
 
         String persistedRootTraceId = jdbcTemplate.queryForObject(
-                "select root_trace_id from lattice_b8_compile_job_test.compile_jobs where job_id = ?",
+                "select root_trace_id from lattice.compile_jobs where job_id = ?",
                 String.class,
                 jobId
         );
@@ -284,7 +280,7 @@ class AdminCompileJobControllerTests {
                 .andExpect(jsonPath("$.sourceNames[0]").value("docs/payment-brief.docx"));
 
         Integer articleCount = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_b8_compile_job_test.articles",
+                "select count(*) from lattice.articles",
                 Integer.class
         );
         assertThat(articleCount).isNotNull();
@@ -367,12 +363,12 @@ class AdminCompileJobControllerTests {
      * 重置测试表。
      */
     private void resetTables() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_compile_job_test.pending_queries");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_compile_job_test.contributions");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_compile_job_test.knowledge_sources RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.pending_queries");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.contributions");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.knowledge_sources RESTART IDENTITY CASCADE");
         jdbcTemplate.update(
                 """
-                        insert into lattice_b8_compile_job_test.knowledge_sources (
+                        insert into lattice.knowledge_sources (
                             source_code,
                             name,
                             source_type,

@@ -17,13 +17,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b1_source_chunk_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b1_source_chunk_test",
-        "spring.flyway.default-schema=lattice_b1_source_chunk_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key"
 })
@@ -43,7 +39,7 @@ class SourceFileChunkJdbcRepositoryTests {
      */
     @Test
     void shouldRebuildAllChunksFromSourceFileContent() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_source_chunk_test.source_files CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_files CASCADE");
         SourceFileRecord sourceFileRecord = new SourceFileRecord(
                 "payment/order.md",
                 "# Payment",
@@ -81,7 +77,7 @@ class SourceFileChunkJdbcRepositoryTests {
      */
     @Test
     void shouldSearchSourceChunksByLexicalIndex() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_source_chunk_test.source_file_chunks");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_file_chunks");
         sourceFileChunkJdbcRepository.replaceChunks(
                 "payment/order.md",
                 List.of(
@@ -107,20 +103,20 @@ class SourceFileChunkJdbcRepositoryTests {
      */
     @Test
     void shouldPreferStructuredAssignmentMatchWhenSearchingSourceChunks() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_source_chunk_test.source_file_chunks");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_file_chunks");
         sourceFileChunkJdbcRepository.replaceChunks(
-                "scenarios.xlsx",
+                "table-source.xlsx",
                 List.of(
                         new SourceFileChunkRecord(
-                                "scenarios.xlsx",
+                                "table-source.xlsx",
                                 0,
                                 "case 100814 raw step text without row fields",
                                 true
                         ),
                         new SourceFileChunkRecord(
-                                "scenarios.xlsx",
+                                "table-source.xlsx",
                                 1,
-                                "- sheet=场景用例; row=3; case_num=100814; name=SVC; expected=退款成功",
+                                "- sheet=sheet-a; row=3; record_key=100814; name=demo; expected=success",
                                 true
                         )
                 )
@@ -134,8 +130,46 @@ class SourceFileChunkJdbcRepositoryTests {
         );
 
         assertThat(hits).isNotEmpty();
-        assertThat(hits.get(0).getItemKey()).isEqualTo("scenarios.xlsx#1");
-        assertThat(hits.get(0).getContent()).contains("expected=退款成功");
+        assertThat(hits.get(0).getItemKey()).isEqualTo("table-source.xlsx#1");
+        assertThat(hits.get(0).getContent()).contains("expected=success");
+    }
+
+    /**
+     * 验证 LIKE token 预算会优先保留高信号 token，避免长问题里的泛词挤掉精确定位。
+     */
+    @Test
+    void shouldSearchSourceChunksWithBoundedHighSignalLikeTokens() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_file_chunks");
+        sourceFileChunkJdbcRepository.replaceChunks(
+                "manual.md",
+                List.of(
+                        new SourceFileChunkRecord("manual.md", 0, "alpha beta gamma", false),
+                        new SourceFileChunkRecord("manual.md", 1, "the callback path is /alpha/beta", false)
+                )
+        );
+
+        List<LexicalSearchRecord> hits = sourceFileChunkJdbcRepository.searchLexical(
+                "alpha beta gamma delta epsilon zeta eta theta iota kappa /alpha/beta",
+                List.of(
+                        "alpha",
+                        "beta",
+                        "gamma",
+                        "delta",
+                        "epsilon",
+                        "zeta",
+                        "eta",
+                        "theta",
+                        "iota",
+                        "kappa",
+                        "/alpha/beta"
+                ),
+                5,
+                "simple"
+        );
+
+        assertThat(hits).isNotEmpty();
+        assertThat(hits.get(0).getItemKey()).isEqualTo("manual.md#1");
+        assertThat(hits.get(0).getContent()).contains("/alpha/beta");
     }
 
     /**
@@ -143,7 +177,7 @@ class SourceFileChunkJdbcRepositoryTests {
      */
     @Test
     void shouldFindNeighborChunksByFilePathAndIndex() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_source_chunk_test.source_file_chunks");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_file_chunks");
         sourceFileChunkJdbcRepository.replaceChunks(
                 "manual.pdf",
                 List.of(

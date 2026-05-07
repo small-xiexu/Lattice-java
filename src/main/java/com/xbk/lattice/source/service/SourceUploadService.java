@@ -18,7 +18,6 @@ import com.xbk.lattice.source.domain.SourceDecisionResult;
 import com.xbk.lattice.source.domain.SourceSyncRun;
 import com.xbk.lattice.source.domain.SourceSyncRunDetail;
 import com.xbk.lattice.source.infra.SourceSnapshotJdbcRepository;
-import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,7 +39,6 @@ import java.util.Locale;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class SourceUploadService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -900,7 +898,7 @@ public class SourceUploadService {
     }
 
     private KnowledgeSource createUploadSource(BundleSummary bundleSummary) {
-        String sourceCode = nextSourceCode(bundleSummary.getDisplayName());
+        String sourceCode = nextSourceCode(bundleSummary);
         ObjectNode metadataNode = OBJECT_MAPPER.createObjectNode();
         metadataNode.set("bundleSummary", OBJECT_MAPPER.valueToTree(bundleSummary));
         return sourceService.save(new KnowledgeSource(
@@ -923,8 +921,22 @@ public class SourceUploadService {
         ));
     }
 
-    private String nextSourceCode(String displayName) {
-        String baseCode = normalizeSourceCode(displayName);
+    /**
+     * 生成下一个可用资料源编码。
+     *
+     * @param bundleSummary 资料包摘要
+     * @return 资料源编码
+     */
+    private String nextSourceCode(BundleSummary bundleSummary) {
+        String baseCode = normalizeSourceCode(bundleSummary.getDisplayName());
+        if ("upload-source".equals(baseCode)) {
+            for (String titleHint : bundleSummary.getTitleHints()) {
+                baseCode = normalizeSourceCode(titleHint);
+                if (!"upload-source".equals(baseCode)) {
+                    break;
+                }
+            }
+        }
         List<KnowledgeSource> existingSources = sourceService.listSources();
         String candidate = baseCode;
         int index = 2;

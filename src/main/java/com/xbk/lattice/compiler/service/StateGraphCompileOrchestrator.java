@@ -8,7 +8,6 @@ import com.xbk.lattice.compiler.graph.CompileGraphLifecycleListener;
 import com.xbk.lattice.compiler.graph.CompileGraphState;
 import com.xbk.lattice.compiler.graph.CompileGraphStateMapper;
 import org.slf4j.MDC;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -24,7 +23,6 @@ import java.util.UUID;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class StateGraphCompileOrchestrator implements CompileOrchestrator {
 
     private final CompileGraphDefinitionFactory compileGraphDefinitionFactory;

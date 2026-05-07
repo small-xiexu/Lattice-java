@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.ArticleSourceRefMapper">
+
+    <resultMap id="ArticleSourceRefRecordResultMap" type="com.xbk.lattice.infra.persistence.ArticleSourceRefRecord">
+        <constructor>
+            <arg column="article_key" javaType="java.lang.String"/>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="source_file_id" javaType="java.lang.Long"/>
+            <arg column="ref_type" javaType="java.lang.String"/>
+            <arg column="ref_label" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="ArticleSourceFileArticleKeyRowResultMap"
+               type="com.xbk.lattice.infra.persistence.ArticleSourceFileArticleKeyRow">
+        <constructor>
+            <arg column="source_file_id" javaType="java.lang.Long"/>
+            <arg column="article_key" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <delete id="deleteByArticleKey">
+        delete from article_source_refs
+        where article_key = #{articleKey}
+    </delete>
+
+    <insert id="insert">
+        insert into article_source_refs (
+            article_key, source_id, source_file_id, ref_type, ref_label
+        )
+        values (
+            #{record.articleKey},
+            #{record.sourceId},
+            #{record.sourceFileId},
+            #{record.refType},
+            #{record.refLabel}
+        )
+    </insert>
+
+    <select id="findByArticleKey" resultMap="ArticleSourceRefRecordResultMap">
+        select article_key, source_id, source_file_id, ref_type, ref_label
+        from article_source_refs
+        where article_key = #{articleKey}
+        order by created_at asc, id asc
+    </select>
+
+    <select id="findArticleKeysBySourceFileIds" resultMap="ArticleSourceFileArticleKeyRowResultMap">
+        select source_file_id, article_key
+        from article_source_refs
+        where source_file_id in
+        <foreach collection="sourceFileIds" item="sourceFileId" open="(" separator="," close=")">
+            #{sourceFileId}
+        </foreach>
+        order by created_at asc, id asc
+    </select>
+</mapper>

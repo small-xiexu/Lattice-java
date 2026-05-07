@@ -3,7 +3,6 @@ package com.xbk.lattice.api.admin;
 import com.xbk.lattice.governance.QualityMetricsReport;
 import com.xbk.lattice.governance.QualityMetricsService;
 import com.xbk.lattice.governance.QualityMetricsTrend;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -17,7 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 @RequestMapping("/api/v1/admin/quality")
 public class AdminQualityController {
 

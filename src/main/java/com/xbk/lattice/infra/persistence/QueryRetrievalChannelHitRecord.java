@@ -31,6 +31,16 @@ public class QueryRetrievalChannelHitRecord {
 
     private final double score;
 
+    private final Long factCardId;
+
+    private final String cardType;
+
+    private final String reviewStatus;
+
+    private final Double confidence;
+
+    private final String sourceChunkIdsJson;
+
     private final String sourcePathsJson;
 
     private final String metadataJson;
@@ -49,6 +59,11 @@ public class QueryRetrievalChannelHitRecord {
      * @param conceptId 概念标识
      * @param title 标题
      * @param score 原始得分
+     * @param factCardId Fact Card 数据库主键
+     * @param cardType Fact Card 类型
+     * @param reviewStatus 审查状态
+     * @param confidence 置信度
+     * @param sourceChunkIdsJson Source Chunk ID JSON
      * @param sourcePathsJson 来源路径 JSON
      * @param metadataJson 元数据 JSON
      */
@@ -64,6 +79,11 @@ public class QueryRetrievalChannelHitRecord {
             String conceptId,
             String title,
             double score,
+            Long factCardId,
+            String cardType,
+            String reviewStatus,
+            Double confidence,
+            String sourceChunkIdsJson,
             String sourcePathsJson,
             String metadataJson
     ) {
@@ -78,6 +98,11 @@ public class QueryRetrievalChannelHitRecord {
         this.conceptId = conceptId;
         this.title = title;
         this.score = score;
+        this.factCardId = factCardId;
+        this.cardType = cardType;
+        this.reviewStatus = reviewStatus;
+        this.confidence = confidence;
+        this.sourceChunkIdsJson = sourceChunkIdsJson;
         this.sourcePathsJson = sourcePathsJson;
         this.metadataJson = metadataJson;
     }
@@ -124,6 +149,26 @@ public class QueryRetrievalChannelHitRecord {
 
     public double getScore() {
         return score;
+    }
+
+    public Long getFactCardId() {
+        return factCardId;
+    }
+
+    public String getCardType() {
+        return cardType;
+    }
+
+    public String getReviewStatus() {
+        return reviewStatus;
+    }
+
+    public Double getConfidence() {
+        return confidence;
+    }
+
+    public String getSourceChunkIdsJson() {
+        return sourceChunkIdsJson;
     }
 
     public String getSourcePathsJson() {

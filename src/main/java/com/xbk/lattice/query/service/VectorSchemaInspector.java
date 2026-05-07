@@ -1,7 +1,6 @@
 package com.xbk.lattice.query.service;
 
 import com.xbk.lattice.infra.persistence.ArticleVectorJdbcRepository;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -16,7 +15,6 @@ import java.util.regex.Pattern;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class VectorSchemaInspector {
 
     private static final Pattern VECTOR_DIMENSIONS_PATTERN = Pattern.compile(".*vector\\((\\d+)\\)$");

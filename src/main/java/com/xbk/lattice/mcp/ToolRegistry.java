@@ -3,7 +3,6 @@ package com.xbk.lattice.mcp;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -18,7 +17,6 @@ import java.util.List;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class ToolRegistry {
 
     private final ObjectProvider<List<McpServerFeatures.SyncToolSpecification>> syncToolSpecificationsProvider;

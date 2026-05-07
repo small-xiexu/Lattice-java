@@ -3,7 +3,6 @@ package com.xbk.lattice.documentparse.service;
 import com.xbk.lattice.compiler.domain.RawSource;
 import com.xbk.lattice.documentparse.domain.DocumentParseResult;
 import com.xbk.lattice.documentparse.application.DocumentParseApplicationService;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -17,7 +16,6 @@ import java.nio.file.Path;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class DocumentParseRouter {
 
     private final DocumentParseApplicationService documentParseApplicationService;

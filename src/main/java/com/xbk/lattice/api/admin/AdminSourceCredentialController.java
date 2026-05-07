@@ -2,7 +2,6 @@ package com.xbk.lattice.api.admin;
 
 import com.xbk.lattice.source.domain.SourceCredential;
 import com.xbk.lattice.source.service.SourceCredentialService;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -20,7 +19,6 @@ import java.util.List;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 @RequestMapping("/api/v1/admin/source-credentials")
 public class AdminSourceCredentialController {
 

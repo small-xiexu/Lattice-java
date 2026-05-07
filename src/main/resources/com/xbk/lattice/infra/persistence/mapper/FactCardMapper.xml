@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.FactCardMapper">
+
+    <resultMap id="FactCardRecordResultMap" type="com.xbk.lattice.infra.persistence.FactCardRecord">
+        <constructor>
+            <arg column="id" javaType="java.lang.Long"/>
+            <arg column="card_id" javaType="java.lang.String"/>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="source_file_id" javaType="java.lang.Long"/>
+            <arg column="card_type" javaType="com.xbk.lattice.query.evidence.domain.FactCardType"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.FactCardTypeHandler"/>
+            <arg column="answer_shape" javaType="com.xbk.lattice.query.evidence.domain.AnswerShape"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.AnswerShapeTypeHandler"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="claim" javaType="java.lang.String"/>
+            <arg column="items_json" javaType="java.lang.String"/>
+            <arg column="evidence_text" javaType="java.lang.String"/>
+            <arg column="source_chunk_ids" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.LongListArrayTypeHandler"/>
+            <arg column="article_ids" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.LongListArrayTypeHandler"/>
+            <arg column="confidence" javaType="_double"/>
+            <arg column="review_status" javaType="com.xbk.lattice.query.evidence.domain.FactCardReviewStatus"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.FactCardReviewStatusTypeHandler"/>
+            <arg column="content_hash" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="updated_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="LexicalSearchRecordResultMap" type="com.xbk.lattice.infra.persistence.LexicalSearchRecord">
+        <constructor>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="item_key" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="content" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="review_status" javaType="java.lang.String"/>
+            <arg column="source_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="chunk_index" javaType="java.lang.Integer"/>
+            <arg column="verbatim" javaType="java.lang.Boolean"/>
+            <arg column="score" javaType="_double"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="FactCardCountRowResultMap" type="com.xbk.lattice.infra.persistence.FactCardCountRow">
+        <constructor>
+            <arg column="count_key" javaType="java.lang.String"/>
+            <arg column="card_count" javaType="_int"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="FactCardColumns">
+        id, card_id, source_id, source_file_id, card_type, answer_shape, title, claim,
+        items_json::text as items_json, evidence_text, source_chunk_ids, article_ids,
+        confidence, review_status, content_hash, created_at, updated_at
+    </sql>
+
+    <select id="upsert" resultMap="FactCardRecordResultMap">
+        insert into fact_cards (
+            card_id, source_id, source_file_id, card_type, answer_shape, title, claim, items_json,
+            evidence_text, source_chunk_ids, article_ids, confidence, review_status, content_hash, search_tsv
+        )
+        values (
+            #{record.cardId},
+            #{record.sourceId},
+            #{record.sourceFileId},
+            #{record.cardType,typeHandler=com.xbk.lattice.infra.persistence.mybatis.FactCardTypeHandler},
+            #{record.answerShape,typeHandler=com.xbk.lattice.infra.persistence.mybatis.AnswerShapeTypeHandler},
+            #{record.title},
+            #{record.claim},
+            #{record.itemsJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{record.evidenceText},
+            #{record.sourceChunkIds,typeHandler=com.xbk.lattice.infra.persistence.mybatis.LongListArrayTypeHandler},
+            #{record.articleIds,typeHandler=com.xbk.lattice.infra.persistence.mybatis.LongListArrayTypeHandler},
+            #{record.confidence},
+            #{record.reviewStatus,typeHandler=com.xbk.lattice.infra.persistence.mybatis.FactCardReviewStatusTypeHandler},
+            #{record.contentHash},
+            to_tsvector('simple'::regconfig, #{searchText})
+        )
+        on conflict (card_id) do update
+        set source_id = excluded.source_id,
+            source_file_id = excluded.source_file_id,
+            card_type = excluded.card_type,
+            answer_shape = excluded.answer_shape,
+            title = excluded.title,
+            claim = excluded.claim,
+            items_json = excluded.items_json,
+            evidence_text = excluded.evidence_text,
+            source_chunk_ids = excluded.source_chunk_ids,
+            article_ids = excluded.article_ids,
+            confidence = excluded.confidence,
+            review_status = excluded.review_status,
+            content_hash = excluded.content_hash,
+            search_tsv = excluded.search_tsv,
+            updated_at = CURRENT_TIMESTAMP
+        returning <include refid="FactCardColumns"/>
+    </select>
+
+    <select id="findByCardId" resultMap="FactCardRecordResultMap">
+        select <include refid="FactCardColumns"/>
+        from fact_cards
+        where card_id = #{cardId}
+    </select>
+
+    <select id="findById" resultMap="FactCardRecordResultMap">
+        select <include refid="FactCardColumns"/>
+        from fact_cards
+        where id = #{id}
+    </select>
+
+    <select id="findAll" resultMap="FactCardRecordResultMap">
+        select <include refid="FactCardColumns"/>
+        from fact_cards
+        order by updated_at desc, id desc
+    </select>
+
+    <select id="findBySourceFileId" resultMap="FactCardRecordResultMap">
+        select <include refid="FactCardColumns"/>
+        from fact_cards
+        where source_file_id = #{sourceFileId}
+        order by card_type asc, title asc, id asc
+    </select>
+
+    <delete id="deleteBySourceFileId">
+        delete from fact_cards
+        where source_file_id = #{sourceFileId}
+    </delete>
+
+    <delete id="deleteAll">
+        delete from fact_cards
+    </delete>
+
+    <select id="countAll" resultType="_int">
+        select count(*)
+        from fact_cards
+    </select>
+
+    <select id="countByCardType" resultMap="FactCardCountRowResultMap">
+        select card_type as count_key, count(*)::integer as card_count
+        from fact_cards
+        group by card_type
+        order by card_type asc
+    </select>
+
+    <select id="countByReviewStatus" resultMap="FactCardCountRowResultMap">
+        select review_status as count_key, count(*)::integer as card_count
+        from fact_cards
+        group by review_status
+        order by review_status asc
+    </select>
+
+    <select id="countWithoutSourceChunks" resultType="_int">
+        select count(*)
+        from fact_cards
+        where cardinality(source_chunk_ids) = 0
+    </select>
+
+    <select id="countByReviewStatusValue" resultType="_int">
+        select count(*)
+        from fact_cards
+        where review_status = #{reviewStatus}
+    </select>
+
+    <select id="searchLexical" resultMap="LexicalSearchRecordResultMap">
+        with query as (
+            select plainto_tsquery(cast(#{tsConfig} as regconfig), #{question}) as tsq
+        )
+        select fc.source_id,
+               fc.card_id as item_key,
+               fc.card_id as concept_id,
+               fc.title,
+               trim(concat_ws(E'\n\n', coalesce(fc.claim, ''), coalesce(fc.items_json::text, ''), coalesce(fc.evidence_text, ''))) as content,
+               jsonb_build_object(
+                   'factCardId', fc.id,
+                   'cardId', fc.card_id,
+                   'sourceFileId', fc.source_file_id,
+                   'cardType', fc.card_type,
+                   'answerShape', fc.answer_shape,
+                   'confidence', fc.confidence,
+                   'sourceChunkIds', coalesce(to_jsonb(fc.source_chunk_ids), '[]'::jsonb),
+                   'articleIds', coalesce(to_jsonb(fc.article_ids), '[]'::jsonb)
+               )::text as metadata_json,
+               fc.review_status,
+               array_remove(array[sf.file_path], null)::text[] as source_paths,
+               null::integer as chunk_index,
+               false as verbatim,
+               ts_rank_cd(fc.search_tsv, query.tsq)
+               <foreach collection="likeTokens" item="likeToken">
+                   + case when lower(fc.title) like #{likeToken} then 3.0 else 0 end
+                   + case when lower(fc.claim) like #{likeToken} then 4.0 else 0 end
+                   + case when lower(fc.items_json::text) like #{likeToken} then 4.0 else 0 end
+                   + case when lower(fc.evidence_text) like #{likeToken} then 3.0 else 0 end
+                   + case when lower(fc.card_type) like #{likeToken} then 1.0 else 0 end
+                   + case when lower(fc.answer_shape) like #{likeToken} then 1.0 else 0 end
+               </foreach>
+               as score
+        from fact_cards fc
+        left join source_files sf on sf.id = fc.source_file_id
+        cross join query
+        where fc.search_tsv @@ query.tsq
+        <foreach collection="likeTokens" item="likeToken">
+           or lower(fc.title) like #{likeToken}
+           or lower(fc.claim) like #{likeToken}
+           or lower(fc.items_json::text) like #{likeToken}
+           or lower(fc.evidence_text) like #{likeToken}
+           or lower(fc.card_type) like #{likeToken}
+           or lower(fc.answer_shape) like #{likeToken}
+        </foreach>
+        order by score desc, fc.updated_at desc, fc.card_id asc
+        limit #{limit}
+    </select>
+</mapper>

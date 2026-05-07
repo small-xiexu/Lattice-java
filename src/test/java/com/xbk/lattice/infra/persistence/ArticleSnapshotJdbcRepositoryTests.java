@@ -18,13 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b7_snapshot_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b7_snapshot_test",
-        "spring.flyway.default-schema=lattice_b7_snapshot_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key"
 })
@@ -40,15 +36,15 @@ class ArticleSnapshotJdbcRepositoryTests {
     private ArticleSnapshotJdbcRepository articleSnapshotJdbcRepository;
 
     /**
-     * 验证 Flyway 已创建 article_snapshots 表。
+     * 验证 手动 DDL 已创建 article_snapshots 表。
      */
     @Test
-    void shouldCreateArticleSnapshotsTableByFlyway() {
+    void shouldCreateArticleSnapshotsTableByManualDdl() {
         Integer count = jdbcTemplate.queryForObject(
                 """
                         select count(*)
                         from information_schema.tables
-                        where table_schema = 'lattice_b7_snapshot_test'
+                        where table_schema = 'lattice'
                           and table_name = 'article_snapshots'
                         """,
                 Integer.class
@@ -63,9 +59,9 @@ class ArticleSnapshotJdbcRepositoryTests {
     @Test
     void shouldCaptureSnapshotHistoryWhenArticleUpserted() {
         jdbcTemplate.execute(
-                "TRUNCATE TABLE lattice_b7_snapshot_test.article_chunks, "
-                        + "lattice_b7_snapshot_test.article_snapshots, "
-                        + "lattice_b7_snapshot_test.articles CASCADE"
+                "TRUNCATE TABLE lattice.article_chunks, "
+                        + "lattice.article_snapshots, "
+                        + "lattice.articles CASCADE"
         );
 
         OffsetDateTime firstCompiledAt = OffsetDateTime.parse("2026-04-15T20:00:00+08:00");

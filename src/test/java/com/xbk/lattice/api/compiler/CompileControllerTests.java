@@ -31,13 +31,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b1_api_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b1_api_test",
-        "spring.flyway.default-schema=lattice_b1_api_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key"
 })
@@ -64,8 +60,8 @@ class CompileControllerTests {
      */
     @Test
     void shouldCompileSourceDirectoryViaHttpApi(@TempDir Path tempDir) throws Exception {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_api_test.source_files CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_api_test.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_files CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
 
         Path paymentDir = Files.createDirectories(tempDir.resolve("payment"));
         Files.writeString(paymentDir.resolve("order.md"), "order-flow", StandardCharsets.UTF_8);
@@ -109,9 +105,9 @@ class CompileControllerTests {
      */
     @Test
     void shouldEnhanceExistingArticleViaIncrementalCompileApi(@TempDir Path tempDir) throws Exception {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_api_test.source_files CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_api_test.synthesis_artifacts");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_api_test.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_files CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.synthesis_artifacts");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
 
         Path baselineRoot = Files.createDirectories(tempDir.resolve("baseline"));
         Path baselinePaymentDir = Files.createDirectories(baselineRoot.resolve("payment"));

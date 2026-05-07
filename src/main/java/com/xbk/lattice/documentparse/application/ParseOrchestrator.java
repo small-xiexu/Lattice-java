@@ -4,7 +4,6 @@ import com.xbk.lattice.documentparse.domain.model.ParseCapability;
 import com.xbk.lattice.documentparse.domain.model.ParseOutput;
 import com.xbk.lattice.documentparse.domain.model.ParseRequest;
 import com.xbk.lattice.documentparse.port.NativeExtractor;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -24,7 +23,6 @@ import java.util.Set;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class ParseOrchestrator {
 
     private static final Set<String> IMAGE_FORMATS = new HashSet<String>(Arrays.asList(

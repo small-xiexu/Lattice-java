@@ -2,7 +2,6 @@ package com.xbk.lattice.query.service;
 
 import com.xbk.lattice.infra.persistence.QueryRetrievalSettingsJdbcRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,7 +15,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class QueryRetrievalSettingsService {
 
     private final QueryRetrievalSettingsJdbcRepository queryRetrievalSettingsJdbcRepository;
@@ -66,6 +64,7 @@ public class QueryRetrievalSettingsService {
                 QueryRetrievalSettingsState.DEFAULT_ARTICLE_CHUNK_WEIGHT,
                 QueryRetrievalSettingsState.DEFAULT_SOURCE_WEIGHT,
                 QueryRetrievalSettingsState.DEFAULT_SOURCE_CHUNK_WEIGHT,
+                QueryRetrievalSettingsState.DEFAULT_FACT_CARD_WEIGHT,
                 QueryRetrievalSettingsState.DEFAULT_CONTRIBUTION_WEIGHT,
                 QueryRetrievalSettingsState.DEFAULT_GRAPH_WEIGHT,
                 QueryRetrievalSettingsState.DEFAULT_ARTICLE_VECTOR_WEIGHT,
@@ -107,6 +106,7 @@ public class QueryRetrievalSettingsService {
                 QueryRetrievalSettingsState.DEFAULT_ARTICLE_CHUNK_WEIGHT,
                 sourceWeight,
                 QueryRetrievalSettingsState.DEFAULT_SOURCE_CHUNK_WEIGHT,
+                QueryRetrievalSettingsState.DEFAULT_FACT_CARD_WEIGHT,
                 contributionWeight,
                 graphWeight,
                 articleVectorWeight,
@@ -126,6 +126,7 @@ public class QueryRetrievalSettingsService {
      * @param articleChunkWeight Article Chunk lexical 权重
      * @param sourceWeight Source 文件级权重
      * @param sourceChunkWeight Source Chunk lexical 权重
+     * @param factCardWeight Fact Card lexical 权重
      * @param contributionWeight Contribution 权重
      * @param graphWeight Graph 权重
      * @param articleVectorWeight 文章向量权重
@@ -143,6 +144,7 @@ public class QueryRetrievalSettingsService {
             double articleChunkWeight,
             double sourceWeight,
             double sourceChunkWeight,
+            double factCardWeight,
             double contributionWeight,
             double graphWeight,
             double articleVectorWeight,
@@ -159,6 +161,7 @@ public class QueryRetrievalSettingsService {
                     articleChunkWeight,
                     sourceWeight,
                     sourceChunkWeight,
+                    factCardWeight,
                     contributionWeight,
                     graphWeight,
                     articleVectorWeight,
@@ -175,6 +178,7 @@ public class QueryRetrievalSettingsService {
                 articleChunkWeight,
                 sourceWeight,
                 sourceChunkWeight,
+                factCardWeight,
                 contributionWeight,
                 graphWeight,
                 articleVectorWeight,

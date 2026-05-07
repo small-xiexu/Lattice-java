@@ -32,13 +32,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_phase_e_source_admin_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_phase_e_source_admin_test",
-        "spring.flyway.default-schema=lattice_phase_e_source_admin_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.query.cache.store=in-memory",
@@ -233,7 +229,8 @@ class AdminSourceControllerTests {
 
         mockMvc.perform(get("/api/v1/admin/sources/" + sourceId + "/files"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].relativePath").value("README.md"));
+                .andExpect(jsonPath("$[0].relativePath").value("README.md"))
+                .andExpect(jsonPath("$[0].contentPreview", containsString("retry=3")));
     }
 
     /**
@@ -281,18 +278,18 @@ class AdminSourceControllerTests {
      * 重置测试表。
      */
     private void resetTables() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.source_sync_runs RESTART IDENTITY CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.source_snapshots RESTART IDENTITY CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.source_file_chunks RESTART IDENTITY CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.source_files RESTART IDENTITY CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.article_source_refs RESTART IDENTITY CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.article_chunks RESTART IDENTITY CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.articles RESTART IDENTITY CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.compile_jobs RESTART IDENTITY CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_source_admin_test.knowledge_sources RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_sync_runs RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_snapshots RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_file_chunks RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_files RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.article_source_refs RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.article_chunks RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.articles RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.knowledge_sources RESTART IDENTITY CASCADE");
         jdbcTemplate.update(
                 """
-                        insert into lattice_phase_e_source_admin_test.knowledge_sources (
+                        insert into lattice.knowledge_sources (
                             source_code,
                             name,
                             source_type,

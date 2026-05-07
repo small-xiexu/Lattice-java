@@ -7,9 +7,9 @@ import com.xbk.lattice.query.citation.QueryAnswerAuditSnapshot;
 import com.xbk.lattice.query.domain.ReviewResult;
 import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import com.xbk.lattice.query.service.QueryArticleHit;
+import com.xbk.lattice.query.service.RetrievalChannelRun;
 import com.xbk.lattice.query.service.RetrievalStrategy;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -26,7 +26,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 @ConditionalOnProperty(
         prefix = "lattice.query.working-set",
         name = "store",
@@ -180,6 +179,41 @@ public class InMemoryQueryWorkingSetStore implements QueryWorkingSetStore {
             return (RetrievalStrategy) value;
         }
         return null;
+    }
+
+    /**
+     * 保存检索通道运行摘要。
+     *
+     * @param queryId 查询标识
+     * @param channelRuns 通道运行摘要
+     * @return 工作集引用
+     */
+    @Override
+    public String saveRetrievalChannelRuns(String queryId, Map<String, RetrievalChannelRun> channelRuns) {
+        String ref = buildRef(queryId, "retrieval-channel-runs");
+        store.put(ref, channelRuns == null
+                ? Collections.<String, RetrievalChannelRun>emptyMap()
+                : new java.util.LinkedHashMap<String, RetrievalChannelRun>(channelRuns));
+        return ref;
+    }
+
+    /**
+     * 读取检索通道运行摘要。
+     *
+     * @param ref 工作集引用
+     * @return 通道运行摘要
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Map<String, RetrievalChannelRun> loadRetrievalChannelRuns(String ref) {
+        if (!hasRef(ref)) {
+            return Collections.emptyMap();
+        }
+        Object value = store.get(ref);
+        if (!(value instanceof Map<?, ?>)) {
+            return Collections.emptyMap();
+        }
+        return new java.util.LinkedHashMap<String, RetrievalChannelRun>((Map<String, RetrievalChannelRun>) value);
     }
 
     /**

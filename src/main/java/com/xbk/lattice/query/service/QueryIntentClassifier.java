@@ -1,6 +1,5 @@
 package com.xbk.lattice.query.service;
 
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.Locale;
@@ -13,7 +12,6 @@ import java.util.Locale;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class QueryIntentClassifier {
 
     /**
@@ -27,6 +25,9 @@ public class QueryIntentClassifier {
             return QueryIntent.GENERAL;
         }
         String normalizedQuestion = question.toLowerCase(Locale.ROOT);
+        if (!QueryTokenExtractor.extractExactIdentifierTokens(question).isEmpty()) {
+            return QueryIntent.CONFIGURATION;
+        }
         if (looksLikeExactLookupQuestion(normalizedQuestion)) {
             return QueryIntent.CONFIGURATION;
         }
@@ -62,8 +63,6 @@ public class QueryIntentClassifier {
                 "路径是什么",
                 "哪个接口",
                 "对应哪个接口",
-                "第几批",
-                "哪一批",
                 "分别是什么",
                 "分别是多少",
                 "结论是什么",

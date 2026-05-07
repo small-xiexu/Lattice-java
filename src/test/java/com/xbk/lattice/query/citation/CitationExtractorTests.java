@@ -93,6 +93,22 @@ class CitationExtractorTests {
                 .containsExactly("[[readme]]", "[→ README.md]");
     }
 
+    @Test
+    void shouldKeepOriginalParagraphAsCitationContextForSplitClaims() {
+        CitationExtractor citationExtractor = new CitationExtractor();
+
+        List<ClaimSegment> claimSegments = citationExtractor.extractClaims("""
+                `POST /api/demo/v2/inventory/sync` 是库存同步接口。调用方只需要调整目标地址，实现零代码改造。新链路入口侧必须保持 API path、请求参数、响应参数与旧接口完全一致 [→ docs/interface-contract.md]
+                """);
+
+        assertThat(claimSegments).hasSize(3);
+        assertThat(claimSegments.get(1).getCitations()).hasSize(1);
+        assertThat(claimSegments.get(1).getCitations().get(0).getContextWindow())
+                .contains("POST /api/demo/v2/inventory/sync")
+                .contains("零代码改造")
+                .contains("API path、请求参数、响应参数");
+    }
+
     /**
      * 验证同一段里 citation 挂在后续短句时，也会回补给前面的无引用短句。
      */
@@ -200,5 +216,24 @@ class CitationExtractorTests {
                 .containsExactly("[[swip-fields]]");
         assertThat(claimSegments.get(1).getCitations()).extracting(Citation::getLiteral)
                 .containsExactly("[[swip-fields]]");
+    }
+
+    /**
+     * 验证纯过渡句不会进入 citation 覆盖率分母。
+     */
+    @Test
+    void shouldIgnoreLowInformationTransitionClaims() {
+        CitationExtractor citationExtractor = new CitationExtractor();
+
+        List<ClaimSegment> claimSegments = citationExtractor.extractClaims("""
+                ## 结论
+
+                具体来说： [→ docs/design.md]
+                - api-service 只做 API 接收和消息发送 [→ docs/design.md]
+                """);
+
+        assertThat(claimSegments).hasSize(1);
+        assertThat(claimSegments.get(0).getClaimText())
+                .isEqualTo("api-service 只做 API 接收和消息发送");
     }
 }

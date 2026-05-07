@@ -33,8 +33,6 @@ public final class QueryTokenExtractor {
 
     private static final Pattern HAN_TEXT_PATTERN = Pattern.compile("[\\p{IsHan}]{2,}");
 
-    private static final String CJK_STOP_CHARS = "的是了和及或在将把与就还都也着";
-
     private QueryTokenExtractor() {
     }
 
@@ -65,6 +63,27 @@ public final class QueryTokenExtractor {
             appendChineseTokens(tokens, hanMatcher.group());
         }
         return new ArrayList<String>(tokens);
+    }
+
+    /**
+     * 提取带结构符号的精确标识 token。
+     *
+     * @param question 查询问题
+     * @return 精确标识 token
+     */
+    public static List<String> extractExactIdentifierTokens(String question) {
+        Set<String> exactIdentifierTokens = new LinkedHashSet<String>();
+        List<String> rawTokens = extract(question);
+        for (String rawToken : rawTokens) {
+            if (rawToken == null || rawToken.isBlank()) {
+                continue;
+            }
+            String normalizedToken = rawToken.toLowerCase(Locale.ROOT);
+            if (containsExactIdentifierSignal(normalizedToken)) {
+                exactIdentifierTokens.add(normalizedToken);
+            }
+        }
+        return new ArrayList<String>(exactIdentifierTokens);
     }
 
     /**
@@ -122,26 +141,24 @@ public final class QueryTokenExtractor {
             }
             for (int start = 0; start <= hanText.length() - window; start++) {
                 String token = hanText.substring(start, start + window);
-                if (containsStopChar(token)) {
-                    continue;
-                }
                 tokens.add(token);
             }
         }
     }
 
     /**
-     * 判断 token 是否包含高频虚词字符。
+     * 判断 token 是否包含精确标识符结构信号。
      *
-     * @param token 待判断 token
-     * @return 是否需要过滤
+     * @param token token
+     * @return 包含返回 true
      */
-    private static boolean containsStopChar(String token) {
-        for (int index = 0; index < token.length(); index++) {
-            if (CJK_STOP_CHARS.indexOf(token.charAt(index)) >= 0) {
-                return true;
-            }
-        }
-        return false;
+    private static boolean containsExactIdentifierSignal(String token) {
+        return token != null
+                && (token.contains("_")
+                || token.contains("-")
+                || token.contains("=")
+                || token.contains("/")
+                || token.contains("."));
     }
+
 }

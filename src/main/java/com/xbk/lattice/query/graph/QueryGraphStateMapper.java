@@ -1,6 +1,5 @@
 package com.xbk.lattice.query.graph;
 
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -14,7 +13,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class QueryGraphStateMapper {
 
     /**
@@ -34,8 +32,10 @@ public class QueryGraphStateMapper {
         state.setNormalizedQuestion(readString(stateMap, QueryGraphStateKeys.NORMALIZED_QUESTION));
         state.setRewrittenQuestion(readString(stateMap, QueryGraphStateKeys.REWRITTEN_QUESTION));
         state.setQueryIntent(readString(stateMap, QueryGraphStateKeys.QUERY_INTENT));
+        state.setAnswerShape(readString(stateMap, QueryGraphStateKeys.ANSWER_SHAPE));
         state.setRewriteAuditRef(readString(stateMap, QueryGraphStateKeys.REWRITE_AUDIT_REF));
         state.setRetrievalStrategyRef(readString(stateMap, QueryGraphStateKeys.RETRIEVAL_STRATEGY_REF));
+        state.setRetrievalChannelRunsRef(readString(stateMap, QueryGraphStateKeys.RETRIEVAL_CHANNEL_RUNS_REF));
         state.setRetrievalAuditRef(readString(stateMap, QueryGraphStateKeys.RETRIEVAL_AUDIT_REF));
         state.setLlmScopeType(readString(stateMap, QueryGraphStateKeys.LLM_SCOPE_TYPE));
         state.setLlmScopeId(readString(stateMap, QueryGraphStateKeys.LLM_SCOPE_ID));
@@ -50,6 +50,8 @@ public class QueryGraphStateMapper {
         state.setRefkeyHitsRef(readString(stateMap, QueryGraphStateKeys.REFKEY_HITS_REF));
         state.setSourceHitsRef(readString(stateMap, QueryGraphStateKeys.SOURCE_HITS_REF));
         state.setSourceChunkHitsRef(readString(stateMap, QueryGraphStateKeys.SOURCE_CHUNK_HITS_REF));
+        state.setFactCardHitsRef(readString(stateMap, QueryGraphStateKeys.FACT_CARD_HITS_REF));
+        state.setFactCardVectorHitsRef(readString(stateMap, QueryGraphStateKeys.FACT_CARD_VECTOR_HITS_REF));
         state.setContributionHitsRef(readString(stateMap, QueryGraphStateKeys.CONTRIBUTION_HITS_REF));
         state.setGraphHitsRef(readString(stateMap, QueryGraphStateKeys.GRAPH_HITS_REF));
         state.setArticleVectorHitsRef(readString(stateMap, QueryGraphStateKeys.ARTICLE_VECTOR_HITS_REF));
@@ -94,8 +96,10 @@ public class QueryGraphStateMapper {
         values.put(QueryGraphStateKeys.NORMALIZED_QUESTION, state.getNormalizedQuestion());
         values.put(QueryGraphStateKeys.REWRITTEN_QUESTION, state.getRewrittenQuestion());
         values.put(QueryGraphStateKeys.QUERY_INTENT, state.getQueryIntent());
+        values.put(QueryGraphStateKeys.ANSWER_SHAPE, state.getAnswerShape());
         values.put(QueryGraphStateKeys.REWRITE_AUDIT_REF, state.getRewriteAuditRef());
         values.put(QueryGraphStateKeys.RETRIEVAL_STRATEGY_REF, state.getRetrievalStrategyRef());
+        values.put(QueryGraphStateKeys.RETRIEVAL_CHANNEL_RUNS_REF, state.getRetrievalChannelRunsRef());
         values.put(QueryGraphStateKeys.RETRIEVAL_AUDIT_REF, state.getRetrievalAuditRef());
         values.put(QueryGraphStateKeys.LLM_SCOPE_TYPE, state.getLlmScopeType());
         values.put(QueryGraphStateKeys.LLM_SCOPE_ID, state.getLlmScopeId());
@@ -110,6 +114,8 @@ public class QueryGraphStateMapper {
         values.put(QueryGraphStateKeys.REFKEY_HITS_REF, state.getRefkeyHitsRef());
         values.put(QueryGraphStateKeys.SOURCE_HITS_REF, state.getSourceHitsRef());
         values.put(QueryGraphStateKeys.SOURCE_CHUNK_HITS_REF, state.getSourceChunkHitsRef());
+        values.put(QueryGraphStateKeys.FACT_CARD_HITS_REF, state.getFactCardHitsRef());
+        values.put(QueryGraphStateKeys.FACT_CARD_VECTOR_HITS_REF, state.getFactCardVectorHitsRef());
         values.put(QueryGraphStateKeys.CONTRIBUTION_HITS_REF, state.getContributionHitsRef());
         values.put(QueryGraphStateKeys.GRAPH_HITS_REF, state.getGraphHitsRef());
         values.put(QueryGraphStateKeys.ARTICLE_VECTOR_HITS_REF, state.getArticleVectorHitsRef());

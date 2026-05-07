@@ -4,7 +4,6 @@ import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -20,7 +19,6 @@ import java.util.TreeSet;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class OmissionTrackingService {
 
     private final SourceFileJdbcRepository sourceFileJdbcRepository;

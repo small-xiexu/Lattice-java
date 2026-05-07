@@ -12,7 +12,6 @@ import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.ai.model.anthropic.autoconfigure.AnthropicConnectionProperties;
 import org.springframework.ai.ollama.api.OllamaEmbeddingOptions;
 import org.springframework.ai.openai.OpenAiEmbeddingOptions;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
@@ -31,7 +30,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class LlmModelProbeService {
 
     private static final int DEFAULT_CHAT_MAX_TOKENS = 64;
@@ -280,7 +278,8 @@ public class LlmModelProbeService {
                 resolvedConfig.baseUrl,
                 resolvedConfig.apiKey,
                 resolvedConfig.modelName,
-                resolvedConfig.expectedDimensions
+                resolvedConfig.expectedDimensions,
+                Integer.valueOf(resolveTimeout(resolvedConfig.timeoutSeconds))
         );
         EmbeddingModel embeddingModel = embeddingClientFactory.getOrCreate(routeResolution);
         EmbeddingResponse response = embeddingModel.call(buildEmbeddingRequest("模型测试", routeResolution));

@@ -1,6 +1,7 @@
 package com.xbk.lattice.llm.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.xbk.lattice.compiler.config.LlmProperties;
 import com.xbk.lattice.observability.StructuredEventLogger;
 import org.junit.jupiter.api.AfterEach;
@@ -105,12 +106,12 @@ class LlmInvocationExecutorTests {
     }
 
     /**
-     * 验证结构化问答用途会自动下发 OpenAI JSON mode。
+     * 验证结构化问答用途会自动下发 OpenAI Structured Outputs schema。
      *
      * @throws IOException IO 异常
      */
     @Test
-    void shouldAttachJsonResponseFormatForStructuredQueryPurpose() throws IOException {
+    void shouldAttachJsonSchemaResponseFormatForStructuredQueryPurpose() throws IOException {
         openAiStubServer = new StubOpenAiChatServer("structured-route-ok");
         openAiStubServer.start();
         ChatClientRegistry chatClientRegistry = new ChatClientRegistry(
@@ -158,7 +159,17 @@ class LlmInvocationExecutorTests {
                 "llm:cache:structured:test"
         );
 
-        assertThat(openAiStubServer.getCapturedResponseFormatTypes()).containsExactly("json_object");
+        assertThat(openAiStubServer.getCapturedResponseFormatTypes()).containsExactly("json_schema");
+        JsonNode responseFormat = openAiStubServer.getCapturedResponseFormats().get(0);
+        assertThat(responseFormat.path("json_schema").path("name").asText()).isEqualTo("query_answer_payload");
+        assertThat(responseFormat.path("json_schema").path("strict").asBoolean(false)).isTrue();
+        JsonNode schema = responseFormat.path("json_schema").path("schema");
+        assertThat(schema.path("additionalProperties").asBoolean(true)).isFalse();
+        assertThat(schema.path("required")).hasSize(3);
+        assertThat(schema.path("required").toString())
+                .contains("answerMarkdown", "answerOutcome", "answerCacheable");
+        assertThat(schema.path("properties").path("answerOutcome").path("enum").toString())
+                .contains("SUCCESS", "INSUFFICIENT_EVIDENCE", "NO_RELEVANT_KNOWLEDGE", "PARTIAL_ANSWER");
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.xbk.lattice.llm.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClientResponse;
@@ -208,6 +209,71 @@ class ChatClientRegistryTests {
                 assertThat(String.valueOf(acceptHeader)).contains("application/json"));
     }
 
+    /**
+     * 验证 OpenAI 动态 ChatClient 会透传后台配置中的 JSON Schema response_format。
+     *
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldPassJsonSchemaResponseFormatFromRouteExtraOptions() throws IOException {
+        StubOpenAiChatServer route = startOpenAiStubServer("route-schema-ok");
+        ChatClientRegistry registry = new ChatClientRegistry(
+                RestClient.builder(),
+                WebClient.builder(),
+                new ObjectMapper(),
+                new AdvisorChainFactory()
+        );
+        LlmRouteResolution routeResolution = createRouteResolution(
+                route.getBaseUrl(),
+                "key-schema",
+                "gpt-5.4",
+                new BigDecimal("0.1"),
+                Integer.valueOf(64),
+                "query.answer.openai.schema",
+                """
+                        {
+                          "response_format": {
+                            "type": "json_schema",
+                            "json_schema": {
+                              "name": "generic_payload",
+                              "strict": true,
+                              "schema": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["value"],
+                                "properties": {
+                                  "value": {"type": "string"}
+                                }
+                              }
+                            }
+                          }
+                        }
+                        """
+        );
+
+        ChatClientResponse response = registry.getOrCreate(routeResolution)
+                .getChatClient()
+                .prompt()
+                .advisors(spec -> spec.params(new LlmInvocationContext(
+                        "query",
+                        "schema-format",
+                        "scope-schema",
+                        "answer",
+                        "query.answer.openai.schema"
+                ).toAdvisorParams()))
+                .system("schema-system")
+                .user("schema-user")
+                .call()
+                .chatClientResponse();
+
+        assertThat(response.chatResponse().getResult().getOutput().getText()).isEqualTo("route-schema-ok");
+        assertThat(route.getCapturedResponseFormatTypes()).containsExactly("json_schema");
+        JsonNode responseFormat = route.getCapturedResponseFormats().get(0);
+        assertThat(responseFormat.path("json_schema").path("name").asText()).isEqualTo("generic_payload");
+        assertThat(responseFormat.path("json_schema").path("schema").path("properties").path("value").path("type").asText())
+                .isEqualTo("string");
+    }
+
     @Test
     void shouldCacheAndInvokeAnthropicDynamicChatClientsAcrossRoutes() throws IOException {
         StubAnthropicChatServer routeA = startAnthropicStubServer("anthropic-a-ok");
@@ -357,6 +423,38 @@ class ChatClientRegistryTests {
                 maxTokens,
                 Integer.valueOf(30),
                 "{\"reasoning_effort\":\"medium\"}",
+                new BigDecimal("0.001"),
+                new BigDecimal("0.002"),
+                true
+        );
+    }
+
+    private LlmRouteResolution createRouteResolution(
+            String baseUrl,
+            String apiKey,
+            String modelName,
+            BigDecimal temperature,
+            Integer maxTokens,
+            String routeLabel,
+            String extraOptionsJson
+    ) {
+        return new LlmRouteResolution(
+                "query_request",
+                "query-1",
+                "query",
+                "answer",
+                Long.valueOf(11L),
+                Long.valueOf(22L),
+                Integer.valueOf(3),
+                routeLabel,
+                "openai",
+                baseUrl,
+                apiKey,
+                modelName,
+                temperature,
+                maxTokens,
+                Integer.valueOf(30),
+                extraOptionsJson,
                 new BigDecimal("0.001"),
                 new BigDecimal("0.002"),
                 true

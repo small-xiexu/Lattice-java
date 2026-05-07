@@ -1,7 +1,6 @@
 package com.xbk.lattice.infra.persistence;
 
-import org.springframework.context.annotation.Profile;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.xbk.lattice.infra.persistence.mapper.DeepResearchEvidenceAnchorValidationMapper;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -12,18 +11,19 @@ import org.springframework.stereotype.Repository;
  * @author xiexu
  */
 @Repository
-@Profile("jdbc")
 public class DeepResearchEvidenceAnchorValidationJdbcRepository {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final DeepResearchEvidenceAnchorValidationMapper deepResearchEvidenceAnchorValidationMapper;
 
     /**
      * 创建 Deep Research 证据锚点校验 JDBC 仓储。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @param deepResearchEvidenceAnchorValidationMapper Deep Research 证据锚点校验 Mapper
      */
-    public DeepResearchEvidenceAnchorValidationJdbcRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public DeepResearchEvidenceAnchorValidationJdbcRepository(
+            DeepResearchEvidenceAnchorValidationMapper deepResearchEvidenceAnchorValidationMapper
+    ) {
+        this.deepResearchEvidenceAnchorValidationMapper = deepResearchEvidenceAnchorValidationMapper;
     }
 
     /**
@@ -32,21 +32,6 @@ public class DeepResearchEvidenceAnchorValidationJdbcRepository {
      * @param record 证据锚点校验记录
      */
     public void insert(DeepResearchEvidenceAnchorValidationRecord record) {
-        jdbcTemplate.update(
-                """
-                        insert into deep_research_evidence_anchor_validations (
-                            run_id, anchor_id, validation_round, validation_status,
-                            validated_by, reason, matched_excerpt
-                        )
-                        values (?, ?, ?, ?, ?, ?, ?)
-                        """,
-                record.getRunId(),
-                record.getAnchorId(),
-                Integer.valueOf(record.getValidationRound()),
-                record.getValidationStatus(),
-                record.getValidatedBy(),
-                record.getReason(),
-                record.getMatchedExcerpt()
-        );
+        deepResearchEvidenceAnchorValidationMapper.insert(record);
     }
 }

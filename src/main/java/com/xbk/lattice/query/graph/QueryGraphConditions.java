@@ -4,7 +4,6 @@ import com.xbk.lattice.query.citation.CitationCheckOptions;
 import com.xbk.lattice.query.citation.CitationCheckReport;
 import com.xbk.lattice.query.service.QueryReviewProperties;
 import com.xbk.lattice.query.domain.ReviewResult;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
@@ -15,7 +14,6 @@ import org.springframework.stereotype.Component;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class QueryGraphConditions {
 
     private static final CitationCheckOptions CITATION_CHECK_OPTIONS = CitationCheckOptions.defaults();

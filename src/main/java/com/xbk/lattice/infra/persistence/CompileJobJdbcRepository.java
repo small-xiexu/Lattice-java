@@ -1,11 +1,8 @@
 package com.xbk.lattice.infra.persistence;
 
-import org.springframework.context.annotation.Profile;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.xbk.lattice.infra.persistence.mapper.CompileJobMapper;
 import org.springframework.stereotype.Repository;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -18,18 +15,17 @@ import java.util.Optional;
  * @author xiexu
  */
 @Repository
-@Profile("jdbc")
 public class CompileJobJdbcRepository {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final CompileJobMapper compileJobMapper;
 
     /**
      * 创建编译作业 JDBC 仓储。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @param compileJobMapper 编译作业 Mapper
      */
-    public CompileJobJdbcRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public CompileJobJdbcRepository(CompileJobMapper compileJobMapper) {
+        this.compileJobMapper = compileJobMapper;
     }
 
     /**
@@ -38,64 +34,7 @@ public class CompileJobJdbcRepository {
      * @param compileJobRecord 编译作业记录
      */
     public void save(CompileJobRecord compileJobRecord) {
-        jdbcTemplate.update(
-                """
-                        insert into compile_jobs (
-                            job_id, source_dir, source_id, source_sync_run_id, root_trace_id, incremental,
-                            orchestration_mode, status, worker_id, last_heartbeat_at, running_expires_at,
-                            current_step, progress_current, progress_total, progress_message, progress_updated_at,
-                            error_code, persisted_count, error_message,
-                            attempt_count, requested_at, started_at, finished_at
-                        )
-                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        on conflict (job_id) do update
-                        set source_dir = excluded.source_dir,
-                            source_id = excluded.source_id,
-                            source_sync_run_id = excluded.source_sync_run_id,
-                            root_trace_id = excluded.root_trace_id,
-                            incremental = excluded.incremental,
-                            orchestration_mode = excluded.orchestration_mode,
-                            status = excluded.status,
-                            worker_id = excluded.worker_id,
-                            last_heartbeat_at = excluded.last_heartbeat_at,
-                            running_expires_at = excluded.running_expires_at,
-                            current_step = excluded.current_step,
-                            progress_current = excluded.progress_current,
-                            progress_total = excluded.progress_total,
-                            progress_message = excluded.progress_message,
-                            progress_updated_at = excluded.progress_updated_at,
-                            error_code = excluded.error_code,
-                            persisted_count = excluded.persisted_count,
-                            error_message = excluded.error_message,
-                            attempt_count = excluded.attempt_count,
-                            requested_at = excluded.requested_at,
-                            started_at = excluded.started_at,
-                            finished_at = excluded.finished_at
-                        """,
-                compileJobRecord.getJobId(),
-                compileJobRecord.getSourceDir(),
-                compileJobRecord.getSourceId(),
-                compileJobRecord.getSourceSyncRunId(),
-                compileJobRecord.getRootTraceId(),
-                compileJobRecord.isIncremental(),
-                compileJobRecord.getOrchestrationMode(),
-                compileJobRecord.getStatus(),
-                compileJobRecord.getWorkerId(),
-                compileJobRecord.getLastHeartbeatAt(),
-                compileJobRecord.getRunningExpiresAt(),
-                compileJobRecord.getCurrentStep(),
-                compileJobRecord.getProgressCurrent(),
-                compileJobRecord.getProgressTotal(),
-                compileJobRecord.getProgressMessage(),
-                compileJobRecord.getProgressUpdatedAt(),
-                compileJobRecord.getErrorCode(),
-                compileJobRecord.getPersistedCount(),
-                compileJobRecord.getErrorMessage(),
-                compileJobRecord.getAttemptCount(),
-                compileJobRecord.getRequestedAt(),
-                compileJobRecord.getStartedAt(),
-                compileJobRecord.getFinishedAt()
-        );
+        compileJobMapper.upsert(compileJobRecord);
     }
 
     /**
@@ -104,18 +43,7 @@ public class CompileJobJdbcRepository {
      * @return 编译作业列表
      */
     public List<CompileJobRecord> findAll() {
-        return jdbcTemplate.query(
-                """
-                        select job_id, source_dir, source_id, source_sync_run_id, incremental,
-                               root_trace_id, orchestration_mode, status, worker_id, last_heartbeat_at,
-                               running_expires_at, current_step, progress_current, progress_total,
-                               progress_message, progress_updated_at, error_code, persisted_count, error_message,
-                               attempt_count, requested_at, started_at, finished_at
-                        from compile_jobs
-                        order by requested_at desc, job_id desc
-                        """,
-                this::mapCompileJobRecord
-        );
+        return compileJobMapper.findAll();
     }
 
     /**
@@ -125,20 +53,7 @@ public class CompileJobJdbcRepository {
      * @return 最近编译作业列表
      */
     public List<CompileJobRecord> findRecent(int limit) {
-        return jdbcTemplate.query(
-                """
-                        select job_id, source_dir, source_id, source_sync_run_id, incremental,
-                               root_trace_id, orchestration_mode, status, worker_id, last_heartbeat_at,
-                               running_expires_at, current_step, progress_current, progress_total,
-                               progress_message, progress_updated_at, error_code, persisted_count, error_message,
-                               attempt_count, requested_at, started_at, finished_at
-                        from compile_jobs
-                        order by requested_at desc, job_id desc
-                        limit ?
-                        """,
-                this::mapCompileJobRecord,
-                Math.max(limit, 1)
-        );
+        return compileJobMapper.findRecent(Math.max(limit, 1));
     }
 
     /**
@@ -148,21 +63,18 @@ public class CompileJobJdbcRepository {
      * @return 最近独立编译作业列表
      */
     public List<CompileJobRecord> findRecentStandalone(int limit) {
-        return jdbcTemplate.query(
-                """
-                        select job_id, source_dir, source_id, source_sync_run_id, incremental,
-                               root_trace_id, orchestration_mode, status, worker_id, last_heartbeat_at,
-                               running_expires_at, current_step, progress_current, progress_total,
-                               progress_message, progress_updated_at, error_code, persisted_count, error_message,
-                               attempt_count, requested_at, started_at, finished_at
-                        from compile_jobs
-                        where source_sync_run_id is null
-                        order by requested_at desc, job_id desc
-                        limit ?
-                        """,
-                this::mapCompileJobRecord,
-                Math.max(limit, 1)
-        );
+        return compileJobMapper.findRecentStandalone(Math.max(limit, 1));
+    }
+
+    /**
+     * 按资料源查询最近独立编译作业。
+     *
+     * @param sourceId 资料源主键
+     * @param limit 返回数量
+     * @return 最近独立编译作业列表
+     */
+    public List<CompileJobRecord> findRecentStandaloneBySourceId(Long sourceId, int limit) {
+        return compileJobMapper.findRecentStandaloneBySourceId(sourceId, Math.max(limit, 1));
     }
 
     /**
@@ -172,23 +84,7 @@ public class CompileJobJdbcRepository {
      * @return 编译作业
      */
     public Optional<CompileJobRecord> findByJobId(String jobId) {
-        List<CompileJobRecord> records = jdbcTemplate.query(
-                """
-                        select job_id, source_dir, source_id, source_sync_run_id, incremental,
-                               root_trace_id, orchestration_mode, status, worker_id, last_heartbeat_at,
-                               running_expires_at, current_step, progress_current, progress_total,
-                               progress_message, progress_updated_at, error_code, persisted_count, error_message,
-                               attempt_count, requested_at, started_at, finished_at
-                        from compile_jobs
-                        where job_id = ?
-                        """,
-                this::mapCompileJobRecord,
-                jobId
-        );
-        if (records.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(records.get(0));
+        return Optional.ofNullable(compileJobMapper.findByJobId(jobId));
     }
 
     /**
@@ -197,24 +93,7 @@ public class CompileJobJdbcRepository {
      * @return 最早排队中的作业
      */
     public Optional<CompileJobRecord> findNextQueued() {
-        List<CompileJobRecord> records = jdbcTemplate.query(
-                """
-                        select job_id, source_dir, source_id, source_sync_run_id, incremental,
-                               root_trace_id, orchestration_mode, status, worker_id, last_heartbeat_at,
-                               running_expires_at, current_step, progress_current, progress_total,
-                               progress_message, progress_updated_at, error_code, persisted_count, error_message,
-                               attempt_count, requested_at, started_at, finished_at
-                        from compile_jobs
-                        where status = 'QUEUED'
-                        order by requested_at asc, job_id asc
-                        limit 1
-                        """,
-                this::mapCompileJobRecord
-        );
-        if (records.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(records.get(0));
+        return Optional.ofNullable(compileJobMapper.findNextQueued());
     }
 
     /**
@@ -227,33 +106,7 @@ public class CompileJobJdbcRepository {
      * @return 是否成功抢占
      */
     public boolean markRunning(String jobId, String workerId, OffsetDateTime startedAt, OffsetDateTime runningExpiresAt) {
-        int updatedRows = jdbcTemplate.update(
-                """
-                        update compile_jobs
-                        set status = 'RUNNING',
-                            worker_id = ?,
-                            last_heartbeat_at = ?,
-                            running_expires_at = ?,
-                            current_step = 'initialize_job',
-                            progress_current = 0,
-                            progress_total = 0,
-                            progress_message = '编译任务已启动，等待图执行',
-                            progress_updated_at = ?,
-                            error_code = null,
-                            started_at = ?,
-                            finished_at = null,
-                            error_message = null,
-                            attempt_count = attempt_count + 1
-                        where job_id = ?
-                          and status = 'QUEUED'
-                        """,
-                workerId,
-                startedAt,
-                runningExpiresAt,
-                startedAt,
-                startedAt,
-                jobId
-        );
+        int updatedRows = compileJobMapper.markRunning(jobId, workerId, startedAt, runningExpiresAt);
         return updatedRows > 0;
     }
 
@@ -272,20 +125,7 @@ public class CompileJobJdbcRepository {
             OffsetDateTime heartbeatAt,
             OffsetDateTime runningExpiresAt
     ) {
-        int updatedRows = jdbcTemplate.update(
-                """
-                        update compile_jobs
-                        set last_heartbeat_at = ?,
-                            running_expires_at = ?
-                        where job_id = ?
-                          and status = 'RUNNING'
-                          and worker_id = ?
-                        """,
-                heartbeatAt,
-                runningExpiresAt,
-                jobId,
-                workerId
-        );
+        int updatedRows = compileJobMapper.refreshHeartbeat(jobId, workerId, heartbeatAt, runningExpiresAt);
         return updatedRows > 0;
     }
 
@@ -308,25 +148,13 @@ public class CompileJobJdbcRepository {
             OffsetDateTime heartbeatAt,
             OffsetDateTime runningExpiresAt
     ) {
-        int updatedRows = jdbcTemplate.update(
-                """
-                        update compile_jobs
-                        set current_step = ?,
-                            progress_message = ?,
-                            progress_updated_at = ?,
-                            last_heartbeat_at = ?,
-                            running_expires_at = ?
-                        where job_id = ?
-                          and status = 'RUNNING'
-                          and worker_id = ?
-                        """,
+        int updatedRows = compileJobMapper.updateCurrentStep(
+                jobId,
+                workerId,
                 currentStep,
                 progressMessage,
                 heartbeatAt,
-                heartbeatAt,
-                runningExpiresAt,
-                jobId,
-                workerId
+                runningExpiresAt
         );
         return updatedRows > 0;
     }
@@ -354,29 +182,15 @@ public class CompileJobJdbcRepository {
             OffsetDateTime heartbeatAt,
             OffsetDateTime runningExpiresAt
     ) {
-        int updatedRows = jdbcTemplate.update(
-                """
-                        update compile_jobs
-                        set current_step = ?,
-                            progress_current = ?,
-                            progress_total = ?,
-                            progress_message = ?,
-                            progress_updated_at = ?,
-                            last_heartbeat_at = ?,
-                            running_expires_at = ?
-                        where job_id = ?
-                          and status = 'RUNNING'
-                          and worker_id = ?
-                        """,
+        int updatedRows = compileJobMapper.updateProgressSnapshot(
+                jobId,
+                workerId,
                 currentStep,
                 progressCurrent,
                 progressTotal,
                 progressMessage,
                 heartbeatAt,
-                heartbeatAt,
-                runningExpiresAt,
-                jobId,
-                workerId
+                runningExpiresAt
         );
         return updatedRows > 0;
     }
@@ -389,27 +203,7 @@ public class CompileJobJdbcRepository {
      * @param finishedAt 完成时间
      */
     public void markSucceeded(String jobId, int persistedCount, OffsetDateTime finishedAt) {
-        jdbcTemplate.update(
-                """
-                        update compile_jobs
-                        set status = 'SUCCEEDED',
-                            last_heartbeat_at = ?,
-                            running_expires_at = null,
-                            current_step = 'finalize_job',
-                            progress_message = '编译完成',
-                            progress_updated_at = ?,
-                            error_code = null,
-                            persisted_count = ?,
-                            error_message = null,
-                            finished_at = ?
-                        where job_id = ?
-                        """,
-                finishedAt,
-                finishedAt,
-                persistedCount,
-                finishedAt,
-                jobId
-        );
+        compileJobMapper.markSucceeded(jobId, persistedCount, finishedAt);
     }
 
     /**
@@ -421,25 +215,7 @@ public class CompileJobJdbcRepository {
      * @param finishedAt 完成时间
      */
     public void markFailed(String jobId, String errorCode, String errorMessage, OffsetDateTime finishedAt) {
-        jdbcTemplate.update(
-                """
-                        update compile_jobs
-                        set status = 'FAILED',
-                            last_heartbeat_at = ?,
-                            running_expires_at = null,
-                            progress_updated_at = ?,
-                            error_code = ?,
-                            error_message = ?,
-                            finished_at = ?
-                        where job_id = ?
-                        """,
-                finishedAt,
-                finishedAt,
-                errorCode,
-                errorMessage,
-                finishedAt,
-                jobId
-        );
+        compileJobMapper.markFailed(jobId, errorCode, errorMessage, finishedAt);
     }
 
     /**
@@ -452,26 +228,7 @@ public class CompileJobJdbcRepository {
      * @return 是否更新成功
      */
     public boolean markFailedIfRunning(String jobId, String errorCode, String errorMessage, OffsetDateTime finishedAt) {
-        int updatedRows = jdbcTemplate.update(
-                """
-                        update compile_jobs
-                        set status = 'FAILED',
-                            last_heartbeat_at = ?,
-                            running_expires_at = null,
-                            progress_updated_at = ?,
-                            error_code = ?,
-                            error_message = ?,
-                            finished_at = ?
-                        where job_id = ?
-                          and status = 'RUNNING'
-                        """,
-                finishedAt,
-                finishedAt,
-                errorCode,
-                errorMessage,
-                finishedAt,
-                jobId
-        );
+        int updatedRows = compileJobMapper.markFailedIfRunning(jobId, errorCode, errorMessage, finishedAt);
         return updatedRows > 0;
     }
 
@@ -481,27 +238,7 @@ public class CompileJobJdbcRepository {
      * @param jobId 作业标识
      */
     public void retry(String jobId) {
-        jdbcTemplate.update(
-                """
-                        update compile_jobs
-                        set status = 'QUEUED',
-                            worker_id = null,
-                            last_heartbeat_at = null,
-                            running_expires_at = null,
-                            current_step = null,
-                            progress_current = 0,
-                            progress_total = 0,
-                            progress_message = null,
-                            progress_updated_at = null,
-                            error_code = null,
-                            persisted_count = 0,
-                            error_message = null,
-                            started_at = null,
-                            finished_at = null
-                        where job_id = ?
-                        """,
-                jobId
-        );
+        compileJobMapper.retry(jobId);
     }
 
     /**
@@ -511,20 +248,7 @@ public class CompileJobJdbcRepository {
      * @return 被回收的作业数
      */
     public int requeueRunningJobsOwnedByWorker(String workerId) {
-        return jdbcTemplate.update(
-                """
-                        update compile_jobs
-                        set status = 'QUEUED',
-                            worker_id = null,
-                            running_expires_at = null,
-                            last_heartbeat_at = null,
-                            error_code = null,
-                            error_message = null
-                        where status = 'RUNNING'
-                          and worker_id = ?
-                        """,
-                workerId
-        );
+        return compileJobMapper.requeueRunningJobsOwnedByWorker(workerId);
     }
 
     /**
@@ -534,58 +258,6 @@ public class CompileJobJdbcRepository {
      * @return 过期作业标识列表
      */
     public List<String> findExpiredRunningJobIds(OffsetDateTime now) {
-        return jdbcTemplate.queryForList(
-                """
-                        select job_id
-                        from compile_jobs
-                        where status = 'RUNNING'
-                          and running_expires_at is not null
-                          and running_expires_at < ?
-                        order by running_expires_at asc, job_id asc
-                        """,
-                String.class,
-                now
-        );
-    }
-
-    /**
-     * 映射编译作业记录。
-     *
-     * @param resultSet 结果集
-     * @param rowNum 行号
-     * @return 编译作业记录
-     * @throws SQLException SQL 异常
-     */
-    private CompileJobRecord mapCompileJobRecord(ResultSet resultSet, int rowNum) throws SQLException {
-        return new CompileJobRecord(
-                resultSet.getString("job_id"),
-                resultSet.getString("source_dir"),
-                readLong(resultSet, "source_id"),
-                readLong(resultSet, "source_sync_run_id"),
-                resultSet.getString("root_trace_id"),
-                resultSet.getBoolean("incremental"),
-                resultSet.getString("orchestration_mode"),
-                resultSet.getString("status"),
-                resultSet.getString("worker_id"),
-                resultSet.getObject("last_heartbeat_at", OffsetDateTime.class),
-                resultSet.getObject("running_expires_at", OffsetDateTime.class),
-                resultSet.getString("current_step"),
-                resultSet.getInt("progress_current"),
-                resultSet.getInt("progress_total"),
-                resultSet.getString("progress_message"),
-                resultSet.getObject("progress_updated_at", OffsetDateTime.class),
-                resultSet.getString("error_code"),
-                resultSet.getInt("persisted_count"),
-                resultSet.getString("error_message"),
-                resultSet.getInt("attempt_count"),
-                resultSet.getObject("requested_at", OffsetDateTime.class),
-                resultSet.getObject("started_at", OffsetDateTime.class),
-                resultSet.getObject("finished_at", OffsetDateTime.class)
-        );
-    }
-
-    private Long readLong(ResultSet resultSet, String columnName) throws SQLException {
-        Object value = resultSet.getObject(columnName);
-        return value == null ? null : resultSet.getLong(columnName);
+        return compileJobMapper.findExpiredRunningJobIds(now);
     }
 }

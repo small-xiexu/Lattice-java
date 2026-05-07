@@ -4,7 +4,6 @@ import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import com.xbk.lattice.llm.service.LlmInvocationEnvelope;
 import org.springframework.context.annotation.Primary;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 /**
@@ -16,7 +15,6 @@ import org.springframework.stereotype.Service;
  */
 @Service
 @Primary
-@Profile("jdbc")
 public class LlmReviewerGateway implements ReviewerGateway {
 
     private static final String SYSTEM_QUERY_REVIEW = """

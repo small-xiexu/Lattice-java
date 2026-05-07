@@ -28,13 +28,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b9_repo_snapshot_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b9_repo_snapshot_test",
-        "spring.flyway.default-schema=lattice_b9_repo_snapshot_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key"
 })
@@ -102,10 +98,10 @@ class RepoSnapshotServiceTests {
     }
 
     private void resetTables() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_repo_snapshot_test.repo_snapshot_items");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_repo_snapshot_test.repo_snapshots RESTART IDENTITY CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_repo_snapshot_test.contributions");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_repo_snapshot_test.synthesis_artifacts");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_repo_snapshot_test.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.repo_snapshot_items");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.repo_snapshots RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.contributions");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.synthesis_artifacts");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
     }
 }

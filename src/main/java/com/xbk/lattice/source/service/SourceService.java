@@ -5,7 +5,6 @@ import com.xbk.lattice.source.domain.KnowledgeSourcePage;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import com.xbk.lattice.source.infra.KnowledgeSourceJdbcRepository;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,7 +19,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class SourceService {
 
     private final KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository;

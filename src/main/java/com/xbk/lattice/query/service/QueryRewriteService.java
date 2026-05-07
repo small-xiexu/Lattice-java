@@ -4,7 +4,6 @@ import com.xbk.lattice.infra.persistence.QueryRewriteAuditJdbcRepository;
 import com.xbk.lattice.infra.persistence.QueryRewriteRuleJdbcRepository;
 import com.xbk.lattice.infra.persistence.QueryRewriteRuleRecord;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -20,7 +19,6 @@ import java.util.Locale;
  */
 @Slf4j
 @Service
-@Profile("jdbc")
 public class QueryRewriteService {
 
     private final QueryRewriteRuleJdbcRepository queryRewriteRuleJdbcRepository;

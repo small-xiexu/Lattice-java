@@ -37,13 +37,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_phase_e_upload_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_phase_e_upload_test",
-        "spring.flyway.default-schema=lattice_phase_e_upload_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.query.cache.store=in-memory",
@@ -107,6 +103,11 @@ class AdminUploadControllerTests {
                 .getContentAsString(StandardCharsets.UTF_8);
         Long runId = readLong(responseBody, "runId");
         Long sourceId = readLong(responseBody, "sourceId");
+        KnowledgeSource createdSource = sourceService.findById(sourceId).orElseThrow();
+        assertThat(createdSource.getName()).isEqualTo("payments");
+        JsonNode createdMetadataNode = OBJECT_MAPPER.readTree(createdSource.getMetadataJson());
+        assertThat(createdMetadataNode.path("bundleSummary").path("titleHints").get(0).asText())
+                .isEqualTo("Payments Docs");
 
         compileJobService.processNextQueuedJob();
 
@@ -137,18 +138,26 @@ class AdminUploadControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].runId").value(runId));
 
+        mockMvc.perform(get("/api/v1/admin/sources/" + sourceId + "/processing-tasks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].taskType").value("SOURCE_SYNC"))
+                .andExpect(jsonPath("$.items[0].runId").value(runId))
+                .andExpect(jsonPath("$.items[0].compileJobId").isNotEmpty())
+                .andExpect(jsonPath("$.items[0].displayStatus").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.items[0].currentStepLabel").value("写入知识库"));
+
         mockMvc.perform(get("/api/v1/admin/source-runs?limit=5"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].runId").value(runId));
 
         Integer articleCount = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_phase_e_upload_test.articles",
+                "select count(*) from lattice.articles",
                 Integer.class
         );
         assertThat(articleCount).isNotNull();
         assertThat(articleCount.intValue()).isGreaterThan(0);
         Integer snapshotCount = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_phase_e_upload_test.source_snapshots where source_id = ?",
+                "select count(*) from lattice.source_snapshots where source_id = ?",
                 Integer.class,
                 sourceId
         );
@@ -203,7 +212,7 @@ class AdminUploadControllerTests {
         Integer docCount = jdbcTemplate.queryForObject(
                 """
                         select count(*)
-                        from lattice_phase_e_upload_test.source_files
+                        from lattice.source_files
                         where format = 'doc'
                           and content_text like '%Legacy DOC payment timeout%'
                         """,
@@ -212,7 +221,7 @@ class AdminUploadControllerTests {
         Integer csvCount = jdbcTemplate.queryForObject(
                 """
                         select count(*)
-                        from lattice_phase_e_upload_test.source_files
+                        from lattice.source_files
                         where format = 'csv'
                           and content_text like '%businessSubTypeCode,meaning%'
                         """,
@@ -313,7 +322,7 @@ class AdminUploadControllerTests {
                 .getContentAsString(StandardCharsets.UTF_8);
         Long runId = readLong(responseBody, "runId");
         String compileJobId = jdbcTemplate.queryForObject(
-                "select compile_job_id from lattice_phase_e_upload_test.source_sync_runs where id = ?",
+                "select compile_job_id from lattice.source_sync_runs where id = ?",
                 String.class,
                 runId
         );
@@ -403,7 +412,7 @@ class AdminUploadControllerTests {
                 .getContentAsString(StandardCharsets.UTF_8);
         Long runId = readLong(responseBody, "runId");
         String compileJobId = jdbcTemplate.queryForObject(
-                "select compile_job_id from lattice_phase_e_upload_test.source_sync_runs where id = ?",
+                "select compile_job_id from lattice.source_sync_runs where id = ?",
                 String.class,
                 runId
         );
@@ -595,7 +604,7 @@ class AdminUploadControllerTests {
 
         jdbcTemplate.update(
                 """
-                        update lattice_phase_e_upload_test.source_sync_runs
+                        update lattice.source_sync_runs
                         set requested_at = current_timestamp - interval '8 days',
                             updated_at = current_timestamp - interval '8 days'
                         where id = ?
@@ -611,15 +620,52 @@ class AdminUploadControllerTests {
     }
 
     /**
+     * 验证资料源处理历史会纳入不由 source run 触发的独立编译作业。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldExposeStandaloneCompileInSourceProcessingHistory() throws Exception {
+        resetTables();
+        KnowledgeSource source = sourceService.save(new KnowledgeSource(
+                null,
+                "docs-source",
+                "Docs Source",
+                "SERVER_DIR",
+                "DOCUMENT",
+                "ACTIVE",
+                "NORMAL",
+                "FULL",
+                "{}",
+                "{}",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+        compileJobService.submit("/tmp/source-processing-history", false, true, "state_graph", source.getId(), null);
+
+        mockMvc.perform(get("/api/v1/admin/sources/" + source.getId() + "/processing-tasks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].taskType").value("STANDALONE_COMPILE"))
+                .andExpect(jsonPath("$.items[0].sourceId").value(source.getId()))
+                .andExpect(jsonPath("$.items[0].runId").doesNotExist())
+                .andExpect(jsonPath("$.items[0].compileJobId").isNotEmpty())
+                .andExpect(jsonPath("$.items[0].displayStatus").value("QUEUED"));
+    }
+
+    /**
      * 重置测试表。
      */
     private void resetTables() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_upload_test.pending_queries");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_upload_test.contributions");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_e_upload_test.knowledge_sources RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.pending_queries");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.contributions");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.knowledge_sources RESTART IDENTITY CASCADE");
         jdbcTemplate.update(
                 """
-                        insert into lattice_phase_e_upload_test.knowledge_sources (
+                        insert into lattice.knowledge_sources (
                             source_code,
                             name,
                             source_type,

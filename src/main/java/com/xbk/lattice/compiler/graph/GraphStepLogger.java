@@ -2,7 +2,6 @@ package com.xbk.lattice.compiler.graph;
 
 import com.xbk.lattice.infra.persistence.CompileJobStepJdbcRepository;
 import com.xbk.lattice.infra.persistence.CompileJobStepRecord;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -21,7 +20,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class GraphStepLogger {
 
     private final CompileJobStepJdbcRepository compileJobStepJdbcRepository;

@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import java.time.OffsetDateTime;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -14,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 向量 JDBC 仓储运算符测试
  *
- * 职责：验证在独立 schema 连接下，pgvector 查询仍可正确解析 public schema 中的距离运算符
+ * 职责：验证在 lattice schema 连接下，pgvector 查询仍可正确解析 public schema 中的距离运算符
  *
  * @author xiexu
  */
@@ -27,29 +28,29 @@ class VectorJdbcRepositoryOperatorTests {
     private static final String JDBC_PASSWORD = "postgres";
 
     /**
-     * 验证文章级向量检索在独立 schema 下仍可正常返回命中。
+     * 验证文章级向量检索在 lattice schema 下仍可正常返回命中。
      */
     @Test
     void shouldSearchArticleVectorsWhenOperatorLivesInPublicSchema() {
-        String schemaName = "lattice_vector_repo_article_operator_test";
-        resetSchema(schemaName);
-        JdbcTemplate jdbcTemplate = createSchemaJdbcTemplate(schemaName);
-        createArticleVectorTables(jdbcTemplate);
+        JdbcTemplate jdbcTemplate = createSchemaJdbcTemplate();
+        resetTables(jdbcTemplate);
+        Long modelProfileId = ensureEmbeddingModelProfile(jdbcTemplate);
         seedArticle(jdbcTemplate, 1L, "refund-status", "Refund Status", "退款状态流转说明");
+        float[] embedding = testEmbedding();
 
         ArticleVectorJdbcRepository articleVectorJdbcRepository = new ArticleVectorJdbcRepository(jdbcTemplate);
         articleVectorJdbcRepository.upsert(new ArticleVectorRecord(
                 "refund-status",
-                Long.valueOf(1L),
-                3,
+                modelProfileId,
+                embedding.length,
                 "repo-operator-test",
                 "hash-article",
-                new float[]{1.0F, 2.0F, 3.0F},
+                embedding,
                 OffsetDateTime.now()
         ));
 
         List<QueryArticleHit> hits = articleVectorJdbcRepository.searchNearestNeighbors(
-                new float[]{1.0F, 2.0F, 3.0F},
+                embedding,
                 5
         );
 
@@ -59,16 +60,16 @@ class VectorJdbcRepositoryOperatorTests {
     }
 
     /**
-     * 验证 chunk 级向量检索在独立 schema 下仍可正常返回命中。
+     * 验证 chunk 级向量检索在 lattice schema 下仍可正常返回命中。
      */
     @Test
     void shouldSearchChunkVectorsWhenOperatorLivesInPublicSchema() {
-        String schemaName = "lattice_vector_repo_chunk_operator_test";
-        resetSchema(schemaName);
-        JdbcTemplate jdbcTemplate = createSchemaJdbcTemplate(schemaName);
-        createChunkVectorTables(jdbcTemplate);
+        JdbcTemplate jdbcTemplate = createSchemaJdbcTemplate();
+        resetTables(jdbcTemplate);
+        Long modelProfileId = ensureEmbeddingModelProfile(jdbcTemplate);
         seedArticle(jdbcTemplate, 1L, "refund-status", "Refund Status", "退款状态流转说明");
         seedChunk(jdbcTemplate, 11L, 1L, 0, "退款完成后 T+1 日到账");
+        float[] embedding = testEmbedding();
 
         ArticleChunkVectorJdbcRepository articleChunkVectorJdbcRepository =
                 new ArticleChunkVectorJdbcRepository(jdbcTemplate);
@@ -77,14 +78,14 @@ class VectorJdbcRepositoryOperatorTests {
                 Long.valueOf(1L),
                 "refund-status",
                 0,
-                Long.valueOf(1L),
+                modelProfileId,
                 "hash-chunk",
-                new float[]{1.0F, 2.0F, 3.0F},
+                embedding,
                 OffsetDateTime.now()
         ));
 
         List<ArticleChunkVectorHit> hits = articleChunkVectorJdbcRepository.searchNearestNeighbors(
-                new float[]{1.0F, 2.0F, 3.0F},
+                embedding,
                 5
         );
 
@@ -95,116 +96,31 @@ class VectorJdbcRepositoryOperatorTests {
     }
 
     /**
-     * 重建测试 schema。
-     *
-     * @param schemaName schema 名称
-     */
-    private void resetSchema(String schemaName) {
-        JdbcTemplate adminJdbcTemplate = createAdminJdbcTemplate();
-        adminJdbcTemplate.execute("CREATE EXTENSION IF NOT EXISTS vector");
-        adminJdbcTemplate.execute("DROP SCHEMA IF EXISTS \"" + schemaName + "\" CASCADE");
-        adminJdbcTemplate.execute("CREATE SCHEMA \"" + schemaName + "\"");
-    }
-
-    /**
-     * 创建管理连接 JDBC 模板。
-     *
-     * @return JDBC 模板
-     */
-    private JdbcTemplate createAdminJdbcTemplate() {
-        DriverManagerDataSource dataSource = new DriverManagerDataSource();
-        dataSource.setUrl(JDBC_BASE_URL);
-        dataSource.setUsername(JDBC_USERNAME);
-        dataSource.setPassword(JDBC_PASSWORD);
-        return new JdbcTemplate(dataSource);
-    }
-
-    /**
-     * 创建绑定到指定 schema 的 JDBC 模板。
-     *
-     * @param schemaName schema 名称
-     * @return JDBC 模板
-     */
-    private JdbcTemplate createSchemaJdbcTemplate(String schemaName) {
-        DriverManagerDataSource dataSource = new DriverManagerDataSource();
-        dataSource.setUrl(JDBC_BASE_URL + "?currentSchema=" + schemaName);
-        dataSource.setUsername(JDBC_USERNAME);
-        dataSource.setPassword(JDBC_PASSWORD);
-        return new JdbcTemplate(dataSource);
-    }
-
-    /**
-     * 创建文章级向量检索所需的最小表结构。
+     * 清理测试表。
      *
      * @param jdbcTemplate JDBC 模板
      */
-    private void createArticleVectorTables(JdbcTemplate jdbcTemplate) {
-        jdbcTemplate.execute("""
-                CREATE TABLE articles (
-                    id BIGINT PRIMARY KEY,
-                    source_id BIGINT,
-                    article_key VARCHAR(256) NOT NULL UNIQUE,
-                    concept_id VARCHAR(128) NOT NULL UNIQUE,
-                    title TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    metadata_json JSONB NOT NULL,
-                    source_paths TEXT[] NOT NULL,
-                    compiled_at TIMESTAMPTZ NOT NULL
-                )
-                """);
-        jdbcTemplate.execute("""
-                CREATE TABLE article_vector_index (
-                    article_key VARCHAR(256) PRIMARY KEY,
-                    concept_id VARCHAR(128) NOT NULL,
-                    model_profile_id BIGINT NOT NULL,
-                    embedding_dimensions INTEGER NOT NULL,
-                    index_version VARCHAR(64) NOT NULL,
-                    content_hash VARCHAR(64) NOT NULL,
-                    embedding public.vector(3) NOT NULL,
-                    updated_at TIMESTAMPTZ NOT NULL
-                )
-                """);
+    private void resetTables(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("CREATE EXTENSION IF NOT EXISTS vector");
+        jdbcTemplate.execute(
+                """
+                        TRUNCATE TABLE article_chunk_vector_index, article_vector_index, article_chunks, articles
+                        RESTART IDENTITY CASCADE
+                        """
+        );
     }
 
     /**
-     * 创建 chunk 级向量检索所需的最小表结构。
+     * 创建绑定到 lattice schema 的 JDBC 模板。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @return JDBC 模板
      */
-    private void createChunkVectorTables(JdbcTemplate jdbcTemplate) {
-        jdbcTemplate.execute("""
-                CREATE TABLE articles (
-                    id BIGINT PRIMARY KEY,
-                    source_id BIGINT,
-                    article_key VARCHAR(256) NOT NULL UNIQUE,
-                    concept_id VARCHAR(128) NOT NULL UNIQUE,
-                    title TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    metadata_json JSONB NOT NULL,
-                    source_paths TEXT[] NOT NULL,
-                    compiled_at TIMESTAMPTZ NOT NULL
-                )
-                """);
-        jdbcTemplate.execute("""
-                CREATE TABLE article_chunks (
-                    id BIGINT PRIMARY KEY,
-                    article_id BIGINT NOT NULL,
-                    chunk_index INTEGER NOT NULL,
-                    chunk_text TEXT NOT NULL
-                )
-                """);
-        jdbcTemplate.execute("""
-                CREATE TABLE article_chunk_vector_index (
-                    article_chunk_id BIGINT PRIMARY KEY,
-                    article_id BIGINT NOT NULL,
-                    concept_id VARCHAR(128) NOT NULL,
-                    chunk_index INTEGER NOT NULL,
-                    model_profile_id BIGINT NOT NULL,
-                    content_hash VARCHAR(64) NOT NULL,
-                    embedding public.vector(3) NOT NULL,
-                    updated_at TIMESTAMPTZ NOT NULL
-                )
-                """);
+    private JdbcTemplate createSchemaJdbcTemplate() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource();
+        dataSource.setUrl(JDBC_BASE_URL + "?currentSchema=lattice");
+        dataSource.setUsername(JDBC_USERNAME);
+        dataSource.setPassword(JDBC_PASSWORD);
+        return new JdbcTemplate(dataSource);
     }
 
     /**
@@ -223,19 +139,30 @@ class VectorJdbcRepositoryOperatorTests {
             String title,
             String content
     ) {
+        ArticleJdbcRepository articleJdbcRepository = new ArticleJdbcRepository(jdbcTemplate);
+        articleJdbcRepository.upsert(
+                new ArticleRecord(
+                        null,
+                        conceptId,
+                        conceptId,
+                        title,
+                        content,
+                        "ACTIVE",
+                        OffsetDateTime.now(),
+                        Arrays.asList("refund/status.md"),
+                        "{\"source\":\"vector\"}",
+                        "",
+                        List.<String>of(),
+                        List.<String>of(),
+                        List.<String>of(),
+                        "medium",
+                        "pending"
+                )
+        );
         jdbcTemplate.update(
-                """
-                        INSERT INTO articles (
-                            id, source_id, article_key, concept_id, title, content, metadata_json, source_paths, compiled_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, cast(? as jsonb), ARRAY['refund/status.md'], now())
-                        """,
+                "UPDATE articles SET id = ? WHERE article_key = ?",
                 articleId,
-                null,
-                conceptId,
-                conceptId,
-                title,
-                content,
-                "{\"source\":\"vector\"}"
+                conceptId
         );
     }
 
@@ -258,13 +185,63 @@ class VectorJdbcRepositoryOperatorTests {
         jdbcTemplate.update(
                 """
                         INSERT INTO article_chunks (
-                            id, article_id, chunk_index, chunk_text
-                        ) VALUES (?, ?, ?, ?)
+                            id, article_id, chunk_index, chunk_text, search_tsv
+                        ) VALUES (?, ?, ?, ?, to_tsvector('simple'::regconfig, ?))
                         """,
                 chunkId,
                 articleId,
                 Integer.valueOf(chunkIndex),
+                chunkText,
                 chunkText
         );
+    }
+
+    /**
+     * 确保测试用 embedding 模型配置存在。
+     *
+     * @param jdbcTemplate JDBC 模板
+     * @return 模型配置主键
+     */
+    private Long ensureEmbeddingModelProfile(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.update(
+                """
+                        INSERT INTO llm_provider_connections (
+                            connection_code, provider_type, base_url, api_key_ciphertext, api_key_mask
+                        )
+                        VALUES ('vector-operator-test-openai', 'OPENAI', 'https://api.openai.com', 'test', 'test')
+                        ON CONFLICT (connection_code) DO NOTHING
+                        """
+        );
+        Long connectionId = jdbcTemplate.queryForObject(
+                "SELECT id FROM llm_provider_connections WHERE connection_code = 'vector-operator-test-openai'",
+                Long.class
+        );
+        jdbcTemplate.update(
+                """
+                        INSERT INTO llm_model_profiles (
+                            model_code, connection_id, model_name, model_kind, expected_dimensions
+                        )
+                        VALUES ('vector-operator-test-embedding', ?, 'text-embedding-test', 'EMBEDDING', 2000)
+                        ON CONFLICT (model_code) DO NOTHING
+                        """,
+                connectionId
+        );
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM llm_model_profiles WHERE model_code = 'vector-operator-test-embedding'",
+                Long.class
+        );
+    }
+
+    /**
+     * 构造匹配正式 schema 的 2000 维测试向量。
+     *
+     * @return 测试向量
+     */
+    private float[] testEmbedding() {
+        float[] embedding = new float[2000];
+        embedding[0] = 1.0F;
+        embedding[1] = 2.0F;
+        embedding[2] = 3.0F;
+        return embedding;
     }
 }

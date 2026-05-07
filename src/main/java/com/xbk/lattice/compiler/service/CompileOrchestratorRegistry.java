@@ -1,6 +1,5 @@
 package com.xbk.lattice.compiler.service;
 
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -16,7 +15,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class CompileOrchestratorRegistry {
 
     private final Map<String, CompileOrchestrator> compileOrchestratorMap;

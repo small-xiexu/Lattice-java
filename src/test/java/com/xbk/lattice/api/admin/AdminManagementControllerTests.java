@@ -33,13 +33,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b8_admin_manage_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b8_admin_manage_test",
-        "spring.flyway.default-schema=lattice_b8_admin_manage_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.query.cache.store=in-memory"
@@ -231,10 +227,10 @@ class AdminManagementControllerTests {
      * 重置测试表，避免不同用例之间相互污染。
      */
     private void resetTables() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_admin_manage_test.pending_queries");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_admin_manage_test.contributions");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_admin_manage_test.source_files CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_admin_manage_test.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.pending_queries");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.contributions");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_files CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
     }
 
     /**

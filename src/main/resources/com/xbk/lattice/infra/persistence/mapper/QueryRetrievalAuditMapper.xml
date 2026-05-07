@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.QueryRetrievalAuditMapper">
+
+    <resultMap id="QueryRetrievalRunViewResultMap" type="com.xbk.lattice.infra.persistence.QueryRetrievalRunView">
+        <constructor>
+            <arg column="run_id" javaType="java.lang.Long"/>
+            <arg column="query_id" javaType="java.lang.String"/>
+            <arg column="question" javaType="java.lang.String"/>
+            <arg column="normalized_question" javaType="java.lang.String"/>
+            <arg column="retrieval_question" javaType="java.lang.String"/>
+            <arg column="version_tag" javaType="java.lang.String"/>
+            <arg column="strategy_tag" javaType="java.lang.String"/>
+            <arg column="question_type_tag" javaType="java.lang.String"/>
+            <arg column="answer_shape" javaType="java.lang.String"/>
+            <arg column="retrieval_mode" javaType="java.lang.String"/>
+            <arg column="rewrite_applied" javaType="_boolean"/>
+            <arg column="rewrite_audit_ref" javaType="java.lang.String"/>
+            <arg column="retrieval_strategy_ref" javaType="java.lang.String"/>
+            <arg column="fused_hit_count" javaType="_int"/>
+            <arg column="channel_count" javaType="_int"/>
+            <arg column="fact_card_hit_count" javaType="_int"/>
+            <arg column="source_chunk_hit_count" javaType="_int"/>
+            <arg column="coverage_status" javaType="java.lang.String"/>
+            <arg column="channel_run_summary_json" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="QueryRetrievalChannelHitViewResultMap"
+               type="com.xbk.lattice.infra.persistence.QueryRetrievalChannelHitView">
+        <constructor>
+            <arg column="hit_id" javaType="java.lang.Long"/>
+            <arg column="run_id" javaType="java.lang.Long"/>
+            <arg column="channel_name" javaType="java.lang.String"/>
+            <arg column="hit_rank" javaType="_int"/>
+            <arg column="fused_rank" javaType="java.lang.Integer"/>
+            <arg column="included_in_fused" javaType="_boolean"/>
+            <arg column="channel_weight" javaType="_double"/>
+            <arg column="evidence_type" javaType="java.lang.String"/>
+            <arg column="article_key" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="score" javaType="_double"/>
+            <arg column="fact_card_id" javaType="java.lang.Long"/>
+            <arg column="card_type" javaType="java.lang.String"/>
+            <arg column="review_status" javaType="java.lang.String"/>
+            <arg column="confidence" javaType="java.lang.Double"/>
+            <arg column="source_chunk_ids_json" javaType="java.lang.String"/>
+            <arg column="source_paths_json" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="RunViewColumns">
+        run_id, query_id, question, normalized_question, retrieval_question,
+        version_tag, strategy_tag, question_type_tag, answer_shape, retrieval_mode,
+        rewrite_applied, rewrite_audit_ref, retrieval_strategy_ref,
+        fused_hit_count, channel_count, fact_card_hit_count, source_chunk_hit_count,
+        coverage_status, channel_run_summary_json::text as channel_run_summary_json, created_at
+    </sql>
+
+    <select id="insertRun" resultType="java.lang.Long">
+        insert into query_retrieval_runs (
+            query_id, question, normalized_question, retrieval_question,
+            version_tag, strategy_tag, question_type_tag, answer_shape, retrieval_mode,
+            rewrite_applied, rewrite_audit_ref, retrieval_strategy_ref,
+            fused_hit_count, channel_count, fact_card_hit_count,
+            source_chunk_hit_count, coverage_status, channel_run_summary_json
+        )
+        values (
+            #{record.queryId},
+            #{record.question},
+            #{record.normalizedQuestion},
+            #{record.retrievalQuestion},
+            #{record.versionTag},
+            #{record.strategyTag},
+            #{record.questionTypeTag},
+            #{record.answerShape},
+            #{record.retrievalMode},
+            #{record.rewriteApplied},
+            #{record.rewriteAuditRef},
+            #{record.retrievalStrategyRef},
+            #{record.fusedHitCount},
+            #{record.channelCount},
+            #{record.factCardHitCount},
+            #{record.sourceChunkHitCount},
+            #{record.coverageStatus},
+            #{record.channelRunSummaryJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler}
+        )
+        returning run_id
+    </select>
+
+    <insert id="insertChannelHit">
+        insert into query_retrieval_channel_hits (
+            run_id, channel_name, hit_rank, fused_rank, included_in_fused,
+            channel_weight, evidence_type, article_key, concept_id,
+            title, score, fact_card_id, card_type, review_status,
+            confidence, source_chunk_ids_json, source_paths_json, metadata_json
+        )
+        values (
+            #{record.runId},
+            #{record.channelName},
+            #{record.hitRank},
+            #{record.fusedRank},
+            #{record.includedInFused},
+            #{record.channelWeight},
+            #{record.evidenceType},
+            #{record.articleKey},
+            #{record.conceptId},
+            #{record.title},
+            #{record.score},
+            #{record.factCardId},
+            #{record.cardType},
+            #{record.reviewStatus},
+            #{record.confidence},
+            #{record.sourceChunkIdsJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{record.sourcePathsJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{record.metadataJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler}
+        )
+    </insert>
+
+    <select id="findLatestRunByQueryId" resultMap="QueryRetrievalRunViewResultMap">
+        select <include refid="RunViewColumns"/>
+        from query_retrieval_runs
+        where query_id = #{queryId}
+        order by created_at desc, run_id desc
+        limit 1
+    </select>
+
+    <select id="findRunsByQueryId" resultMap="QueryRetrievalRunViewResultMap">
+        select <include refid="RunViewColumns"/>
+        from query_retrieval_runs
+        where query_id = #{queryId}
+        order by created_at desc, run_id desc
+        limit #{limit}
+    </select>
+
+    <select id="findRecentRuns" resultMap="QueryRetrievalRunViewResultMap">
+        select <include refid="RunViewColumns"/>
+        from query_retrieval_runs
+        order by created_at desc, run_id desc
+        limit #{limit}
+    </select>
+
+    <select id="findChannelHitsByRunId" resultMap="QueryRetrievalChannelHitViewResultMap">
+        select hit_id, run_id, channel_name, hit_rank, fused_rank, included_in_fused,
+               channel_weight, evidence_type, article_key, concept_id, title, score,
+               fact_card_id, card_type, review_status, confidence,
+               source_chunk_ids_json::text as source_chunk_ids_json,
+               source_paths_json::text as source_paths_json,
+               metadata_json::text as metadata_json,
+               created_at
+        from query_retrieval_channel_hits
+        where run_id = #{runId}
+        order by channel_name asc, hit_rank asc, hit_id asc
+    </select>
+</mapper>

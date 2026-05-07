@@ -149,16 +149,20 @@ class QueryHitIntentRerankerTests {
     }
 
     /**
-     * 验证接口路径 / 命中数这类精确查值题会优先落到配置型检索意图。
+     * 验证接口路径 / 指标数值这类精确查值题会优先落到配置型检索意图。
      */
     @Test
     void shouldClassifyExactLookupQuestionAsConfiguration() {
         QueryIntentClassifier queryIntentClassifier = new QueryIntentClassifier();
 
         QueryIntent pathIntent = queryIntentClassifier.classify("子场景 B 的接口路径是什么？");
-        QueryIntent countIntent = queryIntentClassifier.classify("某个渠道的 30 天命中数是多少？");
+        QueryIntent countIntent = queryIntentClassifier.classify("某个指标的 30 天命中数是多少？");
+        QueryIntent urlPathIntent = queryIntentClassifier.classify("/api/v1/orders/create 的约束是什么？");
+        QueryIntent configKeyIntent = queryIntentClassifier.classify("payment.retry.maxAttempts 取值是什么？");
 
         assertThat(pathIntent).isEqualTo(QueryIntent.CONFIGURATION);
         assertThat(countIntent).isEqualTo(QueryIntent.CONFIGURATION);
+        assertThat(urlPathIntent).isEqualTo(QueryIntent.CONFIGURATION);
+        assertThat(configKeyIntent).isEqualTo(QueryIntent.CONFIGURATION);
     }
 }

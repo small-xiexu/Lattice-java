@@ -62,7 +62,8 @@ class ConfiguredVectorEmbeddingServiceTest {
                         "https://api.siliconflow.cn",
                         "test-key",
                         "BAAI/bge-m3",
-                        Integer.valueOf(1024)
+                        Integer.valueOf(1024),
+                        Integer.valueOf(7)
                 );
             }
         };

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.QueryRewriteRuleMapper">
+
+    <resultMap id="QueryRewriteRuleRecordResultMap" type="com.xbk.lattice.infra.persistence.QueryRewriteRuleRecord">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+            <arg column="rule_code" javaType="java.lang.String"/>
+            <arg column="source_pattern" javaType="java.lang.String"/>
+            <arg column="rewrite_text" javaType="java.lang.String"/>
+            <arg column="scope" javaType="java.lang.String"/>
+            <arg column="priority" javaType="_int"/>
+        </constructor>
+    </resultMap>
+
+    <select id="findActiveRules" resultMap="QueryRewriteRuleRecordResultMap">
+        select id, rule_code, source_pattern, rewrite_text, scope, priority
+        from query_rewrite_rules
+        where enabled = true
+        order by priority desc, id asc
+    </select>
+</mapper>

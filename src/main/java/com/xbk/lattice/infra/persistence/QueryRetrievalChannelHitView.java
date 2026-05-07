@@ -35,6 +35,16 @@ public class QueryRetrievalChannelHitView {
 
     private final double score;
 
+    private final Long factCardId;
+
+    private final String cardType;
+
+    private final String reviewStatus;
+
+    private final Double confidence;
+
+    private final String sourceChunkIdsJson;
+
     private final String sourcePathsJson;
 
     private final String metadataJson;
@@ -56,6 +66,11 @@ public class QueryRetrievalChannelHitView {
      * @param conceptId 概念标识
      * @param title 标题
      * @param score 分数
+     * @param factCardId Fact Card 数据库主键
+     * @param cardType Fact Card 类型
+     * @param reviewStatus 审查状态
+     * @param confidence 置信度
+     * @param sourceChunkIdsJson Source Chunk ID JSON
      * @param sourcePathsJson 来源路径 JSON
      * @param metadataJson 元数据 JSON
      * @param createdAt 创建时间
@@ -73,6 +88,11 @@ public class QueryRetrievalChannelHitView {
             String conceptId,
             String title,
             double score,
+            Long factCardId,
+            String cardType,
+            String reviewStatus,
+            Double confidence,
+            String sourceChunkIdsJson,
             String sourcePathsJson,
             String metadataJson,
             OffsetDateTime createdAt
@@ -89,6 +109,11 @@ public class QueryRetrievalChannelHitView {
         this.conceptId = conceptId;
         this.title = title;
         this.score = score;
+        this.factCardId = factCardId;
+        this.cardType = cardType;
+        this.reviewStatus = reviewStatus;
+        this.confidence = confidence;
+        this.sourceChunkIdsJson = sourceChunkIdsJson;
         this.sourcePathsJson = sourcePathsJson;
         this.metadataJson = metadataJson;
         this.createdAt = createdAt;
@@ -200,6 +225,51 @@ public class QueryRetrievalChannelHitView {
      */
     public double getScore() {
         return score;
+    }
+
+    /**
+     * 获取 Fact Card 数据库主键。
+     *
+     * @return Fact Card 数据库主键
+     */
+    public Long getFactCardId() {
+        return factCardId;
+    }
+
+    /**
+     * 获取 Fact Card 类型。
+     *
+     * @return Fact Card 类型
+     */
+    public String getCardType() {
+        return cardType;
+    }
+
+    /**
+     * 获取证据审查状态。
+     *
+     * @return 证据审查状态
+     */
+    public String getReviewStatus() {
+        return reviewStatus;
+    }
+
+    /**
+     * 获取 Fact Card 置信度。
+     *
+     * @return Fact Card 置信度
+     */
+    public Double getConfidence() {
+        return confidence;
+    }
+
+    /**
+     * 获取 Source Chunk ID JSON。
+     *
+     * @return Source Chunk ID JSON
+     */
+    public String getSourceChunkIdsJson() {
+        return sourceChunkIdsJson;
     }
 
     /**

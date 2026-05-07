@@ -13,6 +13,7 @@ import com.xbk.lattice.query.deepresearch.domain.EvidenceLedger;
 import com.xbk.lattice.query.deepresearch.store.InMemoryDeepResearchWorkingSetStore;
 import com.xbk.lattice.query.evidence.domain.AnswerProjection;
 import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
+import com.xbk.lattice.query.evidence.domain.AnswerShape;
 import com.xbk.lattice.query.evidence.domain.EvidenceAnchor;
 import com.xbk.lattice.query.evidence.domain.EvidenceAnchorSourceType;
 import com.xbk.lattice.query.evidence.domain.FactFinding;
@@ -108,6 +109,7 @@ class WorkingSetStoreRoundTripTests {
                 new RetrievalStrategy(
                         "payment retry policy",
                         QueryIntent.TROUBLESHOOTING,
+                        AnswerShape.STATUS,
                         true,
                         60,
                         new LinkedHashMap<String, Double>(java.util.Map.of(RetrievalStrategyResolver.CHANNEL_FTS, 1.0D)),
@@ -135,6 +137,7 @@ class WorkingSetStoreRoundTripTests {
         assertThat(loadedStrategy).isNotNull();
         assertThat(loadedStrategy.getRetrievalQuestion()).isEqualTo("payment retry policy");
         assertThat(loadedStrategy.getQueryIntent()).isEqualTo(QueryIntent.TROUBLESHOOTING);
+        assertThat(loadedStrategy.getAnswerShape()).isEqualTo(AnswerShape.STATUS);
     }
 
     /**

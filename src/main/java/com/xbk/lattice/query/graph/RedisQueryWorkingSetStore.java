@@ -11,13 +11,14 @@ import com.xbk.lattice.query.domain.ReviewResult;
 import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import com.xbk.lattice.query.service.QueryArticleHit;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
+import com.xbk.lattice.query.service.RetrievalChannelRun;
 import com.xbk.lattice.query.service.RetrievalStrategy;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Redis 版 Query 工作集存储
@@ -27,7 +28,6 @@ import java.util.List;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 @ConditionalOnProperty(prefix = "lattice.query.working-set", name = "store", havingValue = "redis")
 public class RedisQueryWorkingSetStore extends AbstractRedisJsonStore implements QueryWorkingSetStore {
 
@@ -36,6 +36,10 @@ public class RedisQueryWorkingSetStore extends AbstractRedisJsonStore implements
 
     private static final TypeReference<List<List<QueryArticleHit>>> QUERY_HIT_GROUPS_TYPE =
             new TypeReference<List<List<QueryArticleHit>>>() {
+            };
+
+    private static final TypeReference<Map<String, RetrievalChannelRun>> RETRIEVAL_CHANNEL_RUNS_TYPE =
+            new TypeReference<Map<String, RetrievalChannelRun>>() {
             };
 
     private static final TypeReference<List<ClaimSegment>> CLAIM_SEGMENTS_TYPE = new TypeReference<List<ClaimSegment>>() {
@@ -105,6 +109,19 @@ public class RedisQueryWorkingSetStore extends AbstractRedisJsonStore implements
     @Override
     public RetrievalStrategy loadRetrievalStrategy(String ref) {
         return loadJson(ref, RetrievalStrategy.class);
+    }
+
+    @Override
+    public String saveRetrievalChannelRuns(String queryId, Map<String, RetrievalChannelRun> channelRuns) {
+        String ref = buildRef(queryId, "retrieval-channel-runs");
+        saveJson(ref, channelRuns == null ? Map.of() : channelRuns);
+        return ref;
+    }
+
+    @Override
+    public Map<String, RetrievalChannelRun> loadRetrievalChannelRuns(String ref) {
+        Map<String, RetrievalChannelRun> channelRuns = loadJson(ref, RETRIEVAL_CHANNEL_RUNS_TYPE);
+        return channelRuns == null ? Map.of() : channelRuns;
     }
 
     @Override

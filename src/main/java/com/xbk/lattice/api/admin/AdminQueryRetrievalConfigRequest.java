@@ -32,6 +32,8 @@ public class AdminQueryRetrievalConfigRequest {
 
     private Double sourceChunkWeight;
 
+    private Double factCardWeight;
+
     private Double contributionWeight;
 
     private Double graphWeight;

@@ -1,7 +1,6 @@
 package com.xbk.lattice.infra.persistence;
 
-import org.springframework.context.annotation.Profile;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.xbk.lattice.infra.persistence.mapper.DeepResearchTaskHitMapper;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -12,18 +11,17 @@ import org.springframework.stereotype.Repository;
  * @author xiexu
  */
 @Repository
-@Profile("jdbc")
 public class DeepResearchTaskHitJdbcRepository {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final DeepResearchTaskHitMapper deepResearchTaskHitMapper;
 
     /**
      * 创建 Deep Research 任务命中 JDBC 仓储。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @param deepResearchTaskHitMapper Deep Research 任务命中 Mapper
      */
-    public DeepResearchTaskHitJdbcRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public DeepResearchTaskHitJdbcRepository(DeepResearchTaskHitMapper deepResearchTaskHitMapper) {
+        this.deepResearchTaskHitMapper = deepResearchTaskHitMapper;
     }
 
     /**
@@ -32,30 +30,6 @@ public class DeepResearchTaskHitJdbcRepository {
      * @param record 命中记录
      */
     public void insert(DeepResearchTaskHitRecord record) {
-        jdbcTemplate.update(
-                """
-                        insert into deep_research_task_hits (
-                            run_id, task_id, hit_ordinal, channel, evidence_type, source_id,
-                            article_key, concept_id, title, chunk_id, path, original_score,
-                            rrf_score, fused_score, content_excerpt
-                        )
-                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                record.getRunId(),
-                record.getTaskId(),
-                Integer.valueOf(record.getHitOrdinal()),
-                record.getChannel(),
-                record.getEvidenceType(),
-                record.getSourceId(),
-                record.getArticleKey(),
-                record.getConceptId(),
-                record.getTitle(),
-                record.getChunkId(),
-                record.getPath(),
-                record.getOriginalScore(),
-                record.getRrfScore(),
-                record.getFusedScore(),
-                record.getContentExcerpt()
-        );
+        deepResearchTaskHitMapper.insert(record);
     }
 }

@@ -9,7 +9,6 @@ import com.xbk.lattice.compiler.graph.CompileGraphStateMapper;
 import com.xbk.lattice.compiler.service.ArticleCompileSupport;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -22,7 +21,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 @Slf4j
 public class InitializeJobNode extends AbstractCompileGraphNode {
 

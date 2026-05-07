@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.QueryRetrievalSettingsMapper">
+
+    <resultMap id="QueryRetrievalSettingsStateResultMap" type="com.xbk.lattice.query.service.QueryRetrievalSettingsState">
+        <constructor>
+            <arg column="parallel_enabled" javaType="_boolean"/>
+            <arg column="rewrite_enabled" javaType="_boolean"/>
+            <arg column="intent_aware_vector_enabled" javaType="_boolean"/>
+            <arg column="fts_weight" javaType="_double"/>
+            <arg column="refkey_weight" javaType="_double"/>
+            <arg column="article_chunk_weight" javaType="_double"/>
+            <arg column="source_weight" javaType="_double"/>
+            <arg column="source_chunk_weight" javaType="_double"/>
+            <arg column="fact_card_weight" javaType="_double"/>
+            <arg column="contribution_weight" javaType="_double"/>
+            <arg column="graph_weight" javaType="_double"/>
+            <arg column="article_vector_weight" javaType="_double"/>
+            <arg column="chunk_vector_weight" javaType="_double"/>
+            <arg column="rrf_k" javaType="_int"/>
+        </constructor>
+    </resultMap>
+
+    <select id="findDefault" resultMap="QueryRetrievalSettingsStateResultMap">
+        select parallel_enabled, rewrite_enabled, intent_aware_vector_enabled,
+               fts_weight, refkey_weight, article_chunk_weight,
+               source_weight, source_chunk_weight, fact_card_weight, contribution_weight, graph_weight,
+               article_vector_weight, chunk_vector_weight, rrf_k
+        from query_retrieval_settings
+        where id = 1
+    </select>
+
+    <insert id="saveDefault">
+        insert into query_retrieval_settings (
+            id, parallel_enabled, rewrite_enabled, intent_aware_vector_enabled,
+            fts_weight, refkey_weight, article_chunk_weight,
+            source_weight, source_chunk_weight, fact_card_weight, contribution_weight, graph_weight,
+            article_vector_weight, chunk_vector_weight, rrf_k, updated_at
+        )
+        values (
+            1,
+            #{state.parallelEnabled},
+            #{state.rewriteEnabled},
+            #{state.intentAwareVectorEnabled},
+            #{state.ftsWeight},
+            #{state.refkeyWeight},
+            #{state.articleChunkWeight},
+            #{state.sourceWeight},
+            #{state.sourceChunkWeight},
+            #{state.factCardWeight},
+            #{state.contributionWeight},
+            #{state.graphWeight},
+            #{state.articleVectorWeight},
+            #{state.chunkVectorWeight},
+            #{state.rrfK},
+            current_timestamp
+        )
+        on conflict (id) do update
+        set parallel_enabled = excluded.parallel_enabled,
+            rewrite_enabled = excluded.rewrite_enabled,
+            intent_aware_vector_enabled = excluded.intent_aware_vector_enabled,
+            fts_weight = excluded.fts_weight,
+            refkey_weight = excluded.refkey_weight,
+            article_chunk_weight = excluded.article_chunk_weight,
+            source_weight = excluded.source_weight,
+            source_chunk_weight = excluded.source_chunk_weight,
+            fact_card_weight = excluded.fact_card_weight,
+            contribution_weight = excluded.contribution_weight,
+            graph_weight = excluded.graph_weight,
+            article_vector_weight = excluded.article_vector_weight,
+            chunk_vector_weight = excluded.chunk_vector_weight,
+            rrf_k = excluded.rrf_k,
+            updated_at = current_timestamp
+    </insert>
+</mapper>

@@ -1,7 +1,6 @@
 package com.xbk.lattice.infra.persistence;
 
-import org.springframework.context.annotation.Profile;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.xbk.lattice.infra.persistence.mapper.DeepResearchFindingMapper;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -12,18 +11,17 @@ import org.springframework.stereotype.Repository;
  * @author xiexu
  */
 @Repository
-@Profile("jdbc")
 public class DeepResearchFindingJdbcRepository {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final DeepResearchFindingMapper deepResearchFindingMapper;
 
     /**
      * 创建 Deep Research finding JDBC 仓储。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @param deepResearchFindingMapper Deep Research finding Mapper
      */
-    public DeepResearchFindingJdbcRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public DeepResearchFindingJdbcRepository(DeepResearchFindingMapper deepResearchFindingMapper) {
+        this.deepResearchFindingMapper = deepResearchFindingMapper;
     }
 
     /**
@@ -32,29 +30,6 @@ public class DeepResearchFindingJdbcRepository {
      * @param record finding 记录
      */
     public void insert(DeepResearchFindingRecord record) {
-        jdbcTemplate.update(
-                """
-                        insert into deep_research_findings (
-                            finding_id, run_id, task_id, fact_key, subject, predicate,
-                            value_text, value_type, unit, qualifier, claim_text, support_level,
-                            confidence, anchor_ids_json
-                        )
-                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
-                        """,
-                record.getFindingId(),
-                record.getRunId(),
-                record.getTaskId(),
-                record.getFactKey(),
-                record.getSubject(),
-                record.getPredicate(),
-                record.getValueText(),
-                record.getValueType(),
-                record.getUnit(),
-                record.getQualifier(),
-                record.getClaimText(),
-                record.getSupportLevel(),
-                Double.valueOf(record.getConfidence()),
-                record.getAnchorIdsJson()
-        );
+        deepResearchFindingMapper.insert(record);
     }
 }

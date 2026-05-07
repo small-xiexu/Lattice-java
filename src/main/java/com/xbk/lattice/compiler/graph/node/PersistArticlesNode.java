@@ -6,7 +6,6 @@ import com.xbk.lattice.compiler.graph.CompileGraphState;
 import com.xbk.lattice.compiler.graph.CompileGraphStateMapper;
 import com.xbk.lattice.compiler.graph.CompileWorkingSetStore;
 import com.xbk.lattice.compiler.service.ArticlePersistSupport;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -21,7 +20,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class PersistArticlesNode extends AbstractCompileGraphNode {
 
     private final ArticlePersistSupport articlePersistSupport;

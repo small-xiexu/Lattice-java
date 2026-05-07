@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.ContributionMapper">
+
+    <resultMap id="ContributionRecordResultMap" type="com.xbk.lattice.infra.persistence.ContributionRecord">
+        <constructor>
+            <arg column="id" javaType="java.util.UUID"/>
+            <arg column="question" javaType="java.lang.String"/>
+            <arg column="answer" javaType="java.lang.String"/>
+            <arg column="corrections_json" javaType="java.lang.String"/>
+            <arg column="confirmed_by" javaType="java.lang.String"/>
+            <arg column="confirmed_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="LexicalSearchRecordResultMap" type="com.xbk.lattice.infra.persistence.LexicalSearchRecord">
+        <constructor>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="item_key" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="content" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="source_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="chunk_index" javaType="java.lang.Integer"/>
+            <arg column="verbatim" javaType="java.lang.Boolean"/>
+            <arg column="score" javaType="_double"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="insert">
+        insert into contributions (
+            id, question, answer, corrections, confirmed_by, confirmed_at,
+            question_tsv, answer_tsv, corrections_tsv
+        )
+        values (
+            #{record.id},
+            #{record.question},
+            #{record.answer},
+            #{record.correctionsJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{record.confirmedBy},
+            #{record.confirmedAt},
+            to_tsvector('simple'::regconfig, #{record.question}),
+            to_tsvector('simple'::regconfig, #{record.answer}),
+            to_tsvector('simple'::regconfig, #{record.correctionsJson})
+        )
+    </insert>
+
+    <select id="findAll" resultMap="ContributionRecordResultMap">
+        select id, question, answer, corrections::text as corrections_json, confirmed_by, confirmed_at
+        from contributions
+        order by confirmed_at desc, id desc
+    </select>
+
+    <select id="searchLexical" resultMap="LexicalSearchRecordResultMap">
+        with query as (
+            select plainto_tsquery(cast(#{tsConfig} as regconfig), #{question}) as tsq
+        )
+        select null::bigint as source_id,
+               id::text as item_key,
+               concat('contribution:', id::text) as concept_id,
+               concat('用户反馈：', question) as title,
+               answer as content,
+               concat(
+                   '{"question":"',
+                   replace(coalesce(question, ''), '"', '\"'),
+                   '","confirmedBy":"',
+                   replace(coalesce(confirmed_by, ''), '"', '\"'),
+                   '"}'
+               ) as metadata_json,
+               array['[用户反馈]']::text[] as source_paths,
+               null::integer as chunk_index,
+               null::boolean as verbatim,
+               ts_rank_cd(question_tsv, query.tsq) * 3.0
+                   + ts_rank_cd(answer_tsv, query.tsq) * 4.0
+                   + ts_rank_cd(corrections_tsv, query.tsq) * 1.5
+               <foreach collection="likeTokens" item="likeToken">
+                   + case when lower(question) like #{likeToken} then 3.0 else 0 end
+                   + case when lower(answer) like #{likeToken} then 4.0 else 0 end
+                   + case when lower(corrections::text) like #{likeToken} then 1.5 else 0 end
+               </foreach>
+               as score
+        from contributions
+        cross join query
+        where question_tsv @@ query.tsq
+           or answer_tsv @@ query.tsq
+           or corrections_tsv @@ query.tsq
+        <foreach collection="likeTokens" item="likeToken">
+           or lower(question) like #{likeToken}
+           or lower(answer) like #{likeToken}
+           or lower(corrections::text) like #{likeToken}
+        </foreach>
+        order by score desc, confirmed_at desc, id desc
+        limit #{limit}
+    </select>
+
+    <update id="deleteAll">
+        truncate table contributions
+    </update>
+</mapper>

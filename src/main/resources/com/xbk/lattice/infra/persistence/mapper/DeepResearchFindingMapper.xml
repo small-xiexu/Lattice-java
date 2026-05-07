@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.DeepResearchFindingMapper">
+
+    <insert id="insert">
+        insert into deep_research_findings (
+            finding_id, run_id, task_id, fact_key, subject, predicate,
+            value_text, value_type, unit, qualifier, claim_text, support_level,
+            confidence, anchor_ids_json
+        )
+        values (
+            #{record.findingId},
+            #{record.runId},
+            #{record.taskId},
+            #{record.factKey},
+            #{record.subject},
+            #{record.predicate},
+            #{record.valueText},
+            #{record.valueType},
+            #{record.unit},
+            #{record.qualifier},
+            #{record.claimText},
+            #{record.supportLevel},
+            #{record.confidence},
+            #{record.anchorIdsJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler}
+        )
+    </insert>
+</mapper>

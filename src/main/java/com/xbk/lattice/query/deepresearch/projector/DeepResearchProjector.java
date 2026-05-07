@@ -8,7 +8,6 @@ import com.xbk.lattice.query.evidence.domain.EvidenceAnchor;
 import com.xbk.lattice.query.evidence.domain.ProjectionCandidate;
 import com.xbk.lattice.query.evidence.domain.ProjectionCitationFormat;
 import com.xbk.lattice.query.evidence.domain.ProjectionStatus;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -24,7 +23,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class DeepResearchProjector {
 
     /**

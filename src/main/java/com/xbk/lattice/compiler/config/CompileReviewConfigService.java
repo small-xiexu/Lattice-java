@@ -3,7 +3,6 @@ package com.xbk.lattice.compiler.config;
 import com.xbk.lattice.infra.persistence.CompileReviewConfigJdbcRepository;
 import com.xbk.lattice.infra.persistence.CompileReviewConfigRecord;
 import jakarta.annotation.PostConstruct;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.Locale;
@@ -17,7 +16,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class CompileReviewConfigService {
 
     private static final String DEFAULT_SCOPE = "default";

@@ -15,40 +15,6 @@ import java.util.Set;
  */
 public final class QueryEvidenceRelevanceSupport {
 
-    private static final Set<String> GENERIC_QUERY_TOKENS = Set.of(
-            "什么",
-            "这个",
-            "那个",
-            "项目",
-            "系统",
-            "当前",
-            "直接",
-            "相关",
-            "支持",
-            "实现",
-            "方式",
-            "时机",
-            "目标",
-            "关键",
-            "结论",
-            "问题",
-            "情况",
-            "功能",
-            "方案",
-            "策略",
-            "请按",
-            "请从",
-            "请结",
-            "哪些",
-            "需要",
-            "执行",
-            "动作",
-            "日常",
-            "维护"
-    );
-
-    private static final String GENERIC_HAN_CHARS = "这个那个项目支持当前直接相关目标触发时机实现方式关键结论什么请按从与及和是否到底究竟";
-
     private QueryEvidenceRelevanceSupport() {
     }
 
@@ -59,40 +25,133 @@ public final class QueryEvidenceRelevanceSupport {
      * @return 高信号 token
      */
     public static List<String> extractHighSignalTokens(String question) {
-        Set<String> highSignalTokens = new LinkedHashSet<String>();
-        String focusQuestion = extractFocusQuestion(question);
-        List<String> rawTokens = QueryTokenExtractor.extract(focusQuestion);
+        List<String> exactTokens = new ArrayList<String>();
+        List<String> asciiTokens = new ArrayList<String>();
+        List<String> hanFourGramTokens = new ArrayList<String>();
+        List<String> hanThreeGramTokens = new ArrayList<String>();
+        List<String> hanTwoGramTokens = new ArrayList<String>();
+        List<String> rawTokens = QueryTokenExtractor.extract(question);
         for (String rawToken : rawTokens) {
             String normalizedToken = normalize(rawToken);
-            if (normalizedToken.isBlank() || isGenericToken(normalizedToken)) {
-                continue;
-            }
-            if (isAsciiToken(normalizedToken) && normalizedToken.length() >= 4) {
-                highSignalTokens.add(normalizedToken);
+            if (!isUsableHighSignalToken(normalizedToken)) {
                 continue;
             }
             if (containsSpecialSignalChar(normalizedToken)) {
-                highSignalTokens.add(normalizedToken);
+                addDistinctToken(exactTokens, normalizedToken);
                 continue;
             }
-            if (containsHanText(normalizedToken) && normalizedToken.length() >= 2) {
-                highSignalTokens.add(normalizedToken);
-            }
-        }
-        if (!highSignalTokens.isEmpty()) {
-            return new ArrayList<String>(highSignalTokens);
-        }
-        for (String rawToken : QueryTokenExtractor.extract(question == null ? "" : question)) {
-            String normalizedToken = normalize(rawToken);
-            if (normalizedToken.isBlank() || isGenericToken(normalizedToken)) {
+            if (isAsciiToken(normalizedToken)) {
+                addDistinctToken(asciiTokens, normalizedToken);
                 continue;
             }
-            highSignalTokens.add(normalizedToken);
-            if (highSignalTokens.size() >= 3) {
+            if (normalizedToken.length() >= 4) {
+                addDistinctToken(hanFourGramTokens, normalizedToken);
+                continue;
+            }
+            if (normalizedToken.length() == 3) {
+                addDistinctToken(hanThreeGramTokens, normalizedToken);
+                continue;
+            }
+            addDistinctToken(hanTwoGramTokens, normalizedToken);
+        }
+        List<String> highSignalTokens = new ArrayList<String>();
+        addRankedTokens(highSignalTokens, exactTokens, 6, 12);
+        addRankedTokens(highSignalTokens, asciiTokens, 8, 12);
+        addBalancedTokens(highSignalTokens, hanFourGramTokens, 4, 12);
+        addBalancedTokens(highSignalTokens, hanThreeGramTokens, 4, 12);
+        addBalancedTokens(highSignalTokens, hanTwoGramTokens, 4, 12);
+        if (highSignalTokens.isEmpty()) {
+            return List.of();
+        }
+        return highSignalTokens;
+    }
+
+    /**
+     * 按形态优先级追加 token。
+     *
+     * @param targetTokens 目标 token
+     * @param sourceTokens 来源 token
+     * @param groupLimit 当前分组数量上限
+     * @param totalLimit 总数量上限
+     */
+    private static void addRankedTokens(
+            List<String> targetTokens,
+            List<String> sourceTokens,
+            int groupLimit,
+            int totalLimit
+    ) {
+        if (sourceTokens == null || sourceTokens.isEmpty() || groupLimit <= 0 || totalLimit <= 0) {
+            return;
+        }
+        List<String> rankedTokens = new ArrayList<String>(sourceTokens);
+        rankedTokens.sort((leftToken, rightToken) -> {
+            int rankCompare = Integer.compare(tokenPriority(rightToken), tokenPriority(leftToken));
+            if (rankCompare != 0) {
+                return rankCompare;
+            }
+            return Integer.compare(rightToken.length(), leftToken.length());
+        });
+        int addedCount = 0;
+        for (String rankedToken : rankedTokens) {
+            addDistinctToken(targetTokens, rankedToken);
+            addedCount++;
+            if (addedCount >= groupLimit || targetTokens.size() >= totalLimit) {
                 break;
             }
         }
-        return new ArrayList<String>(highSignalTokens);
+    }
+
+    /**
+     * 从长问题 token 中按位置均衡抽样，避免只保留开头片段。
+     *
+     * @param targetTokens 目标 token
+     * @param sourceTokens 来源 token
+     * @param groupLimit 当前分组数量上限
+     * @param totalLimit 总数量上限
+     */
+    private static void addBalancedTokens(
+            List<String> targetTokens,
+            List<String> sourceTokens,
+            int groupLimit,
+            int totalLimit
+    ) {
+        if (sourceTokens == null || sourceTokens.isEmpty() || groupLimit <= 0 || totalLimit <= 0) {
+            return;
+        }
+        if (sourceTokens.size() <= groupLimit) {
+            for (String sourceToken : sourceTokens) {
+                addDistinctToken(targetTokens, sourceToken);
+                if (targetTokens.size() >= totalLimit) {
+                    break;
+                }
+            }
+            return;
+        }
+        Set<Integer> selectedIndexes = new LinkedHashSet<Integer>();
+        int denominator = Math.max(1, groupLimit - 1);
+        for (int offset = 0; offset < groupLimit; offset++) {
+            int selectedIndex = Math.round((sourceTokens.size() - 1) * (offset / (float) denominator));
+            selectedIndexes.add(Integer.valueOf(selectedIndex));
+        }
+        for (Integer selectedIndex : selectedIndexes) {
+            addDistinctToken(targetTokens, sourceTokens.get(selectedIndex.intValue()));
+            if (targetTokens.size() >= totalLimit) {
+                break;
+            }
+        }
+    }
+
+    /**
+     * 去重追加 token。
+     *
+     * @param tokens token 列表
+     * @param token 待追加 token
+     */
+    private static void addDistinctToken(List<String> tokens, String token) {
+        if (token == null || token.isBlank() || tokens.contains(token)) {
+            return;
+        }
+        tokens.add(token);
     }
 
     /**
@@ -107,25 +166,12 @@ public final class QueryEvidenceRelevanceSupport {
         if (queryArticleHits == null || queryArticleHits.isEmpty()) {
             return relevantHits;
         }
-        boolean flowQuestion = looksLikeFlowQuestion(question);
-        boolean capabilityQuestion = looksLikeCapabilityQuestion(question);
         List<String> highSignalTokens = extractHighSignalTokens(question);
-        if (highSignalTokens.isEmpty() && !flowQuestion) {
+        if (highSignalTokens.isEmpty()) {
             return relevantHits;
         }
-        boolean capabilityTopicQuestion = capabilityQuestion && containsCapabilityTopic(highSignalTokens);
         List<String> entityLikeTokens = extractEntityLikeTokens(highSignalTokens);
         for (QueryArticleHit queryArticleHit : queryArticleHits) {
-            if (flowQuestion
-                    && containsFlowSignal(queryArticleHit)
-                    && shouldAcceptFlowSignalHit(queryArticleHit, highSignalTokens, entityLikeTokens)) {
-                relevantHits.add(queryArticleHit);
-                continue;
-            }
-            if (capabilityTopicQuestion && containsCapabilitySignal(queryArticleHit)) {
-                relevantHits.add(queryArticleHit);
-                continue;
-            }
             if (isRelevant(queryArticleHit, highSignalTokens, entityLikeTokens)) {
                 relevantHits.add(queryArticleHit);
             }
@@ -142,18 +188,6 @@ public final class QueryEvidenceRelevanceSupport {
      */
     public static boolean isRelevant(String question, QueryArticleHit queryArticleHit) {
         List<String> highSignalTokens = extractHighSignalTokens(question);
-        if (looksLikeFlowQuestion(question) && containsFlowSignal(queryArticleHit)) {
-            return shouldAcceptFlowSignalHit(
-                    queryArticleHit,
-                    highSignalTokens,
-                    extractEntityLikeTokens(highSignalTokens)
-            );
-        }
-        if (looksLikeCapabilityQuestion(question)
-                && containsCapabilityTopic(highSignalTokens)
-                && containsCapabilitySignal(queryArticleHit)) {
-            return true;
-        }
         if (highSignalTokens.isEmpty()) {
             return false;
         }
@@ -171,26 +205,6 @@ public final class QueryEvidenceRelevanceSupport {
         return score(queryArticleHit, extractHighSignalTokens(question));
     }
 
-    private static boolean shouldAcceptFlowSignalHit(
-            QueryArticleHit queryArticleHit,
-            List<String> highSignalTokens,
-            List<String> entityLikeTokens
-    ) {
-        if (highSignalTokens == null || highSignalTokens.isEmpty()) {
-            return true;
-        }
-        if (entityLikeTokens == null || entityLikeTokens.isEmpty()) {
-            return true;
-        }
-        for (String entityLikeToken : entityLikeTokens) {
-            if (matchesStructuredField(queryArticleHit, entityLikeToken)
-                    || matchesContent(queryArticleHit, entityLikeToken)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private static boolean isRelevant(
             QueryArticleHit queryArticleHit,
             List<String> highSignalTokens,
@@ -203,8 +217,12 @@ public final class QueryEvidenceRelevanceSupport {
         if (score <= 0) {
             return false;
         }
+        List<String> exactSignalTokens = extractExactSignalTokens(entityLikeTokens);
+        if (!exactSignalTokens.isEmpty()) {
+            return countTokenMatches(queryArticleHit, exactSignalTokens) > 0;
+        }
         if (!entityLikeTokens.isEmpty()) {
-            return countStructuredFieldMatches(queryArticleHit, entityLikeTokens) > 0 || score >= 8;
+            return countTokenMatches(queryArticleHit, entityLikeTokens) > 0;
         }
         return countStrongTokenMatches(queryArticleHit, highSignalTokens) >= 1 || score >= 5;
     }
@@ -253,6 +271,47 @@ public final class QueryEvidenceRelevanceSupport {
         int matchedCount = 0;
         for (String entityLikeToken : entityLikeTokens) {
             if (matchesStructuredField(queryArticleHit, entityLikeToken)) {
+                matchedCount++;
+            }
+        }
+        return matchedCount;
+    }
+
+    /**
+     * 提取必须精确覆盖的高信号标识 token。
+     *
+     * @param entityLikeTokens 实体类 token
+     * @return 精确标识 token
+     */
+    private static List<String> extractExactSignalTokens(List<String> entityLikeTokens) {
+        List<String> exactSignalTokens = new ArrayList<String>();
+        if (entityLikeTokens == null) {
+            return exactSignalTokens;
+        }
+        for (String entityLikeToken : entityLikeTokens) {
+            if (containsSpecialSignalChar(entityLikeToken)) {
+                exactSignalTokens.add(entityLikeToken);
+            }
+        }
+        return exactSignalTokens;
+    }
+
+    /**
+     * 统计 token 在结构化字段、标题说明或正文中的命中数量。
+     *
+     * @param queryArticleHit 查询命中
+     * @param tokens token 列表
+     * @return 命中数量
+     */
+    private static int countTokenMatches(QueryArticleHit queryArticleHit, List<String> tokens) {
+        int matchedCount = 0;
+        if (tokens == null || tokens.isEmpty()) {
+            return matchedCount;
+        }
+        for (String token : tokens) {
+            if (matchesStructuredField(queryArticleHit, token)
+                    || matchesTitleOrDescription(queryArticleHit, token)
+                    || matchesContent(queryArticleHit, token)) {
                 matchedCount++;
             }
         }
@@ -309,51 +368,20 @@ public final class QueryEvidenceRelevanceSupport {
         return normalize(value).contains(normalize(token));
     }
 
-    private static String extractFocusQuestion(String question) {
-        String normalizedQuestion = question == null ? "" : question.trim();
-        int compareIndex = normalizedQuestion.indexOf("对比");
-        if (compareIndex >= 0 && compareIndex < normalizedQuestion.length() - 2) {
-            normalizedQuestion = normalizedQuestion.substring(compareIndex + 2).trim();
+    private static boolean isUsableHighSignalToken(String token) {
+        if (token == null || token.isBlank() || token.length() <= 1) {
+            return false;
         }
-        normalizedQuestion = normalizedQuestion.replace("有什么区别", "");
-        normalizedQuestion = normalizedQuestion.replace("区别是什么", "");
-        normalizedQuestion = normalizedQuestion.replace("的关键结论是什么", "");
-        normalizedQuestion = normalizedQuestion.replaceAll("[？?。！!]+$", "");
-        if (normalizedQuestion.endsWith("是什么")) {
-            normalizedQuestion = normalizedQuestion.substring(0, normalizedQuestion.length() - 3).trim();
+        if (containsSpecialSignalChar(token)) {
+            return true;
         }
-        if (normalizedQuestion.endsWith("吗")) {
-            normalizedQuestion = normalizedQuestion.substring(0, normalizedQuestion.length() - 1).trim();
+        if (isAsciiToken(token)) {
+            return token.length() >= 3;
         }
-        return normalizedQuestion;
-    }
-
-    private static boolean looksLikeFlowQuestion(String question) {
-        String normalizedQuestion = normalize(question);
-        return normalizedQuestion.contains("流程")
-                || normalizedQuestion.contains("链路")
-                || normalizedQuestion.contains("步骤")
-                || normalizedQuestion.contains("怎么跑")
-                || normalizedQuestion.contains("怎么走")
-                || normalizedQuestion.contains("运行路径");
-    }
-
-    private static boolean looksLikeCapabilityQuestion(String question) {
-        String normalizedQuestion = normalize(question);
-        return normalizedQuestion.contains("支持")
-                || normalizedQuestion.contains("接入")
-                || normalizedQuestion.contains("入口")
-                || normalizedQuestion.contains("方式")
-                || normalizedQuestion.contains("能力")
-                || normalizedQuestion.contains("有哪些");
-    }
-
-    private static boolean isGenericToken(String token) {
-        return GENERIC_QUERY_TOKENS.contains(token)
-                || token.length() <= 1
-                || token.startsWith("请")
-                || token.endsWith("什么")
-                || containsOnlyGenericHanChars(token);
+        if (containsHanText(token)) {
+            return token.length() >= 2 && !isSingleRepeatedCharacter(token);
+        }
+        return false;
     }
 
     private static boolean isEntityLikeToken(String token) {
@@ -389,6 +417,28 @@ public final class QueryEvidenceRelevanceSupport {
         return 3;
     }
 
+    /**
+     * 计算 token 在截断预算中的优先级，只依赖字符形态与长度。
+     *
+     * @param token token
+     * @return 优先级
+     */
+    private static int tokenPriority(String token) {
+        if (token == null || token.isBlank()) {
+            return 0;
+        }
+        if (containsSpecialSignalChar(token)) {
+            return 120 + Math.min(token.length(), 40);
+        }
+        if (isAsciiToken(token)) {
+            return 90 + Math.min(token.length(), 30);
+        }
+        if (containsHanText(token)) {
+            return 20 + Math.min(token.length(), 10);
+        }
+        return token.length();
+    }
+
     private static boolean containsSpecialSignalChar(String token) {
         return token != null
                 && (token.contains("_")
@@ -396,124 +446,6 @@ public final class QueryEvidenceRelevanceSupport {
                 || token.contains("=")
                 || token.contains("/")
                 || token.contains("."));
-    }
-
-    private static boolean containsFlowSignal(QueryArticleHit queryArticleHit) {
-        if (queryArticleHit == null) {
-            return false;
-        }
-        if (containsFlowSignal(queryArticleHit.getTitle())
-                || containsFlowSignal(queryArticleHit.getContent())
-                || containsFlowSignal(extractDescription(queryArticleHit.getMetadataJson()))) {
-            return true;
-        }
-        if (queryArticleHit.getSourcePaths() == null) {
-            return false;
-        }
-        for (String sourcePath : queryArticleHit.getSourcePaths()) {
-            if (containsFlowSignal(sourcePath)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean containsFlowSignal(String value) {
-        if (value == null || value.isBlank()) {
-            return false;
-        }
-        String normalizedValue = normalize(value);
-        return value.contains("->")
-                || (value.contains("`") && (normalizedValue.contains("主链") || normalizedValue.contains("正式")))
-                || normalizedValue.contains("主链路")
-                || normalizedValue.contains("链路")
-                || normalizedValue.contains("流程")
-                || normalizedValue.contains("步骤")
-                || normalizedValue.contains("阶段")
-                || normalizedValue.contains("进入")
-                || normalizedValue.contains("提交")
-                || normalizedValue.contains("启动");
-    }
-
-    private static boolean containsCapabilitySignal(QueryArticleHit queryArticleHit) {
-        if (queryArticleHit == null) {
-            return false;
-        }
-        if (containsCapabilitySignal(queryArticleHit.getTitle())
-                || containsCapabilitySignal(queryArticleHit.getContent())
-                || containsCapabilitySignal(extractDescription(queryArticleHit.getMetadataJson()))) {
-            return true;
-        }
-        if (queryArticleHit.getSourcePaths() == null) {
-            return false;
-        }
-        for (String sourcePath : queryArticleHit.getSourcePaths()) {
-            if (containsCapabilitySignal(sourcePath)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean containsCapabilitySignal(String value) {
-        if (value == null || value.isBlank()) {
-            return false;
-        }
-        String normalizedValue = normalize(value);
-        int listSeparatorCount = countOccurrences(value, "、")
-                + countOccurrences(value, " / ")
-                + countOccurrences(value, "·");
-        int backtickCount = countOccurrences(value, "`");
-        return normalizedValue.contains("api")
-                || normalizedValue.contains("cli")
-                || normalizedValue.contains("mcp")
-                || normalizedValue.contains("http")
-                || normalizedValue.contains("web")
-                || normalizedValue.contains("sdk")
-                || normalizedValue.contains("入口")
-                || normalizedValue.contains("接入")
-                || listSeparatorCount >= 2
-                || backtickCount >= 4;
-    }
-
-    private static int countOccurrences(String value, String token) {
-        if (value == null || value.isBlank() || token == null || token.isBlank()) {
-            return 0;
-        }
-        int count = 0;
-        int fromIndex = 0;
-        while (fromIndex >= 0) {
-            fromIndex = value.indexOf(token, fromIndex);
-            if (fromIndex < 0) {
-                break;
-            }
-            count++;
-            fromIndex += token.length();
-        }
-        return count;
-    }
-
-    private static boolean containsCapabilityTopic(List<String> highSignalTokens) {
-        if (highSignalTokens == null || highSignalTokens.isEmpty()) {
-            return false;
-        }
-        for (String highSignalToken : highSignalTokens) {
-            String normalizedToken = normalize(highSignalToken);
-            if (normalizedToken.contains("开发")
-                    || normalizedToken.contains("接入")
-                    || normalizedToken.contains("入口")
-                    || normalizedToken.contains("方式")
-                    || normalizedToken.contains("能力")
-                    || normalizedToken.contains("api")
-                    || normalizedToken.contains("cli")
-                    || normalizedToken.contains("mcp")
-                    || normalizedToken.contains("http")
-                    || normalizedToken.contains("web")
-                    || normalizedToken.contains("sdk")) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static boolean isAsciiToken(String token) {
@@ -542,16 +474,13 @@ public final class QueryEvidenceRelevanceSupport {
         return false;
     }
 
-    private static boolean containsOnlyGenericHanChars(String token) {
-        if (token == null || token.isBlank() || !containsHanText(token)) {
+    private static boolean isSingleRepeatedCharacter(String token) {
+        if (token == null || token.isBlank()) {
             return false;
         }
+        char firstChar = token.charAt(0);
         for (int index = 0; index < token.length(); index++) {
-            char currentChar = token.charAt(index);
-            if (Character.UnicodeScript.of(currentChar) != Character.UnicodeScript.HAN) {
-                return false;
-            }
-            if (GENERIC_HAN_CHARS.indexOf(currentChar) < 0) {
+            if (token.charAt(index) != firstChar) {
                 return false;
             }
         }

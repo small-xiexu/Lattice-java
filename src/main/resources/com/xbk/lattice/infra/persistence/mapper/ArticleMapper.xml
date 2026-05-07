@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.ArticleMapper">
+
+    <resultMap id="ArticleRecordResultMap" type="com.xbk.lattice.infra.persistence.ArticleRecord">
+        <constructor>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="article_key" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="content" javaType="java.lang.String"/>
+            <arg column="lifecycle" javaType="java.lang.String"/>
+            <arg column="compiled_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="source_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="summary" javaType="java.lang.String"/>
+            <arg column="referential_keywords" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="depends_on" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="related" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="confidence" javaType="java.lang.String"/>
+            <arg column="review_status" javaType="java.lang.String"/>
+            <arg column="risk_level" javaType="java.lang.String"/>
+            <arg column="risk_reasons" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="is_hotspot" javaType="_boolean"/>
+            <arg column="requires_result_verification" javaType="_boolean"/>
+            <arg column="created_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="updated_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="ArticleColumns">
+        source_id, article_key, concept_id, title, content, lifecycle, compiled_at, created_at, updated_at,
+        source_paths, metadata_json::text as metadata_json, summary, referential_keywords, depends_on,
+        related, confidence, review_status, risk_level, risk_reasons, is_hotspot,
+        requires_result_verification
+    </sql>
+
+    <insert id="upsert">
+        insert into articles (
+            source_id, article_key, concept_id, title, content, lifecycle, compiled_at,
+            source_paths, metadata_json, summary, referential_keywords, depends_on,
+            related, confidence, review_status, risk_level, risk_reasons, is_hotspot,
+            requires_result_verification, search_text, search_tsv, refkey_text
+        )
+        values (
+            #{record.sourceId},
+            #{record.articleKey},
+            #{record.conceptId},
+            #{record.title},
+            #{record.content},
+            #{record.lifecycle},
+            #{record.compiledAt},
+            #{record.sourcePaths,typeHandler=com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler},
+            #{record.metadataJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{record.summary},
+            #{record.referentialKeywords,typeHandler=com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler},
+            #{record.dependsOn,typeHandler=com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler},
+            #{record.related,typeHandler=com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler},
+            #{record.confidence},
+            #{record.reviewStatus},
+            #{record.riskLevel},
+            #{record.riskReasons,typeHandler=com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler},
+            #{record.hotspot},
+            #{record.requiresResultVerification},
+            #{searchText},
+            to_tsvector('simple'::regconfig, #{searchText}),
+            #{refkeyText}
+        )
+        on conflict (article_key) do update
+        set source_id = excluded.source_id,
+            concept_id = excluded.concept_id,
+            title = excluded.title,
+            content = excluded.content,
+            lifecycle = excluded.lifecycle,
+            compiled_at = excluded.compiled_at,
+            source_paths = excluded.source_paths,
+            metadata_json = excluded.metadata_json,
+            summary = excluded.summary,
+            referential_keywords = excluded.referential_keywords,
+            depends_on = excluded.depends_on,
+            related = excluded.related,
+            confidence = excluded.confidence,
+            review_status = excluded.review_status,
+            risk_level = excluded.risk_level,
+            risk_reasons = excluded.risk_reasons,
+            is_hotspot = excluded.is_hotspot,
+            requires_result_verification = excluded.requires_result_verification,
+            search_text = excluded.search_text,
+            search_tsv = excluded.search_tsv,
+            refkey_text = excluded.refkey_text,
+            updated_at = CURRENT_TIMESTAMP
+    </insert>
+
+    <select id="findByConceptId" resultMap="ArticleRecordResultMap">
+        select <include refid="ArticleColumns"/>
+        from articles
+        where concept_id = #{conceptId}
+        order by updated_at desc, article_key asc
+        limit 1
+    </select>
+
+    <select id="findByArticleKey" resultMap="ArticleRecordResultMap">
+        select <include refid="ArticleColumns"/>
+        from articles
+        where article_key = #{articleKey}
+    </select>
+
+    <select id="findBySourceIdAndConceptId" resultMap="ArticleRecordResultMap">
+        select <include refid="ArticleColumns"/>
+        from articles
+        where source_id = #{sourceId}
+          and concept_id = #{conceptId}
+    </select>
+
+    <update id="appendUpstreamCorrection">
+        update articles
+        set metadata_json = jsonb_set(
+            coalesce(metadata_json::jsonb, '{}'::jsonb),
+            '{upstream_corrections}',
+            coalesce(metadata_json::jsonb->'upstream_corrections', '[]'::jsonb)
+                || jsonb_build_array(jsonb_build_object(
+                    'from', #{fromConceptId},
+                    'summary', #{correctionSummary},
+                    'marked_at', to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+                ))
+        ),
+            updated_at = CURRENT_TIMESTAMP
+        where concept_id = #{conceptId}
+    </update>
+
+    <select id="findWithUpstreamCorrections" resultMap="ArticleRecordResultMap">
+        select <include refid="ArticleColumns"/>
+        from articles
+        where exists (
+            select 1
+            from jsonb_array_elements(coalesce(metadata_json::jsonb->'upstream_corrections', '[]'::jsonb)) as elem
+            where elem->>'from' = #{fromConceptId}
+        )
+        order by concept_id asc
+    </select>
+
+    <select id="findUpstreamCorrectionCandidates" resultMap="ArticleRecordResultMap">
+        select <include refid="ArticleColumns"/>
+        from articles
+        where metadata_json::text like '%upstream_corrections%'
+        order by source_id asc nulls first, article_key asc
+    </select>
+
+    <update id="clearUpstreamCorrection">
+        update articles
+        set metadata_json = jsonb_set(
+            coalesce(metadata_json::jsonb, '{}'::jsonb),
+            '{upstream_corrections}',
+            (
+                select coalesce(jsonb_agg(elem), '[]'::jsonb)
+                from jsonb_array_elements(coalesce(metadata_json::jsonb->'upstream_corrections', '[]'::jsonb)) as elem
+                where elem->>'from' &lt;&gt; #{fromConceptId}
+            )
+        ),
+            updated_at = CURRENT_TIMESTAMP
+        where concept_id = #{downstreamConceptId}
+    </update>
+
+    <select id="findAll" resultMap="ArticleRecordResultMap">
+        select <include refid="ArticleColumns"/>
+        from articles
+        order by source_id asc nulls first, updated_at desc, article_key asc
+    </select>
+
+    <update id="markHotspotPendingVerification">
+        update articles
+        set is_hotspot = true,
+            requires_result_verification = true,
+            risk_level = case
+                when lower(risk_level) = 'high' then risk_level
+                else 'medium'
+            end,
+            risk_reasons = case
+                when #{riskReason} = any(risk_reasons) then risk_reasons
+                else array_append(risk_reasons, #{riskReason})
+            end,
+            updated_at = CURRENT_TIMESTAMP
+        where article_key = any(
+            #{articleKeys,typeHandler=com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler}
+        )
+    </update>
+
+    <delete id="deleteAll">
+        truncate table articles cascade
+    </delete>
+</mapper>

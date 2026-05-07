@@ -20,13 +20,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_ws2_compile_job_lease_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_ws2_compile_job_lease_test",
-        "spring.flyway.default-schema=lattice_ws2_compile_job_lease_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.compiler.jobs.heartbeat-interval-seconds=1",
@@ -54,7 +50,7 @@ class CompileJobLeaseManagerIntegrationTests {
      */
     @Test
     void shouldRefreshHeartbeatForRegisteredRunningJob() throws Exception {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_ws2_compile_job_lease_test.compile_jobs CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs CASCADE");
         compileJobJdbcRepository.save(buildQueuedRecord("job-lease-heartbeat"));
         OffsetDateTime startedAt = OffsetDateTime.now();
         compileJobJdbcRepository.markRunning(
@@ -83,7 +79,7 @@ class CompileJobLeaseManagerIntegrationTests {
      */
     @Test
     void shouldFailExpiredRunningJobDuringRecovery() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_ws2_compile_job_lease_test.compile_jobs CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs CASCADE");
         compileJobJdbcRepository.save(buildQueuedRecord("job-lease-expired"));
         OffsetDateTime startedAt = OffsetDateTime.now().minusMinutes(5);
         compileJobJdbcRepository.markRunning(
@@ -106,7 +102,7 @@ class CompileJobLeaseManagerIntegrationTests {
      */
     @Test
     void shouldUpdateProgressSnapshotWhenTouchingProgress() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_ws2_compile_job_lease_test.compile_jobs CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs CASCADE");
         compileJobJdbcRepository.save(buildQueuedRecord("job-lease-progress"));
         OffsetDateTime startedAt = OffsetDateTime.now();
         compileJobJdbcRepository.markRunning(
@@ -138,7 +134,7 @@ class CompileJobLeaseManagerIntegrationTests {
      */
     @Test
     void shouldKeepSingleWorkerOwnershipWhenAnotherWorkerTouchesSameJob() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_ws2_compile_job_lease_test.compile_jobs CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs CASCADE");
         compileJobJdbcRepository.save(buildQueuedRecord("job-lease-single-owner"));
         OffsetDateTime startedAt = OffsetDateTime.now();
         boolean claimed = compileJobJdbcRepository.markRunning(
@@ -203,7 +199,7 @@ class CompileJobLeaseManagerIntegrationTests {
      */
     @Test
     void shouldRequeueRunningJobsOwnedByWorkerOnDestroy() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_ws2_compile_job_lease_test.compile_jobs CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs CASCADE");
         compileJobJdbcRepository.save(buildQueuedRecord("job-lease-requeue"));
         OffsetDateTime startedAt = OffsetDateTime.now();
         boolean claimed = compileJobJdbcRepository.markRunning(

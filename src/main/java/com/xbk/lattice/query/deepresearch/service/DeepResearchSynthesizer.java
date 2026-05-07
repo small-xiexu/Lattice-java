@@ -11,7 +11,6 @@ import com.xbk.lattice.query.deepresearch.projector.DeepResearchProjector;
 import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import com.xbk.lattice.query.evidence.domain.FactFinding;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -28,7 +27,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class DeepResearchSynthesizer {
 
     private static final CitationCheckOptions CITATION_CHECK_OPTIONS = CitationCheckOptions.defaults();

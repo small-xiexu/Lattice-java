@@ -21,13 +21,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b8_admin_page_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b8_admin_page_test",
-        "spring.flyway.default-schema=lattice_b8_admin_page_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.query.cache.store=in-memory"
@@ -57,6 +53,7 @@ class AdminPageControllerTests {
                 .andExpect(content().string(containsString("id=\"knowledge-tab-upload\"")))
                 .andExpect(content().string(containsString("id=\"knowledge-tab-runs\"")))
                 .andExpect(content().string(containsString("id=\"knowledge-tab-articles\"")))
+                .andExpect(content().string(containsString("id=\"knowledge-tab-feedback\"")))
                 .andExpect(content().string(containsString("data-tab-scroll=\"true\"")))
                 .andExpect(content().string(containsString("class=\"workbench-hero-grid\"")))
                 .andExpect(content().string(containsString("id=\"summary-cards\"")))
@@ -77,16 +74,32 @@ class AdminPageControllerTests {
                 .andExpect(content().string(containsString("id=\"recent-run-overview\"")))
                 .andExpect(content().string(containsString("id=\"job-list\"")))
                 .andExpect(content().string(containsString("class=\"run-board top-gap\"")))
+                .andExpect(content().string(containsString("id=\"source-run-list\"")))
+                .andExpect(content().string(containsString("id=\"source-run-detail\"")))
                 .andExpect(content().string(containsString("id=\"article-list\"")))
                 .andExpect(content().string(containsString("id=\"article-detail-title\"")))
                 .andExpect(content().string(containsString("id=\"article-primary-source\"")))
                 .andExpect(content().string(containsString("id=\"article-source-overview\"")))
                 .andExpect(content().string(containsString("id=\"article-source-note\"")))
                 .andExpect(content().string(containsString("id=\"article-sources\"")))
+                .andExpect(content().string(containsString("id=\"article-review-status\"")))
+                .andExpect(content().string(containsString("id=\"article-risk-filter\"")))
+                .andExpect(content().string(containsString("id=\"refresh-hotspots\"")))
+                .andExpect(content().string(containsString("id=\"hotspot-refresh-status\"")))
+                .andExpect(content().string(containsString("id=\"article-risk-summary\"")))
+                .andExpect(content().string(containsString("id=\"article-review-panel\"")))
+                .andExpect(content().string(containsString("id=\"approve-article-review\"")))
+                .andExpect(content().string(containsString("id=\"request-article-changes\"")))
+                .andExpect(content().string(containsString("id=\"article-review-history\"")))
+                .andExpect(content().string(containsString("id=\"article-source-preview\"")))
                 .andExpect(content().string(containsString("id=\"article-technical-info\"")))
+                .andExpect(content().string(containsString("id=\"query-feedback-list\"")))
+                .andExpect(content().string(containsString("id=\"resolve-query-feedback\"")))
+                .andExpect(content().string(containsString("id=\"dismiss-query-feedback\"")))
                 .andExpect(content().string(containsString("id=\"page-notice\"")))
-                .andExpect(content().string(containsString("src=\"/admin/admin-tabs.js?v=20260430-tabs-scroll-1\"")))
-                .andExpect(content().string(containsString("src=\"/admin/management.js?v=20260430-workbench-nav-1\"")))
+                .andExpect(content().string(containsString("src=\"/admin/admin-tabs.js?v=20260502-tabs-scroll-2\"")))
+                .andExpect(content().string(containsString("href=\"/admin/admin.css?v=20260505-answer-feedback-1\"")))
+                .andExpect(content().string(containsString("src=\"/admin/management.js?v=20260506-hotspot-refresh-1\"")))
                 .andExpect(content().string(containsString("href=\"/admin/ask\"")))
                 .andExpect(content().string(containsString("href=\"/admin/settings\"")))
                 .andExpect(content().string(containsString("href=\"/admin/developer-access\"")))
@@ -114,6 +127,8 @@ class AdminPageControllerTests {
                 .andExpect(content().string(containsString("id=\"ask-result-guide\"")))
                 .andExpect(content().string(containsString("id=\"ask-answer-metrics\"")))
                 .andExpect(content().string(containsString("id=\"ask-answer-support\"")))
+                .andExpect(content().string(containsString("id=\"ask-feedback-panel\"")))
+                .andExpect(content().string(containsString("id=\"submit-answer-feedback\"")))
                 .andExpect(content().string(containsString("id=\"ask-answer\"")))
                 .andExpect(content().string(containsString("id=\"ask-source-summary\"")))
                 .andExpect(content().string(containsString("id=\"ask-sources\"")))
@@ -121,7 +136,7 @@ class AdminPageControllerTests {
                 .andExpect(content().string(containsString("href=\"/admin/settings\"")))
                 .andExpect(content().string(containsString("href=\"/admin/developer-access\"")))
                 .andExpect(content().string(containsString("data-help-faq-key=\"no-citation\"")))
-                .andExpect(content().string(containsString("src=\"/admin/ask.js?v=20260429-submit-shortcut-1\"")))
+                .andExpect(content().string(containsString("src=\"/admin/ask.js?v=20260505-answer-feedback-1\"")))
                 .andExpect(content().string(not(containsString("文档解析连接"))))
                 .andExpect(content().string(not(containsString("id=\"test-document-parse-connection\""))))
                 .andExpect(content().string(not(containsString("id=\"global-status\""))))
@@ -247,6 +262,12 @@ class AdminPageControllerTests {
                 .andExpect(content().string(containsString("function resolveSourceTypeLabel")))
                 .andExpect(content().string(containsString("function buildSourceGranularityNote")))
                 .andExpect(content().string(containsString("function buildFileLevelTraceExplanation")))
+                .andExpect(content().string(containsString("function buildArticleListRequestUrl")))
+                .andExpect(content().string(containsString("function shouldShowArticleReviewPanel")))
+                .andExpect(content().string(containsString("function renderArticleReviewHistory")))
+                .andExpect(content().string(containsString("function renderArticleSourcePreview")))
+                .andExpect(content().string(containsString("/review/approve")))
+                .andExpect(content().string(containsString("/review/request-changes")))
                 .andExpect(content().string(containsString("SOURCE_SYNC_CONFLICT")))
                 .andExpect(content().string(containsString(".xlsx")))
                 .andExpect(content().string(containsString(".pdf")))
@@ -259,6 +280,9 @@ class AdminPageControllerTests {
                 .andExpect(content().string(containsString(".run-runtime-item")))
                 .andExpect(content().string(containsString(".detail-section-grid")))
                 .andExpect(content().string(containsString(".source-reference-list")))
+                .andExpect(content().string(containsString(".source-preview-box")))
+                .andExpect(content().string(containsString(".article-review-panel")))
+                .andExpect(content().string(containsString(".review-history-list")))
                 .andExpect(content().string(containsString(".settings-maintenance-grid")))
                 .andExpect(content().string(containsString(".source-section")))
                 .andExpect(content().string(containsString(".source-card-primary")))

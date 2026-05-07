@@ -31,6 +31,15 @@ public class ExcelTextExtractor {
 
     private static final int STRUCTURED_CELL_MAX_CHARS = 500;
 
+    private final StructuredTableContentBuilder structuredTableContentBuilder;
+
+    /**
+     * 创建 Excel 文本抽取器。
+     */
+    public ExcelTextExtractor() {
+        this.structuredTableContentBuilder = new StructuredTableContentBuilder();
+    }
+
     /**
      * 抽取 Excel 文本。
      *
@@ -44,17 +53,26 @@ public class ExcelTextExtractor {
             DataFormatter dataFormatter = new DataFormatter();
             StringBuilder contentBuilder = new StringBuilder();
             List<String> sheetNames = new ArrayList<String>();
+            List<StructuredTableContentBuilder.TableContent> tableContents =
+                    new ArrayList<StructuredTableContentBuilder.TableContent>();
             int sheetCount = workbook.getNumberOfSheets();
             for (int sheetIndex = 0; sheetIndex < sheetCount; sheetIndex++) {
                 Sheet sheet = workbook.getSheetAt(sheetIndex);
                 if (sheet == null) {
                     continue;
                 }
-                String sheetText = toSheetText(sheet, dataFormatter);
+                List<List<String>> rows = readRows(sheet, dataFormatter);
+                String sheetText = toSheetText(sheet, rows);
                 if (sheetText.isBlank()) {
                     continue;
                 }
                 sheetNames.add(sheet.getSheetName());
+                tableContents.add(new StructuredTableContentBuilder.TableContent(
+                        sheet.getSheetName(),
+                        sheet.getSheetName(),
+                        "xlsx",
+                        rows
+                ));
                 if (contentBuilder.length() > 0) {
                     contentBuilder.append("\n\n");
                 }
@@ -64,7 +82,13 @@ public class ExcelTextExtractor {
             if (contentBuilder.length() == 0) {
                 return null;
             }
-            return new SourceExtractionResult(contentBuilder.toString(), buildMetadataJson(sheetNames), true);
+            String structuredContentJson = structuredTableContentBuilder.buildJson(tableContents);
+            return new SourceExtractionResult(
+                    contentBuilder.toString(),
+                    buildMetadataJson(sheetNames),
+                    structuredContentJson,
+                    true
+            );
         }
     }
 
@@ -72,11 +96,10 @@ public class ExcelTextExtractor {
      * 将 sheet 转成兼容 CSV 且适合检索的文本。
      *
      * @param sheet 工作表
-     * @param dataFormatter 单元格格式化器
+     * @param rows 行数据
      * @return 表格文本
      */
-    private String toSheetText(Sheet sheet, DataFormatter dataFormatter) {
-        List<List<String>> rows = readRows(sheet, dataFormatter);
+    private String toSheetText(Sheet sheet, List<List<String>> rows) {
         if (rows.isEmpty()) {
             return "";
         }

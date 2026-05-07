@@ -101,6 +101,8 @@ class ManagementJsRuntimeTests {
 
                 const runs = sandbox.__LATTICE_ADMIN_TEST__.runs;
                 const sourceUi = sandbox.__LATTICE_ADMIN_TEST__.source;
+                const knowledgeUi = sandbox.__LATTICE_ADMIN_TEST__.knowledge;
+                const feedbackUi = sandbox.__LATTICE_ADMIN_TEST__.feedback;
                 const articleUi = sandbox.__LATTICE_ADMIN_TEST__.article;
 
                 function assert(condition, message) {
@@ -111,6 +113,8 @@ class ManagementJsRuntimeTests {
 
                 assert(runs, "missing __LATTICE_ADMIN_TEST__.runs export");
                 assert(sourceUi, "missing __LATTICE_ADMIN_TEST__.source export");
+                assert(knowledgeUi, "missing __LATTICE_ADMIN_TEST__.knowledge export");
+                assert(feedbackUi, "missing __LATTICE_ADMIN_TEST__.feedback export");
                 assert(articleUi, "missing __LATTICE_ADMIN_TEST__.article export");
                 assert(typeof sourceUi.focusSourceRunDetail === "function",
                     "missing focusSourceRunDetail export");
@@ -122,6 +126,21 @@ class ManagementJsRuntimeTests {
                     "should prefer backend-provided current step label");
                 assert(runs.resolveRunProgressText({ progressText: "等待后台 worker 领取" }) === "等待后台 worker 领取",
                     "should prefer backend-provided progress text");
+                const duplicateSummaryRun = {
+                    status: "RUNNING",
+                    currentStepLabel: "质量检查",
+                    progressText: "13 / 15 · 正在修复文章（13/15）：卡券三期-迁移方案-场景8-星礼包退款链路",
+                    reasonSummary: "正在修复文章（13/15）：卡券三期-迁移方案-场景8-星礼包退款链路"
+                };
+                assert(runs.resolveRunSpotlightSummaryText(duplicateSummaryRun) === "",
+                    "spotlight summary should be hidden when it duplicates current progress");
+                assert(runs.resolveRunNextStepText({
+                    nextStepHint: "继续等待当前真实步骤推进",
+                    progressText: "13 / 15 · 正在修复文章（13/15）：卡券三期-迁移方案-场景8-星礼包退款链路"
+                }, {
+                    nextStep: "继续等待当前真实步骤推进"
+                }) === "",
+                    "placeholder next step should be hidden");
                 const runningDuplicateReasonRun = {
                     status: "RUNNING",
                     displayStatus: "RUNNING",
@@ -138,6 +157,38 @@ class ManagementJsRuntimeTests {
                     "running duplicated reason should not render reason summary");
                 assert(runs.shouldRenderRunAsBoardFocus(runningDuplicateReasonRun),
                     "running task should stay as the focused processing task card");
+                const runningWarningProgressStrip = runs.buildRunProgressStrip({
+                    status: "RUNNING",
+                    displayStatus: "RUNNING",
+                    compileDerivedStatus: "RUNNING",
+                    displayTone: "warning",
+                    progressSteps: [{
+                        key: "TASK_RECEIVED",
+                        label: "资料接收",
+                        status: "COMPLETED",
+                        detail: ""
+                    }, {
+                        key: "COMPILE_NEW_ARTICLES",
+                        label: "内容生成",
+                        status: "ACTIVE",
+                        detail: "正在生成文章草稿"
+                    }, {
+                        key: "REVIEW_ARTICLES",
+                        label: "质量检查",
+                        status: "PENDING",
+                        detail: ""
+                    }]
+                }, {
+                    label: "进行中",
+                    nextStep: "继续等待当前真实步骤推进",
+                    tone: "warning"
+                });
+                assert(runningWarningProgressStrip.includes("run-progress-step active"),
+                    "running warning tone should keep the active progress step");
+                assert(!runningWarningProgressStrip.includes("run-progress-status-mark warning"),
+                    "running warning tone should not be rendered as stalled");
+                assert(!runningWarningProgressStrip.includes(">卡住<"),
+                    "running warning tone should not show stalled copy");
 
                 const stalledRun = {
                     status: "RUNNING",
@@ -179,14 +230,14 @@ class ManagementJsRuntimeTests {
                     }]
                 };
                 const runtimeSnapshot = runs.buildRunRuntimeSnapshot(stalledRun);
-                assert(runtimeSnapshot.includes("编译态"),
-                    "runtime snapshot should expose derived status");
-                assert(runtimeSnapshot.includes("质量检查"),
-                    "runtime snapshot should expose current step label");
+                assert(!runtimeSnapshot.includes("编译态"),
+                    "runtime snapshot should hide duplicate derived status");
+                assert(!runtimeSnapshot.includes("当前步骤"),
+                    "runtime snapshot should hide current step when progress strip is present");
                 assert(runtimeSnapshot.includes("2 / 6"),
                     "runtime snapshot should expose current progress");
-                assert(runtimeSnapshot.includes("原因摘要"),
-                    "runtime snapshot should expose reason summary");
+                assert(!runtimeSnapshot.includes("原因摘要"),
+                    "runtime snapshot should hide reason summary when failure panel already covers it");
                 const progressStrip = runs.buildRunProgressStrip(stalledRun, {
                         label: "失败",
                         nextStep: "查看最近推进时间并重新同步资料源",
@@ -196,14 +247,20 @@ class ManagementJsRuntimeTests {
                     "progress strip should expose detail copy for current real sub-step");
                 assert(progressStrip.includes("质量检查"),
                     "progress strip should show current real compile step under grouped stage");
+                assert(progressStrip.includes("run-progress-status-mark warning"),
+                    "progress strip should expose an explicit stalled status mark");
+                assert(progressStrip.includes(">卡住<"),
+                    "progress strip should show stalled copy only for STALLED status");
+                assert(!progressStrip.includes("run-progress-status-mark failed"),
+                    "stalled progress strip should not be mislabeled as a generic failure");
                 assert(progressStrip.includes("正在审查文章草稿"),
                     "progress strip should keep cleaned detail copy");
                 assert(!progressStrip.includes("细分状态"),
                     "progress strip should not render redundant detail label");
                 assert(runs.buildRunReasonSummary(stalledRun).includes("长时间没有新的心跳"),
                     "stalled run should explain stalled reason");
-                assert(runs.shouldRenderRunReasonSummary(stalledRun),
-                    "stalled run should render actionable reason summary");
+                assert(!runs.shouldRenderRunReasonSummary(stalledRun),
+                    "stalled run should hide duplicate reason summary when failure panel covers it");
                 assert(runs.shouldRenderRunAsBoardFocus(stalledRun),
                     "stalled run should stay as a focused processing task card");
                 const compactRunMarkup = runs.renderSourceRunListItem(stalledRun, true);
@@ -272,8 +329,8 @@ class ManagementJsRuntimeTests {
                 const promotedRunMarkup = runs.renderRecentRunBoardItem(succeededRun);
                 assert(promotedRunMarkup.includes("run-spotlight-card"),
                     "promoted completion run should render as a spotlight card");
-                assert(promotedRunMarkup.includes("当前阶段"),
-                    "promoted completion run should expose full task highlights");
+                assert(!promotedRunMarkup.includes("当前阶段"),
+                    "promoted completion run should hide duplicated stage highlight");
 
                 const failedRun = {
                     status: "FAILED",
@@ -282,6 +339,8 @@ class ManagementJsRuntimeTests {
                 };
                 assert(runs.buildRunReasonSummary(failedRun).includes("链路异常"),
                     "failed run should prefer backend-provided reason summary");
+                assert(!runs.shouldRenderRunReasonSummary(failedRun),
+                    "failed run should hide duplicate reason summary when failure panel covers it");
                 const sanitized = runs.sanitizeDisplayMessage(
                     "java.net.SocketTimeoutException: Read timed out\\n at com.example.Test"
                 );
@@ -319,6 +378,8 @@ class ManagementJsRuntimeTests {
                     summary: "摘要",
                     sourceCount: 1,
                     sourcePaths: ["docs/demo.md"],
+                    riskLevel: "low",
+                    riskReasons: [],
                     updatedAt: "2026-05-02T15:08:00+08:00",
                     compiledAt: "2026-05-10T22:30:00+08:00"
                 });
@@ -326,26 +387,279 @@ class ManagementJsRuntimeTests {
                     "article detail should render stored updatedAt as ingestion time");
                 assert(!elementState["article-detail-meta"].textContent.includes("05/10 22:30"),
                     "article detail should not render compiledAt as ingestion time");
+                assert(articleUi.buildArticleListRequestUrl("订单", "ACTIVE", "12", "needs_human_review")
+                        === "/api/v1/admin/articles?query=%E8%AE%A2%E5%8D%95&lifecycle=ACTIVE&sourceId=12&reviewStatus=needs_human_review",
+                    "article list request should include generic reviewStatus filter");
+                assert(articleUi.buildArticleListRequestUrl("订单", "ACTIVE", "12", "passed", "riskReason:user_reported")
+                        === "/api/v1/admin/articles?query=%E8%AE%A2%E5%8D%95&lifecycle=ACTIVE&sourceId=12&reviewStatus=passed&riskReason=user_reported",
+                    "article list request should include generic risk filter");
+                assert(articleUi.buildArticleRiskSummary({
+                    riskLevel: "high",
+                    riskReasons: ["source_conflict", "low_traceability"],
+                    isHotspot: true,
+                    requiresResultVerification: true
+                }).includes("来源冲突"),
+                    "risk summary should render generic risk reasons");
+                assert(articleUi.shouldShowArticleReviewPanel({ reviewStatus: "needs_human_review" }),
+                    "needs_human_review article should show manual review panel");
+                assert(articleUi.shouldShowArticleReviewPanel({ reviewStatus: "needs_review" }),
+                    "needs_review article should show manual review panel");
+                assert(!articleUi.shouldShowArticleReviewPanel({ reviewStatus: "passed" }),
+                    "passed article should hide manual review panel");
+                assert(articleUi.buildArticleReviewNote({ reviewStatus: "needs_review" }).includes("提交过修正"),
+                    "needs_review note should explain correction state");
+                sandbox.__LATTICE_ADMIN_TEST_STATE__.selectedArticleId = "article-001";
+                sandbox.__LATTICE_ADMIN_TEST_STATE__.selectedArticleSourceId = 7;
+                sandbox.__LATTICE_ADMIN_TEST_STATE__.selectedArticleReviewStatus = "needs_human_review";
+                elementState["article-reviewer"].value = "";
+                elementState["article-review-comment"].value = "证据稳定";
+                elementState["article-correction-summary"].value = "补充来源";
+                const articleReviewRequest = articleUi.buildArticleReviewRequest(true);
+                assert(articleReviewRequest.sourceId === 7,
+                    "manual review request should keep selected source id");
+                assert(articleReviewRequest.reviewedBy === "admin",
+                    "manual review request should default reviewer");
+                assert(articleReviewRequest.expectedReviewStatus === "needs_human_review",
+                    "manual review request should carry expected status");
+                assert(articleReviewRequest.correctionSummary === "补充来源",
+                    "request-changes payload should include correction summary");
+                articleUi.renderArticleDetail({
+                    articleKey: "article-002",
+                    conceptId: "article-002",
+                    title: "人工复核测试",
+                    content: "正文",
+                    lifecycle: "ACTIVE",
+                    reviewStatus: "needs_human_review",
+                    summary: "摘要",
+                    sourceCount: 1,
+                    sourcePaths: ["docs/review.md"],
+                    riskLevel: "medium",
+                    riskReasons: ["user_reported"],
+                    isHotspot: true,
+                    requiresResultVerification: true,
+                    updatedAt: "2026-05-05T10:00:00+08:00"
+                }, {
+                    items: [{
+                        action: "approve",
+                        previousReviewStatus: "needs_human_review",
+                        nextReviewStatus: "passed",
+                        reviewedBy: "reviewer",
+                        reviewedAt: "2026-05-05T10:20:00+08:00",
+                        comment: "确认通过"
+                    }]
+                });
+                assert(elementState["article-review-panel"].hidden === false,
+                    "manual review panel should be visible for needs_human_review detail");
+                assert(elementState["article-reviewer"].value === "admin",
+                    "manual review panel should set default reviewer");
+                assert(elementState["article-review-history"].innerHTML.includes("确认通过"),
+                    "review history should render readable approve action");
+                assert(elementState["article-risk-summary"].innerHTML.includes("用户反馈"),
+                    "detail should render readable risk notice");
+                sandbox.__LATTICE_ADMIN_TEST_STATE__.sourceFiles = [{
+                    sourceId: 7,
+                    relativePath: "docs/review.md",
+                    format: "md",
+                    contentPreview: "preview text"
+                }];
+                const sourceReferenceMarkup = articleUi.renderArticleSourceReferences({
+                    sourceId: 7,
+                    sourcePaths: ["docs/review.md"]
+                });
+                assert(sourceReferenceMarkup.includes("data-article-source-path"),
+                    "source references should expose preview trigger for matching source file");
+                articleUi.renderArticleSourcePreview({
+                    relativePath: "docs/review.md",
+                    format: "md",
+                    contentPreview: "preview text"
+                });
+                assert(elementState["article-source-preview"].hidden === false,
+                    "source preview panel should become visible");
+                assert(elementState["article-source-preview"].innerHTML.includes("preview text"),
+                    "source preview panel should render contentPreview only");
+                const summaryElements = {};
+                sandbox.document.getElementById = function (id) {
+                    if (!summaryElements[id]) {
+                        summaryElements[id] = {
+                            textContent: "",
+                            innerHTML: "",
+                            hidden: false,
+                            dataset: {},
+                            setAttribute: function (name, value) {
+                                this[name] = value;
+                            },
+                            querySelectorAll: function () { return []; }
+                        };
+                    }
+                    return summaryElements[id];
+                };
+                sandbox.__LATTICE_ADMIN_TEST_STATE__.sources = [];
+                sandbox.__LATTICE_ADMIN_TEST_STATE__.overview = {
+                    status: {
+                        articleCount: 3,
+                        sourceFileCount: 2,
+                        contributionCount: 0,
+                        pendingQueryCount: 0,
+                        reviewPendingArticleCount: 1,
+                        highRiskArticleCount: 2,
+                        hotspotPendingVerificationCount: 1,
+                        userReportedAnswerCount: 1,
+                        answerFeedbackPendingCount: 2
+                    }
+                };
+                knowledgeUi.renderSummary(sandbox.__LATTICE_ADMIN_TEST_STATE__.overview, {});
+                assert(summaryElements["summary-cards"].innerHTML.includes("需复核内容"),
+                    "summary cards should expose manual review count");
+                assert(summaryElements["summary-cards"].innerHTML.includes("高风险内容"),
+                    "summary cards should expose high risk count");
+                assert(summaryElements["summary-cards"].innerHTML.includes("复核状态筛选"),
+                    "summary card should guide to review status filter");
+                assert(summaryElements["summary-cards"].innerHTML.includes("结果反馈待处理"),
+                    "summary cards should expose answer feedback pending count");
+                const helpState = knowledgeUi.deriveKnowledgeHelpState();
+                assert(helpState.description.includes("复核状态筛选"),
+                    "help state should guide to article review status filter instead of all-article review");
+                sandbox.__LATTICE_ADMIN_TEST_STATE__.overview.status.reviewPendingArticleCount = 0;
+                const feedbackHelpState = knowledgeUi.deriveKnowledgeHelpState();
+                assert(feedbackHelpState.actions[0].action === "knowledge-feedback",
+                    "help state should route to answer feedback queue when only result feedback is pending");
+                sandbox.__LATTICE_ADMIN_TEST_STATE__.overview.status.answerFeedbackPendingCount = 0;
+                const hotspotHelpState = knowledgeUi.deriveKnowledgeHelpState();
+                assert(hotspotHelpState.title.includes("高频热点"),
+                    "help state should expose hotspot verification entry before generic high-risk entry");
+                assert(hotspotHelpState.description.includes("待结果抽检"),
+                    "hotspot help state should guide to result verification filter");
+                assert(articleUi.buildHotspotRefreshStatusText({
+                    hotspotCandidateCount: 2,
+                    updatedArticleCount: 1,
+                    heatScoreThreshold: 3
+                }).includes("更新 1"), "hotspot refresh status should include updated article count");
+                articleUi.renderHotspotRefreshStatus({
+                    hotspotCandidateCount: 2,
+                    updatedArticleCount: 1,
+                    heatScoreThreshold: 3
+                });
+                assert(summaryElements["hotspot-refresh-status"].dataset.status === "refreshed",
+                    "hotspot refresh status should record refreshed state");
+                assert(feedbackUi.buildQueryFeedbackListRequestUrl("PENDING", 20)
+                    === "/api/v1/admin/query-feedback?status=PENDING&limit=20",
+                    "feedback list request should include generic status filter");
+                const feedbackMarkup = feedbackUi.renderQueryFeedbackListItem({
+                    id: 9,
+                    status: "PENDING",
+                    feedbackType: "answer_problem",
+                    question: "接口用途是什么",
+                    answerSummary: "答案混入了不相关内容",
+                    queryId: "query-9",
+                    reportedBy: "reviewer",
+                    createdAt: "2026-05-05T11:20:00+08:00"
+                });
+                assert(feedbackMarkup.includes("答案有问题"),
+                    "feedback list should render readable feedback type");
+                summaryElements["query-feedback-handler"] = { value: "handler" };
+                summaryElements["query-feedback-resolution-comment"] = { value: "已补充回归" };
+                const feedbackHandleRequest = feedbackUi.buildQueryFeedbackHandleRequest();
+                assert(feedbackHandleRequest.handledBy === "handler",
+                    "feedback handle request should keep handler");
+                assert(feedbackHandleRequest.comment === "已补充回归",
+                    "feedback handle request should keep resolution comment");
 
                 const sourceFile = {
                     relativePath: "docs/payment/order-guide.md",
                     format: "md",
                     fileSize: 2048,
-                    parseMode: "NATIVE",
-                    parseProvider: "default-parser"
+                    parseMode: "text_read",
+                    parseProvider: "filesystem"
                 };
                 const compactFileMarkup = sourceUi.renderSourceFileListItem(sourceFile, true);
                 assert(compactFileMarkup.includes("order-guide.md"),
                     "source file list should render file base name");
+                assert(compactFileMarkup.includes("Markdown"),
+                    "source file list should render readable file format");
+                assert(compactFileMarkup.includes("文本读取"),
+                    "source file list should render readable parse mode");
+                assert(!compactFileMarkup.includes(">text_read<"),
+                    "source file list should not expose raw parse mode badges");
                 assert(!compactFileMarkup.includes("run-runtime-grid"),
                     "source file list row should stay compact");
                 const fileDetailMarkup = sourceUi.buildSourceFileDetailCard(sourceFile);
                 assert(fileDetailMarkup.includes("完整路径"),
                     "selected source file detail should expose full relative path");
+                assert(fileDetailMarkup.includes("本地文件系统"),
+                    "selected source file detail should render readable parse provider");
+                const legacySource = {
+                    name: "SRKIT/SVC 卡履约链路从 FC 平移至 DPFM",
+                    sourceCode: "srkit-svc-fc-dpfm",
+                    primaryDocumentTitle: "SRKIT/SVC 卡履约链路从 FC 平移至 DPFM",
+                    metadataJson: JSON.stringify({
+                        bundleSummary: {
+                            displayName: "卡券三期-迁移方案",
+                            relativePathsSample: ["卡券三期-迁移方案.md"],
+                            titleHints: ["SRKIT/SVC 卡履约链路从 FC 平移至 DPFM"]
+                        }
+                    })
+                };
+                assert(sourceUi.resolveSourceDisplayName(legacySource) === "卡券三期-迁移方案",
+                    "source display name should prefer bundle file-oriented display name");
+                assert(sourceUi.resolveSourceDocumentTitle(legacySource) === "SRKIT/SVC 卡履约链路从 FC 平移至 DPFM",
+                    "source document title should stay available as secondary metadata");
+                const sourceListContainer = { innerHTML: "", querySelectorAll: function () { return []; } };
+                sandbox.document.getElementById = function (id) {
+                    if (id === "source-list") {
+                        return sourceListContainer;
+                    }
+                    return null;
+                };
+                sourceUi.renderSourceList([Object.assign({
+                    id: 1,
+                    status: "ACTIVE",
+                    sourceType: "UPLOAD",
+                    contentProfile: "DOCUMENT",
+                    defaultSyncMode: "AUTO",
+                    lastSyncStatus: "RUNNING",
+                    lastSyncAt: "2026-05-05T16:54:00+08:00"
+                }, legacySource)]);
+                assert(sourceListContainer.innerHTML.includes("卡券三期-迁移方案"),
+                    "source list should render source-level display name");
+                assert(sourceListContainer.innerHTML.includes("source-document-title"),
+                    "source list should keep document title as secondary copy");
+                const legacySourceDetailElements = {};
+                sandbox.document.getElementById = function (id) {
+                    if (!legacySourceDetailElements[id]) {
+                        legacySourceDetailElements[id] = {
+                            textContent: "",
+                            innerHTML: "",
+                            hidden: false,
+                            closest: function () {
+                                return { hidden: false };
+                            }
+                        };
+                    }
+                    return legacySourceDetailElements[id];
+                };
+                sourceUi.renderSourceDetail(Object.assign({
+                    id: 1,
+                    status: "ACTIVE",
+                    sourceType: "UPLOAD",
+                    contentProfile: "DOCUMENT",
+                    defaultSyncMode: "AUTO",
+                    configJson: "{}",
+                    lastSyncAt: "2026-05-05T16:54:00+08:00"
+                }, legacySource), [], []);
+                assert(legacySourceDetailElements["source-detail-title"].textContent === "卡券三期-迁移方案",
+                    "source detail title should render source-level display name");
+                assert(legacySourceDetailElements["source-detail-meta"].textContent.includes("文档标题：SRKIT/SVC 卡履约链路从 FC 平移至 DPFM"),
+                    "source detail meta should keep document title separately");
                 assert(sourceUi.isUploadSource({ sourceType: "UPLOAD" }),
                     "upload source helper should identify upload sources");
                 assert(!sourceUi.isUploadSource({ sourceType: "GIT" }),
                     "upload source helper should ignore non-upload sources");
+                assert(sourceUi.resolveSourceProcessingHistoryItems({
+                    items: [{ taskId: "compile-job:1" }]
+                })[0].taskId === "compile-job:1",
+                    "source detail should accept unified processing task list response");
+                assert(sourceUi.resolveSourceProcessingHistoryItems([{ runId: 1 }])[0].runId === 1,
+                    "source detail should remain compatible with source run arrays");
                 assert(sourceUi.shouldFollowLatestSourceRun([], "latest"),
                     "empty source runs should always follow latest");
                 sandbox.__LATTICE_ADMIN_TEST_STATE__.selectedSourceRunKey = null;

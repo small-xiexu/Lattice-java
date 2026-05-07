@@ -192,6 +192,52 @@ class CitationValidatorTests {
     }
 
     @Test
+    void shouldVerifySourceCitationUsingSameParagraphContextWhenClaimHasPartialSupport() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository()
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[→ docs/interface-contract.md]",
+                CitationSourceType.SOURCE_FILE,
+                "docs/interface-contract.md",
+                "迁移后对外 path 不可以改",
+                """
+                `POST /api/demo/v2/inventory/sync` 是库存同步接口。迁移后对外 path 不可以改。
+                新链路入口侧必须保持 API path、请求参数、响应参数与旧接口完全一致 [→ docs/interface-contract.md]
+                """
+        ));
+
+        assertThat(result.isVerified()).isTrue();
+        assertThat(result.getReason()).isEqualTo("source_context_overlap_verified");
+    }
+
+    @Test
+    void shouldDemoteContextCitationWhenClaimIntroducesUnsupportedStrictFact() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository()
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[→ docs/interface-contract.md]",
+                CitationSourceType.SOURCE_FILE,
+                "docs/interface-contract.md",
+                "调用方只需要调整目标地址，额外调用 /api/demo/v2/inventory/review 完成人工复核",
+                """
+                `POST /api/demo/v2/inventory/sync` 是库存同步接口。调用方只需要调整目标地址，额外调用 /api/demo/v2/inventory/review 完成人工复核。
+                新链路入口侧必须保持 API path、请求参数、响应参数与旧接口完全一致 [→ docs/interface-contract.md]
+                """
+        ));
+
+        assertThat(result.isDemoted()).isTrue();
+        assertThat(result.getReason()).isEqualTo("source_insufficient_overlap");
+    }
+
+    @Test
     void shouldFailSourceCitationWhenSourceFileIsMissing() {
         CitationValidator citationValidator = new CitationValidator(
                 new FixedArticleJdbcRepository(),
@@ -351,6 +397,26 @@ class CitationValidatorTests {
                         "{}",
                         false,
                         "standard-guide.pdf"
+                ));
+            }
+            if ("docs/interface-contract.md".equals(filePath)) {
+                return Optional.of(new SourceFileRecord(
+                        104L,
+                        1L,
+                        "docs/interface-contract.md",
+                        "docs/interface-contract.md",
+                        null,
+                        "Markdown",
+                        "MARKDOWN",
+                        1024L,
+                        """
+                        - `/api/demo/v2/inventory/sync` 是库存同步接口。
+                        - 新链路入口侧必须保持 API path、请求参数、响应参数与旧接口完全一致。
+                        - 调用方只切换目标地址（DNS/配置），上游系统保持零代码改造。
+                        """,
+                        "{}",
+                        false,
+                        "docs/interface-contract.md"
                 ));
             }
             return Optional.empty();

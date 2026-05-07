@@ -208,6 +208,23 @@ class AskJsRuntimeTests {
                     "citation popover should align right near viewport edge");
                 assert(!ask.shouldAlignCitationPopoverRight({left: 120}, 1000),
                     "citation popover should keep default placement when there is enough room");
+                ask.setLastAnswerContext({
+                    queryId: "query-123",
+                    question: "这是什么接口",
+                    answer: "接口用于提交请求",
+                    articles: [{ articleKey: "article-001" }],
+                    sources: [{ articleKey: "article-002", sourcePaths: ["docs/api.md"] }],
+                    searchItems: [{ articleKey: "article-001", sourcePaths: ["docs/api.md", "docs/extra.md"] }]
+                });
+                const feedbackRequest = ask.buildAnswerFeedbackRequest("source_conflict", "来源不一致", "reviewer");
+                assert(feedbackRequest.queryId === "query-123",
+                    "feedback request should keep query id");
+                assert(feedbackRequest.articleKeys.length === 2 && feedbackRequest.articleKeys.includes("article-002"),
+                    "feedback request should collect unique article keys from answer context");
+                assert(feedbackRequest.sourcePaths.length === 2 && feedbackRequest.sourcePaths.includes("docs/extra.md"),
+                    "feedback request should collect unique source paths from answer context");
+                assert(feedbackRequest.feedbackType === "source_conflict",
+                    "feedback request should carry selected feedback type");
 
                 ask.setCanAsk(true);
                 ask.setSubmitting(true);

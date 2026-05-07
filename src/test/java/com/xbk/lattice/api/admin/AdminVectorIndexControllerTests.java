@@ -45,13 +45,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         com.xbk.lattice.LatticeApplication.class,
         AdminVectorIndexControllerTests.EmbeddingTestConfiguration.class
 }, properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b8_vector_admin_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b8_vector_admin_test",
-        "spring.flyway.default-schema=lattice_b8_vector_admin_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.llm.secret-encryption-key=test-phase8-key-0123456789abcdef",
@@ -136,10 +132,16 @@ class AdminVectorIndexControllerTests {
                 .andExpect(jsonPath("$.rebuiltAt").isNotEmpty());
 
         Long modelProfileId = jdbcTemplate.queryForObject(
-                "select model_profile_id from lattice_b8_vector_admin_test.article_vector_index where concept_id = 'payment-timeout'",
+                "select model_profile_id from lattice.article_vector_index where concept_id = 'payment-timeout'",
                 Long.class
         );
         assertThat(modelProfileId).isEqualTo(Long.valueOf(1L));
+
+        mockMvc.perform(get("/api/v1/admin/vector/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.indexedArticleCount").value(1))
+                .andExpect(jsonPath("$.annIndexReady").value(true))
+                .andExpect(jsonPath("$.annIndexType").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.blankOrNullString())));
     }
 
     /**
@@ -179,7 +181,9 @@ class AdminVectorIndexControllerTests {
                 .andExpect(jsonPath("$.configuredExpectedDimensions").value(1024))
                 .andExpect(jsonPath("$.schemaDimensions").value(1024))
                 .andExpect(jsonPath("$.dimensionsMatch").value(true))
-                .andExpect(jsonPath("$.indexedArticleCount").value(1));
+                .andExpect(jsonPath("$.indexedArticleCount").value(1))
+                .andExpect(jsonPath("$.annIndexReady").value(true))
+                .andExpect(jsonPath("$.annIndexType").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.blankOrNullString())));
 
         assertThat(findEmbeddingColumnType("article_vector_index")).isEqualTo("vector(1024)");
         assertThat(findEmbeddingColumnType("article_chunk_vector_index")).isEqualTo("vector(1024)");
@@ -228,7 +232,7 @@ class AdminVectorIndexControllerTests {
         String vectorLiteral = createVectorLiteral(0.05F, 2000);
         jdbcTemplate.update(
                 """
-                        insert into lattice_b8_vector_admin_test.article_vector_index (
+                        insert into lattice.article_vector_index (
                             article_key, concept_id, model_profile_id, embedding_dimensions, index_version, content_hash, embedding, updated_at
                         ) values (?, ?, ?, ?, ?, ?, cast(? as public.vector), now())
                         on conflict (article_key) do update
@@ -274,10 +278,10 @@ class AdminVectorIndexControllerTests {
      * 重置测试表。
      */
     private void resetTables() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_admin_test.article_vector_index CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_admin_test.llm_model_profiles RESTART IDENTITY CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_admin_test.llm_provider_connections RESTART IDENTITY CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_admin_test.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.article_vector_index CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.llm_model_profiles RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.llm_provider_connections RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
     }
 
     /**
@@ -288,7 +292,7 @@ class AdminVectorIndexControllerTests {
         String maskedApiKey = llmSecretCryptoService.mask("sk-test-openai");
         jdbcTemplate.update(
                 """
-                        insert into lattice_b8_vector_admin_test.llm_provider_connections (
+                        insert into lattice.llm_provider_connections (
                             id, connection_code, provider_type, base_url, api_key_ciphertext, api_key_mask, enabled, created_by, updated_by
                         ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
@@ -304,7 +308,7 @@ class AdminVectorIndexControllerTests {
         );
         jdbcTemplate.update(
                 """
-                        insert into lattice_b8_vector_admin_test.llm_model_profiles (
+                        insert into lattice.llm_model_profiles (
                             id, model_code, connection_id, model_name, model_kind, expected_dimensions,
                             supports_dimension_override, enabled, created_by, updated_by
                         ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -329,7 +333,7 @@ class AdminVectorIndexControllerTests {
                         from pg_attribute a
                         join pg_class c on c.oid = a.attrelid
                         join pg_namespace n on n.oid = c.relnamespace
-                        where n.nspname = 'lattice_b8_vector_admin_test'
+                        where n.nspname = 'lattice'
                           and c.relname = ?
                           and a.attname = 'embedding'
                           and a.attnum > 0

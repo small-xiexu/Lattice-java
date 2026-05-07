@@ -6,7 +6,6 @@ import com.xbk.lattice.governance.repo.RepoHistoryReport;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.vault.snapshot.VaultGitService;
 import com.xbk.lattice.vault.snapshot.VaultSnapshotService;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,7 +24,6 @@ import java.nio.file.Path;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 public class AdminRepoSnapshotController {
 
     private final RepoSnapshotService repoSnapshotService;

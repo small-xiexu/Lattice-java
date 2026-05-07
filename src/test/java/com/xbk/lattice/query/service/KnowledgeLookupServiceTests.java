@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * KnowledgeLookupService 测试
  *
- * 职责：验证 MCP `lattice_get` 的文章与源文件查询逻辑
+ * 职责：验证 MCP `lattice` 的文章与源文件查询逻辑
  *
  * @author xiexu
  */

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.QueryAnswerAuditMapper">
+
+    <select id="insert" resultType="java.lang.Long">
+        insert into query_answer_audits (
+            query_id, answer_version, question, answer_markdown, answer_outcome,
+            generation_mode, review_status, citation_coverage, unsupported_claim_count,
+            verified_citation_count, demoted_citation_count, skipped_citation_count,
+            cacheable, route_type, model_snapshot_json, deep_research_run_id
+        )
+        values (
+            #{record.queryId},
+            #{record.answerVersion},
+            #{record.question},
+            #{record.answerMarkdown},
+            #{record.answerOutcome},
+            #{record.generationMode},
+            #{record.reviewStatus},
+            #{record.citationCoverage},
+            #{record.unsupportedClaimCount},
+            #{record.verifiedCitationCount},
+            #{record.demotedCitationCount},
+            #{record.skippedCitationCount},
+            #{record.cacheable},
+            #{record.routeType},
+            #{record.modelSnapshotJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{record.deepResearchRunId}
+        )
+        returning audit_id
+    </select>
+</mapper>

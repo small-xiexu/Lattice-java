@@ -10,7 +10,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -338,10 +340,68 @@ class QueryGraphOrchestratorTests {
                 List.of(articleHit)
         );
 
-        QueryResponse queryResponse = queryGraphOrchestrator.execute("payment timeout retry=3 是什么配置");
+        QueryResponse queryResponse = queryGraphOrchestrator.execute("payment timeout retry=5 是什么配置");
 
         assertThat(queryResponse.getReviewStatus()).isEqualTo("PASSED");
         assertThat(reviewerGateway.lastReviewPrompt).contains("answerOutcome=SUCCESS");
+    }
+
+    /**
+     * 验证精确标识题在没有直接命中时不会把弱相关证据带入生成上下文。
+     */
+    @Test
+    void shouldDropWeakHitsWhenExactIdentifierIsMissing() {
+        QueryArticleHit weakHit = new QueryArticleHit(
+                "coupon-missing",
+                "Coupon Missing",
+                "当优惠券不存在时，系统返回失败并提示负责人排查。",
+                "{\"description\":\"优惠券异常说明\"}",
+                List.of("coupon/missing.md"),
+                9.0D
+        );
+        TrackingAnswerGenerationService answerGenerationService = new TrackingAnswerGenerationService(
+                new QueryAnswerPayload(
+                        "未找到相关知识",
+                        AnswerOutcome.NO_RELEVANT_KNOWLEDGE,
+                        GenerationMode.RULE_BASED,
+                        ModelExecutionStatus.SKIPPED,
+                        false
+                ),
+                new QueryAnswerPayload(
+                        "未找到相关知识",
+                        AnswerOutcome.NO_RELEVANT_KNOWLEDGE,
+                        GenerationMode.RULE_BASED,
+                        ModelExecutionStatus.SKIPPED,
+                        false
+                )
+        );
+        InMemoryQueryCacheStore queryCacheStore = new InMemoryQueryCacheStore();
+        QueryReviewProperties queryReviewProperties = new QueryReviewProperties();
+        queryReviewProperties.setRewriteEnabled(false);
+        QueryGraphOrchestrator queryGraphOrchestrator = QueryGraphTestSupport.createQueryGraphOrchestrator(
+                new FixedFtsSearchService(List.of(weakHit)),
+                new FixedRefKeySearchService(List.of()),
+                new FixedSourceSearchService(List.of()),
+                new FixedContributionSearchService(List.of()),
+                new FixedVectorSearchService(List.of()),
+                answerGenerationService,
+                queryCacheStore,
+                new ReviewerAgent(
+                        new SequencedReviewerGateway("{\"approved\":true,\"rewriteRequired\":false,\"riskLevel\":\"LOW\",\"issues\":[],\"userFacingRewriteHints\":[],\"cacheWritePolicy\":\"SKIP_WRITE\"}"),
+                        new ReviewResultParser()
+                ),
+                queryReviewProperties,
+                List.of(weakHit)
+        );
+
+        QueryResponse queryResponse = queryGraphOrchestrator.execute(
+                "请查询配置项 xbk_nonexistent_config_key_20260506 的取值"
+        );
+
+        assertThat(queryResponse.getSources()).isEmpty();
+        assertThat(queryResponse.getArticles()).isEmpty();
+        assertThat(queryResponse.getAnswerOutcome()).isEqualTo(AnswerOutcome.NO_RELEVANT_KNOWLEDGE);
+        assertThat(answerGenerationService.getLastGenerateHitCount()).isZero();
     }
 
     /**
@@ -405,6 +465,70 @@ class QueryGraphOrchestratorTests {
     }
 
     /**
+     * 验证 Query Graph 串行召回路径复用统一 dispatcher，并保留稳定通道 key。
+     */
+    @Test
+    void shouldUseDispatcherForSerialRetrievalPath() {
+        QueryArticleHit articleHit = new QueryArticleHit(
+                "generic-contract",
+                "Generic Contract",
+                "接口契约要求 request.timeout=3000",
+                "{\"description\":\"Generic API contract\"}",
+                List.of("docs/generic-contract.md"),
+                10.0D
+        );
+        TrackingAnswerGenerationService answerGenerationService = new TrackingAnswerGenerationService(
+                "结论：request.timeout=3000 [[generic-contract]]",
+                "结论：request.timeout=3000 [[generic-contract]]"
+        );
+        InMemoryQueryCacheStore queryCacheStore = new InMemoryQueryCacheStore();
+        QueryReviewProperties queryReviewProperties = new QueryReviewProperties();
+        queryReviewProperties.setRewriteEnabled(false);
+        CapturingGraphRetrievalAuditService retrievalAuditService = new CapturingGraphRetrievalAuditService();
+        QueryGraphOrchestrator queryGraphOrchestrator = QueryGraphTestSupport.createQueryGraphOrchestrator(
+                new FixedFtsSearchService(List.of(articleHit)),
+                new FixedRefKeySearchService(List.of()),
+                new FixedSourceSearchService(List.of()),
+                new FixedContributionSearchService(List.of()),
+                new FixedVectorSearchService(List.of()),
+                answerGenerationService,
+                queryCacheStore,
+                new ReviewerAgent(
+                        new SequencedReviewerGateway("{\"approved\":true,\"rewriteRequired\":false,\"riskLevel\":\"LOW\",\"issues\":[],\"userFacingRewriteHints\":[],\"cacheWritePolicy\":\"WRITE\"}"),
+                        new ReviewResultParser()
+                ),
+                queryReviewProperties,
+                List.of(articleHit),
+                new FixedQueryRetrievalSettingsService(false),
+                retrievalAuditService
+        );
+
+        QueryResponse queryResponse = queryGraphOrchestrator.execute("接口契约 request.timeout 是多少");
+
+        assertThat(queryResponse.getReviewStatus()).isEqualTo("PASSED");
+        assertThat(retrievalAuditService.getLastRetrievalMode()).isEqualTo("serial");
+        assertThat(retrievalAuditService.getLastChannelHits().keySet()).containsExactly(
+                RetrievalStrategyResolver.CHANNEL_FTS,
+                RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS,
+                RetrievalStrategyResolver.CHANNEL_REFKEY,
+                RetrievalStrategyResolver.CHANNEL_SOURCE,
+                RetrievalStrategyResolver.CHANNEL_SOURCE_CHUNK_FTS,
+                RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS,
+                RetrievalStrategyResolver.CHANNEL_FACT_CARD_VECTOR,
+                RetrievalStrategyResolver.CHANNEL_CONTRIBUTION,
+                RetrievalStrategyResolver.CHANNEL_GRAPH,
+                RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR,
+                RetrievalStrategyResolver.CHANNEL_CHUNK_VECTOR
+        );
+        assertThat(retrievalAuditService.getLastChannelHits().get(RetrievalStrategyResolver.CHANNEL_FTS))
+                .containsExactly(articleHit);
+        assertThat(retrievalAuditService.getLastChannelRuns().get(RetrievalStrategyResolver.CHANNEL_FTS).getStatus())
+                .isEqualTo(RetrievalChannelRunStatus.SUCCESS);
+        assertThat(retrievalAuditService.getLastChannelRuns().get(RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR)
+                .getStatus()).isEqualTo(RetrievalChannelRunStatus.SKIPPED);
+    }
+
+    /**
      * 追踪生成与重写次数的答案服务替身。
      *
      * @author xiexu
@@ -430,6 +554,8 @@ class QueryGraphOrchestratorTests {
         private String revisedScene;
 
         private String revisedRole;
+
+        private int lastGenerateHitCount;
 
         /**
          * 创建答案服务替身。
@@ -490,6 +616,7 @@ class QueryGraphOrchestratorTests {
             generatedScopeId = scopeId;
             generatedScene = scene;
             generatedRole = agentRole;
+            lastGenerateHitCount = queryArticleHits == null ? 0 : queryArticleHits.size();
             return generatedPayload;
         }
 
@@ -559,6 +686,10 @@ class QueryGraphOrchestratorTests {
 
         private String getRevisedRole() {
             return revisedRole;
+        }
+
+        private int getLastGenerateHitCount() {
+            return lastGenerateHitCount;
         }
     }
 
@@ -886,13 +1017,188 @@ class QueryGraphOrchestratorTests {
         /**
          * 返回固定命中。
          *
-         * @param question 查询问题
-         * @param limit 返回数量
+         * @param executionContext 检索执行上下文
          * @return 固定命中
          */
         @Override
-        public List<QueryArticleHit> search(String question, int limit) {
+        public List<QueryArticleHit> search(RetrievalExecutionContext executionContext) {
             return hits;
+        }
+    }
+
+    /**
+     * 固定并行开关的检索配置服务替身。
+     *
+     * @author xiexu
+     */
+    private static class FixedQueryRetrievalSettingsService extends QueryRetrievalSettingsService {
+
+        private final boolean parallelEnabled;
+
+        /**
+         * 创建固定检索配置服务替身。
+         *
+         * @param parallelEnabled 是否开启并行召回
+         */
+        private FixedQueryRetrievalSettingsService(boolean parallelEnabled) {
+            super();
+            this.parallelEnabled = parallelEnabled;
+        }
+
+        /**
+         * 返回固定检索配置。
+         *
+         * @return 检索配置
+         */
+        @Override
+        public QueryRetrievalSettingsState getCurrentState() {
+            return new QueryRetrievalSettingsState(
+                    parallelEnabled,
+                    QueryRetrievalSettingsState.DEFAULT_REWRITE_ENABLED,
+                    QueryRetrievalSettingsState.DEFAULT_INTENT_AWARE_VECTOR_ENABLED,
+                    QueryRetrievalSettingsState.DEFAULT_FTS_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_REFKEY_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_ARTICLE_CHUNK_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_SOURCE_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_SOURCE_CHUNK_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_FACT_CARD_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_CONTRIBUTION_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_GRAPH_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_ARTICLE_VECTOR_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_CHUNK_VECTOR_WEIGHT,
+                    QueryRetrievalSettingsState.DEFAULT_RRF_K
+            );
+        }
+    }
+
+    /**
+     * 捕获 Query Graph 检索审计的服务替身。
+     *
+     * @author xiexu
+     */
+    private static class CapturingGraphRetrievalAuditService extends RetrievalAuditService {
+
+        private String lastRetrievalMode;
+
+        private Map<String, List<QueryArticleHit>> lastChannelHits = new LinkedHashMap<String, List<QueryArticleHit>>();
+
+        private Map<String, RetrievalChannelRun> lastChannelRuns = new LinkedHashMap<String, RetrievalChannelRun>();
+
+        /**
+         * 创建捕获服务替身。
+         */
+        private CapturingGraphRetrievalAuditService() {
+            super(null);
+        }
+
+        /**
+         * 记录 Graph 融合节点写入的检索审计。
+         *
+         * @param queryId 查询标识
+         * @param question 原始问题
+         * @param normalizedQuestion 归一化问题
+         * @param retrievalStrategy 检索策略
+         * @param retrievalMode 检索模式
+         * @param rewriteApplied 是否发生改写
+         * @param rewriteAuditRef 改写审计引用
+         * @param retrievalStrategyRef 检索策略引用
+         * @param channelHits 通道命中
+         * @param fusedHits 融合命中
+         * @return 固定审计引用
+         */
+        @Override
+        public String persist(
+                String queryId,
+                String question,
+                String normalizedQuestion,
+                RetrievalStrategy retrievalStrategy,
+                String retrievalMode,
+                boolean rewriteApplied,
+                String rewriteAuditRef,
+                String retrievalStrategyRef,
+                Map<String, List<QueryArticleHit>> channelHits,
+                List<QueryArticleHit> fusedHits
+        ) {
+            return persist(
+                    queryId,
+                    question,
+                    normalizedQuestion,
+                    retrievalStrategy,
+                    retrievalMode,
+                    rewriteApplied,
+                    rewriteAuditRef,
+                    retrievalStrategyRef,
+                    channelHits,
+                    fusedHits,
+                    Map.of()
+            );
+        }
+
+        /**
+         * 记录 Graph 融合节点写入的检索审计和通道运行摘要。
+         *
+         * @param queryId 查询标识
+         * @param question 原始问题
+         * @param normalizedQuestion 归一化问题
+         * @param retrievalStrategy 检索策略
+         * @param retrievalMode 检索模式
+         * @param rewriteApplied 是否发生改写
+         * @param rewriteAuditRef 改写审计引用
+         * @param retrievalStrategyRef 检索策略引用
+         * @param channelHits 通道命中
+         * @param fusedHits 融合命中
+         * @param channelRuns 通道运行摘要
+         * @return 固定审计引用
+         */
+        @Override
+        public String persist(
+                String queryId,
+                String question,
+                String normalizedQuestion,
+                RetrievalStrategy retrievalStrategy,
+                String retrievalMode,
+                boolean rewriteApplied,
+                String rewriteAuditRef,
+                String retrievalStrategyRef,
+                Map<String, List<QueryArticleHit>> channelHits,
+                List<QueryArticleHit> fusedHits,
+                Map<String, RetrievalChannelRun> channelRuns
+        ) {
+            lastRetrievalMode = retrievalMode;
+            lastChannelHits = channelHits == null
+                    ? new LinkedHashMap<String, List<QueryArticleHit>>()
+                    : new LinkedHashMap<String, List<QueryArticleHit>>(channelHits);
+            lastChannelRuns = channelRuns == null
+                    ? new LinkedHashMap<String, RetrievalChannelRun>()
+                    : new LinkedHashMap<String, RetrievalChannelRun>(channelRuns);
+            return "query_retrieval_runs:serial";
+        }
+
+        /**
+         * 返回最近一次检索模式。
+         *
+         * @return 检索模式
+         */
+        private String getLastRetrievalMode() {
+            return lastRetrievalMode;
+        }
+
+        /**
+         * 返回最近一次通道命中。
+         *
+         * @return 通道命中
+         */
+        private Map<String, List<QueryArticleHit>> getLastChannelHits() {
+            return lastChannelHits;
+        }
+
+        /**
+         * 返回最近一次通道运行摘要。
+         *
+         * @return 通道运行摘要
+         */
+        private Map<String, RetrievalChannelRun> getLastChannelRuns() {
+            return lastChannelRuns;
         }
     }
 }

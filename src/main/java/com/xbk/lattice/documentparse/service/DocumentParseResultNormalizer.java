@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xbk.lattice.compiler.domain.RawSource;
 import com.xbk.lattice.documentparse.domain.model.ParseOutput;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -17,7 +16,6 @@ import org.springframework.util.StringUtils;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class DocumentParseResultNormalizer {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

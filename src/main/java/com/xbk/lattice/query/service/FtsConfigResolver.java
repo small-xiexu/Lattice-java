@@ -1,6 +1,5 @@
 package com.xbk.lattice.query.service;
 
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 /**
@@ -11,7 +10,6 @@ import org.springframework.stereotype.Service;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class FtsConfigResolver {
 
     private final QuerySearchProperties querySearchProperties;

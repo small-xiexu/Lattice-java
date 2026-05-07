@@ -5,7 +5,6 @@ import com.xbk.lattice.compiler.service.SynthesisArtifactJdbcStore;
 import com.xbk.lattice.compiler.service.SynthesisArtifactRecord;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,7 +32,6 @@ import java.util.regex.Pattern;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class VaultSyncService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

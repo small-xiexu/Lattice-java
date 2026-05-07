@@ -23,13 +23,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_phase_g_source_credential_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_phase_g_source_credential_test",
-        "spring.flyway.default-schema=lattice_phase_g_source_credential_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.query.cache.store=in-memory"
@@ -77,6 +73,6 @@ class AdminSourceCredentialControllerTests {
     }
 
     private void resetTables() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_g_source_credential_test.source_credentials RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_credentials RESTART IDENTITY CASCADE");
     }
 }

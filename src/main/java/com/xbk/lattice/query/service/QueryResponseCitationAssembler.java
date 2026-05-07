@@ -775,6 +775,13 @@ public final class QueryResponseCitationAssembler {
                 responseKeys,
                 canonicalSourceKeys,
                 fallbackHits,
+                QueryEvidenceType.FACT_CARD
+        );
+        appendTopKSourceResponses(
+                sourceResponses,
+                responseKeys,
+                canonicalSourceKeys,
+                fallbackHits,
                 QueryEvidenceType.GRAPH
         );
         appendTopKSourceResponses(
@@ -1160,6 +1167,9 @@ public final class QueryResponseCitationAssembler {
         int priority = 0;
         if (queryArticleHit.getEvidenceType() == QueryEvidenceType.ARTICLE) {
             priority += 100;
+        }
+        if (queryArticleHit.getEvidenceType() == QueryEvidenceType.FACT_CARD) {
+            priority += 95;
         }
         if (!isBlank(queryArticleHit.getArticleKey())) {
             priority += 30;

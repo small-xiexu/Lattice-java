@@ -7,7 +7,6 @@ import com.xbk.lattice.infra.persistence.ArticleVectorRecord;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -30,7 +29,6 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Service
-@Profile("jdbc")
 public class ArticleVectorIndexService {
 
     private static final int RETRY_EMBEDDING_TEXT_MAX_CHARS = 6000;

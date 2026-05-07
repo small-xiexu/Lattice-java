@@ -44,13 +44,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         LatticeApplication.class,
         AdminCompileFailureRegressionTests.TestCompileFailureConfiguration.class
 }, properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_w8_compile_failure_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_w8_compile_failure_test",
-        "spring.flyway.default-schema=lattice_w8_compile_failure_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.query.cache.store=in-memory",
@@ -146,8 +142,8 @@ class AdminCompileFailureRegressionTests {
      * 重置测试表。
      */
     private void resetTables() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_w8_compile_failure_test.compile_jobs CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_w8_compile_failure_test.knowledge_sources RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.knowledge_sources RESTART IDENTITY CASCADE");
         failureThrowingCompileOrchestrator.setFailure(new IllegalStateException("compile failure not configured"));
     }
 

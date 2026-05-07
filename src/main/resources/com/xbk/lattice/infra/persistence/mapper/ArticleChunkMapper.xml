@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.ArticleChunkMapper">
+
+    <resultMap id="ArticleChunkRecordResultMap" type="com.xbk.lattice.infra.persistence.ArticleChunkRecord">
+        <constructor>
+            <arg column="id" javaType="java.lang.Long"/>
+            <arg column="article_id" javaType="java.lang.Long"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="chunk_index" javaType="_int"/>
+            <arg column="chunk_text" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="LexicalSearchRecordResultMap" type="com.xbk.lattice.infra.persistence.LexicalSearchRecord">
+        <constructor>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="item_key" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="content" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="review_status" javaType="java.lang.String"/>
+            <arg column="source_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="chunk_index" javaType="java.lang.Integer"/>
+            <arg column="verbatim" javaType="java.lang.Boolean"/>
+            <arg column="score" javaType="_double"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="ArticleChunkColumns">
+        ac.id, ac.article_id, a.concept_id, ac.chunk_index, ac.chunk_text
+    </sql>
+
+    <delete id="deleteByArticleKey">
+        delete from article_chunks
+        where article_id = (
+            select id
+            from articles
+            where article_key = #{articleKey}
+            order by compiled_at desc, id desc
+            limit 1
+        )
+    </delete>
+
+    <delete id="deleteByConceptId">
+        delete from article_chunks
+        where article_id = (
+            select id
+            from articles
+            where concept_id = #{conceptId}
+            order by compiled_at desc, id desc
+            limit 1
+        )
+    </delete>
+
+    <insert id="insertByArticleKey">
+        insert into article_chunks (article_id, chunk_text, chunk_index, search_tsv)
+        values ((
+            select id
+            from articles
+            where article_key = #{articleKey}
+            order by compiled_at desc, id desc
+            limit 1
+        ), #{chunkText}, #{chunkIndex}, to_tsvector('simple'::regconfig, #{chunkText}))
+    </insert>
+
+    <insert id="insertByConceptId">
+        insert into article_chunks (article_id, chunk_text, chunk_index, search_tsv)
+        values ((
+            select id
+            from articles
+            where concept_id = #{conceptId}
+            order by compiled_at desc, id desc
+            limit 1
+        ), #{chunkText}, #{chunkIndex}, to_tsvector('simple'::regconfig, #{chunkText}))
+    </insert>
+
+    <update id="truncateAll">
+        truncate table article_chunks restart identity cascade
+    </update>
+
+    <select id="countAll" resultType="_int">
+        select count(*)
+        from article_chunks
+    </select>
+
+    <select id="findChunkTexts" resultType="java.lang.String">
+        select ac.chunk_text
+        from article_chunks ac
+        join articles a on a.id = ac.article_id
+        where a.concept_id = #{conceptId}
+        order by ac.chunk_index
+    </select>
+
+    <select id="findByConceptId" resultMap="ArticleChunkRecordResultMap">
+        select <include refid="ArticleChunkColumns"/>
+        from article_chunks ac
+        join articles a on a.id = ac.article_id
+        where a.concept_id = #{conceptId}
+        order by ac.chunk_index
+    </select>
+
+    <select id="findByArticleKey" resultMap="ArticleChunkRecordResultMap">
+        select <include refid="ArticleChunkColumns"/>
+        from article_chunks ac
+        join articles a on a.id = ac.article_id
+        where a.article_key = #{articleKey}
+        order by ac.chunk_index
+    </select>
+
+    <select id="findAllRecords" resultMap="ArticleChunkRecordResultMap">
+        select <include refid="ArticleChunkColumns"/>
+        from article_chunks ac
+        join articles a on a.id = ac.article_id
+        order by ac.article_id asc, ac.chunk_index asc
+    </select>
+
+    <select id="searchLexical" resultMap="LexicalSearchRecordResultMap">
+        with query as (
+            select plainto_tsquery(cast(#{tsConfig} as regconfig), #{question}) as tsq
+        )
+        select a.source_id,
+               a.article_key as item_key,
+               a.concept_id,
+               a.title,
+               ac.chunk_text as content,
+               a.metadata_json::text as metadata_json,
+               a.review_status,
+               a.source_paths,
+               ac.chunk_index,
+               null::boolean as verbatim,
+               ts_rank_cd(ac.search_tsv, query.tsq)
+               <foreach collection="likeTokens" item="likeToken">
+                   + case when lower(ac.chunk_text) like #{likeToken} then 3.0 else 0 end
+                   + case when lower(a.title) like #{likeToken} then 1.5 else 0 end
+                   + case when lower(a.concept_id) like #{likeToken} then 1.0 else 0 end
+               </foreach>
+               as score
+        from article_chunks ac
+        join articles a on a.id = ac.article_id
+        cross join query
+        where ac.search_tsv @@ query.tsq
+        <foreach collection="likeTokens" item="likeToken">
+           or lower(ac.chunk_text) like #{likeToken}
+           or lower(a.title) like #{likeToken}
+           or lower(a.concept_id) like #{likeToken}
+        </foreach>
+        order by score desc, a.compiled_at desc, a.article_key asc, ac.chunk_index asc
+        limit #{limit}
+    </select>
+</mapper>

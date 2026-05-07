@@ -23,13 +23,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b9_compile_review_config_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b9_compile_review_config_test",
-        "spring.flyway.default-schema=lattice_b9_compile_review_config_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.compiler.review.auto-fix-enabled=true",
@@ -99,17 +95,17 @@ class AdminCompileReviewConfigControllerTests {
         assertThat(compileReviewProperties.getHumanReviewSeverityThreshold()).isEqualTo("MEDIUM");
 
         Boolean autoFixEnabled = jdbcTemplate.queryForObject(
-                "select auto_fix_enabled from lattice_b9_compile_review_config_test.compile_review_settings where config_scope = 'default'",
+                "select auto_fix_enabled from lattice.compile_review_settings where config_scope = 'default'",
                 Boolean.class
         );
         Integer maxFixRounds = jdbcTemplate.queryForObject(
-                "select max_fix_rounds from lattice_b9_compile_review_config_test.compile_review_settings where config_scope = 'default'",
+                "select max_fix_rounds from lattice.compile_review_settings where config_scope = 'default'",
                 Integer.class
         );
         Boolean allowPersistNeedsHumanReview = jdbcTemplate.queryForObject(
                 """
                         select allow_persist_needs_human_review
-                        from lattice_b9_compile_review_config_test.compile_review_settings
+                        from lattice.compile_review_settings
                         where config_scope = 'default'
                         """,
                 Boolean.class
@@ -117,7 +113,7 @@ class AdminCompileReviewConfigControllerTests {
         String humanReviewSeverityThreshold = jdbcTemplate.queryForObject(
                 """
                         select human_review_severity_threshold
-                        from lattice_b9_compile_review_config_test.compile_review_settings
+                        from lattice.compile_review_settings
                         where config_scope = 'default'
                         """,
                 String.class
@@ -129,7 +125,7 @@ class AdminCompileReviewConfigControllerTests {
     }
 
     private void resetTable() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_compile_review_config_test.compile_review_settings");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_review_settings");
         compileReviewProperties.setAutoFixEnabled(true);
         compileReviewProperties.setMaxFixRounds(1);
         compileReviewProperties.setAllowPersistNeedsHumanReview(false);

@@ -25,7 +25,6 @@ import com.xbk.lattice.query.domain.ModelExecutionStatus;
 import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import com.xbk.lattice.query.graph.QueryWorkingSetStore;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -39,7 +38,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 @Slf4j
 public class DeepResearchOrchestrator {
 

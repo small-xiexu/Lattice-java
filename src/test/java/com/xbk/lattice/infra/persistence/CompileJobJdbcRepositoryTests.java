@@ -18,13 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_ws1_compile_job_repo_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_ws1_compile_job_repo_test",
-        "spring.flyway.default-schema=lattice_ws1_compile_job_repo_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key"
 })
@@ -40,12 +36,12 @@ class CompileJobJdbcRepositoryTests {
      * 验证 compile_jobs 表已具备运行态字段。
      */
     @Test
-    void shouldCreateCompileJobRuntimeColumnsByFlyway() {
+    void shouldCreateCompileJobRuntimeColumnsByManualDdl() {
         List<String> columnNames = jdbcTemplate.queryForList(
                 """
                         select column_name
                         from information_schema.columns
-                        where table_schema = 'lattice_ws1_compile_job_repo_test'
+                        where table_schema = 'lattice'
                           and table_name = 'compile_jobs'
                         order by ordinal_position
                         """,
@@ -69,7 +65,7 @@ class CompileJobJdbcRepositoryTests {
      */
     @Test
     void shouldSaveAndLoadCompileJobRuntimeFields() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_ws1_compile_job_repo_test.compile_jobs CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs CASCADE");
         OffsetDateTime now = OffsetDateTime.now();
         CompileJobRecord compileJobRecord = new CompileJobRecord(
                 "job-runtime-save",
@@ -116,7 +112,7 @@ class CompileJobJdbcRepositoryTests {
      */
     @Test
     void shouldMarkRunningAndResetRuntimeSnapshotWhenRetrying() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_ws1_compile_job_repo_test.compile_jobs CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs CASCADE");
         compileJobJdbcRepository.save(buildQueuedRecord("job-runtime-retry"));
 
         OffsetDateTime startedAt = OffsetDateTime.now();
@@ -154,7 +150,7 @@ class CompileJobJdbcRepositoryTests {
      */
     @Test
     void shouldUpdateProgressSnapshotForRunningJob() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_ws1_compile_job_repo_test.compile_jobs CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs CASCADE");
         compileJobJdbcRepository.save(buildQueuedRecord("job-runtime-progress"));
 
         OffsetDateTime startedAt = OffsetDateTime.now();
@@ -193,7 +189,7 @@ class CompileJobJdbcRepositoryTests {
      */
     @Test
     void shouldPersistErrorCodeAndErrorMessageSeparatelyWhenFailed() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_ws1_compile_job_repo_test.compile_jobs CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs CASCADE");
         compileJobJdbcRepository.save(buildQueuedRecord("job-runtime-failed"));
 
         OffsetDateTime finishedAt = OffsetDateTime.now();

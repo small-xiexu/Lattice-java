@@ -1,16 +1,9 @@
 package com.xbk.lattice.source.infra;
 
 import com.xbk.lattice.source.domain.SourceCredential;
-import org.springframework.context.annotation.Profile;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
+import com.xbk.lattice.source.infra.mapper.SourceCredentialMapper;
 import org.springframework.stereotype.Repository;
 
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,18 +15,17 @@ import java.util.Optional;
  * @author xiexu
  */
 @Repository
-@Profile("jdbc")
 public class SourceCredentialJdbcRepository {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final SourceCredentialMapper sourceCredentialMapper;
 
     /**
      * 创建资料源凭据 JDBC 仓储。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @param sourceCredentialMapper 资料源凭据 Mapper
      */
-    public SourceCredentialJdbcRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public SourceCredentialJdbcRepository(SourceCredentialMapper sourceCredentialMapper) {
+        this.sourceCredentialMapper = sourceCredentialMapper;
     }
 
     /**
@@ -42,15 +34,7 @@ public class SourceCredentialJdbcRepository {
      * @return 凭据列表
      */
     public List<SourceCredential> findAll() {
-        return jdbcTemplate.query(
-                """
-                        select id, credential_code, credential_type, secret_ciphertext, secret_mask,
-                               enabled, created_by, updated_by, created_at, updated_at
-                        from source_credentials
-                        order by updated_at desc, id desc
-                        """,
-                this::mapRecord
-        );
+        return sourceCredentialMapper.findAll();
     }
 
     /**
@@ -60,20 +44,7 @@ public class SourceCredentialJdbcRepository {
      * @return 凭据
      */
     public Optional<SourceCredential> findById(Long id) {
-        List<SourceCredential> items = jdbcTemplate.query(
-                """
-                        select id, credential_code, credential_type, secret_ciphertext, secret_mask,
-                               enabled, created_by, updated_by, created_at, updated_at
-                        from source_credentials
-                        where id = ?
-                        """,
-                this::mapRecord,
-                id
-        );
-        if (items.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(items.get(0));
+        return Optional.ofNullable(sourceCredentialMapper.findById(id));
     }
 
     /**
@@ -83,20 +54,7 @@ public class SourceCredentialJdbcRepository {
      * @return 凭据
      */
     public Optional<SourceCredential> findByCredentialCode(String credentialCode) {
-        List<SourceCredential> items = jdbcTemplate.query(
-                """
-                        select id, credential_code, credential_type, secret_ciphertext, secret_mask,
-                               enabled, created_by, updated_by, created_at, updated_at
-                        from source_credentials
-                        where credential_code = ?
-                        """,
-                this::mapRecord,
-                credentialCode
-        );
-        if (items.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(items.get(0));
+        return Optional.ofNullable(sourceCredentialMapper.findByCredentialCode(credentialCode));
     }
 
     /**
@@ -114,74 +72,14 @@ public class SourceCredentialJdbcRepository {
     }
 
     private SourceCredential insert(SourceCredential sourceCredential) {
-        KeyHolder keyHolder = new GeneratedKeyHolder();
-        jdbcTemplate.update(connection -> {
-            PreparedStatement preparedStatement = connection.prepareStatement(
-                    """
-                            insert into source_credentials (
-                                credential_code,
-                                credential_type,
-                                secret_ciphertext,
-                                secret_mask,
-                                enabled,
-                                created_by,
-                                updated_by
-                            )
-                            values (?, ?, ?, ?, ?, ?, ?)
-                            """,
-                    new String[]{"id"}
-            );
-            preparedStatement.setString(1, sourceCredential.getCredentialCode());
-            preparedStatement.setString(2, sourceCredential.getCredentialType());
-            preparedStatement.setString(3, sourceCredential.getSecretCiphertext());
-            preparedStatement.setString(4, sourceCredential.getSecretMask());
-            preparedStatement.setBoolean(5, sourceCredential.isEnabled());
-            preparedStatement.setString(6, sourceCredential.getCreatedBy());
-            preparedStatement.setString(7, sourceCredential.getUpdatedBy());
-            return preparedStatement;
-        }, keyHolder);
-        Number key = keyHolder.getKeyAs(Long.class);
-        if (key == null) {
+        Long id = sourceCredentialMapper.insert(sourceCredential);
+        if (id == null) {
             throw new IllegalStateException("failed to insert source_credentials");
         }
-        return findById(key.longValue()).orElseThrow();
+        return findById(id).orElseThrow();
     }
 
     private void update(SourceCredential sourceCredential) {
-        jdbcTemplate.update(
-                """
-                        update source_credentials
-                        set credential_code = ?,
-                            credential_type = ?,
-                            secret_ciphertext = ?,
-                            secret_mask = ?,
-                            enabled = ?,
-                            updated_by = ?,
-                            updated_at = current_timestamp
-                        where id = ?
-                        """,
-                sourceCredential.getCredentialCode(),
-                sourceCredential.getCredentialType(),
-                sourceCredential.getSecretCiphertext(),
-                sourceCredential.getSecretMask(),
-                sourceCredential.isEnabled(),
-                sourceCredential.getUpdatedBy(),
-                sourceCredential.getId()
-        );
-    }
-
-    private SourceCredential mapRecord(ResultSet resultSet, int rowNum) throws SQLException {
-        return new SourceCredential(
-                resultSet.getLong("id"),
-                resultSet.getString("credential_code"),
-                resultSet.getString("credential_type"),
-                resultSet.getString("secret_ciphertext"),
-                resultSet.getString("secret_mask"),
-                resultSet.getBoolean("enabled"),
-                resultSet.getString("created_by"),
-                resultSet.getString("updated_by"),
-                resultSet.getObject("created_at", OffsetDateTime.class),
-                resultSet.getObject("updated_at", OffsetDateTime.class)
-        );
+        sourceCredentialMapper.update(sourceCredential);
     }
 }

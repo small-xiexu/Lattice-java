@@ -23,7 +23,6 @@ import com.xbk.lattice.compiler.graph.node.RebuildArticleChunksNode;
 import com.xbk.lattice.compiler.graph.node.RefreshVectorIndexNode;
 import com.xbk.lattice.compiler.graph.node.ReviewArticlesNode;
 import com.xbk.lattice.compiler.graph.node.SplitBatchesNode;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -36,7 +35,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class CompileGraphDefinitionFactory {
 
     private final InitializeJobNode initializeJobNode;

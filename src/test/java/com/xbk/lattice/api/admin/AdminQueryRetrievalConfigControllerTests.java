@@ -24,13 +24,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b8_retrieval_config_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b8_retrieval_config_test",
-        "spring.flyway.default-schema=lattice_b8_retrieval_config_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.query.cache.store=in-memory"
@@ -66,6 +62,7 @@ class AdminQueryRetrievalConfigControllerTests {
                 .andExpect(jsonPath("$.articleChunkWeight").value(1.25D))
                 .andExpect(jsonPath("$.sourceWeight").value(1.0D))
                 .andExpect(jsonPath("$.sourceChunkWeight").value(1.3D))
+                .andExpect(jsonPath("$.factCardWeight").value(1.4D))
                 .andExpect(jsonPath("$.contributionWeight").value(1.0D))
                 .andExpect(jsonPath("$.graphWeight").value(1.2D))
                 .andExpect(jsonPath("$.articleVectorWeight").value(1.0D))
@@ -93,6 +90,7 @@ class AdminQueryRetrievalConfigControllerTests {
                                 + "\"articleChunkWeight\":1.7,"
                                 + "\"sourceWeight\":0.8,"
                                 + "\"sourceChunkWeight\":1.4,"
+                                + "\"factCardWeight\":2.2,"
                                 + "\"contributionWeight\":1.1,"
                                 + "\"graphWeight\":1.3,"
                                 + "\"articleVectorWeight\":0.7,"
@@ -108,6 +106,7 @@ class AdminQueryRetrievalConfigControllerTests {
                 .andExpect(jsonPath("$.articleChunkWeight").value(1.7D))
                 .andExpect(jsonPath("$.sourceWeight").value(0.8D))
                 .andExpect(jsonPath("$.sourceChunkWeight").value(1.4D))
+                .andExpect(jsonPath("$.factCardWeight").value(2.2D))
                 .andExpect(jsonPath("$.contributionWeight").value(1.1D))
                 .andExpect(jsonPath("$.graphWeight").value(1.3D))
                 .andExpect(jsonPath("$.articleVectorWeight").value(0.7D))
@@ -123,6 +122,7 @@ class AdminQueryRetrievalConfigControllerTests {
         assertThat(state.getArticleChunkWeight()).isEqualTo(1.7D);
         assertThat(state.getSourceWeight()).isEqualTo(0.8D);
         assertThat(state.getSourceChunkWeight()).isEqualTo(1.4D);
+        assertThat(state.getFactCardWeight()).isEqualTo(2.2D);
         assertThat(state.getContributionWeight()).isEqualTo(1.1D);
         assertThat(state.getGraphWeight()).isEqualTo(1.3D);
         assertThat(state.getArticleVectorWeight()).isEqualTo(0.7D);
@@ -130,32 +130,37 @@ class AdminQueryRetrievalConfigControllerTests {
         assertThat(state.getRrfK()).isEqualTo(48);
 
         Double ftsWeight = jdbcTemplate.queryForObject(
-                "select fts_weight from lattice_b8_retrieval_config_test.query_retrieval_settings where id = 1",
+                "select fts_weight from lattice.query_retrieval_settings where id = 1",
                 Double.class
         );
         Integer rrfK = jdbcTemplate.queryForObject(
-                "select rrf_k from lattice_b8_retrieval_config_test.query_retrieval_settings where id = 1",
+                "select rrf_k from lattice.query_retrieval_settings where id = 1",
                 Integer.class
         );
         Boolean parallelEnabled = jdbcTemplate.queryForObject(
-                "select parallel_enabled from lattice_b8_retrieval_config_test.query_retrieval_settings where id = 1",
+                "select parallel_enabled from lattice.query_retrieval_settings where id = 1",
                 Boolean.class
         );
         Boolean rewriteEnabled = jdbcTemplate.queryForObject(
-                "select rewrite_enabled from lattice_b8_retrieval_config_test.query_retrieval_settings where id = 1",
+                "select rewrite_enabled from lattice.query_retrieval_settings where id = 1",
                 Boolean.class
+        );
+        Double factCardWeight = jdbcTemplate.queryForObject(
+                "select fact_card_weight from lattice.query_retrieval_settings where id = 1",
+                Double.class
         );
         assertThat(ftsWeight).isEqualTo(Double.valueOf(1.5D));
         assertThat(rrfK).isEqualTo(Integer.valueOf(48));
         assertThat(parallelEnabled).isFalse();
         assertThat(rewriteEnabled).isFalse();
+        assertThat(factCardWeight).isEqualTo(Double.valueOf(2.2D));
     }
 
     /**
      * 重置 Query 检索配置表。
      */
     private void resetTable() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_retrieval_config_test.query_retrieval_settings");
-        jdbcTemplate.execute("INSERT INTO lattice_b8_retrieval_config_test.query_retrieval_settings DEFAULT VALUES");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.query_retrieval_settings");
+        jdbcTemplate.execute("INSERT INTO lattice.query_retrieval_settings DEFAULT VALUES");
     }
 }

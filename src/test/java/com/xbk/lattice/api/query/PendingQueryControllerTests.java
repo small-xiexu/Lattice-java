@@ -30,13 +30,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b3_query_feedback_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b3_query_feedback_test",
-        "spring.flyway.default-schema=lattice_b3_query_feedback_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.query.cache.store=in-memory"
@@ -79,7 +75,7 @@ class PendingQueryControllerTests {
                 .andExpect(jsonPath("$.answer").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("用户纠正："))));
 
         String correctionsJson = jdbcTemplate.queryForObject(
-                "select corrections::text from lattice_b3_query_feedback_test.pending_queries where query_id = ?",
+                "select corrections::text from lattice.pending_queries where query_id = ?",
                 String.class,
                 queryId
         );
@@ -87,7 +83,7 @@ class PendingQueryControllerTests {
         assertThat(correctionsJson).contains("manual-review 仅在 retry=5 时触发");
 
         Integer pendingCountAfterCorrect = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_b3_query_feedback_test.pending_queries",
+                "select count(*) from lattice.pending_queries",
                 Integer.class
         );
         assertThat(pendingCountAfterCorrect).isEqualTo(1);
@@ -97,11 +93,11 @@ class PendingQueryControllerTests {
                 .andExpect(jsonPath("$.status").value("CONFIRMED"));
 
         Integer pendingCountAfterConfirm = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_b3_query_feedback_test.pending_queries",
+                "select count(*) from lattice.pending_queries",
                 Integer.class
         );
         Integer contributionCount = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_b3_query_feedback_test.contributions",
+                "select count(*) from lattice.contributions",
                 Integer.class
         );
         assertThat(pendingCountAfterConfirm).isZero();
@@ -135,11 +131,11 @@ class PendingQueryControllerTests {
                 .andExpect(jsonPath("$.status").value("DISCARDED"));
 
         Integer pendingCount = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_b3_query_feedback_test.pending_queries",
+                "select count(*) from lattice.pending_queries",
                 Integer.class
         );
         Integer contributionCount = jdbcTemplate.queryForObject(
-                "select count(*) from lattice_b3_query_feedback_test.contributions",
+                "select count(*) from lattice.contributions",
                 Integer.class
         );
         assertThat(pendingCount).isZero();
@@ -195,9 +191,9 @@ class PendingQueryControllerTests {
      * 重置测试表。
      */
     private void resetTables() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b3_query_feedback_test.contributions");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b3_query_feedback_test.pending_queries");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b3_query_feedback_test.source_files CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b3_query_feedback_test.articles CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.contributions");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.pending_queries");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_files CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
     }
 }

@@ -8,7 +8,6 @@ import com.xbk.lattice.compiler.graph.CompileWorkingSetStore;
 import com.xbk.lattice.compiler.graph.ReviewPartition;
 import com.xbk.lattice.compiler.service.ArticleCompileSupport;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -22,7 +21,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class FixReviewIssuesNode extends AbstractCompileGraphNode {
 
     private final ArticleCompileSupport articleCompileSupport;

@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.config.CompilationWalProperties;
 import com.xbk.lattice.compiler.domain.MergedConcept;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -32,7 +31,6 @@ import java.util.Set;
  */
 @Slf4j
 @Service
-@Profile("jdbc")
 public class RedisCompilationWalStore implements CompilationWalStore {
 
     private final StringRedisTemplate stringRedisTemplate;

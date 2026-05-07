@@ -1,7 +1,6 @@
 package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.config.CompileJobProperties;
-import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -13,7 +12,6 @@ import org.springframework.stereotype.Component;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class CompileJobWorker {
 
     private final CompileJobService compileJobService;

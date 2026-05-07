@@ -10,7 +10,6 @@ import com.xbk.lattice.documentparse.service.DocumentParseRoutePolicyAdminServic
 import com.xbk.lattice.query.domain.AnswerOutcome;
 import com.xbk.lattice.query.domain.GenerationMode;
 import com.xbk.lattice.query.domain.ModelExecutionStatus;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -25,7 +24,6 @@ import java.util.Locale;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class OperationalQueryStatusService {
 
     public static final String RUNTIME_STATUS_DERIVATION = "RUNTIME_STATUS";

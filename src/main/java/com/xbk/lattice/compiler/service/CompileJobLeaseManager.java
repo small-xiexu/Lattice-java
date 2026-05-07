@@ -4,7 +4,6 @@ import com.xbk.lattice.compiler.config.CompileJobProperties;
 import com.xbk.lattice.infra.persistence.CompileJobJdbcRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.DisposableBean;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;
@@ -24,7 +23,6 @@ import java.util.concurrent.TimeUnit;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 @Slf4j
 public class CompileJobLeaseManager implements DisposableBean {
 

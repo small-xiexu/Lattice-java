@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.ArticleUsageStatsMapper">
+
+    <resultMap id="ArticleUsageStatsRecordResultMap" type="com.xbk.lattice.infra.persistence.ArticleUsageStatsRecord">
+        <constructor>
+            <arg column="article_key" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="retrieval_hit_count" javaType="_int"/>
+            <arg column="citation_count" javaType="_int"/>
+            <arg column="answer_feedback_count" javaType="_int"/>
+            <arg column="manual_mark_count" javaType="_int"/>
+            <arg column="heat_score" javaType="_int"/>
+            <arg column="source_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="updated_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="UsageStatsColumns">
+        article_key, concept_id, retrieval_hit_count, citation_count,
+        answer_feedback_count, manual_mark_count, heat_score, source_paths, updated_at
+    </sql>
+
+    <update id="truncateStats">
+        truncate table article_usage_stats
+    </update>
+
+    <insert id="rebuildStats">
+        with usage_inputs as (
+            select
+                a.article_key,
+                a.concept_id,
+                (
+                    select count(*)::integer
+                    from query_retrieval_channel_hits hit
+                    where hit.included_in_fused = true
+                      and (
+                        hit.article_key = a.article_key
+                        or hit.article_key = a.concept_id
+                        or hit.concept_id = a.concept_id
+                        or hit.concept_id = a.article_key
+                      )
+                ) as retrieval_hit_count,
+                (
+                    select count(*)::integer
+                    from query_answer_citations citation
+                    where citation.source_type = 'ARTICLE'
+                      and citation.validation_status in ('VERIFIED', 'SKIPPED')
+                      and (citation.target_key = a.article_key or citation.target_key = a.concept_id)
+                ) as citation_count,
+                (
+                    select count(distinct feedback.id)::integer
+                    from pending_answer_feedback feedback
+                    where lower(feedback.feedback_type) &lt;&gt; 'reliable'
+                      and (
+                        feedback.article_keys @&gt; array[a.article_key]::text[]
+                        or feedback.article_keys @&gt; array[a.concept_id]::text[]
+                        or feedback.source_paths &amp;&amp; a.source_paths
+                      )
+                ) as answer_feedback_count,
+                case when a.is_hotspot then 1 else 0 end as manual_mark_count,
+                a.source_paths
+            from articles a
+        )
+        insert into article_usage_stats (
+            article_key, concept_id, retrieval_hit_count, citation_count,
+            answer_feedback_count, manual_mark_count, heat_score, source_paths, updated_at
+        )
+        select
+            article_key,
+            concept_id,
+            retrieval_hit_count,
+            citation_count,
+            answer_feedback_count,
+            manual_mark_count,
+            retrieval_hit_count * #{retrievalWeight}
+                + citation_count * #{citationWeight}
+                + answer_feedback_count * #{feedbackWeight}
+                + manual_mark_count * #{manualWeight} as heat_score,
+            source_paths,
+            CURRENT_TIMESTAMP
+        from usage_inputs
+    </insert>
+
+    <select id="findHotspotCandidates" resultMap="ArticleUsageStatsRecordResultMap">
+        select <include refid="UsageStatsColumns"/>
+        from article_usage_stats
+        where heat_score &gt;= #{heatScoreThreshold}
+        order by heat_score desc, updated_at desc, article_key asc
+        limit #{limit}
+    </select>
+
+    <select id="findAll" resultMap="ArticleUsageStatsRecordResultMap">
+        select <include refid="UsageStatsColumns"/>
+        from article_usage_stats
+        order by heat_score desc, updated_at desc, article_key asc
+        limit #{limit}
+    </select>
+</mapper>

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.CompileJobStepMapper">
+
+    <resultMap id="CompileJobStepRecordResultMap" type="com.xbk.lattice.infra.persistence.CompileJobStepRecord">
+        <constructor>
+            <arg column="job_id" javaType="java.lang.String"/>
+            <arg column="step_execution_id" javaType="java.lang.String"/>
+            <arg column="step_name" javaType="java.lang.String"/>
+            <arg column="agent_role" javaType="java.lang.String"/>
+            <arg column="model_route" javaType="java.lang.String"/>
+            <arg column="sequence_no" javaType="_int"/>
+            <arg column="status" javaType="java.lang.String"/>
+            <arg column="summary" javaType="java.lang.String"/>
+            <arg column="input_summary" javaType="java.lang.String"/>
+            <arg column="output_summary" javaType="java.lang.String"/>
+            <arg column="error_message" javaType="java.lang.String"/>
+            <arg column="started_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="finished_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="createRunningStep">
+        insert into compile_job_steps (
+            job_id, step_execution_id, step_name, agent_role, model_route, sequence_no,
+            status, summary, input_summary, output_summary, error_message, started_at, finished_at
+        )
+        values (
+            #{record.jobId},
+            #{record.stepExecutionId},
+            #{record.stepName},
+            #{record.agentRole},
+            #{record.modelRoute},
+            #{record.sequenceNo},
+            #{record.status},
+            #{record.summary},
+            #{record.inputSummary},
+            #{record.outputSummary},
+            #{record.errorMessage},
+            #{record.startedAt},
+            #{record.finishedAt}
+        )
+    </insert>
+
+    <update id="markSucceeded">
+        update compile_job_steps
+        set status = 'succeeded',
+            summary = #{summary},
+            output_summary = #{outputSummary},
+            error_message = null,
+            finished_at = #{finishedAt}
+        where step_execution_id = #{stepExecutionId}
+          and sequence_no = #{sequenceNo}
+    </update>
+
+    <update id="markFailed">
+        update compile_job_steps
+        set status = 'failed',
+            summary = #{summary},
+            error_message = #{errorMessage},
+            finished_at = #{finishedAt}
+        where step_execution_id = #{stepExecutionId}
+          and sequence_no = #{sequenceNo}
+    </update>
+
+    <select id="findByJobId" resultMap="CompileJobStepRecordResultMap">
+        select job_id, step_execution_id, step_name, agent_role, model_route,
+               sequence_no, status, summary, input_summary,
+               output_summary, error_message, started_at, finished_at
+        from compile_job_steps
+        where job_id = #{jobId}
+        order by sequence_no asc
+    </select>
+</mapper>

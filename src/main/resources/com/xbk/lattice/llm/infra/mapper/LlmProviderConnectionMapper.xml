@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.llm.infra.mapper.LlmProviderConnectionMapper">
+
+    <resultMap id="LlmProviderConnectionResultMap" type="com.xbk.lattice.llm.domain.LlmProviderConnection">
+        <constructor>
+            <arg column="id" javaType="java.lang.Long"/>
+            <arg column="connection_code" javaType="java.lang.String"/>
+            <arg column="provider_type" javaType="java.lang.String"/>
+            <arg column="base_url" javaType="java.lang.String"/>
+            <arg column="api_key_ciphertext" javaType="java.lang.String"/>
+            <arg column="api_key_mask" javaType="java.lang.String"/>
+            <arg column="enabled" javaType="_boolean"/>
+            <arg column="remarks" javaType="java.lang.String"/>
+            <arg column="created_by" javaType="java.lang.String"/>
+            <arg column="updated_by" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="updated_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="LlmProviderConnectionColumns">
+        id, connection_code, provider_type, base_url, api_key_ciphertext, api_key_mask,
+        enabled, remarks, created_by, updated_by, created_at, updated_at
+    </sql>
+
+    <select id="insert" resultType="java.lang.Long">
+        insert into llm_provider_connections (
+            connection_code, provider_type, base_url, api_key_ciphertext, api_key_mask,
+            enabled, remarks, created_by, updated_by
+        )
+        values (
+            #{connection.connectionCode},
+            #{connection.providerType},
+            #{connection.baseUrl},
+            #{connection.apiKeyCiphertext},
+            #{connection.apiKeyMask},
+            #{connection.enabled},
+            #{connection.remarks},
+            #{connection.createdBy},
+            #{connection.updatedBy}
+        )
+        returning id
+    </select>
+
+    <update id="update">
+        update llm_provider_connections
+        set connection_code = #{connection.connectionCode},
+            provider_type = #{connection.providerType},
+            base_url = #{connection.baseUrl},
+            api_key_ciphertext = #{connection.apiKeyCiphertext},
+            api_key_mask = #{connection.apiKeyMask},
+            enabled = #{connection.enabled},
+            remarks = #{connection.remarks},
+            updated_by = #{connection.updatedBy},
+            updated_at = current_timestamp
+        where id = #{connection.id}
+    </update>
+
+    <select id="findAll" resultMap="LlmProviderConnectionResultMap">
+        select <include refid="LlmProviderConnectionColumns"/>
+        from llm_provider_connections
+        order by id desc
+    </select>
+
+    <select id="findById" resultMap="LlmProviderConnectionResultMap">
+        select <include refid="LlmProviderConnectionColumns"/>
+        from llm_provider_connections
+        where id = #{id}
+    </select>
+
+    <select id="findEnabledById" resultMap="LlmProviderConnectionResultMap">
+        select <include refid="LlmProviderConnectionColumns"/>
+        from llm_provider_connections
+        where id = #{id}
+          and enabled = true
+    </select>
+
+    <delete id="deleteById">
+        delete from llm_provider_connections
+        where id = #{id}
+    </delete>
+</mapper>

@@ -28,13 +28,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b8_vector_config_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b8_vector_config_test",
-        "spring.flyway.default-schema=lattice_b8_vector_config_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.llm.secret-encryption-key=test-phase8-key-0123456789abcdef",
@@ -144,11 +140,11 @@ class AdminVectorConfigControllerTests {
                 .andExpect(jsonPath("$.profileDimensions").value(3072));
 
         Boolean vectorEnabled = jdbcTemplate.queryForObject(
-                "select vector_enabled from lattice_b8_vector_config_test.query_vector_settings where config_scope = 'default'",
+                "select vector_enabled from lattice.query_vector_settings where config_scope = 'default'",
                 Boolean.class
         );
         Long embeddingModelProfileId = jdbcTemplate.queryForObject(
-                "select embedding_model_profile_id from lattice_b8_vector_config_test.query_vector_settings where config_scope = 'default'",
+                "select embedding_model_profile_id from lattice.query_vector_settings where config_scope = 'default'",
                 Long.class
         );
         assertThat(vectorEnabled).isTrue();
@@ -159,9 +155,9 @@ class AdminVectorConfigControllerTests {
      * 重置测试表。
      */
     private void resetTables() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_config_test.query_vector_settings CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_config_test.llm_model_profiles RESTART IDENTITY CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b8_vector_config_test.llm_provider_connections RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.query_vector_settings CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.llm_model_profiles RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.llm_provider_connections RESTART IDENTITY CASCADE");
         insertProviderConnection();
         insertEmbeddingProfile(1L, "bootstrap-embedding", "text-embedding-3-small", 1536);
         insertEmbeddingProfile(2L, "large-embedding", "text-embedding-3-large", 3072);
@@ -176,7 +172,7 @@ class AdminVectorConfigControllerTests {
         String maskedApiKey = llmSecretCryptoService.mask("sk-test-openai");
         jdbcTemplate.update(
                 """
-                        insert into lattice_b8_vector_config_test.llm_provider_connections (
+                        insert into lattice.llm_provider_connections (
                             id, connection_code, provider_type, base_url, api_key_ciphertext, api_key_mask,
                             enabled, created_by, updated_by
                         ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -196,7 +192,7 @@ class AdminVectorConfigControllerTests {
     private void insertEmbeddingProfile(Long id, String modelCode, String modelName, int expectedDimensions) {
         jdbcTemplate.update(
                 """
-                        insert into lattice_b8_vector_config_test.llm_model_profiles (
+                        insert into lattice.llm_model_profiles (
                             id, model_code, connection_id, model_name, model_kind, expected_dimensions,
                             supports_dimension_override, enabled, created_by, updated_by
                         ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

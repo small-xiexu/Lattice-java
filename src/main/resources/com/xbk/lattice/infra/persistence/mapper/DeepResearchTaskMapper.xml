@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.DeepResearchTaskMapper">
+
+    <insert id="insert">
+        insert into deep_research_tasks (
+            task_id, run_id, layer_index, task_type, question,
+            expected_fact_schema_json, preferred_upstream_task_ids_json, status,
+            llm_call_count, timed_out, error_reason, started_at, finished_at
+        )
+        values (
+            #{record.taskId},
+            #{record.runId},
+            #{record.layerIndex},
+            #{record.taskType},
+            #{record.question},
+            #{record.expectedFactSchemaJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{record.preferredUpstreamTaskIdsJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{record.status},
+            #{record.llmCallCount},
+            #{record.timedOut},
+            #{record.errorReason},
+            #{record.startedAt},
+            #{record.finishedAt}
+        )
+    </insert>
+</mapper>

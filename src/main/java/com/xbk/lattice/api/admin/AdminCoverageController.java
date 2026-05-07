@@ -4,7 +4,6 @@ import com.xbk.lattice.governance.CoverageReport;
 import com.xbk.lattice.governance.CoverageTrackingService;
 import com.xbk.lattice.governance.OmissionReport;
 import com.xbk.lattice.governance.OmissionTrackingService;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,7 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 public class AdminCoverageController {
 
     private final CoverageTrackingService coverageTrackingService;

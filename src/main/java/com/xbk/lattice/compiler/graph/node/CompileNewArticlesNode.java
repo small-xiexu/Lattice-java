@@ -8,7 +8,6 @@ import com.xbk.lattice.compiler.domain.MergedConcept;
 import com.xbk.lattice.compiler.service.ArticleCompileSupport;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
@@ -23,7 +22,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class CompileNewArticlesNode extends AbstractCompileGraphNode {
 
     private final ArticleCompileSupport articleCompileSupport;

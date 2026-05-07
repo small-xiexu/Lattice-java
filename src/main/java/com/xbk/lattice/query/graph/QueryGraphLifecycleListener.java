@@ -5,7 +5,6 @@ import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.xbk.lattice.observability.StructuredEventLogger;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -19,7 +18,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class QueryGraphLifecycleListener implements GraphLifecycleListener {
 
     private static final String MDC_TRACE_ID = "traceId";

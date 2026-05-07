@@ -11,6 +11,7 @@ import com.xbk.lattice.query.citation.ClaimSegment;
 import com.xbk.lattice.query.domain.AnswerOutcome;
 import com.xbk.lattice.query.domain.GenerationMode;
 import com.xbk.lattice.query.domain.ModelExecutionStatus;
+import com.xbk.lattice.query.evidence.domain.AnswerShape;
 import com.xbk.lattice.query.service.QueryArticleHit;
 import com.xbk.lattice.query.service.QueryIntent;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
@@ -61,6 +62,7 @@ class RedisQueryWorkingSetStoreTests {
         RetrievalStrategy retrievalStrategy = new RetrievalStrategy(
                 "payment timeout retry policy",
                 QueryIntent.TROUBLESHOOTING,
+                AnswerShape.STATUS,
                 true,
                 60,
                 new LinkedHashMap<String, Double>(Map.of(RetrievalStrategyResolver.CHANNEL_FTS, 1.1D)),
@@ -126,6 +128,8 @@ class RedisQueryWorkingSetStoreTests {
         assertThat(redisQueryWorkingSetStore.loadRetrievalStrategy(strategyRef)).isNotNull();
         assertThat(redisQueryWorkingSetStore.loadRetrievalStrategy(strategyRef).getQueryIntent())
                 .isEqualTo(QueryIntent.TROUBLESHOOTING);
+        assertThat(redisQueryWorkingSetStore.loadRetrievalStrategy(strategyRef).getAnswerShape())
+                .isEqualTo(AnswerShape.STATUS);
         assertThat(redisQueryWorkingSetStore.loadResponse(responseRef)).isNotNull();
         assertThat(redisQueryWorkingSetStore.loadResponse(responseRef).getAnswer()).contains("payment-timeout");
         assertThat(redisQueryWorkingSetStore.loadCitationCheckReport(reportRef)).isNotNull();

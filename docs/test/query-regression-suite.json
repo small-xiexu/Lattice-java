@@ -1,0 +1,191 @@
+{
+  "suiteId": "default-real-query-regression",
+  "version": "2026-05-06",
+  "description": "固定真实 Query 回归题集。题集只定义问题、运行参数、通用验收字段与最小人工判定线索，不进入 Query 主链实现。",
+  "coverageDimensions": [
+    "运行态直答",
+    "结构化行定位",
+    "结构化字段投影",
+    "结构化聚合统计",
+    "结构化两行对比",
+    "精确路径解释",
+    "架构边界解释",
+    "本地配置解释",
+    "Deep Research 多跳综合",
+    "无命中保护"
+  ],
+  "replayArtifacts": [
+    "query_results.jsonl",
+    "query_summary.tsv",
+    "query_metrics.json",
+    "query_replay_manifest.json"
+  ],
+  "defaults": {
+    "timeoutMs": 120000,
+    "minSourceCount": 1,
+    "minCitationCoverage": 0.6
+  },
+  "gates": {
+    "minCasePassRate": 0.8,
+    "maxHttpFailureRate": 0.0,
+    "maxTimeoutRate": 0.05,
+    "maxFallbackRate": 0.4,
+    "minLlmSuccessRate": 0.4,
+    "minAverageCitationCoverage": 0.6
+  },
+  "cases": [
+    {
+      "id": "Q-RUNTIME-OCR-001",
+      "category": "运行态说明",
+      "question": "现在 OCR / 文档识别状态怎样，图片和扫描 PDF 可用吗？",
+      "forceSimple": true,
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": ["SUCCESS"],
+        "generationModeAny": ["RULE_BASED"],
+        "modelExecutionStatusAny": ["SKIPPED"],
+        "requireQueryId": false,
+        "minSourceCount": 1,
+        "requiredAnswerTerms": ["OCR", "文档"],
+        "requiredSourceTerms": ["/api/v1/admin/document-parse"]
+      }
+    },
+    {
+      "id": "Q-STRUCT-ROW-001",
+      "category": "Excel 行定位",
+      "question": "scenario_id=100912 这一行的 case_num、场景名称、备注分别是什么？注意不要把 scenario_id 当 case_num。",
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": ["SUCCESS"],
+        "generationModeAny": ["RULE_BASED", "LLM"],
+        "modelExecutionStatusAny": ["SKIPPED", "SUCCESS"],
+        "minSourceCount": 1,
+        "requiredAnswerTerms": ["100912", "case_num", "remark"],
+        "requiredSourceTerms": ["scenarios.xlsx"]
+      }
+    },
+    {
+      "id": "Q-STRUCT-PROJECTION-001",
+      "category": "Excel 字段投影",
+      "question": "case_num=100714 这一行的 name、expected、module 分别是什么？",
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": ["SUCCESS"],
+        "generationModeAny": ["RULE_BASED", "LLM"],
+        "modelExecutionStatusAny": ["SKIPPED", "SUCCESS"],
+        "minSourceCount": 1,
+        "requiredAnswerTerms": ["100714", "name", "expected", "module"],
+        "requiredSourceTerms": ["scenarios.xlsx"]
+      }
+    },
+    {
+      "id": "Q-STRUCT-AGG-001",
+      "category": "Excel 聚合统计",
+      "question": "按 category 统计场景用例各有多少条？请列出每个 category 和数量。",
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": ["SUCCESS", "PARTIAL_ANSWER"],
+        "generationModeAny": ["RULE_BASED", "LLM"],
+        "modelExecutionStatusAny": ["SKIPPED", "SUCCESS"],
+        "minSourceCount": 1,
+        "requiredAnswerTerms": ["category", "数量"],
+        "requiredSourceTerms": ["scenarios.xlsx"]
+      }
+    },
+    {
+      "id": "Q-STRUCT-COMPARE-001",
+      "category": "Excel 两行对比",
+      "question": "对比 case_num=100714 和 case_num=100716：两行的 name、expected 有什么差异？",
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": ["SUCCESS", "PARTIAL_ANSWER"],
+        "generationModeAny": ["RULE_BASED", "LLM"],
+        "modelExecutionStatusAny": ["SKIPPED", "SUCCESS"],
+        "minSourceCount": 1,
+        "requiredAnswerTerms": ["100714", "100716"],
+        "requiredSourceTerms": ["scenarios.xlsx"]
+      }
+    },
+    {
+      "id": "Q-EXACT-PATH-001",
+      "category": "接口路径精确解释",
+      "question": "/api/v2/fulfillment/request/return 这个是什么接口？它迁移后对外 path 可以改吗？",
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": ["SUCCESS", "PARTIAL_ANSWER"],
+        "generationModeAny": ["LLM"],
+        "modelExecutionStatusAny": ["SUCCESS"],
+        "requireQueryId": true,
+        "minSourceCount": 1,
+        "minCitationMarkerCount": 1,
+        "retrievalTargets": ["docs/卡券三期-迁移方案.md"],
+        "requiredAnswerTerms": ["/api/v2/fulfillment/request/return", "path"],
+        "forbiddenAnswerTerms": ["/api/v1/srkit", "/api/v1/svc"]
+      }
+    },
+    {
+      "id": "Q-MQ-BOUNDARY-001",
+      "category": "架构原因",
+      "question": "为什么 dpfm-api-service 不应该消费自己发的 MQ？dpfm-consumer-service 和回调类服务边界是什么？",
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": ["SUCCESS", "PARTIAL_ANSWER"],
+        "generationModeAny": ["LLM"],
+        "modelExecutionStatusAny": ["SUCCESS"],
+        "requireQueryId": true,
+        "minSourceCount": 1,
+        "minCitationMarkerCount": 1,
+        "retrievalTargets": ["docs/卡券三期-迁移方案.md"],
+        "requiredAnswerTerms": ["dpfm-api-service", "MQ"],
+        "minCitationCoverage": 0.5
+      }
+    },
+    {
+      "id": "Q-CONFIG-001",
+      "category": "配置键解释",
+      "question": "当前项目本地开发默认使用哪个 PostgreSQL 和 Redis？端口、数据库名分别是什么？",
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": ["SUCCESS", "PARTIAL_ANSWER"],
+        "generationModeAny": ["LLM", "FALLBACK"],
+        "modelExecutionStatusAny": ["SUCCESS", "DEGRADED", "FAILED"],
+        "minSourceCount": 1,
+        "retrievalTargets": ["docs/项目启动配置清单.md"],
+        "requiredAnswerTerms": ["PostgreSQL", "Redis"]
+      }
+    },
+    {
+      "id": "Q-DEEP-001",
+      "category": "Deep Research 多跳题",
+      "question": "综合说明迁移后 FC、DPFM、入口防腐层和 MQ 消费者边界之间的关系，以及这些边界为什么能降低上游改造成本。",
+      "forceDeep": true,
+      "maxLlmCalls": 4,
+      "overallTimeoutMs": 180000,
+      "timeoutMs": 210000,
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": ["SUCCESS", "PARTIAL_ANSWER"],
+        "generationModeAny": ["LLM", "FALLBACK"],
+        "modelExecutionStatusAny": ["SUCCESS", "DEGRADED", "FAILED"],
+        "requireQueryId": true,
+        "minSourceCount": 1,
+        "retrievalTargets": ["docs/卡券三期-迁移方案.md"],
+        "requiredAnswerTerms": ["FC", "DPFM", "MQ"]
+      }
+    },
+    {
+      "id": "Q-NO-HIT-001",
+      "category": "无命中保护",
+      "question": "请查询一个不存在的内部配置项 xbk_nonexistent_config_key_20260506 的取值和负责人。",
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": ["NO_RELEVANT_KNOWLEDGE", "INSUFFICIENT_EVIDENCE", "PARTIAL_ANSWER"],
+        "generationModeAny": ["RULE_BASED", "FALLBACK", "LLM"],
+        "modelExecutionStatusAny": ["SKIPPED", "FAILED", "DEGRADED", "SUCCESS"],
+        "minSourceCount": 0,
+        "minCitationCoverage": 0,
+        "forbiddenAnswerTerms": ["负责人是", "取值为"]
+      }
+    }
+  ]
+}

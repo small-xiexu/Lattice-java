@@ -1,7 +1,6 @@
 package com.xbk.lattice.infra.persistence;
 
 import com.xbk.lattice.query.service.ArticleChunkVectorHit;
-import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -21,7 +20,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Repository
-@Profile("jdbc")
 public class ArticleChunkVectorJdbcRepository {
 
     private static final int HNSW_MAX_DIMENSIONS = 2000;

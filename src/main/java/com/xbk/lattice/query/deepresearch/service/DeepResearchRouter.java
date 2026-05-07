@@ -1,7 +1,6 @@
 package com.xbk.lattice.query.deepresearch.service;
 
 import com.xbk.lattice.api.query.QueryRequest;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.Locale;
@@ -14,7 +13,6 @@ import java.util.Locale;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class DeepResearchRouter {
 
     /**

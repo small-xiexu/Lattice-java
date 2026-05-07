@@ -34,7 +34,6 @@ import com.xbk.lattice.query.evidence.domain.EvidenceAnchorValidationStatus;
 import com.xbk.lattice.query.evidence.domain.FactFinding;
 import com.xbk.lattice.query.evidence.domain.ProjectionCitationFormat;
 import com.xbk.lattice.query.evidence.domain.ProjectionStatus;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,7 +50,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class DeepResearchAuditPersistenceService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();

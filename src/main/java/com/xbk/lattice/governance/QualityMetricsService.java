@@ -7,7 +7,6 @@ import com.xbk.lattice.infra.persistence.QualityMetricsHistoryJdbcRepository;
 import com.xbk.lattice.infra.persistence.QualityMetricsHistoryRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -21,7 +20,6 @@ import java.util.List;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class QualityMetricsService {
 
     private final ArticleJdbcRepository articleJdbcRepository;

@@ -18,13 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b1_source_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b1_source_test",
-        "spring.flyway.default-schema=lattice_b1_source_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key"
 })
@@ -37,12 +33,12 @@ class SourceFileJdbcRepositoryTests {
     private SourceFileJdbcRepository sourceFileJdbcRepository;
 
     /**
-     * 验证 Flyway 已创建 source_files 表。
+     * 验证 手动 DDL 已创建 source_files 表。
      */
     @Test
-    void shouldCreateSourceFilesTableByFlyway() {
+    void shouldCreateSourceFilesTableByManualDdl() {
         Integer count = jdbcTemplate.queryForObject(
-                "select count(*) from information_schema.tables where table_schema = 'lattice_b1_source_test' and table_name = 'source_files'",
+                "select count(*) from information_schema.tables where table_schema = 'lattice' and table_name = 'source_files'",
                 Integer.class
         );
 
@@ -86,7 +82,7 @@ class SourceFileJdbcRepositoryTests {
                 """
                         select column_name
                         from information_schema.columns
-                        where table_schema = 'lattice_b1_source_test'
+                        where table_schema = 'lattice'
                           and table_name = 'source_files'
                         order by ordinal_position
                         """,
@@ -107,7 +103,7 @@ class SourceFileJdbcRepositoryTests {
      */
     @Test
     void shouldSearchSourceFilesByLexicalIndex() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b1_source_test.source_files CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_files CASCADE");
         sourceFileJdbcRepository.upsert(new SourceFileRecord(
                 "payment/order.md",
                 "# Payment",

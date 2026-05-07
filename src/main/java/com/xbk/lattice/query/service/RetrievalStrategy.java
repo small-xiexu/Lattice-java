@@ -2,6 +2,7 @@ package com.xbk.lattice.query.service;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.xbk.lattice.query.evidence.domain.AnswerShape;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -21,6 +22,8 @@ public class RetrievalStrategy {
 
     private final QueryIntent queryIntent;
 
+    private final AnswerShape answerShape;
+
     private final boolean parallelEnabled;
 
     private final int rrfK;
@@ -34,6 +37,7 @@ public class RetrievalStrategy {
      *
      * @param retrievalQuestion 有效检索问题
      * @param queryIntent 查询意图
+     * @param answerShape 答案形态
      * @param parallelEnabled 是否并行召回
      * @param rrfK RRF K 值
      * @param channelWeights 通道权重
@@ -43,6 +47,7 @@ public class RetrievalStrategy {
     public RetrievalStrategy(
             @JsonProperty("retrievalQuestion") String retrievalQuestion,
             @JsonProperty("queryIntent") QueryIntent queryIntent,
+            @JsonProperty("answerShape") AnswerShape answerShape,
             @JsonProperty("parallelEnabled") boolean parallelEnabled,
             @JsonProperty("rrfK") int rrfK,
             @JsonProperty("channelWeights") Map<String, Double> channelWeights,
@@ -50,6 +55,7 @@ public class RetrievalStrategy {
     ) {
         this.retrievalQuestion = retrievalQuestion;
         this.queryIntent = queryIntent == null ? QueryIntent.GENERAL : queryIntent;
+        this.answerShape = answerShape == null ? AnswerShape.GENERAL : answerShape;
         this.parallelEnabled = parallelEnabled;
         this.rrfK = rrfK;
         this.channelWeights = channelWeights == null
@@ -58,6 +64,35 @@ public class RetrievalStrategy {
         this.enabledChannels = enabledChannels == null
                 ? new LinkedHashSet<String>()
                 : new LinkedHashSet<String>(enabledChannels);
+    }
+
+    /**
+     * 创建检索策略。
+     *
+     * @param retrievalQuestion 有效检索问题
+     * @param queryIntent 查询意图
+     * @param parallelEnabled 是否并行召回
+     * @param rrfK RRF K 值
+     * @param channelWeights 通道权重
+     * @param enabledChannels 启用通道
+     */
+    public RetrievalStrategy(
+            String retrievalQuestion,
+            QueryIntent queryIntent,
+            boolean parallelEnabled,
+            int rrfK,
+            Map<String, Double> channelWeights,
+            Set<String> enabledChannels
+    ) {
+        this(
+                retrievalQuestion,
+                queryIntent,
+                AnswerShape.GENERAL,
+                parallelEnabled,
+                rrfK,
+                channelWeights,
+                enabledChannels
+        );
     }
 
     /**
@@ -76,6 +111,15 @@ public class RetrievalStrategy {
      */
     public QueryIntent getQueryIntent() {
         return queryIntent;
+    }
+
+    /**
+     * 返回答案形态。
+     *
+     * @return 答案形态
+     */
+    public AnswerShape getAnswerShape() {
+        return answerShape;
     }
 
     /**

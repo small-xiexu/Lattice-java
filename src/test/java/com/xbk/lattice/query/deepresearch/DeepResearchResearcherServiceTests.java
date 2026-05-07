@@ -236,6 +236,74 @@ class DeepResearchResearcherServiceTests {
     }
 
     /**
+     * 验证检索异常会被收敛成任务级 gap，避免单个 task 拖垮整轮 Deep Research。
+     */
+    @Test
+    void shouldDegradeTaskWhenRetrievalThrowsException() {
+        DeepResearchResearcherService researcherService = new DeepResearchResearcherService(
+                new ThrowingKnowledgeSearchService(),
+                new FixedAnswerGenerationService()
+        );
+        ResearchTask researchTask = new ResearchTask();
+        researchTask.setTaskId("task-retrieval-failure");
+        researchTask.setQuestion("系统默认配置是什么");
+        DeepResearchExecutionContext executionContext = new DeepResearchExecutionContext(
+                2,
+                System.currentTimeMillis() + 60_000L
+        );
+
+        EvidenceCard evidenceCard = researcherService.research(
+                "dr-q6b",
+                researchTask,
+                0,
+                null,
+                List.of(),
+                executionContext
+        );
+
+        assertThat(evidenceCard.getGaps()).contains("retrieval_failed");
+        assertThat(evidenceCard.getFollowUps()).contains("retry_with_available_retrieval_channels");
+        assertThat(evidenceCard.getTaskHits()).isEmpty();
+        assertThat(evidenceCard.getFactFindings()).isEmpty();
+        assertThat(executionContext.llmCallCount()).isEqualTo(0);
+    }
+
+    /**
+     * 验证答案生成异常时会回退到已有检索证据，不把 task 整体打空。
+     */
+    @Test
+    void shouldFallbackToRetrievedEvidenceWhenAnswerGenerationThrowsException() {
+        DeepResearchResearcherService researcherService = new DeepResearchResearcherService(
+                new FixedKnowledgeSearchService(),
+                new ThrowingAnswerGenerationService()
+        );
+        ResearchTask researchTask = new ResearchTask();
+        researchTask.setTaskId("task-answer-failure");
+        researchTask.setQuestion("PaymentService 默认重试次数是多少");
+        DeepResearchExecutionContext executionContext = new DeepResearchExecutionContext(
+                2,
+                System.currentTimeMillis() + 60_000L
+        );
+
+        EvidenceCard evidenceCard = researcherService.research(
+                "dr-q6c",
+                researchTask,
+                0,
+                null,
+                List.of(),
+                executionContext
+        );
+
+        assertThat(evidenceCard.getGaps()).contains("answer_generation_failed");
+        assertThat(evidenceCard.getFollowUps()).contains("fallback_to_retrieved_evidence");
+        assertThat(evidenceCard.getEvidenceAnchors()).isNotEmpty();
+        assertThat(evidenceCard.getFactFindings()).isNotEmpty();
+        assertThat(evidenceCard.getFactFindings().get(0).getClaimText())
+                .contains("PaymentService 默认最多重试 5 次");
+        assertThat(executionContext.llmCallCount()).isEqualTo(1);
+    }
+
+    /**
      * 验证带有硬 token 的 claim 会过滤掉不相关 hit，避免把冲突文档误挂到补偿重试结论上。
      */
     @Test
@@ -434,6 +502,18 @@ class DeepResearchResearcherServiceTests {
         }
     }
 
+    private static class ThrowingKnowledgeSearchService extends KnowledgeSearchService {
+
+        private ThrowingKnowledgeSearchService() {
+            super(null, null, null, null, null);
+        }
+
+        @Override
+        public List<QueryArticleHit> search(String question, int limit) {
+            throw new IllegalStateException("simulated retrieval failure");
+        }
+    }
+
     private static class FixedAnswerGenerationService extends AnswerGenerationService {
 
         @Override
@@ -448,6 +528,20 @@ class DeepResearchResearcherServiceTests {
                     "PaymentService 默认最多重试 5 次",
                     AnswerOutcome.PARTIAL_ANSWER
             );
+        }
+    }
+
+    private static class ThrowingAnswerGenerationService extends AnswerGenerationService {
+
+        @Override
+        public QueryAnswerPayload generatePayload(
+                String scopeId,
+                String scene,
+                String agentRole,
+                String question,
+                List<QueryArticleHit> queryArticleHits
+        ) {
+            throw new IllegalStateException("simulated answer generation failure");
         }
     }
 

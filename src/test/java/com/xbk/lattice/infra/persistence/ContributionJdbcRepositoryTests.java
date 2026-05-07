@@ -19,13 +19,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_phase_a_contribution_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_phase_a_contribution_test",
-        "spring.flyway.default-schema=lattice_phase_a_contribution_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key"
 })
@@ -42,7 +38,7 @@ class ContributionJdbcRepositoryTests {
      */
     @Test
     void shouldSearchContributionsByLexicalIndex() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_phase_a_contribution_test.contributions");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.contributions");
         contributionJdbcRepository.save(new ContributionRecord(
                 UUID.randomUUID(),
                 "retry=3 是什么配置",

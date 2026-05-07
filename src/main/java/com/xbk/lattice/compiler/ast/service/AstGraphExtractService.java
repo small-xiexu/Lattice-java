@@ -26,7 +26,6 @@ import com.xbk.lattice.compiler.ast.domain.AstSourceFile;
 import com.xbk.lattice.infra.persistence.GraphEntityJdbcRepository;
 import com.xbk.lattice.infra.persistence.GraphFactJdbcRepository;
 import com.xbk.lattice.infra.persistence.GraphRelationJdbcRepository;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -44,7 +43,6 @@ import java.util.Optional;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class AstGraphExtractService {
 
     private final GraphEntityJdbcRepository graphEntityJdbcRepository;

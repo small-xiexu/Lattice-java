@@ -6,7 +6,6 @@ import com.xbk.lattice.compiler.graph.CompileGraphStateMapper;
 import com.xbk.lattice.compiler.graph.CompileWorkingSetStore;
 import com.xbk.lattice.compiler.service.IncrementalCompilePlanResult;
 import com.xbk.lattice.compiler.service.SourceIngestSupport;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -19,7 +18,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class PlanChangesNode extends AbstractCompileGraphNode {
 
     private final SourceIngestSupport sourceIngestSupport;

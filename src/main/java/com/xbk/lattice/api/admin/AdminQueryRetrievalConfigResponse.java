@@ -25,6 +25,8 @@ public class AdminQueryRetrievalConfigResponse {
 
     private final double sourceChunkWeight;
 
+    private final double factCardWeight;
+
     private final double contributionWeight;
 
     private final double graphWeight;
@@ -46,6 +48,7 @@ public class AdminQueryRetrievalConfigResponse {
      * @param articleChunkWeight Article Chunk lexical 权重
      * @param sourceWeight Source 权重
      * @param sourceChunkWeight Source Chunk lexical 权重
+     * @param factCardWeight Fact Card lexical 权重
      * @param contributionWeight Contribution 权重
      * @param graphWeight Graph 权重
      * @param articleVectorWeight 文章向量权重
@@ -61,6 +64,7 @@ public class AdminQueryRetrievalConfigResponse {
             double articleChunkWeight,
             double sourceWeight,
             double sourceChunkWeight,
+            double factCardWeight,
             double contributionWeight,
             double graphWeight,
             double articleVectorWeight,
@@ -75,6 +79,7 @@ public class AdminQueryRetrievalConfigResponse {
         this.articleChunkWeight = articleChunkWeight;
         this.sourceWeight = sourceWeight;
         this.sourceChunkWeight = sourceChunkWeight;
+        this.factCardWeight = factCardWeight;
         this.contributionWeight = contributionWeight;
         this.graphWeight = graphWeight;
         this.articleVectorWeight = articleVectorWeight;
@@ -152,6 +157,15 @@ public class AdminQueryRetrievalConfigResponse {
      */
     public double getSourceChunkWeight() {
         return sourceChunkWeight;
+    }
+
+    /**
+     * 返回 Fact Card lexical 权重。
+     *
+     * @return Fact Card lexical 权重
+     */
+    public double getFactCardWeight() {
+        return factCardWeight;
     }
 
     /**

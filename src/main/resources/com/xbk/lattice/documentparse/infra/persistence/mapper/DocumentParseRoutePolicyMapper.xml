@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.documentparse.infra.persistence.mapper.DocumentParseRoutePolicyMapper">
+
+    <resultMap id="ParseRoutePolicyResultMap" type="com.xbk.lattice.documentparse.domain.model.ParseRoutePolicy">
+        <constructor>
+            <arg column="id" javaType="java.lang.Long"/>
+            <arg column="policy_scope" javaType="java.lang.String"/>
+            <arg column="image_connection_id" javaType="java.lang.Long"/>
+            <arg column="scanned_pdf_connection_id" javaType="java.lang.Long"/>
+            <arg column="cleanup_enabled" javaType="_boolean"/>
+            <arg column="cleanup_model_profile_id" javaType="java.lang.Long"/>
+            <arg column="fallback_policy_json" javaType="java.lang.String"/>
+            <arg column="created_by" javaType="java.lang.String"/>
+            <arg column="updated_by" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="updated_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <select id="findByScope" resultMap="ParseRoutePolicyResultMap">
+        select id, policy_scope, image_connection_id, scanned_pdf_connection_id,
+               cleanup_enabled, cleanup_model_profile_id, fallback_policy_json::text as fallback_policy_json,
+               created_by, updated_by, created_at, updated_at
+        from document_parse_route_policies
+        where policy_scope = #{policyScope}
+    </select>
+
+    <insert id="insert">
+        insert into document_parse_route_policies (
+            policy_scope, image_connection_id, scanned_pdf_connection_id,
+            cleanup_enabled, cleanup_model_profile_id, fallback_policy_json,
+            created_by, updated_by
+        )
+        values (
+            #{policy.policyScope},
+            #{policy.imageConnectionId},
+            #{policy.scannedPdfConnectionId},
+            #{policy.cleanupEnabled},
+            #{policy.cleanupModelProfileId},
+            #{policy.fallbackPolicyJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{policy.createdBy},
+            #{policy.updatedBy}
+        )
+    </insert>
+
+    <update id="update">
+        update document_parse_route_policies
+        set image_connection_id = #{policy.imageConnectionId},
+            scanned_pdf_connection_id = #{policy.scannedPdfConnectionId},
+            cleanup_enabled = #{policy.cleanupEnabled},
+            cleanup_model_profile_id = #{policy.cleanupModelProfileId},
+            fallback_policy_json = #{policy.fallbackPolicyJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            updated_by = #{policy.updatedBy},
+            updated_at = current_timestamp
+        where policy_scope = #{policy.policyScope}
+    </update>
+</mapper>

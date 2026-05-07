@@ -6,7 +6,6 @@ import com.xbk.lattice.compiler.graph.CompileGraphStateMapper;
 import com.xbk.lattice.compiler.graph.CompileWorkingSetStore;
 import com.xbk.lattice.compiler.service.SourceIngestSupport;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -20,7 +19,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class EnhanceExistingArticlesNode extends AbstractCompileGraphNode {
 
     private final SourceIngestSupport sourceIngestSupport;

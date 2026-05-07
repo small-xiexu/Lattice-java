@@ -11,5 +11,6 @@ public enum QueryEvidenceType {
     ARTICLE,
     GRAPH,
     SOURCE,
+    FACT_CARD,
     CONTRIBUTION
 }

@@ -14,7 +14,6 @@ import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -28,7 +27,6 @@ import java.util.UUID;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 @Slf4j
 public class QueryGraphOrchestrator {
 

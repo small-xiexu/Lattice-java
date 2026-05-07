@@ -2,7 +2,6 @@ package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
 import com.xbk.lattice.query.domain.ReviewIssue;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -17,7 +16,6 @@ import java.util.List;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class ReviewFixService {
 
     private static final String COMPILE_SCENE = "compile";

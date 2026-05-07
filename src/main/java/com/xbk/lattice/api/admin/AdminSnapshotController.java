@@ -5,7 +5,6 @@ import com.xbk.lattice.governance.HistoryService;
 import com.xbk.lattice.governance.RollbackResult;
 import com.xbk.lattice.governance.SnapshotReport;
 import com.xbk.lattice.governance.SnapshotService;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -21,7 +20,6 @@ import org.springframework.web.bind.annotation.RestController;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 public class AdminSnapshotController {
 
     private final SnapshotService snapshotService;

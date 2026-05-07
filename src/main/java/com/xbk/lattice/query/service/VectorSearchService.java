@@ -4,7 +4,6 @@ import com.xbk.lattice.infra.persistence.ArticleVectorJdbcRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -18,7 +17,6 @@ import java.util.List;
  */
 @Slf4j
 @Service
-@Profile("jdbc")
 public class VectorSearchService {
 
     private final QuerySearchProperties querySearchProperties;
@@ -80,28 +78,44 @@ public class VectorSearchService {
     }
 
     /**
+     * 使用统一检索执行上下文执行向量近邻检索。
+     *
+     * @param executionContext 检索执行上下文
+     * @return 文章命中
+     */
+    public List<QueryArticleHit> search(RetrievalExecutionContext executionContext) {
+        if (executionContext == null) {
+            return List.of();
+        }
+        return searchWithEmbedding(
+                executionContext.getRetrievalQuestion(),
+                executionContext.getLimit(),
+                executionContext
+        );
+    }
+
+    /**
      * 执行向量近邻检索。
      *
      * @param question 查询问题
      * @param limit 返回数量
+     * @param executionContext 检索执行上下文
      * @return 文章命中
      */
-    public List<QueryArticleHit> search(String question, int limit) {
+    private List<QueryArticleHit> searchWithEmbedding(
+            String question,
+            int limit,
+            RetrievalExecutionContext executionContext
+    ) {
         if (!isQueryAvailable()) {
             return List.of();
         }
 
-        try {
-            float[] embedding = configuredVectorEmbeddingService.embed(question);
-            if (!hasExpectedDimensions(embedding)) {
-                return List.of();
-            }
-            return articleVectorJdbcRepository.searchNearestNeighbors(embedding, limit);
+        float[] embedding = executionContext.getOrCreateQueryEmbedding(configuredVectorEmbeddingService);
+        if (!hasExpectedDimensions(embedding)) {
+            throw new IllegalStateException(buildDimensionMismatchMessage(embedding));
         }
-        catch (RuntimeException ex) {
-            log.warn("Vector search fallback because embedding or query failed", ex);
-            return List.of();
-        }
+        return articleVectorJdbcRepository.searchNearestNeighbors(embedding, limit);
     }
 
     /**
@@ -140,5 +154,17 @@ public class VectorSearchService {
                 expectedDimensions
         );
         return false;
+    }
+
+    /**
+     * 构建维度不匹配摘要。
+     *
+     * @param embedding 查询向量
+     * @return 摘要
+     */
+    private String buildDimensionMismatchMessage(float[] embedding) {
+        int expectedDimensions = configuredVectorEmbeddingService.getConfiguredExpectedDimensions();
+        int actualDimensions = embedding == null ? 0 : embedding.length;
+        return "Vector embedding dimensions " + actualDimensions + " do not match expected " + expectedDimensions;
     }
 }

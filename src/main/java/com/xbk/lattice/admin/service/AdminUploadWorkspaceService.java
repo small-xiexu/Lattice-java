@@ -1,7 +1,6 @@
 package com.xbk.lattice.admin.service;
 
 import com.xbk.lattice.compiler.config.CompileJobProperties;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -26,7 +25,6 @@ import java.util.stream.Stream;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class AdminUploadWorkspaceService {
 
     private final CompileJobProperties compileJobProperties;

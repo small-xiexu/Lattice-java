@@ -1,7 +1,6 @@
 package com.xbk.lattice.infra.persistence;
 
-import org.springframework.context.annotation.Profile;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.xbk.lattice.infra.persistence.mapper.DeepResearchRunMapper;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -12,18 +11,17 @@ import org.springframework.stereotype.Repository;
  * @author xiexu
  */
 @Repository
-@Profile("jdbc")
 public class DeepResearchRunJdbcRepository {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final DeepResearchRunMapper deepResearchRunMapper;
 
     /**
      * 创建 Deep Research 运行 JDBC 仓储。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @param deepResearchRunMapper Deep Research 运行 Mapper
      */
-    public DeepResearchRunJdbcRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public DeepResearchRunJdbcRepository(DeepResearchRunMapper deepResearchRunMapper) {
+        this.deepResearchRunMapper = deepResearchRunMapper;
     }
 
     /**
@@ -33,28 +31,7 @@ public class DeepResearchRunJdbcRepository {
      * @return 运行主键
      */
     public Long insert(DeepResearchRunRecord record) {
-        return jdbcTemplate.queryForObject(
-                """
-                        insert into deep_research_runs (
-                            query_id, question, route_reason, plan_json, layer_count, task_count,
-                            llm_call_count, citation_coverage, partial_answer, has_conflicts, final_answer_audit_id
-                        )
-                        values (?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?)
-                        returning run_id
-                        """,
-                Long.class,
-                record.getQueryId(),
-                record.getQuestion(),
-                record.getRouteReason(),
-                record.getPlanJson(),
-                Integer.valueOf(record.getLayerCount()),
-                Integer.valueOf(record.getTaskCount()),
-                Integer.valueOf(record.getLlmCallCount()),
-                Double.valueOf(record.getCitationCoverage()),
-                Boolean.valueOf(record.isPartialAnswer()),
-                Boolean.valueOf(record.isHasConflicts()),
-                record.getFinalAnswerAuditId()
-        );
+        return deepResearchRunMapper.insert(record);
     }
 
     /**
@@ -64,14 +41,6 @@ public class DeepResearchRunJdbcRepository {
      * @param finalAnswerAuditId 最终答案审计主键
      */
     public void bindFinalAnswerAudit(Long runId, Long finalAnswerAuditId) {
-        jdbcTemplate.update(
-                """
-                        update deep_research_runs
-                        set final_answer_audit_id = ?
-                        where run_id = ?
-                        """,
-                finalAnswerAuditId,
-                runId
-        );
+        deepResearchRunMapper.bindFinalAnswerAudit(runId, finalAnswerAuditId);
     }
 }

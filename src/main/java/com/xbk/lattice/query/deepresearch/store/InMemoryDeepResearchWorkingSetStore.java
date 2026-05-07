@@ -7,7 +7,6 @@ import com.xbk.lattice.query.deepresearch.domain.LayeredResearchPlan;
 import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import com.xbk.lattice.query.evidence.domain.ProjectionCandidate;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -23,7 +22,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 @ConditionalOnProperty(
         prefix = "lattice.deep-research.working-set",
         name = "store",

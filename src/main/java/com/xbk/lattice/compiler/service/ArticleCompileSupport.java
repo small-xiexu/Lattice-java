@@ -23,9 +23,9 @@ import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import com.xbk.lattice.query.domain.ReviewResult;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
@@ -40,8 +40,10 @@ import java.util.List;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
+@Slf4j
 public class ArticleCompileSupport {
+
+    private static final long NANOS_PER_MILLISECOND = 1_000_000L;
 
     private final CompileArticleNode compileArticleNode;
 
@@ -203,6 +205,7 @@ public class ArticleCompileSupport {
                     total,
                     "正在调用 Writer 生成草稿：" + mergedConcept.getConceptId()
             );
+            long startedAtNanos = System.nanoTime();
             WriterResult writerResult = writerAgent.write(new WriterTask(
                     mergedConcept,
                     sourceDir,
@@ -211,6 +214,16 @@ public class ArticleCompileSupport {
                     scopeId,
                     scene
             ));
+            log.info(
+                    "compile article writer completed. scopeId: {}, conceptId: {}, current: {}, total: {}, durationMs: {}, route: {}, articleCreated: {}",
+                    scopeId,
+                    mergedConcept.getConceptId(),
+                    index + 1,
+                    total,
+                    elapsedMillis(startedAtNanos),
+                    writerResult.getModelRoute(),
+                    writerResult.getArticleRecord() != null
+            );
             touchProgress(
                     scopeId,
                     "compile_new_articles",
@@ -264,6 +277,7 @@ public class ArticleCompileSupport {
                     draftArticle.getSourcePaths(),
                     draftArticle.getSourceId()
             );
+            long startedAtNanos = System.nanoTime();
             ReviewerResult reviewerResult = reviewerAgent.review(new ReviewTask(
                     draftArticle,
                     sourceContents,
@@ -271,6 +285,16 @@ public class ArticleCompileSupport {
                     scene
             ));
             ReviewResult reviewResult = reviewerResult.getReviewResult();
+            log.info(
+                    "compile article reviewer completed. scopeId: {}, articleKey: {}, current: {}, total: {}, durationMs: {}, route: {}, passed: {}",
+                    scopeId,
+                    draftArticle.getArticleKey(),
+                    index + 1,
+                    total,
+                    elapsedMillis(startedAtNanos),
+                    reviewerResult.getModelRoute(),
+                    reviewResult.isPass()
+            );
             ArticleReviewEnvelope reviewEnvelope = new ArticleReviewEnvelope();
             reviewEnvelope.setArticle(draftArticle);
             reviewEnvelope.setReviewResult(reviewResult);
@@ -333,6 +357,7 @@ public class ArticleCompileSupport {
                     reviewEnvelope.getArticle().getSourcePaths(),
                     reviewEnvelope.getArticle().getSourceId()
             );
+            long startedAtNanos = System.nanoTime();
             FixerResult fixerResult = fixerAgent.fix(new FixTask(
                     reviewEnvelope.getArticle(),
                     reviewEnvelope.getReviewResult().getIssues(),
@@ -340,6 +365,16 @@ public class ArticleCompileSupport {
                     scopeId,
                     scene
             ));
+            log.info(
+                    "compile article fixer completed. scopeId: {}, articleKey: {}, current: {}, total: {}, durationMs: {}, route: {}, fixed: {}",
+                    scopeId,
+                    reviewEnvelope.getArticle().getArticleKey(),
+                    index + 1,
+                    total,
+                    elapsedMillis(startedAtNanos),
+                    fixerResult.getModelRoute(),
+                    fixerResult.isFixed()
+            );
             reviewEnvelope.setFixerRoute(fixerResult.getModelRoute());
             if (!fixerResult.isFixed()) {
                 fixedArticles.add(reviewEnvelope);
@@ -551,5 +586,15 @@ public class ArticleCompileSupport {
      */
     public String currentFixRoute(String scopeId, String scene) {
         return agentModelRouter.routeForFixerAgent(scopeId, scene);
+    }
+
+    /**
+     * 计算耗时毫秒数。
+     *
+     * @param startedAtNanos 起始纳秒时间
+     * @return 耗时毫秒数
+     */
+    private long elapsedMillis(long startedAtNanos) {
+        return Math.max(0L, (System.nanoTime() - startedAtNanos) / NANOS_PER_MILLISECOND);
     }
 }

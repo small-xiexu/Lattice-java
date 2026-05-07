@@ -41,6 +41,8 @@ public class QueryResponse {
 
     private final List<QueryCitationMarkerResponse> citationMarkers;
 
+    private final QueryStructuredEvidenceResponse structuredEvidence;
+
     /**
      * 创建查询响应。
      *
@@ -177,7 +179,8 @@ public class QueryResponse {
                 citationCheck,
                 deepResearch,
                 fallbackReason,
-                List.of()
+                List.of(),
+                null
         );
     }
 
@@ -197,7 +200,6 @@ public class QueryResponse {
      * @param fallbackReason fallback 原因
      * @param citationMarkers 答案引用点列表
      */
-    @JsonCreator
     public QueryResponse(
             @JsonProperty("answer") String answer,
             @JsonProperty("sources") List<QuerySourceResponse> sources,
@@ -212,6 +214,56 @@ public class QueryResponse {
             @JsonProperty("fallbackReason") String fallbackReason,
             @JsonProperty("citationMarkers") List<QueryCitationMarkerResponse> citationMarkers
     ) {
+        this(
+                answer,
+                sources,
+                articles,
+                queryId,
+                reviewStatus,
+                answerOutcome,
+                generationMode,
+                modelExecutionStatus,
+                citationCheck,
+                deepResearch,
+                fallbackReason,
+                citationMarkers,
+                null
+        );
+    }
+
+    /**
+     * 创建查询响应。
+     *
+     * @param answer 答案
+     * @param sources 来源列表
+     * @param articles 命中文章列表
+     * @param queryId 查询标识
+     * @param reviewStatus 审查状态
+     * @param answerOutcome 答案语义
+     * @param generationMode 生成模式
+     * @param modelExecutionStatus 模型执行状态
+     * @param citationCheck 引用核验摘要
+     * @param deepResearch 深度研究摘要
+     * @param fallbackReason fallback 原因
+     * @param citationMarkers 答案引用点列表
+     * @param structuredEvidence 结构化证据
+     */
+    @JsonCreator
+    public QueryResponse(
+            @JsonProperty("answer") String answer,
+            @JsonProperty("sources") List<QuerySourceResponse> sources,
+            @JsonProperty("articles") List<QueryArticleResponse> articles,
+            @JsonProperty("queryId") String queryId,
+            @JsonProperty("reviewStatus") String reviewStatus,
+            @JsonProperty("answerOutcome") AnswerOutcome answerOutcome,
+            @JsonProperty("generationMode") GenerationMode generationMode,
+            @JsonProperty("modelExecutionStatus") ModelExecutionStatus modelExecutionStatus,
+            @JsonProperty("citationCheck") CitationCheckSummary citationCheck,
+            @JsonProperty("deepResearch") DeepResearchSummary deepResearch,
+            @JsonProperty("fallbackReason") String fallbackReason,
+            @JsonProperty("citationMarkers") List<QueryCitationMarkerResponse> citationMarkers,
+            @JsonProperty("structuredEvidence") QueryStructuredEvidenceResponse structuredEvidence
+    ) {
         this.answer = answer;
         this.sources = sources;
         this.articles = articles;
@@ -224,6 +276,7 @@ public class QueryResponse {
         this.deepResearch = deepResearch;
         this.fallbackReason = fallbackReason;
         this.citationMarkers = citationMarkers == null ? List.of() : citationMarkers;
+        this.structuredEvidence = structuredEvidence;
     }
 
     /**
@@ -332,5 +385,14 @@ public class QueryResponse {
      */
     public List<QueryCitationMarkerResponse> getCitationMarkers() {
         return citationMarkers;
+    }
+
+    /**
+     * 获取结构化证据。
+     *
+     * @return 结构化证据
+     */
+    public QueryStructuredEvidenceResponse getStructuredEvidence() {
+        return structuredEvidence;
     }
 }

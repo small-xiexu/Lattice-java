@@ -18,7 +18,6 @@ import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import com.xbk.lattice.query.evidence.domain.FactFinding;
 import com.xbk.lattice.query.deepresearch.store.DeepResearchWorkingSetStore;
 import com.xbk.lattice.query.graph.QueryWorkingSetStore;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -33,7 +32,6 @@ import java.util.Map;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class DeepResearchGraphDefinitionFactory {
 
     private final DeepResearchStateMapper deepResearchStateMapper;

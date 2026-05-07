@@ -1,6 +1,5 @@
 package com.xbk.lattice.api.admin;
 
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 
@@ -12,7 +11,6 @@ import org.springframework.web.bind.annotation.GetMapping;
  * @author xiexu
  */
 @Controller
-@Profile("jdbc")
 public class AdminPageController {
 
     /**

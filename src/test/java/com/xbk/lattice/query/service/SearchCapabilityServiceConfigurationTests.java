@@ -16,8 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class SearchCapabilityServiceConfigurationTests {
 
-    private final ApplicationContextRunner applicationContextRunner = new ApplicationContextRunner()
-            .withPropertyValues("spring.profiles.active=jdbc");
+    private final ApplicationContextRunner applicationContextRunner = new ApplicationContextRunner();
 
     /**
      * 验证缺少具体实现时会注册 disabled fallback。

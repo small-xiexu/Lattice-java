@@ -7,6 +7,14 @@ import com.xbk.lattice.compiler.domain.RawSource;
 import com.xbk.lattice.compiler.service.SourceIngestSupport;
 import com.xbk.lattice.documentparse.domain.model.ParseRoutePolicy;
 import com.xbk.lattice.documentparse.domain.model.ProviderConnection;
+import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
+import com.xbk.lattice.infra.persistence.SourceFileChunkRecord;
+import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
+import com.xbk.lattice.infra.persistence.SourceFileRecord;
+import com.xbk.lattice.infra.persistence.StructuredTableCellRecord;
+import com.xbk.lattice.infra.persistence.StructuredTableJdbcRepository;
+import com.xbk.lattice.infra.persistence.StructuredTableRecord;
+import com.xbk.lattice.infra.persistence.StructuredTableRowRecord;
 import com.xbk.lattice.llm.service.LlmSecretCryptoService;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -36,6 +44,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -49,13 +58,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_phase_c_document_parse_router_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_phase_c_document_parse_router_test",
-        "spring.flyway.default-schema=lattice_phase_c_document_parse_router_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.query.cache.store=in-memory",
@@ -76,6 +81,15 @@ class DocumentParseRouterIntegrationTests {
 
     @Autowired
     private SourceIngestSupport sourceIngestSupport;
+
+    @Autowired
+    private StructuredTableJdbcRepository structuredTableJdbcRepository;
+
+    @Autowired
+    private SourceFileJdbcRepository sourceFileJdbcRepository;
+
+    @Autowired
+    private SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository;
 
     @Autowired
     private LlmSecretCryptoService llmSecretCryptoService;
@@ -185,6 +199,7 @@ class DocumentParseRouterIntegrationTests {
         assertThat(csvSource.getParseProvider()).isEqualTo("filesystem");
         assertThat(csvSource.getContent()).contains("businessSubTypeCode,meaning");
         assertThat(csvSource.getContent()).contains("1210,refund");
+        assertThat(csvSource.getMetadataJson()).contains("\"structuredContentJson\"");
 
         assertThat(wordSource).isNotNull();
         assertThat(wordSource.getParseMode()).isEqualTo("office_extract");
@@ -197,6 +212,7 @@ class DocumentParseRouterIntegrationTests {
         assertThat(excelSource.getParseProvider()).isEqualTo("poi_excel");
         assertThat(excelSource.getContent()).contains("=== Sheet: Codes ===");
         assertThat(excelSource.getMetadataJson()).contains("\"sheetCount\"");
+        assertThat(excelSource.getMetadataJson()).contains("\"structuredContentJson\"");
 
         assertThat(pptSource).isNotNull();
         assertThat(pptSource.getParseMode()).isEqualTo("office_extract");
@@ -378,6 +394,182 @@ class DocumentParseRouterIntegrationTests {
         assertThat(capturedBodies).hasSize(2);
         assertThat(capturedBodies).anyMatch(body -> body.contains("filename=\"receipt.png\""));
         assertThat(capturedBodies).anyMatch(body -> body.contains("filename=\"scanned.pdf\""));
+    }
+
+    /**
+     * 验证编译入口会把 XLSX / CSV 解析出的通用表格结构落库。
+     *
+     * @param tempDir 临时目录
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldPersistStructuredTablesWhenPersistingParsedXlsxAndCsv(@TempDir Path tempDir) throws Exception {
+        resetTables();
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_files CASCADE");
+        Path docsDir = Files.createDirectories(tempDir.resolve("docs"));
+        Path excelPath = docsDir.resolve("codes.xlsx");
+        writeSimpleWorkbook(excelPath);
+        Path csvPath = docsDir.resolve("rules.csv");
+        Files.writeString(csvPath, "businessSubTypeCode,meaning\n1210,refund", StandardCharsets.UTF_8);
+
+        List<RawSource> rawSources = sourceIngestSupport.ingest(tempDir);
+        Map<String, Long> sourceFileIdsByPath = sourceIngestSupport.persistSourceFiles(rawSources, null, null);
+
+        SourceFileRecord excelSourceFile = new SourceFileRecord(
+                sourceFileIdsByPath.get("docs/codes.xlsx"),
+                null,
+                "docs/codes.xlsx",
+                "docs/codes.xlsx",
+                null,
+                "",
+                "xlsx",
+                0L,
+                "",
+                "{}",
+                true,
+                "docs/codes.xlsx"
+        );
+        List<StructuredTableRecord> excelTables = structuredTableJdbcRepository.findTablesBySourceFileId(
+                excelSourceFile.getId()
+        );
+        assertThat(excelTables).hasSize(1);
+        assertThat(excelTables.get(0).getSheetName()).isEqualTo("Codes");
+        List<StructuredTableRowRecord> excelRows = structuredTableJdbcRepository.findRowsByTableId(
+                excelTables.get(0).getId()
+        );
+        assertThat(excelRows).hasSize(1);
+        assertThat(excelRows.get(0).getRowText()).contains("businessSubTypeCode=1210");
+        List<StructuredTableCellRecord> excelCells = structuredTableJdbcRepository.findCellsByColumnValue(
+                excelSourceFile.getId(),
+                "meaning",
+                "refund"
+        );
+        assertThat(excelCells).hasSize(1);
+        assertThat(excelCells.get(0).getRowNumber()).isEqualTo(2);
+
+        Long csvSourceFileId = sourceFileIdsByPath.get("docs/rules.csv");
+        List<StructuredTableRecord> csvTables = structuredTableJdbcRepository.findTablesBySourceFileId(csvSourceFileId);
+        assertThat(csvTables).hasSize(1);
+        assertThat(csvTables.get(0).getFormat()).isEqualTo("csv");
+    }
+
+    /**
+     * 验证固定入库准确性样本集会保留正文、source chunk 与结构化表格事实。
+     *
+     * @param tempDir 临时目录
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldPersistFixedIngestionAccuracySampleSet(@TempDir Path tempDir) throws Exception {
+        resetTables();
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.source_files RESTART IDENTITY CASCADE");
+        Path docsDir = Files.createDirectories(tempDir.resolve("docs"));
+        Path markdownPath = docsDir.resolve("guide.md");
+        Path htmlPath = docsDir.resolve("page.html");
+        Path csvPath = docsDir.resolve("rules.csv");
+        Path excelPath = docsDir.resolve("codes.xlsx");
+        Path pdfPath = docsDir.resolve("native.pdf");
+        Path wordPath = docsDir.resolve("brief.docx");
+        Files.writeString(markdownPath, "# Refund Guide\n\n- retry=3\n- owner=ops\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                htmlPath,
+                "<html><body><h1>Ops Console</h1><p>feature flag enabled</p></body></html>",
+                StandardCharsets.UTF_8
+        );
+        Files.writeString(csvPath, "businessSubTypeCode,meaning\n1210,refund", StandardCharsets.UTF_8);
+        writeSimpleWorkbook(excelPath);
+        writeTextPdf(pdfPath, "Native pdf retry policy");
+        writeSimpleWord(wordPath);
+
+        List<RawSource> rawSources = sourceIngestSupport.ingest(tempDir);
+        Map<String, Long> sourceFileIdsByPath = sourceIngestSupport.persistSourceFiles(rawSources, null, null);
+        sourceIngestSupport.persistSourceFileChunks(rawSources, sourceFileIdsByPath);
+
+        assertThat(rawSources)
+                .extracting(RawSource::getRelativePath)
+                .contains(
+                        "docs/guide.md",
+                        "docs/page.html",
+                        "docs/rules.csv",
+                        "docs/codes.xlsx",
+                        "docs/native.pdf",
+                        "docs/brief.docx"
+                );
+        assertThat(sourceFileIdsByPath)
+                .containsKeys(
+                        "docs/guide.md",
+                        "docs/page.html",
+                        "docs/rules.csv",
+                        "docs/codes.xlsx",
+                        "docs/native.pdf",
+                        "docs/brief.docx"
+                );
+
+        SourceFileRecord markdownRecord = sourceFileJdbcRepository.findByPath("docs/guide.md").orElseThrow();
+        SourceFileRecord htmlRecord = sourceFileJdbcRepository.findByPath("docs/page.html").orElseThrow();
+        SourceFileRecord excelRecord = sourceFileJdbcRepository.findByPath("docs/codes.xlsx").orElseThrow();
+        SourceFileRecord csvRecord = sourceFileJdbcRepository.findByPath("docs/rules.csv").orElseThrow();
+        SourceFileRecord pdfRecord = sourceFileJdbcRepository.findByPath("docs/native.pdf").orElseThrow();
+        SourceFileRecord wordRecord = sourceFileJdbcRepository.findByPath("docs/brief.docx").orElseThrow();
+
+        assertThat(markdownRecord.getFormat()).isEqualTo("md");
+        assertThat(markdownRecord.getContentText()).contains("# Refund Guide");
+        assertThat(markdownRecord.getContentText()).contains("owner=ops");
+        assertThat(htmlRecord.getFormat()).isEqualTo("html");
+        assertThat(htmlRecord.getContentText()).contains("Ops Console");
+        assertThat(htmlRecord.getContentText()).contains("feature flag enabled");
+        assertThat(pdfRecord.getMetadataJson()).contains("\"parseMode\"");
+        assertThat(pdfRecord.getMetadataJson()).contains("\"pdf_text\"");
+        assertThat(pdfRecord.getMetadataJson()).contains("\"pageCount\"");
+        assertThat(pdfRecord.getContentText()).contains("Native pdf retry policy");
+        assertThat(wordRecord.getMetadataJson()).contains("\"parseMode\"");
+        assertThat(wordRecord.getMetadataJson()).contains("\"office_extract\"");
+        assertThat(wordRecord.getMetadataJson()).contains("\"paragraphCount\"");
+        assertThat(wordRecord.getContentText()).contains("Payment timeout recovery");
+        assertThat(excelRecord.getMetadataJson()).contains("\"structuredContentJson\"");
+        assertThat(excelRecord.getContentText()).contains("sheet=Codes; row=2");
+        assertThat(excelRecord.getContentText()).contains("businessSubTypeCode=1210");
+        assertThat(csvRecord.getMetadataJson()).contains("\"structuredContentJson\"");
+        assertThat(csvRecord.getContentText()).contains("businessSubTypeCode,meaning");
+
+        List<SourceFileChunkRecord> chunkRecords = sourceFileChunkJdbcRepository.findByFilePaths(
+                List.of("docs/guide.md", "docs/page.html", "docs/codes.xlsx", "docs/native.pdf", "docs/brief.docx")
+        );
+        String chunkText = chunkRecords.stream()
+                .map(SourceFileChunkRecord::getChunkText)
+                .reduce("", (left, right) -> left + "\n" + right);
+        assertThat(chunkRecords).hasSizeGreaterThanOrEqualTo(5);
+        assertThat(chunkText).contains("# Refund Guide");
+        assertThat(chunkText).contains("Ops Console");
+        assertThat(chunkText).contains("businessSubTypeCode=1210");
+        assertThat(chunkText).contains("Native pdf retry policy");
+        assertThat(chunkText).contains("Payment timeout recovery");
+
+        List<StructuredTableRecord> excelTables = structuredTableJdbcRepository.findTablesBySourceFileId(
+                sourceFileIdsByPath.get("docs/codes.xlsx")
+        );
+        List<StructuredTableRecord> csvTables = structuredTableJdbcRepository.findTablesBySourceFileId(
+                sourceFileIdsByPath.get("docs/rules.csv")
+        );
+        assertThat(excelTables).hasSize(1);
+        assertThat(excelTables.get(0).getSheetName()).isEqualTo("Codes");
+        assertThat(csvTables).hasSize(1);
+        assertThat(csvTables.get(0).getFormat()).isEqualTo("csv");
+
+        List<StructuredTableCellRecord> excelCells = structuredTableJdbcRepository.findCellsByColumnValue(
+                sourceFileIdsByPath.get("docs/codes.xlsx"),
+                "meaning",
+                "refund"
+        );
+        List<StructuredTableCellRecord> csvCells = structuredTableJdbcRepository.findCellsByColumnValue(
+                sourceFileIdsByPath.get("docs/rules.csv"),
+                "businessSubTypeCode",
+                "1210"
+        );
+        assertThat(excelCells).hasSize(1);
+        assertThat(excelCells.get(0).getRowNumber()).isEqualTo(2);
+        assertThat(csvCells).hasSize(1);
+        assertThat(csvCells.get(0).getCellValue()).isEqualTo("1210");
     }
 
     /**

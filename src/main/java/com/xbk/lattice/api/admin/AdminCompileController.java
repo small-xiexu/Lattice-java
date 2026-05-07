@@ -6,7 +6,6 @@ import com.xbk.lattice.compiler.service.ChunkRebuildService;
 import com.xbk.lattice.compiler.service.CompileJobDerivedStatusResolver;
 import com.xbk.lattice.compiler.service.CompileJobService;
 import com.xbk.lattice.infra.persistence.CompileJobRecord;
-import org.springframework.context.annotation.Profile;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,7 +29,6 @@ import java.util.List;
  * @author xiexu
  */
 @RestController
-@Profile("jdbc")
 public class AdminCompileController {
 
     private final CompileJobService compileJobService;

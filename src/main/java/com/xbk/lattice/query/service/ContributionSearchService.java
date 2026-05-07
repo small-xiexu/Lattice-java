@@ -3,7 +3,6 @@ package com.xbk.lattice.query.service;
 import com.xbk.lattice.infra.persistence.LexicalSearchRecord;
 import com.xbk.lattice.infra.persistence.ContributionJdbcRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -17,7 +16,6 @@ import java.util.List;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class ContributionSearchService {
 
     private final ContributionJdbcRepository contributionJdbcRepository;
@@ -66,7 +64,12 @@ public class ContributionSearchService {
         }
 
         String tsConfig = ftsConfigResolver.resolveArticleTsConfig();
-        List<LexicalSearchRecord> records = contributionJdbcRepository.searchLexical(question, queryTokens, limit, tsConfig);
+        List<LexicalSearchRecord> records = contributionJdbcRepository.searchLexical(
+                question,
+                queryTokens,
+                limit,
+                tsConfig
+        );
         List<QueryArticleHit> matchedHits = new ArrayList<QueryArticleHit>();
         for (LexicalSearchRecord record : records) {
             matchedHits.add(toQueryArticleHit(record));

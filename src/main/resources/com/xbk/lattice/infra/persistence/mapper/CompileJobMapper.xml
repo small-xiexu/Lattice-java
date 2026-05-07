@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.CompileJobMapper">
+
+    <resultMap id="CompileJobRecordResultMap" type="com.xbk.lattice.infra.persistence.CompileJobRecord">
+        <constructor>
+            <arg column="job_id" javaType="java.lang.String"/>
+            <arg column="source_dir" javaType="java.lang.String"/>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="source_sync_run_id" javaType="java.lang.Long"/>
+            <arg column="root_trace_id" javaType="java.lang.String"/>
+            <arg column="incremental" javaType="_boolean"/>
+            <arg column="orchestration_mode" javaType="java.lang.String"/>
+            <arg column="status" javaType="java.lang.String"/>
+            <arg column="worker_id" javaType="java.lang.String"/>
+            <arg column="last_heartbeat_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="running_expires_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="current_step" javaType="java.lang.String"/>
+            <arg column="progress_current" javaType="_int"/>
+            <arg column="progress_total" javaType="_int"/>
+            <arg column="progress_message" javaType="java.lang.String"/>
+            <arg column="progress_updated_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="error_code" javaType="java.lang.String"/>
+            <arg column="persisted_count" javaType="_int"/>
+            <arg column="error_message" javaType="java.lang.String"/>
+            <arg column="attempt_count" javaType="_int"/>
+            <arg column="requested_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="started_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="finished_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="CompileJobColumns">
+        job_id, source_dir, source_id, source_sync_run_id, incremental,
+        root_trace_id, orchestration_mode, status, worker_id, last_heartbeat_at,
+        running_expires_at, current_step, progress_current, progress_total,
+        progress_message, progress_updated_at, error_code, persisted_count, error_message,
+        attempt_count, requested_at, started_at, finished_at
+    </sql>
+
+    <insert id="upsert">
+        insert into compile_jobs (
+            job_id, source_dir, source_id, source_sync_run_id, root_trace_id, incremental,
+            orchestration_mode, status, worker_id, last_heartbeat_at, running_expires_at,
+            current_step, progress_current, progress_total, progress_message, progress_updated_at,
+            error_code, persisted_count, error_message,
+            attempt_count, requested_at, started_at, finished_at
+        )
+        values (
+            #{record.jobId},
+            #{record.sourceDir},
+            #{record.sourceId},
+            #{record.sourceSyncRunId},
+            #{record.rootTraceId},
+            #{record.incremental},
+            #{record.orchestrationMode},
+            #{record.status},
+            #{record.workerId},
+            #{record.lastHeartbeatAt},
+            #{record.runningExpiresAt},
+            #{record.currentStep},
+            #{record.progressCurrent},
+            #{record.progressTotal},
+            #{record.progressMessage},
+            #{record.progressUpdatedAt},
+            #{record.errorCode},
+            #{record.persistedCount},
+            #{record.errorMessage},
+            #{record.attemptCount},
+            #{record.requestedAt},
+            #{record.startedAt},
+            #{record.finishedAt}
+        )
+        on conflict (job_id) do update
+        set source_dir = excluded.source_dir,
+            source_id = excluded.source_id,
+            source_sync_run_id = excluded.source_sync_run_id,
+            root_trace_id = excluded.root_trace_id,
+            incremental = excluded.incremental,
+            orchestration_mode = excluded.orchestration_mode,
+            status = excluded.status,
+            worker_id = excluded.worker_id,
+            last_heartbeat_at = excluded.last_heartbeat_at,
+            running_expires_at = excluded.running_expires_at,
+            current_step = excluded.current_step,
+            progress_current = excluded.progress_current,
+            progress_total = excluded.progress_total,
+            progress_message = excluded.progress_message,
+            progress_updated_at = excluded.progress_updated_at,
+            error_code = excluded.error_code,
+            persisted_count = excluded.persisted_count,
+            error_message = excluded.error_message,
+            attempt_count = excluded.attempt_count,
+            requested_at = excluded.requested_at,
+            started_at = excluded.started_at,
+            finished_at = excluded.finished_at
+    </insert>
+
+    <select id="findAll" resultMap="CompileJobRecordResultMap">
+        select <include refid="CompileJobColumns"/>
+        from compile_jobs
+        order by requested_at desc, job_id desc
+    </select>
+
+    <select id="findRecent" resultMap="CompileJobRecordResultMap">
+        select <include refid="CompileJobColumns"/>
+        from compile_jobs
+        order by requested_at desc, job_id desc
+        limit #{limit}
+    </select>
+
+    <select id="findRecentStandalone" resultMap="CompileJobRecordResultMap">
+        select <include refid="CompileJobColumns"/>
+        from compile_jobs
+        where source_sync_run_id is null
+        order by requested_at desc, job_id desc
+        limit #{limit}
+    </select>
+
+    <select id="findRecentStandaloneBySourceId" resultMap="CompileJobRecordResultMap">
+        select <include refid="CompileJobColumns"/>
+        from compile_jobs
+        where source_sync_run_id is null
+          and source_id = #{sourceId}
+        order by requested_at desc, job_id desc
+        limit #{limit}
+    </select>
+
+    <select id="findByJobId" resultMap="CompileJobRecordResultMap">
+        select <include refid="CompileJobColumns"/>
+        from compile_jobs
+        where job_id = #{jobId}
+    </select>
+
+    <select id="findNextQueued" resultMap="CompileJobRecordResultMap">
+        select <include refid="CompileJobColumns"/>
+        from compile_jobs
+        where status = 'QUEUED'
+        order by requested_at asc, job_id asc
+        limit 1
+    </select>
+
+    <update id="markRunning">
+        update compile_jobs
+        set status = 'RUNNING',
+            worker_id = #{workerId},
+            last_heartbeat_at = #{startedAt},
+            running_expires_at = #{runningExpiresAt},
+            current_step = 'initialize_job',
+            progress_current = 0,
+            progress_total = 0,
+            progress_message = '编译任务已启动，等待图执行',
+            progress_updated_at = #{startedAt},
+            error_code = null,
+            started_at = #{startedAt},
+            finished_at = null,
+            error_message = null,
+            attempt_count = attempt_count + 1
+        where job_id = #{jobId}
+          and status = 'QUEUED'
+    </update>
+
+    <update id="refreshHeartbeat">
+        update compile_jobs
+        set last_heartbeat_at = #{heartbeatAt},
+            running_expires_at = #{runningExpiresAt}
+        where job_id = #{jobId}
+          and status = 'RUNNING'
+          and worker_id = #{workerId}
+    </update>
+
+    <update id="updateCurrentStep">
+        update compile_jobs
+        set current_step = #{currentStep},
+            progress_message = #{progressMessage},
+            progress_updated_at = #{heartbeatAt},
+            last_heartbeat_at = #{heartbeatAt},
+            running_expires_at = #{runningExpiresAt}
+        where job_id = #{jobId}
+          and status = 'RUNNING'
+          and worker_id = #{workerId}
+    </update>
+
+    <update id="updateProgressSnapshot">
+        update compile_jobs
+        set current_step = #{currentStep},
+            progress_current = #{progressCurrent},
+            progress_total = #{progressTotal},
+            progress_message = #{progressMessage},
+            progress_updated_at = #{heartbeatAt},
+            last_heartbeat_at = #{heartbeatAt},
+            running_expires_at = #{runningExpiresAt}
+        where job_id = #{jobId}
+          and status = 'RUNNING'
+          and worker_id = #{workerId}
+    </update>
+
+    <update id="markSucceeded">
+        update compile_jobs
+        set status = 'SUCCEEDED',
+            last_heartbeat_at = #{finishedAt},
+            running_expires_at = null,
+            current_step = 'finalize_job',
+            progress_message = '编译完成',
+            progress_updated_at = #{finishedAt},
+            error_code = null,
+            persisted_count = #{persistedCount},
+            error_message = null,
+            finished_at = #{finishedAt}
+        where job_id = #{jobId}
+    </update>
+
+    <update id="markFailed">
+        update compile_jobs
+        set status = 'FAILED',
+            last_heartbeat_at = #{finishedAt},
+            running_expires_at = null,
+            progress_updated_at = #{finishedAt},
+            error_code = #{errorCode},
+            error_message = #{errorMessage},
+            finished_at = #{finishedAt}
+        where job_id = #{jobId}
+    </update>
+
+    <update id="markFailedIfRunning">
+        update compile_jobs
+        set status = 'FAILED',
+            last_heartbeat_at = #{finishedAt},
+            running_expires_at = null,
+            progress_updated_at = #{finishedAt},
+            error_code = #{errorCode},
+            error_message = #{errorMessage},
+            finished_at = #{finishedAt}
+        where job_id = #{jobId}
+          and status = 'RUNNING'
+    </update>
+
+    <update id="retry">
+        update compile_jobs
+        set status = 'QUEUED',
+            worker_id = null,
+            last_heartbeat_at = null,
+            running_expires_at = null,
+            current_step = null,
+            progress_current = 0,
+            progress_total = 0,
+            progress_message = null,
+            progress_updated_at = null,
+            error_code = null,
+            persisted_count = 0,
+            error_message = null,
+            started_at = null,
+            finished_at = null
+        where job_id = #{jobId}
+    </update>
+
+    <update id="requeueRunningJobsOwnedByWorker">
+        update compile_jobs
+        set status = 'QUEUED',
+            worker_id = null,
+            running_expires_at = null,
+            last_heartbeat_at = null,
+            error_code = null,
+            error_message = null
+        where status = 'RUNNING'
+          and worker_id = #{workerId}
+    </update>
+
+    <select id="findExpiredRunningJobIds" resultType="java.lang.String">
+        select job_id
+        from compile_jobs
+        where status = 'RUNNING'
+          and running_expires_at is not null
+          and running_expires_at &lt; #{now}
+        order by running_expires_at asc, job_id asc
+    </select>
+</mapper>

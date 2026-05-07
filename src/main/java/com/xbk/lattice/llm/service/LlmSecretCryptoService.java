@@ -1,7 +1,6 @@
 package com.xbk.lattice.llm.service;
 
 import com.xbk.lattice.compiler.config.LlmProperties;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -23,7 +22,6 @@ import java.util.Base64;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class LlmSecretCryptoService {
 
     private static final String AES_ALGORITHM = "AES";

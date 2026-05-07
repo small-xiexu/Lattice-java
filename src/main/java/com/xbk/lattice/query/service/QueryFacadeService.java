@@ -5,13 +5,14 @@ import com.xbk.lattice.api.query.QueryResponse;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import com.xbk.lattice.observability.StructuredEventLogger;
 import com.xbk.lattice.query.deepresearch.service.DeepResearchRouter;
+import com.xbk.lattice.query.structured.StructuredQueryService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -22,7 +23,6 @@ import java.util.UUID;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class QueryFacadeService {
 
     private static final int DEEP_RESEARCH_PREFLIGHT_LIMIT = 6;
@@ -45,6 +45,8 @@ public class QueryFacadeService {
 
     private final StructuredEventLogger structuredEventLogger;
 
+    private final StructuredQueryService structuredQueryService;
+
     /**
      * 创建查询门面服务。
      *
@@ -54,6 +56,7 @@ public class QueryFacadeService {
      * @param knowledgeSearchService 知识检索服务
      * @param operationalQueryStatusService 运行态问答状态服务
      * @param pendingQueryManager PendingQuery 管理器
+     * @param structuredEventLogger 结构化事件日志器
      */
     @Autowired
     public QueryFacadeService(
@@ -63,7 +66,8 @@ public class QueryFacadeService {
             KnowledgeSearchService knowledgeSearchService,
             OperationalQueryStatusService operationalQueryStatusService,
             PendingQueryManager pendingQueryManager,
-            StructuredEventLogger structuredEventLogger
+            StructuredEventLogger structuredEventLogger,
+            StructuredQueryService structuredQueryService
     ) {
         this.queryGraphOrchestrator = queryGraphOrchestrator;
         this.deepResearchOrchestrator = deepResearchOrchestrator;
@@ -72,6 +76,39 @@ public class QueryFacadeService {
         this.operationalQueryStatusService = operationalQueryStatusService;
         this.pendingQueryManager = pendingQueryManager;
         this.structuredEventLogger = structuredEventLogger;
+        this.structuredQueryService = structuredQueryService;
+    }
+
+    /**
+     * 创建查询门面服务。
+     *
+     * @param queryGraphOrchestrator 问答图编排器
+     * @param deepResearchOrchestrator Deep Research 编排器
+     * @param deepResearchRouter Deep Research 路由器
+     * @param knowledgeSearchService 知识检索服务
+     * @param operationalQueryStatusService 运行态问答状态服务
+     * @param pendingQueryManager PendingQuery 管理器
+     * @param structuredEventLogger 结构化事件日志器
+     */
+    public QueryFacadeService(
+            QueryGraphOrchestrator queryGraphOrchestrator,
+            DeepResearchOrchestrator deepResearchOrchestrator,
+            DeepResearchRouter deepResearchRouter,
+            KnowledgeSearchService knowledgeSearchService,
+            OperationalQueryStatusService operationalQueryStatusService,
+            PendingQueryManager pendingQueryManager,
+            StructuredEventLogger structuredEventLogger
+    ) {
+        this(
+                queryGraphOrchestrator,
+                deepResearchOrchestrator,
+                deepResearchRouter,
+                knowledgeSearchService,
+                operationalQueryStatusService,
+                pendingQueryManager,
+                structuredEventLogger,
+                null
+        );
     }
 
     /**
@@ -125,10 +162,21 @@ public class QueryFacadeService {
         if (operationalQueryResponse != null) {
             return operationalQueryResponse;
         }
+        Optional<QueryResponse> structuredQueryResponse = tryStructuredQuery(question, queryId);
+        if (structuredQueryResponse.isPresent()) {
+            return structuredQueryResponse.orElseThrow();
+        }
         if (shouldEscalateToDeepResearch(queryRequest)) {
             return deepResearchOrchestrator.execute(queryRequest, queryId);
         }
         return queryGraphOrchestrator.execute(question, queryId);
+    }
+
+    private Optional<QueryResponse> tryStructuredQuery(String question, String queryId) {
+        if (structuredQueryService == null) {
+            return Optional.empty();
+        }
+        return structuredQueryService.tryAnswer(question, queryId);
     }
 
     /**
@@ -205,7 +253,8 @@ public class QueryFacadeService {
                 baseResponse.getCitationCheck(),
                 baseResponse.getDeepResearch(),
                 baseResponse.getFallbackReason(),
-                baseResponse.getCitationMarkers()
+                baseResponse.getCitationMarkers(),
+                baseResponse.getStructuredEvidence()
         );
     }
 

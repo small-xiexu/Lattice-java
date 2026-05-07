@@ -4,7 +4,6 @@ import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -23,7 +22,6 @@ import java.util.regex.Pattern;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class CitationValidator {
 
     private static final Pattern NUMERIC_LITERAL_PATTERN = Pattern.compile("\\b(\\d+(?:\\.\\d+)?)\\b");
@@ -164,6 +162,16 @@ public class CitationValidator {
                         citation.getOrdinal()
                 );
             }
+            CitationValidationResult contextValidationResult = validateAgainstContextWindow(
+                    citation,
+                    sourceFileRecord.getContentText(),
+                    hardFactTokens,
+                    overlapScore,
+                    "source_context_overlap_verified"
+            );
+            if (contextValidationResult != null) {
+                return contextValidationResult;
+            }
             return new CitationValidationResult(
                     citation.getTargetKey(),
                     citation.getSourceType(),
@@ -233,6 +241,16 @@ public class CitationValidator {
                     citation.getOrdinal()
             );
         }
+        CitationValidationResult contextValidationResult = validateAgainstContextWindow(
+                citation,
+                buildEvidenceText(articleRecord),
+                hardFactTokens,
+                overlapScore,
+                "context_overlap_verified"
+        );
+        if (contextValidationResult != null) {
+            return contextValidationResult;
+        }
         return new CitationValidationResult(
                 citation.getTargetKey(),
                 citation.getSourceType(),
@@ -242,6 +260,65 @@ public class CitationValidator {
                 extractMatchedExcerpt(articleRecord.getContent(), hardFactTokens),
                 citation.getOrdinal()
         );
+    }
+
+    private CitationValidationResult validateAgainstContextWindow(
+            Citation citation,
+            String evidenceText,
+            List<String> hardFactTokens,
+            double overlapScore,
+            String verifiedReason
+    ) {
+        if (!hasContextWindowSupport(citation, evidenceText, overlapScore)) {
+            return null;
+        }
+        List<String> contextTokens = extractHardFactTokens(citation.getContextWindow());
+        double contextOverlapScore = calculateOverlapScore(contextTokens, evidenceText);
+        return new CitationValidationResult(
+                citation.getTargetKey(),
+                citation.getSourceType(),
+                CitationValidationStatus.VERIFIED,
+                Math.max(overlapScore, contextOverlapScore),
+                verifiedReason,
+                extractMatchedExcerpt(evidenceText, hardFactTokens),
+                citation.getOrdinal()
+        );
+    }
+
+    private boolean hasContextWindowSupport(Citation citation, String evidenceText, double overlapScore) {
+        if (citation == null || overlapScore <= 0.0D || evidenceText == null || evidenceText.isBlank()) {
+            return false;
+        }
+        String claimText = citation.getClaimText();
+        String contextWindow = citation.getContextWindow();
+        String normalizedClaimText = normalizeForDirectLineMatch(claimText);
+        String normalizedContextWindow = normalizeForDirectLineMatch(contextWindow);
+        if (normalizedClaimText.isBlank()
+                || normalizedContextWindow.isBlank()
+                || normalizedClaimText.equals(normalizedContextWindow)
+                || !normalizedContextWindow.contains(normalizedClaimText)) {
+            return false;
+        }
+        if (hasUnmatchedStrictHardFactToken(claimText, evidenceText)) {
+            return false;
+        }
+        List<String> contextTokens = extractHardFactTokens(contextWindow);
+        double contextOverlapScore = calculateOverlapScore(contextTokens, evidenceText);
+        return contextOverlapScore >= 1.0D || isHighConfidencePartialOverlap(contextTokens, contextOverlapScore);
+    }
+
+    private boolean hasUnmatchedStrictHardFactToken(String claimText, String evidenceText) {
+        List<String> strictHardFactTokens = extractStrictHardFactTokens(claimText);
+        if (strictHardFactTokens.isEmpty()) {
+            return false;
+        }
+        Set<String> evidenceTokens = tokenize(evidenceText);
+        for (String strictHardFactToken : strictHardFactTokens) {
+            if (!evidenceTokens.contains(strictHardFactToken)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isHighConfidencePartialOverlap(List<String> hardFactTokens, double overlapScore) {
@@ -297,6 +374,20 @@ public class CitationValidator {
         if (hardFactTokens.size() < 2) {
             appendHanTermMatches(hardFactTokens, HAN_TERM_PATTERN.matcher(normalizedClaimText));
         }
+        return hardFactTokens;
+    }
+
+    private List<String> extractStrictHardFactTokens(String claimText) {
+        List<String> hardFactTokens = new ArrayList<String>();
+        if (claimText == null || claimText.isBlank()) {
+            return hardFactTokens;
+        }
+        String normalizedClaimText = normalizeForHardFactExtraction(claimText);
+        appendMatches(hardFactTokens, NUMERIC_LITERAL_PATTERN.matcher(normalizedClaimText));
+        appendMatches(hardFactTokens, SNAKE_CASE_PATTERN.matcher(normalizedClaimText));
+        appendMatches(hardFactTokens, FQN_PATTERN.matcher(normalizedClaimText));
+        appendMatches(hardFactTokens, HTTP_PATH_PATTERN.matcher(normalizedClaimText));
+        appendMatches(hardFactTokens, JAVA_SYMBOL_PATTERN.matcher(normalizedClaimText));
         return hardFactTokens;
     }
 
@@ -370,10 +461,23 @@ public class CitationValidator {
         for (String part : parts) {
             if (part != null && !part.isBlank() && (part.length() >= 2 || isNumericToken(part))) {
                 tokens.add(part);
+                appendCompositeTokenParts(tokens, part);
             }
         }
         appendEmbeddedNumericTokens(tokens, content);
         return tokens;
+    }
+
+    private void appendCompositeTokenParts(Set<String> tokens, String token) {
+        if (tokens == null || token == null || token.isBlank()) {
+            return;
+        }
+        String[] parts = token.split("[./-]+");
+        for (String part : parts) {
+            if (part != null && !part.isBlank() && (part.length() >= 2 || isNumericToken(part))) {
+                tokens.add(part);
+            }
+        }
     }
 
     /**
@@ -402,6 +506,8 @@ public class CitationValidator {
                 : claimText
                 .replace("**", "")
                 .replace("`", "")
+                .replaceAll("\\[\\[[^\\]]+]]", "")
+                .replaceAll("\\[→\\s*[^\\]]+]", "")
                 .replaceAll("(?m)^#+\\s*", "")
                 .replaceAll("(?<=\\s|^)\\d+\\.\\s*", "")
                 .trim();

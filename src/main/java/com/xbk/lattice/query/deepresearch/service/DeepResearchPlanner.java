@@ -6,7 +6,6 @@ import com.xbk.lattice.query.deepresearch.domain.LayeredResearchPlan;
 import com.xbk.lattice.query.deepresearch.domain.ResearchLayer;
 import com.xbk.lattice.query.deepresearch.domain.ResearchTask;
 import com.xbk.lattice.query.deepresearch.domain.ResearchTaskType;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -21,7 +20,6 @@ import java.util.Locale;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class DeepResearchPlanner {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

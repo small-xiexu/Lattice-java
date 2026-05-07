@@ -10,7 +10,6 @@ import org.slf4j.MDC;
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -29,12 +28,50 @@ import java.util.Map;
  */
 @Slf4j
 @Service
-@Profile("jdbc")
 public class LlmInvocationExecutor {
 
     private static final String OPENAI_PROVIDER = "openai";
 
     private static final String OPENAI_COMPATIBLE_PROVIDER = "openai_compatible";
+
+    private static final String STRUCTURED_QUERY_RESPONSE_FORMAT_JSON = """
+            {
+              "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                  "name": "query_answer_payload",
+                  "strict": true,
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "answerMarkdown",
+                      "answerOutcome",
+                      "answerCacheable"
+                    ],
+                    "properties": {
+                      "answerMarkdown": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "answerOutcome": {
+                        "type": "string",
+                        "enum": [
+                          "SUCCESS",
+                          "INSUFFICIENT_EVIDENCE",
+                          "NO_RELEVANT_KNOWLEDGE",
+                          "PARTIAL_ANSWER"
+                        ]
+                      },
+                      "answerCacheable": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            """;
 
     private final ChatClientRegistry chatClientRegistry;
 
@@ -149,7 +186,7 @@ public class LlmInvocationExecutor {
     }
 
     /**
-     * 针对结构化问答用途，为 OpenAI 路由补充 response_format 约束。
+     * 针对结构化问答用途，为 OpenAI 路由补充严格 JSON Schema 约束。
      *
      * @param routeResolution 原始路由
      * @param invocationContext 调用上下文
@@ -164,7 +201,7 @@ public class LlmInvocationExecutor {
         }
         String mergedExtraOptionsJson = mergeJsonObject(
                 routeResolution.getExtraOptionsJson(),
-                "{\"response_format\":{\"type\":\"json_object\"}}"
+                STRUCTURED_QUERY_RESPONSE_FORMAT_JSON
         );
         return new LlmRouteResolution(
                 routeResolution.getScopeType(),

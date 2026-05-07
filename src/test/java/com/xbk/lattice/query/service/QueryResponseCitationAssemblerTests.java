@@ -525,6 +525,36 @@ class QueryResponseCitationAssemblerTests {
         assertThat(sourceResponses.get(0).getDerivation()).isEqualTo("TOP_K");
     }
 
+    /**
+     * 验证 TOP_K 兜底 sources 会暴露 fact card 命中，便于前端展示结构化证据来源。
+     */
+    @Test
+    void shouldExposeFactCardTopKSourceResponse() {
+        QueryArticleHit factCardHit = new QueryArticleHit(
+                QueryEvidenceType.FACT_CARD,
+                41L,
+                "fact-card:ops:enum",
+                "fact-card:ops:enum",
+                "巡检项目清单",
+                "项目包括接口可用性、任务积压、告警确认。",
+                "{\"cardType\":\"FACT_ENUM\",\"answerShape\":\"ENUM\",\"sourceChunkIds\":[31]}",
+                "valid",
+                List.of(),
+                8.0D
+        );
+
+        List<QuerySourceResponse> sourceResponses = QueryResponseCitationAssembler.toSourceResponses(
+                null,
+                List.of(factCardHit),
+                true
+        );
+
+        assertThat(sourceResponses).hasSize(1);
+        assertThat(sourceResponses.get(0).getArticleKey()).isEqualTo("fact-card:ops:enum");
+        assertThat(sourceResponses.get(0).getTitle()).isEqualTo("巡检项目清单");
+        assertThat(sourceResponses.get(0).getDerivation()).isEqualTo("TOP_K");
+    }
+
     private static class FixedCitationValidator extends com.xbk.lattice.query.citation.CitationValidator {
 
         /**

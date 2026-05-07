@@ -10,7 +10,6 @@ import com.xbk.lattice.llm.infra.ExecutionLlmSnapshotJdbcRepository;
 import com.xbk.lattice.llm.infra.LlmModelProfileJdbcRepository;
 import com.xbk.lattice.llm.infra.LlmProviderConnectionJdbcRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -29,7 +28,6 @@ import java.util.Set;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 @Slf4j
 public class ExecutionLlmSnapshotService {
 

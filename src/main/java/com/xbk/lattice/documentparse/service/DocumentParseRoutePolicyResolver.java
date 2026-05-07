@@ -3,7 +3,6 @@ package com.xbk.lattice.documentparse.service;
 import com.xbk.lattice.documentparse.domain.model.ParseCapability;
 import com.xbk.lattice.documentparse.domain.model.ParseRoutePolicy;
 import com.xbk.lattice.documentparse.domain.model.ProviderConnection;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 /**
@@ -14,7 +13,6 @@ import org.springframework.stereotype.Service;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class DocumentParseRoutePolicyResolver {
 
     private final DocumentParseRoutePolicyAdminService documentParseRoutePolicyAdminService;

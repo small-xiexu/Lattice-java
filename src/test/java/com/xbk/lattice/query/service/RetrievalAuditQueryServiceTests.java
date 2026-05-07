@@ -21,13 +21,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author xiexu
  */
 @SpringBootTest(properties = {
-        "spring.profiles.active=jdbc",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice_b9_retrieval_audit_query_test",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
-        "spring.flyway.enabled=true",
-        "spring.flyway.schemas=lattice_b9_retrieval_audit_query_test",
-        "spring.flyway.default-schema=lattice_b9_retrieval_audit_query_test",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key"
 })
@@ -57,6 +53,10 @@ class RetrievalAuditQueryServiceTests {
         assertThat(snapshot.getLatestRun()).isNotNull();
         assertThat(snapshot.getLatestRun().getRetrievalQuestion()).isEqualTo("timeout-policy-v2");
         assertThat(snapshot.getLatestRun().isRewriteApplied()).isTrue();
+        assertThat(snapshot.getLatestRun().getAnswerShape()).isEqualTo("GENERAL");
+        assertThat(snapshot.getLatestRun().getCoverageStatus()).isEqualTo("not_applicable");
+        assertThat(snapshot.getLatestRun().getFactCardHitCount()).isZero();
+        assertThat(snapshot.getLatestRun().getSourceChunkHitCount()).isZero();
         assertThat(snapshot.getRunHistory()).hasSize(2);
         assertThat(snapshot.getRunHistory().get(0).getRetrievalQuestion()).isEqualTo("timeout-policy-v2");
         assertThat(snapshot.getRunHistory().get(1).getRetrievalQuestion()).isEqualTo("timeout-policy-v1");
@@ -100,7 +100,7 @@ class RetrievalAuditQueryServiceTests {
      * 重置测试表。
      */
     private void resetTables() {
-        jdbcTemplate.execute("TRUNCATE TABLE lattice_b9_retrieval_audit_query_test.query_retrieval_runs CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.query_retrieval_runs CASCADE");
     }
 
     /**

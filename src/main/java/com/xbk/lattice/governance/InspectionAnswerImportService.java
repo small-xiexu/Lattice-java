@@ -7,7 +7,6 @@ import com.xbk.lattice.infra.persistence.ContributionJdbcRepository;
 import com.xbk.lattice.infra.persistence.ContributionRecord;
 import com.xbk.lattice.infra.persistence.PendingQueryJdbcRepository;
 import com.xbk.lattice.infra.persistence.PendingQueryRecord;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -24,7 +23,6 @@ import java.util.UUID;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class InspectionAnswerImportService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

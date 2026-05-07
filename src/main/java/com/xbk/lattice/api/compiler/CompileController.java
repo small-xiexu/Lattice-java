@@ -3,7 +3,6 @@ package com.xbk.lattice.api.compiler;
 import com.xbk.lattice.compiler.service.CompileApplicationFacade;
 import com.xbk.lattice.compiler.service.CompileResult;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,7 +20,6 @@ import java.nio.file.Path;
  */
 @RestController
 @Slf4j
-@Profile("jdbc")
 @RequestMapping("/api/v1/compile")
 public class CompileController {
 

@@ -11,7 +11,6 @@ import com.xbk.lattice.governance.domain.LifecycleTransitionResult;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +26,6 @@ import java.util.List;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class LifecycleService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

@@ -75,6 +75,8 @@ import com.xbk.lattice.query.deepresearch.service.DeepResearchResearcherService;
 import com.xbk.lattice.query.service.ArticleChunkFtsSearchService;
 import com.xbk.lattice.query.service.ChunkVectorSearchService;
 import com.xbk.lattice.query.service.ContributionSearchService;
+import com.xbk.lattice.query.service.FactCardFtsSearchService;
+import com.xbk.lattice.query.service.FactCardVectorSearchService;
 import com.xbk.lattice.query.evidence.domain.EvidenceAnchor;
 import com.xbk.lattice.query.evidence.domain.EvidenceAnchorSourceType;
 import com.xbk.lattice.query.evidence.domain.AnswerProjection;
@@ -94,10 +96,12 @@ import com.xbk.lattice.query.graph.QueryGraphStateMapper;
 import com.xbk.lattice.query.service.FtsSearchService;
 import com.xbk.lattice.query.service.GraphSearchService;
 import com.xbk.lattice.query.service.KnowledgeSearchService;
+import com.xbk.lattice.query.service.AnswerShapeClassifier;
 import com.xbk.lattice.query.service.QueryIntentClassifier;
 import com.xbk.lattice.query.service.QueryArticleHit;
 import com.xbk.lattice.query.service.QueryCacheStore;
 import com.xbk.lattice.query.service.QueryReviewProperties;
+import com.xbk.lattice.query.service.QuerySearchProperties;
 import com.xbk.lattice.query.graph.QueryWorkingSetProperties;
 import com.xbk.lattice.query.graph.RedisQueryWorkingSetStore;
 import com.xbk.lattice.query.service.QueryRetrievalSettingsService;
@@ -115,7 +119,6 @@ import com.xbk.lattice.query.service.RrfFusionService;
 import com.xbk.lattice.query.service.SourceChunkFtsSearchService;
 import com.xbk.lattice.query.service.SourceSearchService;
 import com.xbk.lattice.query.service.VectorSearchService;
-import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -135,7 +138,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -226,6 +228,23 @@ class AstCitationDeepResearchBenchmarkRunner {
         assertThat(javaResult.withArray("scenarios")).isNotEmpty();
         assertThat(tsResult.withArray("scenarios")).isNotEmpty();
         assertThat(markdownReport).contains("对标结论");
+    }
+
+    @Test
+    void shouldGenerateResumeRecoveryReport() throws Exception {
+        Files.createDirectories(REPORT_DIR);
+
+        ObjectNode resumeRecoveryBenchmark = runResumeRecoveryBenchmark();
+        Path reportPath = REPORT_DIR.resolve("resume-recovery-report.json");
+        Files.writeString(
+                reportPath,
+                OBJECT_MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(resumeRecoveryBenchmark),
+                StandardCharsets.UTF_8
+        );
+
+        assertThat(resumeRecoveryBenchmark.path("scenarioCount").asInt()).isEqualTo(3);
+        assertThat(resumeRecoveryBenchmark.path("checkpointRecoveryReady").asBoolean()).isTrue();
+        assertThat(resumeRecoveryBenchmark.path("endToEndRecoveryReady").asBoolean()).isTrue();
     }
 
     private ObjectNode runJavaShadow(JsonNode dataset) {
@@ -1365,27 +1384,12 @@ class AstCitationDeepResearchBenchmarkRunner {
 
     private class RetrievalBenchmarkHarness implements AutoCloseable {
 
-        private final String schemaName;
-
-        private final JdbcTemplate adminJdbcTemplate;
-
         private final JdbcTemplate jdbcTemplate;
 
         private final KnowledgeSearchService knowledgeSearchService;
 
         private RetrievalBenchmarkHarness() {
-            this.schemaName = "lattice_benchmark_" + UUID.randomUUID().toString().replace("-", "_");
-            this.adminJdbcTemplate = new JdbcTemplate(dataSource(BENCHMARK_DB_URL));
-            this.adminJdbcTemplate.execute("drop schema if exists " + schemaName + " cascade");
-            this.adminJdbcTemplate.execute("create schema " + schemaName);
-            DriverManagerDataSource schemaDataSource = dataSource(withCurrentSchema(BENCHMARK_DB_URL, schemaName));
-            Flyway.configure()
-                    .dataSource(schemaDataSource)
-                    .schemas(schemaName)
-                    .defaultSchema(schemaName)
-                    .locations("classpath:db/migration")
-                    .load()
-                    .migrate();
+            DriverManagerDataSource schemaDataSource = dataSource(withCurrentSchema(BENCHMARK_DB_URL, "lattice"));
             this.jdbcTemplate = new JdbcTemplate(schemaDataSource);
 
             QueryRetrievalSettingsService queryRetrievalSettingsService = new QueryRetrievalSettingsService();
@@ -1613,7 +1617,6 @@ class AstCitationDeepResearchBenchmarkRunner {
 
         @Override
         public void close() {
-            adminJdbcTemplate.execute("drop schema if exists " + schemaName + " cascade");
         }
     }
 
@@ -1639,10 +1642,6 @@ class AstCitationDeepResearchBenchmarkRunner {
 
     private class RealQuestionReplayHarness implements AutoCloseable {
 
-        private final String schemaName;
-
-        private final JdbcTemplate adminJdbcTemplate;
-
         private final JdbcTemplate jdbcTemplate;
 
         private final SourceFileJdbcRepository sourceFileJdbcRepository;
@@ -1660,18 +1659,7 @@ class AstCitationDeepResearchBenchmarkRunner {
         private final KnowledgeSearchService baselineKnowledgeSearchService;
 
         private RealQuestionReplayHarness() {
-            this.schemaName = "lattice_replay_" + UUID.randomUUID().toString().replace("-", "_");
-            this.adminJdbcTemplate = new JdbcTemplate(dataSource(BENCHMARK_DB_URL));
-            this.adminJdbcTemplate.execute("drop schema if exists " + schemaName + " cascade");
-            this.adminJdbcTemplate.execute("create schema " + schemaName);
-            DriverManagerDataSource schemaDataSource = dataSource(withCurrentSchema(BENCHMARK_DB_URL, schemaName));
-            Flyway.configure()
-                    .dataSource(schemaDataSource)
-                    .schemas(schemaName)
-                    .defaultSchema(schemaName)
-                    .locations("classpath:db/migration")
-                    .load()
-                    .migrate();
+            DriverManagerDataSource schemaDataSource = dataSource(withCurrentSchema(BENCHMARK_DB_URL, "lattice"));
             this.jdbcTemplate = new JdbcTemplate(schemaDataSource);
             this.sourceFileJdbcRepository = new SourceFileJdbcRepository(jdbcTemplate);
             this.graphEntityJdbcRepository = new GraphEntityJdbcRepository(jdbcTemplate);
@@ -1684,6 +1672,7 @@ class AstCitationDeepResearchBenchmarkRunner {
                     false,
                     false,
                     1.0D,
+                    0.0D,
                     0.0D,
                     0.0D,
                     0.0D,
@@ -2130,7 +2119,6 @@ class AstCitationDeepResearchBenchmarkRunner {
 
         @Override
         public void close() {
-            adminJdbcTemplate.execute("drop schema if exists " + schemaName + " cascade");
         }
     }
 
@@ -2466,14 +2454,18 @@ class AstCitationDeepResearchBenchmarkRunner {
                     new RefKeySearchService(null),
                     new SourceSearchService(null),
                     new SourceChunkFtsSearchService(null),
+                    new FactCardFtsSearchService(null),
+                    new FactCardVectorSearchService(),
                     new ContributionSearchService(null),
                     new GraphSearchService(),
                     new VectorSearchService(),
                     new ChunkVectorSearchService(),
                     new RrfFusionService(),
                     new QueryRetrievalSettingsService(),
+                    new QuerySearchProperties(),
                     new QueryRewriteService(),
                     new QueryIntentClassifier(),
+                    new AnswerShapeClassifier(),
                     new RetrievalStrategyResolver(),
                     null,
                     new com.xbk.lattice.query.service.AnswerGenerationService(),

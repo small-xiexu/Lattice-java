@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.DeepResearchAnswerProjectionMapper">
+
+    <insert id="insert">
+        insert into deep_research_answer_projections (
+            run_id, answer_audit_id, projection_ordinal, anchor_id, citation_literal,
+            source_type, target_key, status, repair_round, repaired_from_projection_ordinal
+        )
+        values (
+            #{record.runId},
+            #{record.answerAuditId},
+            #{record.projectionOrdinal},
+            #{record.anchorId},
+            #{record.citationLiteral},
+            #{record.sourceType},
+            #{record.targetKey},
+            #{record.status},
+            #{record.repairRound},
+            #{record.repairedFromProjectionOrdinal}
+        )
+    </insert>
+</mapper>

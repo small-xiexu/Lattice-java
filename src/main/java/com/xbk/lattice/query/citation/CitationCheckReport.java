@@ -198,6 +198,15 @@ public class CitationCheckReport {
      * @return 对外摘要
      */
     public CitationCheckSummary toSummary() {
-        return new CitationCheckSummary(verifiedCount, demotedCount, skippedCount, coverageRate, noCitation);
+        int claimCount = claimSegments == null ? 0 : claimSegments.size();
+        return new CitationCheckSummary(
+                verifiedCount,
+                demotedCount,
+                skippedCount,
+                coverageRate,
+                noCitation,
+                claimCount,
+                unsupportedClaimCount
+        );
     }
 }

@@ -4,7 +4,6 @@ import com.xbk.lattice.query.evidence.domain.AnswerProjection;
 import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import com.xbk.lattice.query.evidence.domain.ProjectionCitationFormat;
 import com.xbk.lattice.query.evidence.domain.ProjectionStatus;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -22,7 +21,6 @@ import java.util.Set;
  * @author xiexu
  */
 @Service
-@Profile("jdbc")
 public class CitationCheckService {
 
     private final CitationExtractor citationExtractor;

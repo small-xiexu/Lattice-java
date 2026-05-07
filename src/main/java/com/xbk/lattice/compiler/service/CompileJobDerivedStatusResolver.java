@@ -2,7 +2,6 @@ package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.config.CompileJobProperties;
 import com.xbk.lattice.infra.persistence.CompileJobRecord;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;
@@ -15,7 +14,6 @@ import java.time.OffsetDateTime;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class CompileJobDerivedStatusResolver {
 
     private final CompileJobProperties compileJobProperties;

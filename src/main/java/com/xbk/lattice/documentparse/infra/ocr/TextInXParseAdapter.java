@@ -16,7 +16,6 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
-import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -44,7 +43,6 @@ import java.util.Locale;
  * @author xiexu
  */
 @Component
-@Profile("jdbc")
 public class TextInXParseAdapter implements OcrProviderAdapter {
 
     private static final int DEFAULT_TIMEOUT_SECONDS = 30;
