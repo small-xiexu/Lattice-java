@@ -100,7 +100,7 @@ abstract class AnswerGenerationFallbackAggregationSupport extends AnswerGenerati
      */
     boolean shouldUseFocusedStructuredFactAggregation(String question) {
         return looksLikeStructuredFactQuestion(question)
-                && lowerCase(question).contains("分别")
+                && containsMultiFocusSeparator(lowerCase(question))
                 && extractStructuredFactFocusTokens(question).size() >= 2;
     }
 
@@ -313,7 +313,7 @@ abstract class AnswerGenerationFallbackAggregationSupport extends AnswerGenerati
                     || containsRuleConstraintSignal(snippet)
                     || containsChangeTrackingSignal(snippet);
         }
-        if (normalizedQuestion.contains("哪三个") || normalizedQuestion.contains("三个")) {
+        if (containsMultiFocusSeparator(normalizedQuestion)) {
             return containsPathSignal(snippet)
                     || containsStructuredLabelSignal(snippet)
                     || containsBatchOrOrdinalSignal(snippet)
@@ -454,6 +454,20 @@ abstract class AnswerGenerationFallbackAggregationSupport extends AnswerGenerati
             return List.of();
         }
         return List.of("当前可确认的信息是：" + bestSnippet + " " + joinConclusionCitations(List.of(bestHit)));
+    }
+
+    /**
+     * 判断问题是否带有多焦点分隔符。
+     *
+     * @param normalizedQuestion 归一化问题
+     * @return 多焦点返回 true
+     */
+    private boolean containsMultiFocusSeparator(String normalizedQuestion) {
+        return normalizedQuestion != null
+                && (normalizedQuestion.contains(",")
+                || normalizedQuestion.contains("/")
+                || normalizedQuestion.contains("&")
+                || normalizedQuestion.contains("+"));
     }
 
     /**

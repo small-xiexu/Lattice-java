@@ -37,10 +37,10 @@ public class DeepResearchRouter {
         }
         String normalizedQuestion = question.toLowerCase(Locale.ROOT);
         return looksLikeDeepComparisonQuestion(normalizedQuestion)
-                || normalizedQuestion.contains("为什么")
-                || normalizedQuestion.contains("排查")
-                || normalizedQuestion.contains("调用链")
-                || normalizedQuestion.contains("影响");
+                || normalizedQuestion.contains("why")
+                || normalizedQuestion.contains("troubleshoot")
+                || normalizedQuestion.contains("call chain")
+                || normalizedQuestion.contains("impact");
     }
 
     /**
@@ -64,10 +64,9 @@ public class DeepResearchRouter {
      * @return 包含对比语义返回 true
      */
     private boolean containsComparisonIntent(String normalizedQuestion) {
-        return normalizedQuestion.contains("区别")
-                || normalizedQuestion.contains("差异")
-                || normalizedQuestion.contains("对比")
-                || normalizedQuestion.contains("比较")
+        return normalizedQuestion.contains("compare")
+                || normalizedQuestion.contains("comparison")
+                || normalizedQuestion.contains("difference")
                 || normalizedQuestion.contains(" vs ")
                 || normalizedQuestion.contains(" versus ");
     }
@@ -108,7 +107,7 @@ public class DeepResearchRouter {
      */
     private int firstComparisonIntentIndex(String normalizedQuestion) {
         int firstIndex = -1;
-        String[] comparisonIntents = {"区别", "差异", "对比", "比较", " vs ", " versus "};
+        String[] comparisonIntents = {"compare", "comparison", "difference", " vs ", " versus "};
         for (String comparisonIntent : comparisonIntents) {
             int currentIndex = normalizedQuestion.indexOf(comparisonIntent);
             if (currentIndex >= 0 && (firstIndex < 0 || currentIndex < firstIndex)) {
@@ -126,7 +125,7 @@ public class DeepResearchRouter {
      */
     private int countListDelimiters(String text) {
         int delimiterCount = 0;
-        String[] delimiters = {"、", "，", ",", "/", "与", "和", "及", " and ", "&"};
+        String[] delimiters = {",", "/", " and ", "&"};
         for (String delimiter : delimiters) {
             int searchIndex = text.indexOf(delimiter);
             while (searchIndex >= 0) {

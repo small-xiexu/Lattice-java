@@ -154,22 +154,8 @@ abstract class AnswerGenerationFallbackSnippetSelectionSupport extends AnswerGen
      * @return 适合返回 true
      */
     boolean shouldCollectDistinctMachineIdentifiers(String question) {
-        String normalizedQuestion = lowerCase(question);
         return containsMachineIdentifierSignal(question)
-                || normalizedQuestion.contains("标识")
-                || normalizedQuestion.contains("名称")
-                || normalizedQuestion.contains("编号")
-                || normalizedQuestion.contains("编码")
-                || normalizedQuestion.contains("接口")
-                || normalizedQuestion.contains("路径")
-                || normalizedQuestion.contains("队列")
-                || normalizedQuestion.contains("主题")
-                || normalizedQuestion.contains("key")
-                || normalizedQuestion.contains("id")
-                || normalizedQuestion.contains("url")
-                || normalizedQuestion.contains("endpoint")
-                || normalizedQuestion.contains("topic")
-                || normalizedQuestion.contains("queue");
+                || !extractRequestedReferentialIdentifiers(question).isEmpty();
     }
 
     /**
@@ -231,12 +217,7 @@ abstract class AnswerGenerationFallbackSnippetSelectionSupport extends AnswerGen
             return looksLikeNumericQuestion(question);
         }
         if ("status".equals(shape)) {
-            return normalizedQuestion.contains("结论")
-                    || normalizedQuestion.contains("流量")
-                    || normalizedQuestion.contains("调整")
-                    || normalizedQuestion.contains("修正")
-                    || normalizedQuestion.contains("降级")
-                    || looksLikeStatusQuestion(question);
+            return looksLikeStatusQuestion(question);
         }
         if ("ordinal".equals(shape)) {
             return expectsBatchOrOrdinalAnswer(normalizedQuestion);
@@ -516,10 +497,6 @@ abstract class AnswerGenerationFallbackSnippetSelectionSupport extends AnswerGen
         }
         if (looksLikeSetupChecklistQuestion(question) && answerEvidenceNormalizer.startsWithDirectStructuredFactAssignment(normalizedLine)) {
             score -= 28;
-        }
-        if (normalizedQuestion.contains("配置")
-                && (lowerCaseLine.startsWith("代码中的") || lowerCaseLine.contains("数值一致"))) {
-            score -= 8;
         }
         if (looksLikeRuleConstraintQuestion(question)
                 && lowerCaseLine.contains("一般遵循")

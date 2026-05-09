@@ -177,7 +177,7 @@ public class GraphSearchService {
 
     private String buildFactsBlock(AstEntity entity, List<AstFact> facts, List<AstRelation> relations) {
         StringBuilder factsBlockBuilder = new StringBuilder();
-        factsBlockBuilder.append("实体=").append(entity.getCanonicalName());
+        factsBlockBuilder.append("entity=").append(entity.getCanonicalName());
         if (!facts.isEmpty()) {
             for (AstFact fact : facts) {
                 factsBlockBuilder.append("；")

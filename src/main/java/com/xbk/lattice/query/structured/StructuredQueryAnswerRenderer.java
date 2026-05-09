@@ -34,10 +34,10 @@ public class StructuredQueryAnswerRenderer {
      */
     public String renderAnswer(StructuredQueryResult result) {
         if (result == null || result.getPlan() == null || !result.hasResult()) {
-            return "未找到满足结构化条件的记录。";
+            return "NO_STRUCTURED_RECORDS";
         }
         if (result.getPlan().getQueryType() == StructuredQueryType.COUNT) {
-            return "满足条件的记录数为 " + result.getCount() + "。";
+            return "count=" + result.getCount();
         }
         if (result.getPlan().getQueryType() == StructuredQueryType.GROUP_BY) {
             return renderGroupCounts(result);
@@ -160,7 +160,7 @@ public class StructuredQueryAnswerRenderer {
             lines.add("- " + groupCount.getCellValue() + "=" + groupCount.getCount());
         }
         if (totalCount > 0L) {
-            lines.add("总行数=" + totalCount);
+            lines.add("total_rows=" + totalCount);
         }
         return String.join("\n", lines);
     }
@@ -168,10 +168,10 @@ public class StructuredQueryAnswerRenderer {
     private String renderComparison(StructuredQueryResult result) {
         List<StructuredTableRowEvidence> rowEvidences = result.getRowEvidences();
         if (rowEvidences.size() < 2) {
-            return "未找到可对比的两条结构化记录。";
+            return "NO_COMPARABLE_STRUCTURED_RECORDS";
         }
         List<String> lines = new ArrayList<String>();
-        lines.add("对比结果：");
+        lines.add("comparison:");
         List<String> projections = result.getPlan().getProjections();
         if (projections.isEmpty()) {
             lines.add(renderRow(result.getPlan(), rowEvidences.get(0)));

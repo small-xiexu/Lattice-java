@@ -31,7 +31,7 @@ public class LocalReviewerGateway implements ReviewerGateway {
                     {"approved":false,"rewriteRequired":true,"riskLevel":"HIGH","issues":[{"severity":"HIGH","category":"EMPTY_SOURCES","description":"答案缺少来源路径，无法验证"}],"userFacingRewriteHints":["请补充可验证的来源路径"],"cacheWritePolicy":"SKIP_WRITE"}
                     """;
         }
-        if (normalizedPrompt.contains("answer=未找到相关知识")
+        if (normalizedPrompt.contains("answer=NO_RELEVANT_KNOWLEDGE")
                 || normalizedPrompt.contains("answer=TODO")
                 || normalizedPrompt.contains("answer=TBD")) {
             return """

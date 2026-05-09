@@ -191,10 +191,10 @@ abstract class AnswerGenerationEvidenceSignalSupport extends AnswerGenerationCor
         if (normalizedQuestion == null || normalizedQuestion.isBlank()) {
             return false;
         }
-        return normalizedQuestion.contains("批")
-                || normalizedQuestion.contains("第几")
-                || normalizedQuestion.contains("哪一")
-                || normalizedQuestion.contains("顺序");
+        return normalizedQuestion.contains("ordinal")
+                || normalizedQuestion.contains("sequence")
+                || normalizedQuestion.contains("batch")
+                || normalizedQuestion.contains("step");
     }
 
     /**

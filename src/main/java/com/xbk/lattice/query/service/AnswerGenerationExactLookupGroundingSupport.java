@@ -291,8 +291,8 @@ abstract class AnswerGenerationExactLookupGroundingSupport extends AnswerGenerat
      * @return 数值列表
      */
     List<String> extractRequiredEvidenceNumbers(String normalizedQuestion, List<String> focusSnippets) {
-        if (normalizedQuestion != null && normalizedQuestion.contains("命中数")) {
-            List<String> countNumbers = extractNumbersFromSignalSnippets(focusSnippets, List.of("命中", "条", "count"));
+        if (normalizedQuestion != null && normalizedQuestion.contains("count")) {
+            List<String> countNumbers = extractNumbersFromSignalSnippets(focusSnippets, List.of("count"));
             if (!countNumbers.isEmpty()) {
                 return countNumbers;
             }

@@ -32,16 +32,16 @@ final class AnswerFallbackMarkdownBuilder {
      * @param queryArticleHits 查询命中
      * @return Markdown 答案
      */
-    String buildFallbackMarkdown(String question, List<QueryArticleHit> queryArticleHits) {
+    String buildEvidenceMarkdown(String question, List<QueryArticleHit> queryArticleHits) {
         List<QueryArticleHit> fallbackHits = support.selectFallbackEvidenceHits(question, queryArticleHits);
         List<String> queryTokens = support.extractQueryTokens(question);
-        StringBuilder markdownBuilder = new StringBuilder();
-        markdownBuilder.append("# 查询回答").append("\n\n");
-        markdownBuilder.append("## 问题").append("\n");
-        markdownBuilder.append(question.trim()).append("\n\n");
-        appendFallbackConclusion(markdownBuilder, question, fallbackHits, queryTokens);
-        appendFallbackReferenceSection(markdownBuilder, question, fallbackHits, queryTokens);
-        return markdownBuilder.toString().trim();
+        StringBuilder builder = new StringBuilder();
+        builder.append("# Query Answer").append("\n\n");
+        builder.append("## Question").append("\n");
+        builder.append(question.trim()).append("\n\n");
+        appendEvidenceConclusion(builder, question, fallbackHits, queryTokens);
+        appendEvidenceReferenceSection(builder, question, fallbackHits, queryTokens);
+        return builder.toString().trim();
     }
 
     /**
@@ -53,7 +53,7 @@ final class AnswerFallbackMarkdownBuilder {
      * @param queryArticleHits 修订证据
      * @return 修订 Markdown
      */
-    String buildFallbackRevisionMarkdown(
+    String buildRevisionEvidenceMarkdown(
             String question,
             String currentAnswer,
             String correction,
@@ -61,21 +61,21 @@ final class AnswerFallbackMarkdownBuilder {
     ) {
         List<String> queryTokens = support.extractQueryTokens(question);
         Map<QueryEvidenceType, List<QueryArticleHit>> groupedHits = support.groupHitsByEvidenceType(queryArticleHits);
-        StringBuilder markdownBuilder = new StringBuilder();
-        markdownBuilder.append("# 修订答案").append("\n\n");
-        markdownBuilder.append("## 问题").append("\n");
-        markdownBuilder.append(question.trim()).append("\n\n");
-        markdownBuilder.append("## 修订结论").append("\n");
-        markdownBuilder.append("- ").append(SensitiveTextMasker.mask(correction == null ? "" : correction.trim())).append("\n\n");
-        markdownBuilder.append("## 修订说明").append("\n");
-        markdownBuilder.append("- 原答案摘要：").append(support.extractEvidenceSnippet(currentAnswer)).append("\n");
-        markdownBuilder.append("- 纠正输入：").append(SensitiveTextMasker.mask(correction == null ? "" : correction.trim())).append("\n\n");
-        appendFallbackSection(markdownBuilder, "用户反馈证据", groupedHits.get(QueryEvidenceType.CONTRIBUTION), queryArticleHits, queryTokens);
-        appendFallbackSection(markdownBuilder, "结构化证据卡", groupedHits.get(QueryEvidenceType.FACT_CARD), queryArticleHits, queryTokens);
-        appendFallbackSection(markdownBuilder, "源文件证据", groupedHits.get(QueryEvidenceType.SOURCE), queryArticleHits, queryTokens);
-        appendFallbackSection(markdownBuilder, "图谱证据", groupedHits.get(QueryEvidenceType.GRAPH), queryArticleHits, queryTokens);
-        appendFallbackSection(markdownBuilder, "文章背景证据", groupedHits.get(QueryEvidenceType.ARTICLE), queryArticleHits, queryTokens);
-        return markdownBuilder.toString().trim();
+        StringBuilder builder = new StringBuilder();
+        builder.append("# Revised Answer").append("\n\n");
+        builder.append("## Question").append("\n");
+        builder.append(question.trim()).append("\n\n");
+        builder.append("## Revision").append("\n");
+        builder.append("- ").append(SensitiveTextMasker.mask(correction == null ? "" : correction.trim())).append("\n\n");
+        builder.append("## Inputs").append("\n");
+        builder.append("- Previous answer: ").append(support.extractEvidenceSnippet(currentAnswer)).append("\n");
+        builder.append("- Correction: ").append(SensitiveTextMasker.mask(correction == null ? "" : correction.trim())).append("\n\n");
+        appendEvidenceSection(builder, "Contribution Evidence", groupedHits.get(QueryEvidenceType.CONTRIBUTION), queryArticleHits, queryTokens);
+        appendEvidenceSection(builder, "Fact Card Evidence", groupedHits.get(QueryEvidenceType.FACT_CARD), queryArticleHits, queryTokens);
+        appendEvidenceSection(builder, "Source Evidence", groupedHits.get(QueryEvidenceType.SOURCE), queryArticleHits, queryTokens);
+        appendEvidenceSection(builder, "Graph Evidence", groupedHits.get(QueryEvidenceType.GRAPH), queryArticleHits, queryTokens);
+        appendEvidenceSection(builder, "Article Evidence", groupedHits.get(QueryEvidenceType.ARTICLE), queryArticleHits, queryTokens);
+        return builder.toString().trim();
     }
 
     /**
@@ -87,8 +87,8 @@ final class AnswerFallbackMarkdownBuilder {
      * @param citationCandidateHits citation 候选
      * @param queryTokens 查询 token
      */
-    private void appendFallbackSection(
-            StringBuilder markdownBuilder,
+    private void appendEvidenceSection(
+            StringBuilder builder,
             String title,
             List<QueryArticleHit> queryArticleHits,
             List<QueryArticleHit> citationCandidateHits,
@@ -97,19 +97,19 @@ final class AnswerFallbackMarkdownBuilder {
         if (queryArticleHits == null || queryArticleHits.isEmpty()) {
             return;
         }
-        markdownBuilder.append("## ").append(title).append("\n");
+        builder.append("## ").append(title).append("\n");
         for (QueryArticleHit queryArticleHit : queryArticleHits) {
-            markdownBuilder.append("- **").append(queryArticleHit.getTitle()).append("**");
+            builder.append("- **").append(queryArticleHit.getTitle()).append("**");
             if (!queryArticleHit.getSourcePaths().isEmpty()) {
-                markdownBuilder.append(" (").append(String.join(", ", queryArticleHit.getSourcePaths())).append(")");
+                builder.append(" (").append(String.join(", ", queryArticleHit.getSourcePaths())).append(")");
             }
-            markdownBuilder.append("：")
+            builder.append(": ")
                     .append(SensitiveTextMasker.mask(support.selectFallbackEvidenceSnippet(queryArticleHit, queryTokens)))
                     .append(" ")
                     .append(support.resolveCitationLiteral(queryArticleHit, citationCandidateHits))
                     .append("\n");
         }
-        markdownBuilder.append("\n");
+        builder.append("\n");
     }
 
     /**
@@ -120,22 +120,22 @@ final class AnswerFallbackMarkdownBuilder {
      * @param fallbackHits fallback 证据
      * @param queryTokens 查询 token
      */
-    private void appendFallbackConclusion(
-            StringBuilder markdownBuilder,
+    private void appendEvidenceConclusion(
+            StringBuilder builder,
             String question,
             List<QueryArticleHit> fallbackHits,
             List<String> queryTokens
     ) {
-        markdownBuilder.append("## 结论").append("\n");
-        List<String> conclusionLines = support.buildFallbackConclusionLines(question, fallbackHits, queryTokens);
+        builder.append("## Evidence").append("\n");
+        List<String> conclusionLines = support.buildEvidenceConclusionLines(question, fallbackHits, queryTokens);
         if (conclusionLines.isEmpty()) {
-            markdownBuilder.append("- 当前未找到与该问题直接相关的知识。").append("\n\n");
+            builder.append("- NO_RELEVANT_KNOWLEDGE").append("\n\n");
             return;
         }
         for (String conclusionLine : conclusionLines) {
-            markdownBuilder.append("- ").append(SensitiveTextMasker.mask(conclusionLine)).append("\n");
+            builder.append("- ").append(SensitiveTextMasker.mask(conclusionLine)).append("\n");
         }
-        markdownBuilder.append("\n");
+        builder.append("\n");
     }
 
     /**
@@ -146,8 +146,8 @@ final class AnswerFallbackMarkdownBuilder {
      * @param fallbackHits fallback 证据
      * @param queryTokens 查询 token
      */
-    private void appendFallbackReferenceSection(
-            StringBuilder markdownBuilder,
+    private void appendEvidenceReferenceSection(
+            StringBuilder builder,
             String question,
             List<QueryArticleHit> fallbackHits,
             List<String> queryTokens
@@ -157,7 +157,7 @@ final class AnswerFallbackMarkdownBuilder {
         }
         List<String> comparisonOptions = support.extractComparisonOptions(question);
         QueryArticleHit primaryHit = fallbackHits.get(0);
-        markdownBuilder.append("## 参考说明").append("\n");
+        builder.append("## References").append("\n");
         for (int index = 0; index < fallbackHits.size(); index++) {
             QueryArticleHit fallbackHit = fallbackHits.get(index);
             if (index > 0
@@ -166,16 +166,16 @@ final class AnswerFallbackMarkdownBuilder {
                 continue;
             }
             String snippet = support.selectReferenceFallbackSnippet(question, fallbackHit, comparisonOptions, queryTokens);
-            markdownBuilder.append("- **").append(fallbackHit.getTitle()).append("**");
+            builder.append("- **").append(fallbackHit.getTitle()).append("**");
             if (!fallbackHit.getSourcePaths().isEmpty()) {
-                markdownBuilder.append(" (").append(String.join(", ", fallbackHit.getSourcePaths())).append(")");
+                builder.append(" (").append(String.join(", ", fallbackHit.getSourcePaths())).append(")");
             }
-            markdownBuilder.append("：")
+            builder.append(": ")
                     .append(SensitiveTextMasker.mask(snippet))
                     .append(" ")
                     .append(support.resolveCitationLiteral(fallbackHit, fallbackHits))
                     .append("\n");
         }
-        markdownBuilder.append("\n");
+        builder.append("\n");
     }
 }

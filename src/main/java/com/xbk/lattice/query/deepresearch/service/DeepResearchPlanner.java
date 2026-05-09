@@ -257,14 +257,18 @@ public class DeepResearchPlanner {
         if (question == null || question.isBlank()) {
             return ResearchTaskType.FACT_LOOKUP;
         }
-        String normalizedQuestion = question.trim();
-        if (normalizedQuestion.contains("区别") || normalizedQuestion.contains("对比")) {
+        String normalizedQuestion = question.trim().toLowerCase(Locale.ROOT);
+        if (normalizedQuestion.contains("compare")
+                || normalizedQuestion.contains("comparison")
+                || normalizedQuestion.contains("difference")
+                || normalizedQuestion.contains(" vs ")
+                || normalizedQuestion.contains(" versus ")) {
             return ResearchTaskType.COMPARE;
         }
-        if (normalizedQuestion.contains("为什么") || normalizedQuestion.contains("原因")) {
+        if (normalizedQuestion.contains("why") || normalizedQuestion.contains("cause")) {
             return ResearchTaskType.CAUSE;
         }
-        if (normalizedQuestion.contains("如何") || normalizedQuestion.contains("策略") || normalizedQuestion.contains("方案")) {
+        if (normalizedQuestion.contains("how") || normalizedQuestion.contains("policy") || normalizedQuestion.contains("strategy")) {
             return ResearchTaskType.POLICY;
         }
         return ResearchTaskType.FACT_LOOKUP;
@@ -276,21 +280,24 @@ public class DeepResearchPlanner {
             return splitQuestions;
         }
         String normalizedQuestion = question.trim();
-        if (normalizedQuestion.contains("区别") || normalizedQuestion.contains("对比")) {
-            String cleanedQuestion = extractComparisonSubject(normalizedQuestion).replace("对比", "和");
-            String[] parts = cleanedQuestion.split("和|与|以及");
+        String lowercaseQuestion = normalizedQuestion.toLowerCase(Locale.ROOT);
+        if (lowercaseQuestion.contains("compare")
+                || lowercaseQuestion.contains("comparison")
+                || lowercaseQuestion.contains("difference")
+                || lowercaseQuestion.contains(" vs ")
+                || lowercaseQuestion.contains(" versus ")) {
+            String cleanedQuestion = extractComparisonSubject(normalizedQuestion);
+            String[] parts = cleanedQuestion.split("(?i)\\s+(?:vs|versus|and)\\s+|[,/&+]");
             for (String part : parts) {
                 String trimmedPart = part == null ? "" : part.trim();
                 if (!trimmedPart.isBlank()) {
-                    splitQuestions.add(trimmedPart + " 的关键结论是什么");
+                    splitQuestions.add(trimmedPart);
                 }
             }
         }
         if (splitQuestions.isEmpty()) {
-            String lowercaseQuestion = normalizedQuestion.toLowerCase(Locale.ROOT);
-            if (lowercaseQuestion.contains("为什么") && lowercaseQuestion.contains("如何")) {
-                splitQuestions.add(normalizedQuestion.replace("如何", "").trim() + " 的原因");
-                splitQuestions.add(normalizedQuestion.replace("为什么", "").trim() + " 的做法");
+            if (lowercaseQuestion.contains("why") && lowercaseQuestion.contains("how")) {
+                splitQuestions.add(normalizedQuestion);
             }
         }
         if (splitQuestions.size() > 3) {

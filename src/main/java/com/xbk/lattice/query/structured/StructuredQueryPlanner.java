@@ -231,15 +231,8 @@ public class StructuredQueryPlanner {
 
     private boolean isCountQuestion(String question) {
         String normalizedQuestion = question == null ? "" : question.trim();
-        return normalizedQuestion.contains("多少条")
-                || normalizedQuestion.contains("多少行")
-                || normalizedQuestion.contains("多少个记录")
-                || normalizedQuestion.contains("多少条记录")
-                || normalizedQuestion.contains("记录数")
-                || normalizedQuestion.contains("行数")
-                || normalizedQuestion.contains("几条")
-                || normalizedQuestion.contains("几行")
-                || question.toLowerCase(Locale.ROOT).contains("count");
+        return normalizedQuestion.toLowerCase(Locale.ROOT).contains("count")
+                || normalizedQuestion.matches("(?s).*\\bcount\\b.*");
     }
 
     private String cleanFieldCandidate(String fieldCandidate) {

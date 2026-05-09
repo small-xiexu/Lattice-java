@@ -52,24 +52,14 @@ abstract class AnswerGenerationCoreSignalSupport extends AnswerGenerationBaseSup
     }
 
 boolean containsStatusSignal(String normalizedLine) {
-        return normalizedLine.contains("当前可用")
-                || normalizedLine.contains("已可用")
-                || normalizedLine.contains("不可用")
-                || normalizedLine.contains("已实现")
-                || normalizedLine.contains("未实现")
-                || normalizedLine.contains("尚未实现")
-                || normalizedLine.contains("已有")
-                || normalizedLine.contains("实际")
-                || normalizedLine.contains("待配置")
-                || normalizedLine.contains("未配置")
-                || normalizedLine.contains("不存在")
-                || normalizedLine.contains("未提供")
-                || normalizedLine.contains("启用")
-                || normalizedLine.contains("禁用")
-                || normalizedLine.contains("就绪")
-                || normalizedLine.contains("正常")
-                || normalizedLine.contains("还没有")
-                || normalizedLine.contains("未发现");
+        return normalizedLine.contains("available")
+                || normalizedLine.contains("implemented")
+                || normalizedLine.contains("configured")
+                || normalizedLine.contains("enabled")
+                || normalizedLine.contains("disabled")
+                || normalizedLine.contains("ready")
+                || normalizedLine.contains("missing")
+                || normalizedLine.contains("pending");
     }
 
     /**

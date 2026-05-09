@@ -121,7 +121,7 @@ abstract class AnswerGenerationApiSupport extends AnswerGenerationOutcomeSupport
             List<QueryArticleHit> queryArticleHits,
             AnswerOutcome answerOutcome
     ) {
-        return buildDeterministicFallbackPayload(
+        return buildEvidencePayload(
                 question,
                 queryArticleHits,
                 answerOutcome,

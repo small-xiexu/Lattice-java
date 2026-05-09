@@ -189,22 +189,8 @@ abstract class AnswerGenerationReferenceIdentifierSupport extends AnswerGenerati
      * @return 精确标识知识题返回 true
      */
     boolean looksLikeReferentialKnowledgeQuestion(String question) {
-        String normalizedQuestion = lowerCase(question);
         List<String> requestedIdentifiers = extractRequestedReferentialIdentifiers(question);
-        if (requestedIdentifiers.isEmpty()) {
-            return false;
-        }
-        return normalizedQuestion.contains("字段")
-                || normalizedQuestion.contains("状态码")
-                || normalizedQuestion.contains("枚举")
-                || normalizedQuestion.contains("配置")
-                || normalizedQuestion.contains("参数")
-                || normalizedQuestion.contains("报文")
-                || normalizedQuestion.contains("接口")
-                || normalizedQuestion.contains("分别")
-                || normalizedQuestion.contains("表示")
-                || normalizedQuestion.contains("含义")
-                || normalizedQuestion.contains("定义");
+        return !requestedIdentifiers.isEmpty();
     }
 
     /**
@@ -234,17 +220,7 @@ abstract class AnswerGenerationReferenceIdentifierSupport extends AnswerGenerati
             return false;
         }
         List<String> requestedIdentifiers = extractRequestedReferentialIdentifiers(question);
-        if (requestedIdentifiers.size() < 2) {
-            return false;
-        }
-        String normalizedQuestion = lowerCase(question);
-        return normalizedQuestion.contains("分别")
-                || normalizedQuestion.contains("表示")
-                || normalizedQuestion.contains("含义")
-                || normalizedQuestion.contains("定义")
-                || normalizedQuestion.contains("字段")
-                || normalizedQuestion.contains("状态码")
-                || normalizedQuestion.contains("枚举");
+        return requestedIdentifiers.size() >= 2;
     }
 
     /**

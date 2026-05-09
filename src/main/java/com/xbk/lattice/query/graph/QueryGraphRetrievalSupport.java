@@ -312,40 +312,79 @@ abstract class QueryGraphRetrievalSupport extends QueryGraphDefinitionBaseSuppor
         if (queryArticleHit == null) {
             return Integer.MIN_VALUE;
         }
-        String normalizedQuestion = lowerCase(question);
         String haystack = lowerCase(queryArticleHit.getTitle())
                 + " "
                 + lowerCase(queryArticleHit.getContent())
                 + " "
                 + lowerCase(queryArticleHit.getMetadataJson());
+        List<String> highSignalTokens = QueryEvidenceRelevanceSupport.extractHighSignalTokens(question);
         int score = QueryEvidenceRelevanceSupport.score(question, queryArticleHit);
         if (queryArticleHit.getEvidenceType() == QueryEvidenceType.SOURCE) {
             score += 16;
         }
-        if (normalizedQuestion.contains("命中数") && haystack.matches("(?s).*\\d.*")) {
+        if (queryArticleHit.getEvidenceType() == QueryEvidenceType.FACT_CARD) {
+            score += 10;
+        }
+        if (containsNumericToken(highSignalTokens) && haystack.matches("(?s).*\\d.*")) {
             score += 18;
         }
-        if ((normalizedQuestion.contains("路径") || normalizedQuestion.contains("接口")) && haystack.contains("/")) {
+        if (containsStructuredToken(highSignalTokens) && containsStructuredSignal(haystack)) {
             score += 18;
-        }
-        if ((normalizedQuestion.contains("结论") || normalizedQuestion.contains("状态"))
-                && (haystack.contains("修正为")
-                || haystack.contains("确认")
-                || haystack.contains("生效")
-                || haystack.contains("启用")
-                || haystack.contains("禁用"))) {
-            score += 20;
-        }
-        if ((normalizedQuestion.contains("差异") || normalizedQuestion.contains("不同") || normalizedQuestion.contains("是否一致"))
-                && (haystack.contains("不同") || haystack.contains("不一致") || haystack.contains("差异"))) {
-            score += 18;
-        }
-        if ((normalizedQuestion.contains("批") || normalizedQuestion.contains("场景"))
-                && haystack.contains("第")
-                && haystack.contains("批")) {
-            score += 16;
         }
         return score;
+    }
+
+    /**
+     * 判断高信号 token 中是否包含数值。
+     *
+     * @param highSignalTokens 高信号 token
+     * @return 包含数值返回 true
+     */
+    private boolean containsNumericToken(List<String> highSignalTokens) {
+        if (highSignalTokens == null || highSignalTokens.isEmpty()) {
+            return false;
+        }
+        for (String highSignalToken : highSignalTokens) {
+            if (highSignalToken != null && highSignalToken.matches(".*\\d.*")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断高信号 token 中是否包含结构化标识。
+     *
+     * @param highSignalTokens 高信号 token
+     * @return 包含结构化标识返回 true
+     */
+    private boolean containsStructuredToken(List<String> highSignalTokens) {
+        if (highSignalTokens == null || highSignalTokens.isEmpty()) {
+            return false;
+        }
+        for (String highSignalToken : highSignalTokens) {
+            if (containsStructuredSignal(highSignalToken)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断文本是否包含结构化标识信号。
+     *
+     * @param value 文本
+     * @return 包含返回 true
+     */
+    private boolean containsStructuredSignal(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        return value.contains("/")
+                || value.contains(".")
+                || value.contains("_")
+                || value.contains("-")
+                || value.contains("=");
     }
     /**
      * 判断融合命中中是否已有同一条证据。

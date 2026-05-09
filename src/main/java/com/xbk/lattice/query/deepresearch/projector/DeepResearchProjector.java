@@ -132,7 +132,7 @@ public class DeepResearchProjector {
 
     private AnswerProjectionBundle insufficientBundle() {
         return new AnswerProjectionBundle(
-                "当前证据不足，无法生成可核验引用版答案",
+                "INSUFFICIENT_EVIDENCE",
                 List.of()
         );
     }

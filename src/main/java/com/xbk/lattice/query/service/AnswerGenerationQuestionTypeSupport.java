@@ -120,10 +120,10 @@ abstract class AnswerGenerationQuestionTypeSupport extends AnswerGenerationQuest
     int desiredStructuredFactCount(String question) {
         String normalizedQuestion = lowerCase(question);
         int requestedShapeCount = 1;
-        if (normalizedQuestion.contains("命中数")) {
+        if (normalizedQuestion.contains("count") || normalizedQuestion.matches("(?s).*\\d+.*")) {
             requestedShapeCount++;
         }
-        if (normalizedQuestion.contains("结论") || normalizedQuestion.contains("状态")) {
+        if (normalizedQuestion.contains("status") || normalizedQuestion.contains("state")) {
             requestedShapeCount++;
         }
         if (expectsBatchOrOrdinalAnswer(normalizedQuestion)) {
@@ -132,14 +132,14 @@ abstract class AnswerGenerationQuestionTypeSupport extends AnswerGenerationQuest
         if (requestedShapeCount > 1) {
             return Math.min(4, requestedShapeCount);
         }
-        if (normalizedQuestion.contains("分别")) {
+        if (containsMultiFocusSeparator(normalizedQuestion)) {
             int focusTokenCount = extractStructuredFactFocusTokens(question).size();
             if (focusTokenCount > 0) {
                 return Math.min(6, Math.max(2, focusTokenCount));
             }
             return 2;
         }
-        if (looksLikeNumericQuestion(question) && normalizedQuestion.contains("和")) {
+        if (looksLikeNumericQuestion(question) && containsMultiFocusSeparator(normalizedQuestion)) {
             return 2;
         }
         return 1;
@@ -154,31 +154,22 @@ abstract class AnswerGenerationQuestionTypeSupport extends AnswerGenerationQuest
     int desiredFallbackConclusionSnippetCount(String question) {
         String normalizedQuestion = lowerCase(question);
         if (looksLikeStructuredFactQuestion(question)
-                && (normalizedQuestion.contains("多少")
-                || normalizedQuestion.contains("分别")
-                || normalizedQuestion.contains("命中数")
-                || normalizedQuestion.contains("结论")
-                || normalizedQuestion.contains("批")
-                || normalizedQuestion.contains("阈值")
-                || normalizedQuestion.contains("窗口")
-                || normalizedQuestion.contains("值"))) {
+                && (looksLikeNumericQuestion(question)
+                || containsMultiFocusSeparator(normalizedQuestion)
+                || normalizedQuestion.contains("status")
+                || normalizedQuestion.contains("state")
+                || normalizedQuestion.contains("value"))) {
             return desiredStructuredFactCount(question);
         }
         if (looksLikeCapabilityQuestion(question)
-                && !normalizedQuestion.contains("形态")
-                && !normalizedQuestion.contains("技巧")
-                && !normalizedQuestion.contains("字段")
-                && !normalizedQuestion.contains("步骤")
-                && !normalizedQuestion.contains("渠道")) {
+                && !normalizedQuestion.contains("fields")
+                && !normalizedQuestion.contains("steps")) {
             return 1;
         }
-        if (normalizedQuestion.contains("步骤")) {
+        if (normalizedQuestion.contains("steps")) {
             return 8;
         }
-        if (normalizedQuestion.contains("技巧") || normalizedQuestion.contains("形态")) {
-            return 8;
-        }
-        if (normalizedQuestion.contains("字段") || normalizedQuestion.contains("渠道")) {
+        if (normalizedQuestion.contains("fields")) {
             return 6;
         }
         if (looksLikeEnumerationQuestion(question)) {
@@ -201,7 +192,7 @@ abstract class AnswerGenerationQuestionTypeSupport extends AnswerGenerationQuest
         if (!shouldExtractStructuredFactFocusTokens(question)) {
             return focusTokens;
         }
-        String[] rawSegments = question.split("和|以及|及|、|/|，|,");
+        String[] rawSegments = question.split("[,/&+;]");
         for (String rawSegment : rawSegments) {
             String focusToken = cleanupStructuredFactQuestionSegment(rawSegment);
             if (focusToken.isBlank() || focusTokens.contains(focusToken)) {
@@ -233,14 +224,13 @@ abstract class AnswerGenerationQuestionTypeSupport extends AnswerGenerationQuest
      */
     boolean shouldExtractStructuredFactFocusTokens(String question) {
         String normalizedQuestion = lowerCase(question);
-        if (normalizedQuestion.contains("分别")) {
+        if (containsMultiFocusSeparator(normalizedQuestion)) {
             return true;
         }
-        return normalizedQuestion.matches("(?s).*[A-Za-z0-9._-]+\\s*(?:和|以及|、|/)\\s*[A-Za-z0-9._-]+.*")
-                && (normalizedQuestion.contains("多少")
-                || normalizedQuestion.contains("值")
-                || normalizedQuestion.contains("配置")
-                || normalizedQuestion.contains("参数"));
+        return normalizedQuestion.matches("(?s).*[A-Za-z0-9._-]+\\s*(?:,|/|&|\\+)\\s*[A-Za-z0-9._-]+.*")
+                && (normalizedQuestion.contains("value")
+                || normalizedQuestion.contains("config")
+                || normalizedQuestion.contains("parameter"));
     }
 
     /**
@@ -255,19 +245,12 @@ abstract class AnswerGenerationQuestionTypeSupport extends AnswerGenerationQuest
             return "";
         }
         normalizedSegment = removeLeadingPossessiveScope(normalizedSegment);
-        normalizedSegment = normalizedSegment.replace("当前", " ");
-        normalizedSegment = normalizedSegment.replace("现在", " ");
-        normalizedSegment = normalizedSegment.replace("目前", " ");
-        normalizedSegment = normalizedSegment.replace("分别", " ");
-        normalizedSegment = normalizedSegment.replace("多少", " ");
-        normalizedSegment = normalizedSegment.replace("几", " ");
-        normalizedSegment = normalizedSegment.replace("数值", " ");
-        normalizedSegment = normalizedSegment.replace("参数", " ");
-        normalizedSegment = normalizedSegment.replace("配置", " ");
-        normalizedSegment = normalizedSegment.replace("是什么", " ");
-        normalizedSegment = normalizedSegment.replace("是多少", " ");
-        normalizedSegment = normalizedSegment.replace("值", " ");
-        normalizedSegment = normalizedSegment.replace("是", " ");
+        normalizedSegment = normalizedSegment.replace("current", " ");
+        normalizedSegment = normalizedSegment.replace("latest", " ");
+        normalizedSegment = normalizedSegment.replace("value", " ");
+        normalizedSegment = normalizedSegment.replace("parameter", " ");
+        normalizedSegment = normalizedSegment.replace("config", " ");
+        normalizedSegment = normalizedSegment.replace("what is", " ");
         normalizedSegment = normalizedSegment.replaceAll("[？?。！!：:（）()“”\"'`]", " ");
         normalizedSegment = normalizedSegment.replaceAll("\\s+", " ").trim();
         if (normalizedSegment.isBlank()) {
@@ -289,15 +272,29 @@ abstract class AnswerGenerationQuestionTypeSupport extends AnswerGenerationQuest
         if (normalizedSegment == null || normalizedSegment.isBlank()) {
             return "";
         }
-        int possessiveIndex = normalizedSegment.lastIndexOf("的");
+        int possessiveIndex = normalizedSegment.lastIndexOf(" of ");
         if (possessiveIndex < 0 || possessiveIndex >= normalizedSegment.length() - 1) {
             return normalizedSegment;
         }
         String scopePart = normalizedSegment.substring(0, possessiveIndex).trim();
-        String focusPart = normalizedSegment.substring(possessiveIndex + 1).trim();
+        String focusPart = normalizedSegment.substring(possessiveIndex + 4).trim();
         if (scopePart.isBlank() || focusPart.isBlank()) {
             return normalizedSegment;
         }
         return focusPart;
+    }
+
+    /**
+     * 判断问题是否带有多焦点分隔符。
+     *
+     * @param normalizedQuestion 归一化问题
+     * @return 多焦点返回 true
+     */
+    private boolean containsMultiFocusSeparator(String normalizedQuestion) {
+        return normalizedQuestion != null
+                && (normalizedQuestion.contains(",")
+                || normalizedQuestion.contains("/")
+                || normalizedQuestion.contains("&")
+                || normalizedQuestion.contains("+"));
     }
 }

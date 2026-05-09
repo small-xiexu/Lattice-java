@@ -23,6 +23,8 @@ import java.util.Set;
 @Service
 public class CitationCheckService {
 
+    private static final String INSUFFICIENT_EVIDENCE_MARKER = "[insufficient-evidence]";
+
     private final CitationExtractor citationExtractor;
 
     private final CitationValidator citationValidator;
@@ -181,7 +183,7 @@ public class CitationCheckService {
         }
         for (ClaimSegment claimSegment : report.getClaimSegments()) {
             if (!claimSegment.getCitations().isEmpty()
-                    || claimSegment.getClaimText().contains("当前证据不足")) {
+                    || claimSegment.getClaimText().contains(INSUFFICIENT_EVIDENCE_MARKER)) {
                 continue;
             }
             String nearestUsableCitationLiteral = nearestUsableCitationLiteral(claimSegment, report);
@@ -390,11 +392,11 @@ public class CitationCheckService {
     }
 
     private String appendEvidenceInsufficientMarker(String claimText) {
-        String normalizedClaimText = claimText == null ? "" : claimText.replace("（当前证据不足）", "").trim();
+        String normalizedClaimText = claimText == null ? "" : claimText.replace(INSUFFICIENT_EVIDENCE_MARKER, "").trim();
         if (normalizedClaimText.isBlank()) {
-            return "当前证据不足";
+            return INSUFFICIENT_EVIDENCE_MARKER;
         }
-        return normalizedClaimText + "（当前证据不足）";
+        return normalizedClaimText + " " + INSUFFICIENT_EVIDENCE_MARKER;
     }
 
     private String normalizeEvidenceInsufficientMarkers(String answerMarkdown) {
@@ -402,9 +404,9 @@ public class CitationCheckService {
             return answerMarkdown;
         }
         String normalizedAnswer = answerMarkdown
-                .replaceAll("(（当前证据不足）\\s*){2,}", "（当前证据不足）")
-                .replaceAll("\\*\\*\\s*（当前证据不足）", "**（当前证据不足）")
-                .replaceAll("（当前证据不足）\\s+([，。；：])", "（当前证据不足）$1");
+                .replaceAll("(\\[insufficient-evidence]\\s*){2,}", INSUFFICIENT_EVIDENCE_MARKER)
+                .replaceAll("\\*\\*\\s*\\[insufficient-evidence]", "**" + INSUFFICIENT_EVIDENCE_MARKER)
+                .replaceAll("\\[insufficient-evidence]\\s+([,.;:])", INSUFFICIENT_EVIDENCE_MARKER + "$1");
         return normalizedAnswer;
     }
 

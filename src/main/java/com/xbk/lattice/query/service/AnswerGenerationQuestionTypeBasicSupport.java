@@ -53,22 +53,8 @@ abstract class AnswerGenerationQuestionTypeBasicSupport extends AnswerGeneration
 
 boolean looksLikeStructuredFactQuestion(String question) {
         String normalizedQuestion = lowerCase(question);
-        return normalizedQuestion.contains("配置")
-                || normalizedQuestion.contains("参数")
-                || normalizedQuestion.contains("规范")
-                || normalizedQuestion.contains("规则")
-                || normalizedQuestion.contains("阈值")
-                || normalizedQuestion.contains("结论")
-                || normalizedQuestion.contains("命中数")
-                || normalizedQuestion.contains("路径")
-                || normalizedQuestion.contains("接口")
-                || normalizedQuestion.contains("归属")
-                || normalizedQuestion.contains("对应")
-                || normalizedQuestion.contains("多少")
-                || normalizedQuestion.contains("几")
-                || normalizedQuestion.contains("数值")
-                || normalizedQuestion.contains("值")
-                || normalizedQuestion.contains("分别");
+        return containsStructuredQuestionSignal(normalizedQuestion)
+                || !QueryTokenExtractor.extractExactIdentifierTokens(question).isEmpty();
     }
 
     /**
@@ -82,9 +68,7 @@ boolean looksLikeStructuredFactQuestion(String question) {
         return looksLikeStructuredFactQuestion(question)
                 || looksLikeRuleConstraintQuestion(question)
                 || looksLikeChangeTrackingQuestion(question)
-                || normalizedQuestion.contains("是否一致")
-                || normalizedQuestion.contains("是否生效")
-                || normalizedQuestion.contains("是否启用");
+                || containsStructuredQuestionSignal(normalizedQuestion);
     }
 
     /**
@@ -122,14 +106,12 @@ boolean looksLikeStructuredFactQuestion(String question) {
      */
     boolean looksLikeNumericQuestion(String question) {
         String normalizedQuestion = lowerCase(question);
-        return normalizedQuestion.contains("多少")
-                || normalizedQuestion.contains("几")
-                || normalizedQuestion.contains("命中数")
-                || normalizedQuestion.contains("数值")
-                || normalizedQuestion.contains("值")
-                || normalizedQuestion.contains("阈值")
-                || normalizedQuestion.contains("窗口")
-                || normalizedQuestion.contains("分别");
+        return normalizedQuestion.matches("(?s).*\\d+.*")
+                || normalizedQuestion.contains("count")
+                || normalizedQuestion.contains("number")
+                || normalizedQuestion.contains("value")
+                || normalizedQuestion.contains("threshold")
+                || normalizedQuestion.contains("window");
     }
 
     /**
@@ -143,14 +125,8 @@ boolean looksLikeStructuredFactQuestion(String question) {
             return false;
         }
         String lowerCaseLine = lowerCase(normalizedLine);
-        return lowerCaseLine.contains("只有")
-                || lowerCaseLine.contains("一共")
-                || lowerCaseLine.contains("总计")
-                || lowerCaseLine.contains("合计")
-                || lowerCaseLine.contains("共 ")
-                || lowerCaseLine.contains("共")
-                || lowerCaseLine.contains("不是")
-                || lowerCaseLine.contains("修正");
+        return lowerCaseLine.matches("(?s).*\\d+.*")
+                || answerEvidenceNormalizer.structuredAssignmentDelimiterIndex(lowerCaseLine) > 0;
     }
 
     /**
@@ -164,12 +140,11 @@ boolean looksLikeStructuredFactQuestion(String question) {
             return false;
         }
         String lowerCaseLine = lowerCase(normalizedLine);
-        return lowerCaseLine.contains("命名规范")
-                || lowerCaseLine.contains("格式")
-                || lowerCaseLine.contains("统一")
-                || lowerCaseLine.contains("采用")
-                || lowerCaseLine.contains("规则")
-                || lowerCaseLine.contains("约束");
+        return lowerCaseLine.contains("rule")
+                || lowerCaseLine.contains("policy")
+                || lowerCaseLine.contains("constraint")
+                || lowerCaseLine.contains("required")
+                || lowerCaseLine.contains("forbidden");
     }
 
     /**
@@ -182,10 +157,9 @@ boolean looksLikeStructuredFactQuestion(String question) {
         if (normalizedQuestion == null || normalizedQuestion.isBlank()) {
             return false;
         }
-        return normalizedQuestion.contains("当前")
-                || normalizedQuestion.contains("现在")
-                || normalizedQuestion.contains("目前")
-                || normalizedQuestion.contains("最新");
+        return normalizedQuestion.contains("current")
+                || normalizedQuestion.contains("latest")
+                || normalizedQuestion.contains("now");
     }
 
     /**
@@ -198,13 +172,10 @@ boolean looksLikeStructuredFactQuestion(String question) {
         if (lowerCaseLine == null || lowerCaseLine.isBlank()) {
             return false;
         }
-        return lowerCaseLine.contains("当前")
-                || lowerCaseLine.contains("现在")
-                || lowerCaseLine.contains("目前")
-                || lowerCaseLine.contains("最新")
-                || lowerCaseLine.contains("建议值")
-                || lowerCaseLine.contains("生效")
-                || lowerCaseLine.contains("现行");
+        return lowerCaseLine.contains("current")
+                || lowerCaseLine.contains("latest")
+                || lowerCaseLine.contains("enabled")
+                || lowerCaseLine.contains("active");
     }
 
     /**
@@ -218,10 +189,10 @@ boolean looksLikeStructuredFactQuestion(String question) {
             return false;
         }
         String lowerCaseLine = lowerCase(normalizedLine);
-        return lowerCaseLine.contains("强约束")
-                || lowerCaseLine.contains("禁止")
-                || lowerCaseLine.contains("必须")
-                || lowerCaseLine.contains("不得");
+        return lowerCaseLine.contains("must")
+                || lowerCaseLine.contains("required")
+                || lowerCaseLine.contains("forbidden")
+                || lowerCaseLine.contains("disallowed");
     }
 
     /**
@@ -235,14 +206,12 @@ boolean looksLikeStructuredFactQuestion(String question) {
             return false;
         }
         String lowerCaseLine = lowerCase(normalizedLine);
-        return lowerCaseLine.contains("修正")
-                || lowerCaseLine.contains("改为")
-                || lowerCaseLine.contains("删除")
-                || lowerCaseLine.contains("合并")
-                || lowerCaseLine.contains("并入")
-                || lowerCaseLine.contains("调整")
-                || lowerCaseLine.contains("承接")
-                || lowerCaseLine.contains("保持不变");
+        return lowerCaseLine.contains("changed")
+                || lowerCaseLine.contains("updated")
+                || lowerCaseLine.contains("deleted")
+                || lowerCaseLine.contains("merged")
+                || lowerCaseLine.contains("renamed")
+                || containsAssignmentLikeMappingSignal(lowerCaseLine);
     }
 
     /**
@@ -295,10 +264,9 @@ boolean looksLikeStructuredFactQuestion(String question) {
      */
     boolean looksLikePathQuestion(String question) {
         String normalizedQuestion = lowerCase(question);
-        return normalizedQuestion.contains("路径")
-                || normalizedQuestion.contains("接口")
-                || normalizedQuestion.contains("endpoint")
-                || normalizedQuestion.contains("url");
+        return normalizedQuestion.contains("endpoint")
+                || normalizedQuestion.contains("url")
+                || !QueryTokenExtractor.extractExactIdentifierTokens(question).isEmpty();
     }
 
     /**
@@ -309,13 +277,9 @@ boolean looksLikeStructuredFactQuestion(String question) {
      */
     boolean looksLikeSetupChecklistQuestion(String question) {
         String normalizedQuestion = lowerCase(question);
-        return (normalizedQuestion.contains("启动前")
-                || (normalizedQuestion.contains("启动") && normalizedQuestion.contains("之前"))
-                || (normalizedQuestion.contains("启动") && normalizedQuestion.contains("先")))
-                && (normalizedQuestion.contains("需要")
-                || normalizedQuestion.contains("配置")
-                || normalizedQuestion.contains("准备")
-                || normalizedQuestion.contains("顺序"));
+        return normalizedQuestion.contains("setup")
+                || normalizedQuestion.contains("bootstrap")
+                || normalizedQuestion.contains("before start");
     }
 
     /**
@@ -326,16 +290,12 @@ boolean looksLikeStructuredFactQuestion(String question) {
      */
     boolean looksLikeRuleConstraintQuestion(String question) {
         String normalizedQuestion = lowerCase(question);
-        return normalizedQuestion.contains("规范")
-                || normalizedQuestion.contains("规则")
-                || normalizedQuestion.contains("命名")
-                || normalizedQuestion.contains("格式")
-                || normalizedQuestion.contains("约束")
-                || normalizedQuestion.contains("原则")
-                || normalizedQuestion.contains("契约")
-                || normalizedQuestion.contains("怎么处理")
-                || normalizedQuestion.contains("必须")
-                || normalizedQuestion.contains("禁止");
+        return normalizedQuestion.contains("policy")
+                || normalizedQuestion.contains("rule")
+                || normalizedQuestion.contains("constraint")
+                || normalizedQuestion.contains("requirement")
+                || normalizedQuestion.contains("must")
+                || normalizedQuestion.contains("forbidden");
     }
 
     /**
@@ -346,16 +306,12 @@ boolean looksLikeStructuredFactQuestion(String question) {
      */
     boolean looksLikeChangeTrackingQuestion(String question) {
         String normalizedQuestion = lowerCase(question);
-        return normalizedQuestion.contains("修正后")
-                || normalizedQuestion.contains("调整后")
-                || normalizedQuestion.contains("原来的")
-                || normalizedQuestion.contains("怎么处理")
-                || normalizedQuestion.contains("合并")
-                || normalizedQuestion.contains("并入")
-                || normalizedQuestion.contains("改为")
-                || normalizedQuestion.contains("变成")
-                || normalizedQuestion.contains("删除")
-                || normalizedQuestion.contains("承接");
+        return normalizedQuestion.contains("changed")
+                || normalizedQuestion.contains("updated")
+                || normalizedQuestion.contains("deleted")
+                || normalizedQuestion.contains("merged")
+                || normalizedQuestion.contains("renamed")
+                || normalizedQuestion.contains("before and after");
     }
 
     /**
@@ -366,12 +322,11 @@ boolean looksLikeStructuredFactQuestion(String question) {
      */
     boolean looksLikeCapabilityQuestion(String question) {
         String normalizedQuestion = lowerCase(question);
-        return normalizedQuestion.contains("支持")
-                || normalizedQuestion.contains("接入")
-                || normalizedQuestion.contains("入口")
-                || normalizedQuestion.contains("方式")
-                || normalizedQuestion.contains("能力")
-                || normalizedQuestion.contains("有哪些");
+        return normalizedQuestion.contains("capability")
+                || normalizedQuestion.contains("support")
+                || normalizedQuestion.contains("entry")
+                || normalizedQuestion.contains("integration")
+                || normalizedQuestion.contains("option");
     }
 
     /**
@@ -382,20 +337,12 @@ boolean looksLikeStructuredFactQuestion(String question) {
      */
     boolean looksLikeEnumerationQuestion(String question) {
         String normalizedQuestion = lowerCase(question);
-        return normalizedQuestion.contains("有哪些")
-                || normalizedQuestion.contains("哪些")
-                || normalizedQuestion.contains("几种")
-                || normalizedQuestion.contains("几个")
-                || normalizedQuestion.contains("列出")
-                || normalizedQuestion.contains("包括")
-                || normalizedQuestion.contains("包含")
-                || normalizedQuestion.contains("分别")
-                || normalizedQuestion.contains("技巧")
-                || normalizedQuestion.contains("形态")
-                || normalizedQuestion.contains("字段")
-                || normalizedQuestion.contains("渠道")
-                || normalizedQuestion.contains("步骤")
-                || normalizedQuestion.contains("主要完成");
+        return normalizedQuestion.contains("list")
+                || normalizedQuestion.contains("items")
+                || normalizedQuestion.contains("options")
+                || normalizedQuestion.contains("types")
+                || normalizedQuestion.contains("fields")
+                || normalizedQuestion.contains("steps");
     }
 
     /**
@@ -406,11 +353,11 @@ boolean looksLikeStructuredFactQuestion(String question) {
      */
     boolean looksLikeComparisonQuestion(String question) {
         String normalizedQuestion = lowerCase(question);
-        return normalizedQuestion.contains("差异")
-                || normalizedQuestion.contains("区别")
-                || normalizedQuestion.contains("不同")
-                || normalizedQuestion.contains("对比")
-                || normalizedQuestion.contains("比较");
+        return normalizedQuestion.contains("compare")
+                || normalizedQuestion.contains("comparison")
+                || normalizedQuestion.contains("difference")
+                || normalizedQuestion.contains(" vs ")
+                || normalizedQuestion.contains(" versus ");
     }
 
     /**
@@ -421,25 +368,19 @@ boolean looksLikeStructuredFactQuestion(String question) {
      */
     boolean looksLikeStatusQuestion(String question) {
         String normalizedQuestion = lowerCase(question);
-        boolean explicitStatusQuestion = normalizedQuestion.contains("状态")
-                || normalizedQuestion.contains("可用")
-                || normalizedQuestion.contains("是否可用")
-                || normalizedQuestion.contains("是否已经")
-                || normalizedQuestion.contains("是否已")
-                || normalizedQuestion.contains("是否启用")
-                || normalizedQuestion.contains("就绪")
-                || normalizedQuestion.contains("实现状态")
-                || normalizedQuestion.contains("当前是否")
-                || normalizedQuestion.contains("实际已有")
-                || normalizedQuestion.contains("待配置")
-                || normalizedQuestion.contains("是否正常");
+        boolean explicitStatusQuestion = normalizedQuestion.contains("status")
+                || normalizedQuestion.contains("state")
+                || normalizedQuestion.contains("enabled")
+                || normalizedQuestion.contains("ready")
+                || normalizedQuestion.contains("available")
+                || normalizedQuestion.contains("pending");
         if (explicitStatusQuestion) {
             return true;
         }
         if (looksLikeEnumerationQuestion(question) || looksLikeStructuredFactQuestion(question)) {
             return false;
         }
-        return normalizedQuestion.contains("现在") || normalizedQuestion.contains("当前");
+        return looksLikeCurrentFactQuestion(normalizedQuestion);
     }
 
     /**
@@ -450,17 +391,32 @@ boolean looksLikeStructuredFactQuestion(String question) {
      */
     boolean looksLikeFlowQuestion(String question) {
         String normalizedQuestion = lowerCase(question);
-        return normalizedQuestion.contains("流程")
-                || normalizedQuestion.contains("链路")
-                || normalizedQuestion.contains("步骤")
-                || normalizedQuestion.contains("发送")
-                || normalizedQuestion.contains("投递")
-                || normalizedQuestion.contains("转发")
-                || normalizedQuestion.contains("队列")
+        return normalizedQuestion.contains("workflow")
+                || normalizedQuestion.contains("process")
+                || normalizedQuestion.contains("steps")
                 || normalizedQuestion.contains("topic")
                 || normalizedQuestion.contains("queue")
-                || normalizedQuestion.contains("怎么跑")
-                || normalizedQuestion.contains("怎么走")
-                || normalizedQuestion.contains("运行路径");
+                || normalizedQuestion.contains("route");
+    }
+
+    /**
+     * 判断问题是否携带通用结构化取值信号。
+     *
+     * @param normalizedQuestion 归一化问题
+     * @return 携带结构信号返回 true
+     */
+    private boolean containsStructuredQuestionSignal(String normalizedQuestion) {
+        if (normalizedQuestion == null || normalizedQuestion.isBlank()) {
+            return false;
+        }
+        return normalizedQuestion.contains("=")
+                || normalizedQuestion.contains("/")
+                || normalizedQuestion.contains(".")
+                || normalizedQuestion.contains("endpoint")
+                || normalizedQuestion.contains("url")
+                || normalizedQuestion.contains("config")
+                || normalizedQuestion.contains("parameter")
+                || normalizedQuestion.contains("value")
+                || normalizedQuestion.contains("count");
     }
 }

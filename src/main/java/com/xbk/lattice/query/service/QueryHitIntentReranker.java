@@ -144,7 +144,7 @@ public final class QueryHitIntentReranker {
             }
             return bonus;
         }
-        if (queryIntent == QueryIntent.ARCHITECTURE || looksLikeArchitectureQuestion(question)) {
+        if (queryIntent == QueryIntent.ARCHITECTURE) {
             if (matchesArchitectureFriendlyPath(hit)) {
                 bonus += 12.0D;
             }
@@ -314,22 +314,6 @@ public final class QueryHitIntentReranker {
                 || text.contains("overview")
                 || text.contains("settings")
                 || text.contains("developer");
-    }
-
-    /**
-     * 判断问题是否更偏架构解释。
-     *
-     * @param question 检索问题
-     * @return 架构解释题返回 true
-     */
-    private static boolean looksLikeArchitectureQuestion(String question) {
-        String normalizedQuestion = lowerCase(question);
-        return normalizedQuestion.contains("为什么要")
-                || normalizedQuestion.contains("架构")
-                || normalizedQuestion.contains("设计")
-                || normalizedQuestion.contains("同步")
-                || normalizedQuestion.contains("异步")
-                || normalizedQuestion.contains("取舍");
     }
 
     /**

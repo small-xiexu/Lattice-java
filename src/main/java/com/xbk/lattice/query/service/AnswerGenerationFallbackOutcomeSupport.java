@@ -163,7 +163,7 @@ abstract class AnswerGenerationFallbackOutcomeSupport extends AnswerGenerationEx
      * @param fallbackReason fallback 原因
      * @return fallback 载荷
      */
-    QueryAnswerPayload buildDeterministicFallbackPayload(
+    QueryAnswerPayload buildEvidencePayload(
             String question,
             List<QueryArticleHit> queryArticleHits,
             AnswerOutcome preferredOutcome,
@@ -173,7 +173,7 @@ abstract class AnswerGenerationFallbackOutcomeSupport extends AnswerGenerationEx
     ) {
         List<QueryArticleHit> fallbackHits = selectFallbackEvidenceHits(question, queryArticleHits);
         return new QueryAnswerPayload(
-                SensitiveTextMasker.mask(buildFallbackMarkdown(question, queryArticleHits)),
+                SensitiveTextMasker.mask(buildEvidenceMarkdown(question, queryArticleHits)),
                 resolveFallbackAnswerOutcome(question, fallbackHits, preferredOutcome),
                 generationMode,
                 modelExecutionStatus,
@@ -391,12 +391,10 @@ abstract class AnswerGenerationFallbackOutcomeSupport extends AnswerGenerationEx
      * @return 包含返回 true
      */
     boolean containsMultiFacetQuestionSignal(String normalizedQuestion) {
-        return normalizedQuestion.contains("分别")
-                || normalizedQuestion.contains("各自")
-                || normalizedQuestion.contains("和")
-                || normalizedQuestion.contains("以及")
-                || normalizedQuestion.contains("、")
-                || normalizedQuestion.contains("/");
+        return normalizedQuestion.contains(",")
+                || normalizedQuestion.contains("/")
+                || normalizedQuestion.contains("&")
+                || normalizedQuestion.contains("+");
     }
 
     /**

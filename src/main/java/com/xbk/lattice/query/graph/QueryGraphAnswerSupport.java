@@ -312,7 +312,7 @@ abstract class QueryGraphAnswerSupport extends QueryGraphRetrievalSupport {
     }
     protected String buildRewriteGuidance(ReviewResult reviewResult) {
         if (reviewResult == null || reviewResult.getIssues().isEmpty()) {
-            return "审查未通过，请基于证据增强答案的可验证性。";
+            return "REVIEW_REWRITE_REQUIRED";
         }
         List<String> issueDescriptions = new ArrayList<String>();
         for (ReviewIssue reviewIssue : reviewResult.getIssues()) {

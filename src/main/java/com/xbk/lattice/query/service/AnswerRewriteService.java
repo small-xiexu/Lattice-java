@@ -135,7 +135,7 @@ final class AnswerRewriteService {
         }
         if (!answerLlmInvoker.isAvailable()) {
             return QueryAnswerPayload.ruleBased(
-                    support.buildFallbackMarkdown(question, queryArticleHits),
+                    support.buildEvidenceMarkdown(question, queryArticleHits),
                     AnswerOutcome.PARTIAL_ANSWER
             );
         }
@@ -143,7 +143,7 @@ final class AnswerRewriteService {
         ModelExecutionStatus modelExecutionStatus = llmExecutionFailed
                 ? ModelExecutionStatus.FAILED
                 : ModelExecutionStatus.DEGRADED;
-        return support.buildDeterministicFallbackPayload(
+        return support.buildEvidencePayload(
                 question,
                 queryArticleHits,
                 AnswerOutcome.PARTIAL_ANSWER,

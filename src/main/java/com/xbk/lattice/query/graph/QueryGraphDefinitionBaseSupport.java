@@ -33,6 +33,7 @@ import com.xbk.lattice.query.service.QueryRetrievalSettingsState;
 import com.xbk.lattice.query.service.QuerySearchProperties;
 import com.xbk.lattice.query.service.QueryRewriteResult;
 import com.xbk.lattice.query.service.QueryRewriteService;
+import com.xbk.lattice.query.service.QueryTokenExtractor;
 import com.xbk.lattice.query.service.RefKeySearchService;
 import com.xbk.lattice.query.service.RetrievalAuditService;
 import com.xbk.lattice.query.service.RetrievalChannelRun;
@@ -521,25 +522,17 @@ abstract class QueryGraphDefinitionBaseSupport {
      */
     protected boolean looksLikeExactLookupQuestion(String question) {
         String normalizedQuestion = lowerCase(question);
-        return normalizedQuestion.contains("多少")
-                || normalizedQuestion.contains("几")
-                || normalizedQuestion.contains("列出")
-                || normalizedQuestion.contains("有哪些")
-                || normalizedQuestion.contains("哪些")
-                || normalizedQuestion.contains("配置")
-                || normalizedQuestion.contains("规范")
-                || normalizedQuestion.contains("规则")
-                || normalizedQuestion.contains("命名")
-                || normalizedQuestion.contains("格式")
-                || normalizedQuestion.contains("结论")
-                || normalizedQuestion.contains("命中数")
-                || normalizedQuestion.contains("路径")
-                || normalizedQuestion.contains("接口")
-                || normalizedQuestion.contains("归属")
-                || normalizedQuestion.contains("对应")
-                || normalizedQuestion.contains("是否一致")
-                || normalizedQuestion.contains("是否生效")
-                || normalizedQuestion.contains("是否启用");
+        return !QueryTokenExtractor.extractExactIdentifierTokens(question).isEmpty()
+                || normalizedQuestion.matches("(?s).*\\d+.*")
+                || normalizedQuestion.contains("count")
+                || normalizedQuestion.contains("value")
+                || normalizedQuestion.contains("status")
+                || normalizedQuestion.contains("state")
+                || normalizedQuestion.contains("endpoint")
+                || normalizedQuestion.contains("url")
+                || normalizedQuestion.contains("config")
+                || normalizedQuestion.contains("rule")
+                || normalizedQuestion.contains("policy");
     }
     /**
      * 判断问题中是否存在必须精确命中的路径、配置键或字段键。

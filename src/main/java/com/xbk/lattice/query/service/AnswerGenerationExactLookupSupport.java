@@ -84,7 +84,7 @@ QueryAnswerPayload preferDeterministicExactLookupPayload(
         }
         if (preferenceReason != ExactLookupPreferenceReason.NONE) {
             logExactLookupPreference(preferenceReason, groundingStatus);
-            return buildDeterministicFallbackPayload(
+            return buildEvidencePayload(
                     question,
                     queryArticleHits,
                     AnswerOutcome.SUCCESS,
@@ -193,12 +193,12 @@ QueryAnswerPayload preferDeterministicExactLookupPayload(
         }
         String normalizedQuestion = lowerCase(question);
         String normalizedAnswer = lowerCase(answerMarkdown);
-        if ((normalizedQuestion.contains("路径") || normalizedQuestion.contains("接口"))
+        if (looksLikePathQuestion(question)
                 && containsAnySnippetToken(focusSnippets, "/")
                 && !coversRequiredPathShape(question, normalizedAnswer, focusSnippets)) {
             return ExactLookupGroundingStatus.MISSING_PATH_SHAPE;
         }
-        if ((normalizedQuestion.contains("命中数") || looksLikeNumericQuestion(question))
+        if (looksLikeNumericQuestion(question)
                 && containsAnySnippetDigit(focusSnippets)
                 && !normalizedAnswer.matches("(?s).*\\d.*")) {
             return ExactLookupGroundingStatus.MISSING_DIGIT;
@@ -222,7 +222,7 @@ QueryAnswerPayload preferDeterministicExactLookupPayload(
                 && !containsFlowTransitionSignal(answerMarkdown)) {
             return ExactLookupGroundingStatus.MISSING_FLOW;
         }
-        if (normalizedQuestion.contains("结论")
+        if (looksLikeStatusQuestion(question)
                 && containsAnyCorrectionOrStatusSignal(focusSnippets)
                 && !containsCorrectionOrStatusSignal(normalizedAnswer)) {
             return ExactLookupGroundingStatus.MISSING_CORRECTION_OR_STATUS;
@@ -272,13 +272,27 @@ QueryAnswerPayload preferDeterministicExactLookupPayload(
         if (coveredNumberCount > 0) {
             return true;
         }
-        if (normalizedQuestion.contains("命中数") || normalizedQuestion.contains("多少")) {
+        if (normalizedQuestion.contains("count")) {
             return false;
         }
-        if (normalizedQuestion.contains("分别") && evidenceNumbers.size() >= 2) {
+        if (requiresMultipleNumericEvidence(normalizedQuestion) && evidenceNumbers.size() >= 2) {
             return false;
         }
         return normalizedAnswer.matches("(?s).*\\d.*");
+    }
+
+    /**
+     * 判断问题是否通过通用分隔符要求多个数值。
+     *
+     * @param normalizedQuestion 归一化问题
+     * @return 多值问题返回 true
+     */
+    private boolean requiresMultipleNumericEvidence(String normalizedQuestion) {
+        return normalizedQuestion != null
+                && (normalizedQuestion.contains(",")
+                || normalizedQuestion.contains("/")
+                || normalizedQuestion.contains("&")
+                || normalizedQuestion.contains("+"));
     }
 
     /**

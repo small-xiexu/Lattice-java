@@ -277,7 +277,7 @@ public class DeepResearchGraphDefinitionFactory {
      */
     private AnswerProjectionBundle insufficientProjectionBundle() {
         return new AnswerProjectionBundle(
-                "当前证据不足，无法生成可核验引用版答案",
+                "INSUFFICIENT_EVIDENCE",
                 List.of()
         );
     }
@@ -341,25 +341,25 @@ public class DeepResearchGraphDefinitionFactory {
 
     private String buildLayerSummaryMarkdown(List<EvidenceCard> layerCards) {
         if (layerCards.isEmpty()) {
-            return "当前层未取得有效证据";
+            return "NO_EVIDENCE";
         }
         StringBuilder summaryBuilder = new StringBuilder();
         for (EvidenceCard layerCard : layerCards) {
             if (layerCard.getFactFindings() != null && !layerCard.getFactFindings().isEmpty()) {
                 summaryBuilder.append(layerCard.getTaskId())
-                        .append("：")
+                        .append(": ")
                         .append(resolveFindingClaim(layerCard.getFactFindings().get(0)))
-                        .append("；");
+                        .append("; ");
             }
             else if (!layerCard.getGaps().isEmpty()) {
                 summaryBuilder.append(layerCard.getTaskId())
-                        .append("：证据缺口=")
+                        .append(": evidence_gaps=")
                         .append(String.join(",", layerCard.getGaps()))
-                        .append("；");
+                        .append("; ");
             }
         }
         if (summaryBuilder.length() == 0) {
-            return "当前层复用上一层证据做综合，不新增独立 finding";
+            return "REUSED_PRIOR_LAYER_EVIDENCE";
         }
         return summaryBuilder.toString();
     }

@@ -268,7 +268,7 @@ abstract class AnswerCoverageBaseSupport {
         if (factCard != null && factCard.getTitle() != null && !factCard.getTitle().isBlank()) {
             return factCard.getTitle().trim();
         }
-        return "结构化证据卡要点";
+        return FactCardType.FACT_STATUS.name();
     }
     /**
      * 判断全部短语是否已覆盖。
@@ -400,7 +400,7 @@ abstract class AnswerCoverageBaseSupport {
                 addUnique(orderedDisplays, requirement.getDisplayText());
             }
         }
-        return "顺序不一致：" + String.join(" -> ", orderedDisplays);
+        return "SEQUENCE_ORDER_MISMATCH: " + String.join(" -> ", orderedDisplays);
     }
     /**
      * 拆分答案片段。

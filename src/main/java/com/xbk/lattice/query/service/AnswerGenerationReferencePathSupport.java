@@ -415,12 +415,9 @@ List<String> extractEvidencePaths(List<String> snippets) {
         }
         String normalizedQuestion = lowerCase(question);
         return normalizedQuestion.contains("path")
-                || normalizedQuestion.contains("路径")
-                || normalizedQuestion.contains("改")
-                || normalizedQuestion.contains("变")
-                || normalizedQuestion.contains("一致")
-                || normalizedQuestion.contains("兼容")
-                || normalizedQuestion.contains("契约");
+                || normalizedQuestion.contains("change")
+                || normalizedQuestion.contains("compatible")
+                || normalizedQuestion.contains("contract");
     }
 
     /**

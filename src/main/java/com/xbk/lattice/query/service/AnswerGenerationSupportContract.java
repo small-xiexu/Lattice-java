@@ -189,7 +189,7 @@ abstract class AnswerGenerationSupportContract {
      * @param fallbackReason fallback 原因
      * @return 答案载荷
      */
-    abstract QueryAnswerPayload buildDeterministicFallbackPayload(
+    abstract QueryAnswerPayload buildEvidencePayload(
             String question,
             List<QueryArticleHit> queryArticleHits,
             AnswerOutcome preferredOutcome,

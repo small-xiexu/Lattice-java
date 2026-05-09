@@ -37,7 +37,7 @@ final class AnswerFallbackConclusionBuilder {
      * @param queryTokens 查询 token
      * @return 结论行
      */
-    List<String> buildFallbackConclusionLines(
+    List<String> buildEvidenceConclusionLines(
             String question,
             List<QueryArticleHit> fallbackHits,
             List<String> queryTokens
@@ -99,32 +99,32 @@ final class AnswerFallbackConclusionBuilder {
                 support.selectOptionSpecificFallbackSnippet(rightRepresentativeHit, rightOption, queryTokens)
         );
         List<String> conclusionLines = new ArrayList<String>();
-        conclusionLines.add("支持“"
+        conclusionLines.add("Evidence for "
                 + leftOption
-                + "”的材料提到："
+                + ": "
                 + leftSnippet
-                + "。 "
+                + ". "
                 + support.joinConclusionCitations(leftHits));
-        conclusionLines.add("支持“"
+        conclusionLines.add("Evidence for "
                 + rightOption
-                + "”的材料提到："
+                + ": "
                 + rightSnippet
-                + "。 "
+                + ". "
                 + support.joinConclusionCitations(rightHits));
         List<QueryArticleHit> preferredSummaryHits = preferredComparisonSummaryHits(leftOption, rightOption, leftHits, rightHits);
         String conflictSummaryCitations = joinConflictConclusionCitations(fallbackHits, preferredSummaryHits);
         if (leftHits.size() == rightHits.size()) {
             if (!conflictSummaryCitations.isBlank()) {
-                conclusionLines.add("因此，现有资料同时存在两种口径，暂时不能直接判定，需要继续核对原始实现。 "
+                conclusionLines.add("Multiple evidence lines support different positions; verify the primary source before deciding. "
                         + conflictSummaryCitations);
             }
             return conclusionLines;
         }
         String preferredOption = leftHits.size() > rightHits.size() ? leftOption : rightOption;
         if (!conflictSummaryCitations.isBlank()) {
-            conclusionLines.add("因此，现有资料更偏向“"
+            conclusionLines.add("Evidence currently leans toward "
                     + preferredOption
-                    + "”，但相关说明的口径还没有完全收敛，仍需继续核对原始实现。 "
+                    + ", but the source statements are not fully converged. "
                     + conflictSummaryCitations);
         }
         return conclusionLines;
@@ -253,8 +253,8 @@ final class AnswerFallbackConclusionBuilder {
                 setupSteps = support.extractSetupChecklistSteps(setupSnippets);
             }
             if (!setupSteps.isEmpty()) {
-                conclusionLines.add("当前可确认的信息是：启动前优先处理这几件事："
-                        + String.join("；", setupSteps)
+                conclusionLines.add("Confirmed setup evidence: "
+                        + String.join("; ", setupSteps)
                         + " "
                         + support.joinConclusionCitations(List.of(primaryHit)));
                 return conclusionLines;
@@ -269,7 +269,7 @@ final class AnswerFallbackConclusionBuilder {
         );
         if (!primarySnippets.isEmpty()) {
             for (int index = 0; index < primarySnippets.size(); index++) {
-                String prefix = index == 0 ? "当前可确认的信息是：" : "同一份资料还给出：";
+                String prefix = index == 0 ? "Confirmed evidence: " : "Additional evidence: ";
                 conclusionLines.add(prefix
                         + primarySnippets.get(index)
                         + " "
@@ -280,14 +280,14 @@ final class AnswerFallbackConclusionBuilder {
             }
         }
         else {
-            conclusionLines.add("当前可确认的信息是："
+            conclusionLines.add("Confirmed evidence: "
                     + support.selectFallbackEvidenceSnippet(primaryHit, queryTokens)
                     + " "
                     + support.joinConclusionCitations(List.of(primaryHit)));
         }
         if (fallbackHits.size() > 1 && support.shouldIncludeSecondaryFallbackHit(question, primaryHit, fallbackHits.get(1), queryTokens)) {
             QueryArticleHit secondaryHit = fallbackHits.get(1);
-            conclusionLines.add("补充证据还提到："
+            conclusionLines.add("Additional evidence: "
                     + support.selectQuestionFocusedFallbackSnippet(question, secondaryHit, queryTokens)
                     + " "
                     + support.joinConclusionCitations(List.of(secondaryHit)));

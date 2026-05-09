@@ -51,8 +51,8 @@ abstract class AnswerGenerationFallbackConclusionSupport extends AnswerGeneratio
         super(llmGateway);
     }
 
-String buildFallbackMarkdown(String question, List<QueryArticleHit> queryArticleHits) {
-        return answerFallbackMarkdownBuilder.buildFallbackMarkdown(question, queryArticleHits);
+String buildEvidenceMarkdown(String question, List<QueryArticleHit> queryArticleHits) {
+        return answerFallbackMarkdownBuilder.buildEvidenceMarkdown(question, queryArticleHits);
     }
 
     /**
@@ -63,12 +63,12 @@ String buildFallbackMarkdown(String question, List<QueryArticleHit> queryArticle
      * @param queryTokens 查询 token
      * @return 结论行
      */
-    List<String> buildFallbackConclusionLines(
+    List<String> buildEvidenceConclusionLines(
             String question,
             List<QueryArticleHit> fallbackHits,
             List<String> queryTokens
     ) {
-        return answerFallbackConclusionBuilder.buildFallbackConclusionLines(question, fallbackHits, queryTokens);
+        return answerFallbackConclusionBuilder.buildEvidenceConclusionLines(question, fallbackHits, queryTokens);
     }
 
     /**
@@ -292,12 +292,11 @@ String buildFallbackMarkdown(String question, List<QueryArticleHit> queryArticle
      */
     boolean shouldAggregateEvidenceConclusion(String question) {
         String normalizedQuestion = lowerCase(question);
-        return normalizedQuestion.contains("分别")
-                || normalizedQuestion.contains("哪些")
-                || normalizedQuestion.contains("哪三个")
-                || normalizedQuestion.contains("三个")
-                || normalizedQuestion.contains("命中数")
-                || normalizedQuestion.contains("批")
+        return normalizedQuestion.contains(",")
+                || normalizedQuestion.contains("/")
+                || normalizedQuestion.contains("&")
+                || normalizedQuestion.contains("+")
+                || normalizedQuestion.contains("count")
                 || requiresPathContractCompanion(question)
                 || (looksLikePathQuestion(question) && looksLikeRuleConstraintQuestion(question));
     }

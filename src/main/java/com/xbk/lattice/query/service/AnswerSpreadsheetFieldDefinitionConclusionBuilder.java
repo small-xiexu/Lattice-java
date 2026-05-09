@@ -54,27 +54,27 @@ final class AnswerSpreadsheetFieldDefinitionConclusionBuilder {
             datasetSignals.add(tableSummary.getDisplayName());
         }
         if (!codeMappings.isEmpty()) {
-            datasetSignals.add("编码对照");
+            datasetSignals.add("code mappings");
         }
         if (!datasetSignals.isEmpty()) {
-            conclusionLines.add("该资料给出了"
-                    + String.join("、", datasetSignals)
-                    + "等结构化字段定义。 "
+            conclusionLines.add("Structured field definitions: "
+                    + String.join(", ", datasetSignals)
+                    + ". "
                     + citationLiteral);
         }
         for (FieldDefinitionTableSummary tableSummary : tableSummaries) {
             conclusionLines.add(tableSummary.getDisplayName()
-                    + "共 "
+                    + "has "
                     + tableSummary.getFieldDefinitions().size()
-                    + " 个字段："
-                    + String.join("；", tableSummary.getFieldDefinitions())
-                    + "。 "
+                    + " fields: "
+                    + String.join("; ", tableSummary.getFieldDefinitions())
+                    + ". "
                     + citationLiteral);
         }
         if (!codeMappings.isEmpty()) {
-            conclusionLines.add("编码对照包括："
-                    + String.join("；", codeMappings)
-                    + "。 "
+            conclusionLines.add("Code mappings: "
+                    + String.join("; ", codeMappings)
+                    + ". "
                     + citationLiteral);
         }
         return conclusionLines;
@@ -125,14 +125,7 @@ final class AnswerSpreadsheetFieldDefinitionConclusionBuilder {
         if (requestedIdentifiers.size() < 2) {
             return false;
         }
-        String normalizedQuestion = lowerCase(question);
-        return normalizedQuestion.contains("分别")
-                || normalizedQuestion.contains("表示")
-                || normalizedQuestion.contains("含义")
-                || normalizedQuestion.contains("定义")
-                || normalizedQuestion.contains("字段")
-                || normalizedQuestion.contains("状态码")
-                || normalizedQuestion.contains("枚举");
+        return true;
     }
 
     /**
@@ -142,22 +135,11 @@ final class AnswerSpreadsheetFieldDefinitionConclusionBuilder {
      * @return 精确标识知识题返回 true
      */
     private boolean looksLikeReferentialKnowledgeQuestion(String question) {
-        String normalizedQuestion = lowerCase(question);
         List<String> requestedIdentifiers = support.extractRequestedReferentialIdentifiers(question);
         if (requestedIdentifiers.isEmpty()) {
             return false;
         }
-        return normalizedQuestion.contains("字段")
-                || normalizedQuestion.contains("状态码")
-                || normalizedQuestion.contains("枚举")
-                || normalizedQuestion.contains("配置")
-                || normalizedQuestion.contains("参数")
-                || normalizedQuestion.contains("报文")
-                || normalizedQuestion.contains("接口")
-                || normalizedQuestion.contains("分别")
-                || normalizedQuestion.contains("表示")
-                || normalizedQuestion.contains("含义")
-                || normalizedQuestion.contains("定义");
+        return true;
     }
 
     /**
@@ -235,7 +217,7 @@ final class AnswerSpreadsheetFieldDefinitionConclusionBuilder {
         if (normalizedLine.isBlank() || looksLikeHeadingOnlyFallbackLine(rawLine)) {
             return "";
         }
-        return "`" + identifier + "`：" + support.trimTrailingFallbackPunctuation(normalizedLine);
+        return "`" + identifier + "`: " + support.trimTrailingFallbackPunctuation(normalizedLine);
     }
 
     /**
@@ -312,21 +294,21 @@ final class AnswerSpreadsheetFieldDefinitionConclusionBuilder {
         String enumValue = selectEnumCell(nonBlankTailCells, description);
         List<String> parts = new ArrayList<String>();
         if (!type.isBlank()) {
-            parts.add("类型 `" + type + "`");
+            parts.add("type `" + type + "`");
         }
         if (!length.isBlank()) {
-            parts.add("长度 `" + length + "`");
+            parts.add("length `" + length + "`");
         }
         if (!description.isBlank()) {
             parts.add(description);
         }
         if (!enumValue.isBlank()) {
-            parts.add("枚举/取值：" + enumValue);
+            parts.add("enum/value: " + enumValue);
         }
         if (parts.isEmpty()) {
             return "";
         }
-        return "`" + identifier + "`：" + String.join("；", parts) + "。";
+        return "`" + identifier + "`: " + String.join("; ", parts) + ".";
     }
 
     /**
@@ -498,9 +480,7 @@ final class AnswerSpreadsheetFieldDefinitionConclusionBuilder {
      */
     private boolean looksLikeSpreadsheetUsageFlag(String cell) {
         String normalizedCell = lowerCase(cell);
-        return normalizedCell.equals("是")
-                || normalizedCell.equals("否")
-                || normalizedCell.equals("y")
+        return normalizedCell.equals("y")
                 || normalizedCell.equals("n")
                 || normalizedCell.equals("yes")
                 || normalizedCell.equals("no")
@@ -549,14 +529,7 @@ final class AnswerSpreadsheetFieldDefinitionConclusionBuilder {
         if (question == null || question.isBlank() || primaryHit == null) {
             return false;
         }
-        String normalizedQuestion = lowerCase(question);
-        if (!normalizedQuestion.contains("字段")) {
-            return false;
-        }
-        if (!(normalizedQuestion.contains("定义")
-                || normalizedQuestion.contains("报文")
-                || normalizedQuestion.contains("有哪些")
-                || normalizedQuestion.contains("哪些"))) {
+        if (support.extractRequestedReferentialIdentifiers(question).isEmpty()) {
             return false;
         }
         return !extractFieldDefinitionTableSummaries(primaryHit.getContent()).isEmpty();
@@ -679,16 +652,16 @@ final class AnswerSpreadsheetFieldDefinitionConclusionBuilder {
         String normalizedHeading = cleanupHeadingLine(heading);
         List<String> identifiers = extractBacktickIdentifiers(normalizedHeading);
         if (!identifiers.isEmpty()) {
-            return "字段组 `" + identifiers.get(0) + "` ";
+            return "field group `" + identifiers.get(0) + "` ";
         }
         Matcher latinIdentifierMatcher = Pattern.compile("([A-Za-z][A-Za-z0-9_]{2,})").matcher(normalizedHeading);
         if (latinIdentifierMatcher.find()) {
-            return "字段组 `" + latinIdentifierMatcher.group(1) + "` ";
+            return "field group `" + latinIdentifierMatcher.group(1) + "` ";
         }
         if (!normalizedHeading.isBlank()) {
-            return "字段组“" + normalizedHeading + "” ";
+            return "field group \"" + normalizedHeading + "\" ";
         }
-        return "第 " + tableIndex + " 个字段组 ";
+        return "field group " + tableIndex + " ";
     }
 
     /**
@@ -733,9 +706,8 @@ final class AnswerSpreadsheetFieldDefinitionConclusionBuilder {
      */
     private boolean isGenericFieldDefinitionSubheading(String heading) {
         String normalizedHeading = lowerCase(heading);
-        return normalizedHeading.contains("字段通用属性")
-                || normalizedHeading.contains("通用属性")
-                || normalizedHeading.contains("字段属性");
+        return normalizedHeading.contains("field")
+                && normalizedHeading.contains("attribute");
     }
 
     /**

@@ -170,7 +170,7 @@ public class DeepResearchSynthesizer {
      * @return 是内部标题时返回 true
      */
     private boolean isInternalDeepResearchHeading(String trimmedLine) {
-        return "## 分层摘要".equals(trimmedLine) || "## 缺失事实".equals(trimmedLine);
+        return "## Layers".equals(trimmedLine) || "## Missing Facts".equals(trimmedLine);
     }
 
     /**
@@ -226,10 +226,10 @@ public class DeepResearchSynthesizer {
     ) {
         InternalAnswerDraft internalAnswerDraft = new InternalAnswerDraft();
         StringBuilder answerBuilder = new StringBuilder();
-        answerBuilder.append("# 深度研究结论").append("\n\n");
-        answerBuilder.append("## 问题").append("\n");
+        answerBuilder.append("# Deep Research").append("\n\n");
+        answerBuilder.append("## Question").append("\n");
         answerBuilder.append(question == null ? "" : question.trim()).append("\n\n");
-        answerBuilder.append("## 结论").append("\n");
+        answerBuilder.append("## Findings").append("\n");
         populateFactState(internalAnswerDraft, evidenceLedger);
         Map<String, List<FactFinding>> comparisonFindingsByTopic = collectComparisonFindingsByTopic(evidenceLedger);
         boolean appendedConclusion = false;
@@ -248,24 +248,24 @@ public class DeepResearchSynthesizer {
             }
         }
         if (!appendedConclusion) {
-            answerBuilder.append("- 当前证据不足，暂无法形成完整结论").append("\n");
+            answerBuilder.append("- INSUFFICIENT_EVIDENCE").append("\n");
         }
         answerBuilder.append("\n");
         if (layerSummaries != null && !layerSummaries.isEmpty()) {
-            answerBuilder.append("## 分层摘要").append("\n");
+            answerBuilder.append("## Layers").append("\n");
             for (LayerSummary layerSummary : layerSummaries) {
-                answerBuilder.append("- 第 ").append(layerSummary.getLayerIndex() + 1).append(" 层：")
+                answerBuilder.append("- Layer ").append(layerSummary.getLayerIndex() + 1).append(": ")
                         .append(resolveLayerSummaryMarkdown(layerSummary))
                         .append("\n");
             }
             answerBuilder.append("\n");
         }
         if (evidenceLedger != null && evidenceLedger.hasConflicts()) {
-            answerBuilder.append("## 冲突提示").append("\n");
-            answerBuilder.append("- 当前证据链中存在不同来源结论不一致的情况，建议结合原始文档进一步确认。").append("\n");
+            answerBuilder.append("## Conflicts").append("\n");
+            answerBuilder.append("- CONFLICTING_EVIDENCE").append("\n");
         }
         if (!internalAnswerDraft.getMissingFactKeys().isEmpty()) {
-            answerBuilder.append("\n## 缺失事实").append("\n");
+            answerBuilder.append("\n## Missing Facts").append("\n");
             for (String missingFactKey : internalAnswerDraft.getMissingFactKeys()) {
                 answerBuilder.append("- ").append(missingFactKey).append("\n");
             }
@@ -510,7 +510,7 @@ public class DeepResearchSynthesizer {
         if (layerSummary == null
                 || layerSummary.getSummaryMarkdown() == null
                 || layerSummary.getSummaryMarkdown().isBlank()) {
-            return "当前层未取得有效证据";
+            return "NO_EVIDENCE";
         }
         String normalizedMarkdown = layerSummary.getSummaryMarkdown().replace("\r\n", "\n");
         List<String> normalizedSegments = new ArrayList<String>();
@@ -526,9 +526,9 @@ public class DeepResearchSynthesizer {
             }
         }
         if (normalizedSegments.isEmpty()) {
-            return "当前层未取得有效证据";
+            return "NO_EVIDENCE";
         }
-        return String.join("；", normalizedSegments);
+        return String.join("; ", normalizedSegments);
     }
 
     /**

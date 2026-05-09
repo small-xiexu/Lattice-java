@@ -38,7 +38,7 @@ final class AnswerGenerationPayloadOrchestrator {
      */
     String generateSingleArticleAnswer(String question, QueryArticleHit articleHit) {
         if (articleHit == null) {
-            return "未找到相关知识";
+            return "NO_RELEVANT_KNOWLEDGE";
         }
 
         List<String> queryTokens = support.extractQueryTokens(question);
@@ -90,7 +90,7 @@ final class AnswerGenerationPayloadOrchestrator {
             List<QueryArticleHit> queryArticleHits
     ) {
         if (queryArticleHits == null || queryArticleHits.isEmpty()) {
-            return QueryAnswerPayload.ruleBased("未找到相关知识", AnswerOutcome.NO_RELEVANT_KNOWLEDGE);
+            return QueryAnswerPayload.ruleBased("NO_RELEVANT_KNOWLEDGE", AnswerOutcome.NO_RELEVANT_KNOWLEDGE);
         }
         if (support.containsOnlyArticleEvidence(queryArticleHits)) {
             QueryArticleHit articleHit = queryArticleHits.get(0);
@@ -105,7 +105,7 @@ final class AnswerGenerationPayloadOrchestrator {
             return llmPayload;
         }
         if (!support.answerLlmInvoker.isAvailable()) {
-            return support.buildDeterministicFallbackPayload(
+            return support.buildEvidencePayload(
                     question,
                     queryArticleHits,
                     null,
@@ -152,7 +152,7 @@ final class AnswerGenerationPayloadOrchestrator {
             }
         }
         catch (RuntimeException ex) {
-            return support.buildDeterministicFallbackPayload(
+            return support.buildEvidencePayload(
                     question,
                     queryArticleHits,
                     AnswerOutcome.PARTIAL_ANSWER,
@@ -210,7 +210,7 @@ final class AnswerGenerationPayloadOrchestrator {
      * @return fallback 载荷
      */
     private QueryAnswerPayload buildLlmFallbackPayload(String question, List<QueryArticleHit> queryArticleHits) {
-        return support.buildDeterministicFallbackPayload(
+        return support.buildEvidencePayload(
                 question,
                 queryArticleHits,
                 AnswerOutcome.PARTIAL_ANSWER,
@@ -265,7 +265,7 @@ final class AnswerGenerationPayloadOrchestrator {
                 // 修订阶段沿用确定性 Markdown 兜底，避免用户反馈闭环被外部模型阻塞。
             }
         }
-        return support.answerFallbackMarkdownBuilder.buildFallbackRevisionMarkdown(
+        return support.answerFallbackMarkdownBuilder.buildRevisionEvidenceMarkdown(
                 question,
                 currentAnswer,
                 correction,

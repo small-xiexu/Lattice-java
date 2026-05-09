@@ -269,9 +269,9 @@ public class QueryVectorConfigService {
             return "";
         }
         if (!beforeState.isVectorEnabled() && savedRecord.isVectorEnabled()) {
-            return "已启用向量检索，建议执行一次“重建向量索引”为历史文章补齐 article_vector_index。";
+            return "VECTOR_ENABLED_REBUILD_RECOMMENDED";
         }
-        return "embedding profile 已变更，建议执行一次“重建向量索引”以刷新现有 article_vector_index。";
+        return "EMBEDDING_PROFILE_CHANGED_REBUILD_RECOMMENDED";
     }
 
     /**
