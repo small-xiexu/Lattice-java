@@ -1,0 +1,29 @@
+# lattice.llm.* 运行时配置
+lattice:
+  llm:
+    compile-model: ${LATTICE_LLM_COMPILE_MODEL:openai}
+    reviewer-model: ${LATTICE_LLM_REVIEWER_MODEL:anthropic}
+    config-source: ${LATTICE_LLM_CONFIG_SOURCE:hybrid}
+    bootstrap-enabled: ${LATTICE_LLM_BOOTSTRAP_ENABLED:true}
+    deep-research-startup-validation-enabled: ${LATTICE_LLM_DEEP_RESEARCH_STARTUP_VALIDATION_ENABLED:true}
+    secret-encryption-key: ${LATTICE_LLM_SECRET_ENCRYPTION_KEY:lattice-phase8-bootstrap-key-change-me}
+    budget-usd: ${LATTICE_LLM_BUDGET_USD:10.0}
+    cache-ttl-seconds: ${LATTICE_LLM_CACHE_TTL_SECONDS:86400}
+    cache-key-prefix: ${LATTICE_LLM_CACHE_KEY_PREFIX:llm:cache:}
+    review-enabled: ${LATTICE_LLM_REVIEW_ENABLED:false}
+    max-input-chars: ${LATTICE_LLM_MAX_INPUT_CHARS:64000}
+    chat-client:
+      enabled: ${LATTICE_LLM_CHAT_CLIENT_ENABLED:true}
+      query-answer-enabled: ${LATTICE_LLM_CHAT_CLIENT_QUERY_ANSWER_ENABLED:true}
+      query-rewrite-enabled: ${LATTICE_LLM_CHAT_CLIENT_QUERY_REWRITE_ENABLED:true}
+      query-review-enabled: ${LATTICE_LLM_CHAT_CLIENT_QUERY_REVIEW_ENABLED:true}
+      compile-review-enabled: ${LATTICE_LLM_CHAT_CLIENT_COMPILE_REVIEW_ENABLED:true}
+      governance-json-enabled: ${LATTICE_LLM_CHAT_CLIENT_GOVERNANCE_JSON_ENABLED:true}
+    admin:
+      encrypt-secrets: ${LATTICE_LLM_ADMIN_ENCRYPT_SECRETS:true}
+      mask-secrets: ${LATTICE_LLM_ADMIN_MASK_SECRETS:true}
+    pricing:
+      compile-input-price-per-1k-tokens: ${LATTICE_LLM_COMPILE_INPUT_PRICE_PER_1K:0.002500}
+      compile-output-price-per-1k-tokens: ${LATTICE_LLM_COMPILE_OUTPUT_PRICE_PER_1K:0.010000}
+      reviewer-input-price-per-1k-tokens: ${LATTICE_LLM_REVIEWER_INPUT_PRICE_PER_1K:0.003000}
+      reviewer-output-price-per-1k-tokens: ${LATTICE_LLM_REVIEWER_OUTPUT_PRICE_PER_1K:0.015000}

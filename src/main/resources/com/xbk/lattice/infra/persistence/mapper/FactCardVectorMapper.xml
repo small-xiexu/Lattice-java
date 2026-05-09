@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.FactCardVectorMapper">
+
+    <resultMap id="FactCardVectorRecordResultMap" type="com.xbk.lattice.infra.persistence.FactCardVectorRecord">
+        <constructor>
+            <arg column="fact_card_id" javaType="java.lang.Long"/>
+            <arg column="card_id" javaType="java.lang.String"/>
+            <arg column="card_type" javaType="com.xbk.lattice.query.evidence.domain.FactCardType"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.FactCardTypeHandler"/>
+            <arg column="answer_shape" javaType="com.xbk.lattice.query.evidence.domain.AnswerShape"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.AnswerShapeTypeHandler"/>
+            <arg column="model_profile_id" javaType="java.lang.Long"/>
+            <arg column="embedding_dimensions" javaType="_int"/>
+            <arg column="index_version" javaType="java.lang.String"/>
+            <arg column="content_hash" javaType="java.lang.String"/>
+            <arg column="embedding" javaType="[F"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.PgVectorFloatArrayTypeHandler"/>
+            <arg column="updated_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="QueryArticleHitResultMap" type="com.xbk.lattice.query.service.QueryArticleHit">
+        <constructor>
+            <arg column="evidence_type" javaType="com.xbk.lattice.query.service.QueryEvidenceType"/>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="card_id" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="content" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="review_status" javaType="java.lang.String"/>
+            <arg column="source_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="score" javaType="_double"/>
+        </constructor>
+    </resultMap>
+
+    <select id="tableExists" resultType="_boolean">
+        select to_regclass(current_schema() || '.fact_card_vector_index') is not null
+    </select>
+
+    <insert id="upsert">
+        insert into fact_card_vector_index (
+            fact_card_id, card_id, card_type, answer_shape, model_profile_id,
+            embedding_dimensions, index_version, content_hash, embedding, updated_at
+        )
+        values (
+            #{record.factCardId},
+            #{record.cardId},
+            #{record.cardType},
+            #{record.answerShape},
+            #{record.modelProfileId},
+            #{record.embeddingDimensions},
+            #{record.indexVersion},
+            #{record.contentHash},
+            cast(#{vectorLiteral} as ${vectorTypeName}),
+            #{record.updatedAt}
+        )
+        on conflict (fact_card_id) do update
+        set card_id = excluded.card_id,
+            card_type = excluded.card_type,
+            answer_shape = excluded.answer_shape,
+            model_profile_id = excluded.model_profile_id,
+            embedding_dimensions = excluded.embedding_dimensions,
+            index_version = excluded.index_version,
+            content_hash = excluded.content_hash,
+            embedding = excluded.embedding,
+            updated_at = excluded.updated_at
+    </insert>
+
+    <select id="findByFactCardId" resultMap="FactCardVectorRecordResultMap">
+        select fact_card_id, card_id, card_type, answer_shape, model_profile_id,
+               embedding_dimensions, index_version, content_hash, embedding::text as embedding, updated_at
+        from fact_card_vector_index
+        where fact_card_id = #{factCardId}
+    </select>
+
+    <select id="countAll" resultType="_int">
+        select count(*)
+        from fact_card_vector_index
+    </select>
+
+    <delete id="deleteAll">
+        delete from fact_card_vector_index
+    </delete>
+
+    <update id="alignEmbeddingColumnDimensions">
+        alter table fact_card_vector_index alter column embedding type ${vectorTypeName}(${targetDimensions})
+    </update>
+
+    <update id="createHnswIndex">
+        create index if not exists ${indexName}
+        on fact_card_vector_index using hnsw (embedding ${opClass})
+    </update>
+
+    <update id="createIvfflatIndex">
+        create index if not exists ${indexName}
+        on fact_card_vector_index using ivfflat (embedding ${opClass}) with (lists = 100)
+    </update>
+
+    <select id="findEmbeddingColumnType" resultType="java.lang.String">
+        select format_type(a.atttypid, a.atttypmod)
+        from pg_attribute a
+        join pg_class c on c.oid = a.attrelid
+        join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = current_schema()
+          and c.relname = 'fact_card_vector_index'
+          and a.attname = 'embedding'
+          and a.attnum > 0
+          and not a.attisdropped
+    </select>
+
+    <select id="findLatestUpdatedAt" resultType="java.time.OffsetDateTime">
+        select updated_at
+        from fact_card_vector_index
+        order by updated_at desc
+        limit 1
+    </select>
+
+    <select id="searchNearestNeighbors" resultMap="QueryArticleHitResultMap">
+        select 'FACT_CARD' as evidence_type,
+               fc.source_id,
+               fc.card_id,
+               fc.card_id as concept_id,
+               fc.title,
+               concat_ws(E'\n\n', fc.claim, fc.items_json::text, fc.evidence_text) as content,
+               jsonb_build_object(
+                   'factCardId', fc.id,
+                   'cardId', fc.card_id,
+                   'sourceFileId', fc.source_file_id,
+                   'cardType', fc.card_type,
+                   'answerShape', fc.answer_shape,
+                   'confidence', fc.confidence,
+                   'sourceChunkIds', fc.source_chunk_ids,
+                   'articleIds', fc.article_ids
+               )::text as metadata_json,
+               fc.review_status,
+               case
+                   when sf.file_path is null or sf.file_path = '' then array[]::text[]
+                   else array[sf.file_path]::text[]
+               end as source_paths,
+               1 - (vector_index.embedding ${distanceOperator} cast(#{vectorLiteral} as ${vectorTypeName})) as score
+        from fact_card_vector_index vector_index
+        join fact_cards fc on fc.id = vector_index.fact_card_id
+        left join source_files sf on sf.id = fc.source_file_id
+        order by vector_index.embedding ${distanceOperator} cast(#{vectorLiteral} as ${vectorTypeName}),
+                 fc.updated_at desc
+        limit #{limit}
+    </select>
+
+    <select id="resolveVectorTypeName" resultType="java.lang.String">
+        select coalesce(to_regtype('vector')::text, to_regtype('public.vector')::text)
+    </select>
+
+    <select id="resolvePreferredAnnIndexMethod" resultType="java.lang.String">
+        select amname
+        from pg_am
+        where amname in ('hnsw','ivfflat')
+        order by case amname when 'hnsw' then 0 else 1 end
+        limit 1
+    </select>
+
+    <select id="resolveVectorOperatorClass" resultType="java.lang.String">
+        select opcnamespace::regnamespace || '.vector_cosine_ops'
+        from pg_opclass
+        where opcname = 'vector_cosine_ops'
+        order by oid asc
+        limit 1
+    </select>
+
+    <update id="dropIndex">
+        drop index if exists ${indexName}
+    </update>
+</mapper>

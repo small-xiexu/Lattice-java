@@ -1,10 +1,14 @@
 package com.xbk.lattice.api.compiler;
 
-import com.xbk.lattice.source.service.SourceSyncConflictException;
+import com.xbk.lattice.source.error.SourceSyncConflictException;
+import com.xbk.lattice.shared.error.LatticeBusinessException;
+import com.xbk.lattice.shared.error.LatticeIntegrationException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tomcat.util.http.fileupload.impl.FileSizeLimitExceededException;
 import org.apache.tomcat.util.http.fileupload.impl.SizeLimitExceededException;
 import org.springframework.boot.autoconfigure.web.servlet.MultipartProperties;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.unit.DataSize;
@@ -23,6 +27,7 @@ import java.io.IOException;
  * @author xiexu
  */
 @RestControllerAdvice
+@Order(Ordered.LOWEST_PRECEDENCE)
 @Slf4j
 public class CompileExceptionHandler {
 
@@ -61,6 +66,32 @@ public class CompileExceptionHandler {
         log.warn("Compile request rejected due to source sync conflict: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new CompileErrorResponse("SOURCE_SYNC_CONFLICT", ex.getMessage()));
+    }
+
+    /**
+     * 处理编译业务异常。
+     *
+     * @param ex 异常
+     * @return 错误响应
+     */
+    @ExceptionHandler(LatticeBusinessException.class)
+    public ResponseEntity<CompileErrorResponse> handleLatticeBusinessException(LatticeBusinessException ex) {
+        log.warn("Compile request rejected due to business exception: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new CompileErrorResponse(ex.getErrorCode(), ex.getMessage()));
+    }
+
+    /**
+     * 处理编译外部集成异常。
+     *
+     * @param ex 异常
+     * @return 错误响应
+     */
+    @ExceptionHandler(LatticeIntegrationException.class)
+    public ResponseEntity<CompileErrorResponse> handleLatticeIntegrationException(LatticeIntegrationException ex) {
+        log.error("Compile failed due to integration exception", ex);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new CompileErrorResponse(ex.getErrorCode(), ex.getMessage()));
     }
 
     /**

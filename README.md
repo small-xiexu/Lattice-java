@@ -45,6 +45,19 @@
 | 模型中心 | `llm_provider_connections`、`llm_model_profiles`、`agent_model_bindings`、`execution_llm_snapshots` | 运行时到底走了哪个连接、模型和绑定，都能回溯 |
 | 治理与版本 | `quality_metrics_history`、`repo_snapshots`、`repo_snapshot_items` | 知识库不是只会增长，还要能治理、导出、回滚和做质量分析 |
 
+## 可观测性能力地图
+
+可观测性是横切能力，不强行把所有审计表和状态表搬进 `observability` 包：
+
+| 能力 | 主要落点 | 说明 |
+| --- | --- | --- |
+| 结构化事件 | `observability/StructuredEventLogger` | 统一补齐 trace、span、eventName 等 MDC 字段 |
+| 编译状态 | `compile_jobs`、`compile_job_steps`、`synthesis_artifacts` | 记录编译提交、步骤、成功失败与产物引用 |
+| 查询检索审计 | `query_retrieval_*`、`RetrievalAuditService` | 记录召回通道、融合结果、命中证据与错误摘要 |
+| Deep Research 审计 | `query/deepresearch` 子域 | 记录计划、任务、证据账本、覆盖率与部分回答状态 |
+| 治理与快照 | `governance`、`repo_snapshots`、`quality_metrics_history` | 记录整库快照、质量指标与治理操作历史 |
+| 模型运行快照 | `execution_llm_snapshots` | 记录每次执行实际命中的连接、模型与角色绑定 |
+
 ## 和传统 RAG 的分水岭
 
 | 维度 | 常见 RAG | 邪修智库 |

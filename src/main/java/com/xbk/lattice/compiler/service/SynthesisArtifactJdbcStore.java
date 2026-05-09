@@ -1,6 +1,7 @@
 package com.xbk.lattice.compiler.service;
 
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.xbk.lattice.compiler.service.mapper.SynthesisArtifactMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -15,33 +16,24 @@ import java.util.List;
 @Repository
 public class SynthesisArtifactJdbcStore implements SynthesisArtifactStore {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final SynthesisArtifactMapper synthesisArtifactMapper;
 
     /**
-     * 创建合成产物 JDBC 存储。
+     * 创建合成产物存储。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @param synthesisArtifactMapper 合成产物 Mapper
      */
-    public SynthesisArtifactJdbcStore(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    @Autowired
+    public SynthesisArtifactJdbcStore(SynthesisArtifactMapper synthesisArtifactMapper) {
+        this.synthesisArtifactMapper = synthesisArtifactMapper;
     }
 
     @Override
     public void save(SynthesisArtifactRecord synthesisArtifactRecord) {
-        jdbcTemplate.update(
-                """
-                        insert into synthesis_artifacts (artifact_type, title, content, compiled_at)
-                        values (?, ?, ?, ?)
-                        on conflict (artifact_type) do update
-                        set title = excluded.title,
-                            content = excluded.content,
-                            compiled_at = excluded.compiled_at
-                        """,
-                synthesisArtifactRecord.getArtifactType(),
-                synthesisArtifactRecord.getTitle(),
-                synthesisArtifactRecord.getContent(),
-                synthesisArtifactRecord.getCompiledAt()
-        );
+        if (synthesisArtifactMapper == null) {
+            return;
+        }
+        synthesisArtifactMapper.upsert(synthesisArtifactRecord);
     }
 
     /**
@@ -50,25 +42,18 @@ public class SynthesisArtifactJdbcStore implements SynthesisArtifactStore {
      * @return 合成产物列表
      */
     public List<SynthesisArtifactRecord> findAll() {
-        return jdbcTemplate.query(
-                """
-                        select artifact_type, title, content, compiled_at
-                        from synthesis_artifacts
-                        order by artifact_type asc
-                        """,
-                (resultSet, rowNum) -> new SynthesisArtifactRecord(
-                        resultSet.getString("artifact_type"),
-                        resultSet.getString("title"),
-                        resultSet.getString("content"),
-                        resultSet.getObject("compiled_at", java.time.OffsetDateTime.class)
-                )
-        );
+        if (synthesisArtifactMapper == null) {
+            return List.of();
+        }
+        return synthesisArtifactMapper.findAll();
     }
 
     /**
      * 清空全部合成产物。
      */
     public void deleteAll() {
-        jdbcTemplate.execute("TRUNCATE TABLE synthesis_artifacts");
+        if (synthesisArtifactMapper != null) {
+            synthesisArtifactMapper.truncateAll();
+        }
     }
 }

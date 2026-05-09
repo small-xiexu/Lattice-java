@@ -3,7 +3,6 @@ package com.xbk.lattice.query.service;
 import com.xbk.lattice.infra.persistence.ArticleVectorJdbcRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.Optional;
 
@@ -29,7 +28,7 @@ class VectorSchemaInspectorTest {
                         1L,
                         "openai",
                         "text-embedding-3-small",
-                        1536,
+                        2000,
                         "database",
                         false,
                         "",
@@ -38,13 +37,13 @@ class VectorSchemaInspectorTest {
                         null,
                         null
                 )),
-                new StubArticleVectorJdbcRepository("vector(1536)", "hnsw")
+                new StubArticleVectorJdbcRepository("vector(2000)", "hnsw")
         );
 
         VectorSchemaInspection inspection = inspector.inspect();
 
-        assertThat(inspection.getProfileDimensions()).isEqualTo(1536);
-        assertThat(inspection.getSchemaDimensions()).isEqualTo(1536);
+        assertThat(inspection.getProfileDimensions()).isEqualTo(2000);
+        assertThat(inspection.getSchemaDimensions()).isEqualTo(2000);
         assertThat(inspection.isDimensionsConsistent()).isTrue();
         assertThat(inspection.isAnnIndexReady()).isTrue();
         assertThat(inspection.getAnnIndexType()).isEqualTo("hnsw");
@@ -70,13 +69,13 @@ class VectorSchemaInspectorTest {
                         null,
                         null
                 )),
-                new StubArticleVectorJdbcRepository("vector(1536)", "")
+                new StubArticleVectorJdbcRepository("vector(2000)", "")
         );
 
         VectorSchemaInspection inspection = inspector.inspect();
 
         assertThat(inspection.getProfileDimensions()).isEqualTo(3072);
-        assertThat(inspection.getSchemaDimensions()).isEqualTo(1536);
+        assertThat(inspection.getSchemaDimensions()).isEqualTo(2000);
         assertThat(inspection.isDimensionsConsistent()).isFalse();
         assertThat(inspection.isAnnIndexReady()).isFalse();
     }
@@ -127,7 +126,7 @@ class VectorSchemaInspectorTest {
         private final String annIndexType;
 
         private StubArticleVectorJdbcRepository(String embeddingColumnType, String annIndexType) {
-            super(new JdbcTemplate());
+            super(null);
             this.embeddingColumnType = embeddingColumnType;
             this.annIndexType = annIndexType;
         }

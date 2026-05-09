@@ -197,7 +197,7 @@ public class IngestNode {
             return readWordSource(sourceDir, path);
         }
         if ("doc".equals(format)) {
-            return readLegacyWordSource(sourceDir, path);
+            return readBinaryWordSource(sourceDir, path);
         }
         if ("pptx".equals(format)) {
             return readPptSource(sourceDir, path);
@@ -379,17 +379,17 @@ public class IngestNode {
     }
 
     /**
-     * 读取旧版 Word 源文件。
+     * 读取二进制 Word 源文件。
      *
      * @param sourceDir 源目录
      * @param path Word 路径
      * @return 原始源文件；无可提取正文时返回 null
      */
-    private RawSource readLegacyWordSource(Path sourceDir, Path path) {
+    private RawSource readBinaryWordSource(Path sourceDir, Path path) {
         try {
             SourceExtractionResult extractionResult = docTextExtractor.extract(path);
             if (extractionResult == null) {
-                log.warn("Legacy Word has no extractable text path: {}", path);
+                log.warn("Binary Word has no extractable text path: {}", path);
                 return null;
             }
             String relativePath = normalizePath(sourceDir.relativize(path));
@@ -405,7 +405,7 @@ public class IngestNode {
             );
         }
         catch (IOException ex) {
-            log.warn("Failed to extract legacy Word path: {}", path, ex);
+            log.warn("Failed to extract binary Word path: {}", path, ex);
             return null;
         }
     }

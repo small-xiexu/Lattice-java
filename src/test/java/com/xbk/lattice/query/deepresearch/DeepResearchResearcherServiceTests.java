@@ -68,10 +68,10 @@ class DeepResearchResearcherServiceTests {
     }
 
     /**
-     * 验证结构化摘要为空时会保留 anchor-only partial result，避免检索证据丢失。
+     * 验证结构化摘要为空时会回退到检索证据生成 finding，避免最终答案无 projection。
      */
     @Test
-    void shouldKeepAnchorOnlyPartialResultWhenStructuredExtractionFails() {
+    void shouldFallbackToRetrievedFindingsWhenStructuredExtractionFails() {
         DeepResearchResearcherService researcherService = new DeepResearchResearcherService(
                 new FixedKnowledgeSearchService(),
                 new EmptyAnswerGenerationService()
@@ -93,10 +93,10 @@ class DeepResearchResearcherServiceTests {
                 executionContext
         );
 
-        assertThat(evidenceCard.getFactFindings()).isEmpty();
-        assertThat(evidenceCard.getEvidenceAnchors()).hasSize(2);
-        assertThat(evidenceCard.getGaps()).contains("insufficient_grounding");
-        assertThat(evidenceCard.getFollowUps()).contains("retry_structured_fact_extraction");
+        assertThat(evidenceCard.getFactFindings()).isNotEmpty();
+        assertThat(evidenceCard.getEvidenceAnchors()).isNotEmpty();
+        assertThat(evidenceCard.getGaps()).doesNotContain("insufficient_grounding");
+        assertThat(evidenceCard.getFollowUps()).contains("fallback_to_retrieved_evidence");
     }
 
     /**
@@ -165,6 +165,40 @@ class DeepResearchResearcherServiceTests {
         assertThat(evidenceCard.getFollowUps()).contains("schema_repair_attempted");
         assertThat(answerGenerationService.callCount).isEqualTo(2);
         assertThat(executionContext.llmCallCount()).isEqualTo(2);
+    }
+
+    /**
+     * 验证结构化 JSON 修复仍失败时会回退到检索证据，而不是只留下 anchor-only 结果。
+     */
+    @Test
+    void shouldFallbackToRetrievedFindingsWhenStructuredJsonRepairFails() {
+        AlwaysInvalidJsonAnswerGenerationService answerGenerationService = new AlwaysInvalidJsonAnswerGenerationService();
+        DeepResearchResearcherService researcherService = new DeepResearchResearcherService(
+                new FixedKnowledgeSearchService(),
+                answerGenerationService
+        );
+        ResearchTask researchTask = new ResearchTask();
+        researchTask.setTaskId("task-payment-retry");
+        researchTask.setQuestion("PaymentService 默认重试次数是多少");
+        DeepResearchExecutionContext executionContext = new DeepResearchExecutionContext(
+                3,
+                System.currentTimeMillis() + 60_000L
+        );
+
+        EvidenceCard evidenceCard = researcherService.research(
+                "dr-q4b",
+                researchTask,
+                0,
+                null,
+                List.of(),
+                executionContext
+        );
+
+        assertThat(evidenceCard.getFactFindings()).isNotEmpty();
+        assertThat(evidenceCard.getEvidenceAnchors()).isNotEmpty();
+        assertThat(evidenceCard.getGaps()).doesNotContain("structured_fact_schema_invalid");
+        assertThat(evidenceCard.getFollowUps()).contains("schema_repair_attempted", "fallback_to_retrieved_evidence");
+        assertThat(answerGenerationService.callCount).isEqualTo(2);
     }
 
     /**
@@ -836,6 +870,23 @@ class DeepResearchResearcherServiceTests {
                 return QueryAnswerPayload.ruleBased("{\"factFindings\":[", AnswerOutcome.PARTIAL_ANSWER);
             }
             return QueryAnswerPayload.ruleBased(validEvidenceJson(), AnswerOutcome.PARTIAL_ANSWER);
+        }
+    }
+
+    private static class AlwaysInvalidJsonAnswerGenerationService extends AnswerGenerationService {
+
+        private int callCount;
+
+        @Override
+        public QueryAnswerPayload generatePayload(
+                String scopeId,
+                String scene,
+                String agentRole,
+                String question,
+                List<QueryArticleHit> queryArticleHits
+        ) {
+            callCount++;
+            return QueryAnswerPayload.ruleBased("{\"factFindings\":[", AnswerOutcome.PARTIAL_ANSWER);
         }
     }
 

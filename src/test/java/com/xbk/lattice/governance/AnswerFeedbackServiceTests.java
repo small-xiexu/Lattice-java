@@ -5,7 +5,6 @@ import com.xbk.lattice.infra.persistence.AnswerFeedbackAuditRecord;
 import com.xbk.lattice.infra.persistence.AnswerFeedbackJdbcRepository;
 import com.xbk.lattice.infra.persistence.AnswerFeedbackRecord;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -90,7 +89,7 @@ class AnswerFeedbackServiceTests {
         private long sequence = 0L;
 
         private FakeAnswerFeedbackJdbcRepository() {
-            super(new JdbcTemplate());
+            super(null);
         }
 
         @Override
@@ -195,7 +194,7 @@ class AnswerFeedbackServiceTests {
         private long sequence = 0L;
 
         private FakeAnswerFeedbackAuditJdbcRepository() {
-            super(new JdbcTemplate());
+            super(null);
         }
 
         @Override

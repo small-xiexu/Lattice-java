@@ -63,7 +63,7 @@ public class KnowledgeLookupResult {
     }
 
     /**
-     * 创建兼容旧调用的查询结果。
+     * 创建查询结果。
      *
      * @param found 是否找到
      * @param type 记录类型

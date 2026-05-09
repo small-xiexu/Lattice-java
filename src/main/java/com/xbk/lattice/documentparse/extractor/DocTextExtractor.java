@@ -1,5 +1,7 @@
 package com.xbk.lattice.documentparse.extractor;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -14,7 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 旧版 Word 文本抽取器
+ * 二进制 Word 文本抽取器
  *
  * 职责：把 `.doc` 文档抽取为规范化正文与元数据
  *
@@ -23,7 +25,7 @@ import java.util.Map;
 @Slf4j
 public class DocTextExtractor {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     /**
      * 抽取 `.doc` 文本。
@@ -36,25 +38,25 @@ public class DocTextExtractor {
         try (InputStream inputStream = Files.newInputStream(docPath);
              HWPFDocument document = new HWPFDocument(inputStream);
              WordExtractor wordExtractor = new WordExtractor(document)) {
-            LegacyDocTextSource textSource = new PoiLegacyDocTextSource(wordExtractor);
+            BinaryDocTextSource textSource = new PoiBinaryDocTextSource(wordExtractor);
             String sourceName = docPath.toString();
             try {
                 return extract(textSource, sourceName);
             }
             catch (RuntimeException ex) {
-                throw new IOException("提取旧版 DOC 文本失败 path: " + docPath, ex);
+                throw new IOException("提取二进制 DOC 文本失败 path: " + docPath, ex);
             }
         }
     }
 
     /**
-     * 基于可替换文本源抽取旧版 DOC 正文。
+     * 基于可替换文本源抽取二进制 DOC 正文。
      *
      * @param textSource 文本源
      * @param sourceName 来源标识
      * @return 抽取结果；无有效正文时返回 null
      */
-    SourceExtractionResult extract(LegacyDocTextSource textSource, String sourceName) {
+    SourceExtractionResult extract(BinaryDocTextSource textSource, String sourceName) {
         RuntimeException paragraphException = null;
         SourceExtractionResult paragraphResult = null;
         try {
@@ -78,12 +80,12 @@ public class DocTextExtractor {
     }
 
     /**
-     * 按段落优先提取旧版 DOC 正文。
+     * 按段落优先提取二进制 DOC 正文。
      *
      * @param textSource 文本源
      * @return 抽取结果；无有效正文时返回 null
      */
-    private SourceExtractionResult extractFromParagraphs(LegacyDocTextSource textSource) {
+    private SourceExtractionResult extractFromParagraphs(BinaryDocTextSource textSource) {
         String[] paragraphTexts = textSource.getParagraphText();
         StringBuilder contentBuilder = new StringBuilder();
         int paragraphCount = 0;
@@ -103,12 +105,12 @@ public class DocTextExtractor {
     }
 
     /**
-     * 按 text pieces 降级提取旧版 DOC 正文。
+     * 按 text pieces 降级提取二进制 DOC 正文。
      *
      * @param textSource 文本源
      * @return 抽取结果；无有效正文时返回 null
      */
-    private SourceExtractionResult extractFromTextPieces(LegacyDocTextSource textSource) {
+    private SourceExtractionResult extractFromTextPieces(BinaryDocTextSource textSource) {
         String content = normalizeText(textSource.getTextFromPieces());
         if (content.isBlank()) {
             return null;
@@ -119,7 +121,7 @@ public class DocTextExtractor {
     }
 
     /**
-     * 记录旧版 DOC 降级提取日志。
+     * 记录二进制 DOC 降级提取日志。
      *
      * @param sourceName 来源标识
      * @param paragraphException 段落提取异常
@@ -127,10 +129,10 @@ public class DocTextExtractor {
     private void logFallback(String sourceName, RuntimeException paragraphException) {
         if (paragraphException != null) {
             String reason = paragraphException.getMessage();
-            log.warn("Legacy DOC paragraph extraction degraded to text pieces path: {}, reason: {}", sourceName, reason);
+            log.warn("Binary DOC paragraph extraction degraded to text pieces path: {}, reason: {}", sourceName, reason);
             return;
         }
-        log.warn("Legacy DOC paragraph extraction returned no usable content, fallback to text pieces path: {}", sourceName);
+        log.warn("Binary DOC paragraph extraction returned no usable content, fallback to text pieces path: {}", sourceName);
     }
 
     /**
@@ -174,7 +176,7 @@ public class DocTextExtractor {
     }
 
     /**
-     * 构建旧版 DOC 元数据 JSON。
+     * 构建二进制 DOC 元数据 JSON。
      *
      * @param paragraphCount 段落数
      * @param extractionStrategy 抽取策略
@@ -183,7 +185,7 @@ public class DocTextExtractor {
     private String buildMetadataJson(int paragraphCount, String extractionStrategy) {
         Map<String, Object> metadata = new LinkedHashMap<String, Object>();
         metadata.put("paragraphCount", paragraphCount);
-        metadata.put("legacyWord", Boolean.TRUE);
+        metadata.put("binaryWord", Boolean.TRUE);
         metadata.put("extractionStrategy", extractionStrategy);
         metadata.put("listFormattingPreserved", Boolean.FALSE);
         try {
@@ -196,13 +198,13 @@ public class DocTextExtractor {
 }
 
 /**
- * 旧版 DOC 文本源
+ * 二进制 DOC 文本源
  *
  * 职责：为 `DocTextExtractor` 提供可替换的段落文本与降级文本读取能力
  *
  * @author xiexu
  */
-interface LegacyDocTextSource {
+interface BinaryDocTextSource {
 
     /**
      * 获取段落文本数组。
@@ -220,22 +222,22 @@ interface LegacyDocTextSource {
 }
 
 /**
- * 基于 Apache POI 的旧版 DOC 文本源
+ * 基于 Apache POI 的二进制 DOC 文本源
  *
  * 职责：适配 `WordExtractor`，向 `DocTextExtractor` 暴露统一读取接口
  *
  * @author xiexu
  */
-final class PoiLegacyDocTextSource implements LegacyDocTextSource {
+final class PoiBinaryDocTextSource implements BinaryDocTextSource {
 
     private final WordExtractor wordExtractor;
 
     /**
-     * 创建 POI 旧版 DOC 文本源。
+     * 创建 POI 二进制 DOC 文本源。
      *
      * @param wordExtractor Word 抽取器
      */
-    PoiLegacyDocTextSource(WordExtractor wordExtractor) {
+    PoiBinaryDocTextSource(WordExtractor wordExtractor) {
         this.wordExtractor = wordExtractor;
     }
 

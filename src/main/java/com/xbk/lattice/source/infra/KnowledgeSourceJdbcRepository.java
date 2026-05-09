@@ -38,7 +38,7 @@ public class KnowledgeSourceJdbcRepository {
     /**
      * 统计资料源数量。
      *
-     * 职责：为后台分页列表返回总条数，并默认排除 legacy-default
+     * 职责：为后台分页列表返回总条数，并默认排除 default-source
      *
      * @param keyword 关键词
      * @param status 状态过滤

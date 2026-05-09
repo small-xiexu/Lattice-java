@@ -7,7 +7,6 @@ import com.xbk.lattice.llm.infra.LlmModelProfileJdbcRepository;
 import com.xbk.lattice.llm.infra.LlmProviderConnectionJdbcRepository;
 import com.xbk.lattice.llm.service.LlmSecretCryptoService;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -121,7 +120,7 @@ class EmbeddingRouteResolverTest {
         private final LlmModelProfile modelProfile;
 
         private StubModelProfileRepository(LlmModelProfile modelProfile) {
-            super(new JdbcTemplate());
+            super(null);
             this.modelProfile = modelProfile;
         }
 
@@ -136,7 +135,7 @@ class EmbeddingRouteResolverTest {
         private final LlmProviderConnection connection;
 
         private StubProviderConnectionRepository(LlmProviderConnection connection) {
-            super(new JdbcTemplate());
+            super(null);
             this.connection = connection;
         }
 

@@ -1,7 +1,8 @@
 package com.xbk.lattice.query.service;
 
+import com.xbk.lattice.query.service.mapper.SearchCapabilityMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -15,15 +16,16 @@ import org.springframework.stereotype.Service;
 @Service
 public class JdbcSearchCapabilityService implements SearchCapabilityService {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final SearchCapabilityMapper searchCapabilityMapper;
 
     /**
-     * 创建 JDBC 检索能力探测服务。
+     * 创建检索能力探测服务。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @param searchCapabilityMapper 检索能力 Mapper
      */
-    public JdbcSearchCapabilityService(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    @Autowired
+    public JdbcSearchCapabilityService(SearchCapabilityMapper searchCapabilityMapper) {
+        this.searchCapabilityMapper = searchCapabilityMapper;
     }
 
     /**
@@ -34,7 +36,7 @@ public class JdbcSearchCapabilityService implements SearchCapabilityService {
      */
     @Override
     public boolean supportsTextSearchConfig(String configName) {
-        if (jdbcTemplate == null) {
+        if (searchCapabilityMapper == null) {
             return false;
         }
 
@@ -46,31 +48,12 @@ public class JdbcSearchCapabilityService implements SearchCapabilityService {
         try {
             int separatorIndex = normalizedConfigName.lastIndexOf('.');
             if (separatorIndex < 0) {
-                Boolean available = jdbcTemplate.queryForObject(
-                        "select exists(select 1 from pg_catalog.pg_ts_config where cfgname = ?)",
-                        Boolean.class,
-                        normalizedConfigName
-                );
-                return Boolean.TRUE.equals(available);
+                return searchCapabilityMapper.textSearchConfigExists(normalizedConfigName);
             }
 
             String schemaName = normalizedConfigName.substring(0, separatorIndex);
             String simpleName = normalizedConfigName.substring(separatorIndex + 1);
-            Boolean available = jdbcTemplate.queryForObject(
-                    """
-                            select exists(
-                                select 1
-                                from pg_catalog.pg_ts_config c
-                                join pg_catalog.pg_namespace n on n.oid = c.cfgnamespace
-                                where c.cfgname = ?
-                                  and n.nspname = ?
-                            )
-                            """,
-                    Boolean.class,
-                    simpleName,
-                    schemaName
-            );
-            return Boolean.TRUE.equals(available);
+            return searchCapabilityMapper.schemaTextSearchConfigExists(schemaName, simpleName);
         }
         catch (RuntimeException ex) {
             log.warn("Failed to inspect text search config: {}", normalizedConfigName, ex);
@@ -85,16 +68,12 @@ public class JdbcSearchCapabilityService implements SearchCapabilityService {
      */
     @Override
     public boolean supportsVectorType() {
-        if (jdbcTemplate == null) {
+        if (searchCapabilityMapper == null) {
             return false;
         }
 
         try {
-            Boolean available = jdbcTemplate.queryForObject(
-                    "select coalesce(to_regtype('vector'), to_regtype('public.vector')) is not null",
-                    Boolean.class
-            );
-            return Boolean.TRUE.equals(available);
+            return searchCapabilityMapper.vectorTypeAvailable();
         }
         catch (RuntimeException ex) {
             log.warn("Failed to inspect vector type availability", ex);
@@ -109,16 +88,12 @@ public class JdbcSearchCapabilityService implements SearchCapabilityService {
      */
     @Override
     public boolean hasArticleVectorIndex() {
-        if (jdbcTemplate == null) {
+        if (searchCapabilityMapper == null) {
             return false;
         }
 
         try {
-            Boolean available = jdbcTemplate.queryForObject(
-                    "select to_regclass(current_schema() || '.article_vector_index') is not null",
-                    Boolean.class
-            );
-            return Boolean.TRUE.equals(available);
+            return searchCapabilityMapper.tableExists("article_vector_index");
         }
         catch (RuntimeException ex) {
             log.warn("Failed to inspect article_vector_index availability", ex);
@@ -133,16 +108,12 @@ public class JdbcSearchCapabilityService implements SearchCapabilityService {
      */
     @Override
     public boolean hasArticleChunkVectorIndex() {
-        if (jdbcTemplate == null) {
+        if (searchCapabilityMapper == null) {
             return false;
         }
 
         try {
-            Boolean available = jdbcTemplate.queryForObject(
-                    "select to_regclass(current_schema() || '.article_chunk_vector_index') is not null",
-                    Boolean.class
-            );
-            return Boolean.TRUE.equals(available);
+            return searchCapabilityMapper.tableExists("article_chunk_vector_index");
         }
         catch (RuntimeException ex) {
             log.warn("Failed to inspect article_chunk_vector_index availability", ex);
@@ -157,16 +128,12 @@ public class JdbcSearchCapabilityService implements SearchCapabilityService {
      */
     @Override
     public boolean hasFactCardVectorIndex() {
-        if (jdbcTemplate == null) {
+        if (searchCapabilityMapper == null) {
             return false;
         }
 
         try {
-            Boolean available = jdbcTemplate.queryForObject(
-                    "select to_regclass(current_schema() || '.fact_card_vector_index') is not null",
-                    Boolean.class
-            );
-            return Boolean.TRUE.equals(available);
+            return searchCapabilityMapper.tableExists("fact_card_vector_index");
         }
         catch (RuntimeException ex) {
             log.warn("Failed to inspect fact_card_vector_index availability", ex);

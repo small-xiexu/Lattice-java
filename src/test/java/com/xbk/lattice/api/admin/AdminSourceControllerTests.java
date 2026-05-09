@@ -301,15 +301,15 @@ class AdminSourceControllerTests {
                             metadata_json
                         )
                         values (
-                            'legacy-default',
-                            'Legacy Default Source',
+                            'default-source',
+                            'Default Source',
                             'UPLOAD',
                             'DOCUMENT',
                             'ACTIVE',
                             'NORMAL',
                             'FULL',
                             '{}'::jsonb,
-                            '{"legacyDefault":true}'::jsonb
+                            '{"defaultSource":true}'::jsonb
                         )
                         """
         );

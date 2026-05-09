@@ -9,7 +9,6 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.ai.openai.OpenAiEmbeddingOptions;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -44,7 +43,7 @@ class VectorSearchServiceTests {
                 querySearchProperties,
                 new FixedSearchCapabilityService(true, true, true),
                 new FakeArticleVectorJdbcRepository(),
-                new FixedEmbeddingModel(createEmbedding(0.1F, 1536))
+                new FixedEmbeddingModel(createEmbedding(0.1F, 2000))
         );
 
         assertThat(vectorSearchService.search(executionContext("退款状态是什么"))).isEmpty();
@@ -57,7 +56,7 @@ class VectorSearchServiceTests {
     void shouldReturnNearestVectorHitsWhenCapabilitiesAvailable() {
         QuerySearchProperties querySearchProperties = new QuerySearchProperties();
         querySearchProperties.getVector().setEnabled(true);
-        querySearchProperties.getVector().setExpectedDimensions(1536);
+        querySearchProperties.getVector().setExpectedDimensions(2000);
 
         FakeArticleVectorJdbcRepository articleVectorJdbcRepository = new FakeArticleVectorJdbcRepository();
         articleVectorJdbcRepository.setQueryResults(List.of(
@@ -75,14 +74,14 @@ class VectorSearchServiceTests {
                 querySearchProperties,
                 new FixedSearchCapabilityService(true, true, true),
                 articleVectorJdbcRepository,
-                new FixedEmbeddingModel(createEmbedding(0.1F, 1536))
+                new FixedEmbeddingModel(createEmbedding(0.1F, 2000))
         );
 
         List<QueryArticleHit> hits = vectorSearchService.search(executionContext("退款状态是什么"));
 
         assertThat(hits).hasSize(1);
         assertThat(hits.get(0).getConceptId()).isEqualTo("refund-status");
-        assertThat(articleVectorJdbcRepository.getLastQueryEmbedding()).hasSize(1536);
+        assertThat(articleVectorJdbcRepository.getLastQueryEmbedding()).hasSize(2000);
         assertThat(articleVectorJdbcRepository.getLastQueryEmbedding()[0]).isEqualTo(0.1F);
     }
 
@@ -113,7 +112,7 @@ class VectorSearchServiceTests {
     void shouldThrowWhenEmbeddingDimensionsMismatch() {
         QuerySearchProperties querySearchProperties = new QuerySearchProperties();
         querySearchProperties.getVector().setEnabled(true);
-        querySearchProperties.getVector().setExpectedDimensions(1536);
+        querySearchProperties.getVector().setExpectedDimensions(2000);
 
         FakeArticleVectorJdbcRepository articleVectorJdbcRepository = new FakeArticleVectorJdbcRepository();
         articleVectorJdbcRepository.setQueryResults(List.of(
@@ -290,7 +289,7 @@ class VectorSearchServiceTests {
          * 创建向量仓储替身。
          */
         private FakeArticleVectorJdbcRepository() {
-            super(new JdbcTemplate());
+            super(null);
         }
 
         /**

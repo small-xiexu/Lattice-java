@@ -23,7 +23,11 @@ class SettingsPageJsRuntimeTests {
     @Test
     void shouldExposeDeepResearchBindingLabelsViaNode(@TempDir Path tempDir) throws Exception {
         String userDir = System.getProperty("user.dir");
+        Path adminCommonJsPath = Path.of(userDir, "src/main/resources/static/admin/admin-common.js");
+        Path adminModuleDir = Path.of(userDir, "src/main/resources/static/admin/modules");
         Path settingsPageJsPath = Path.of(userDir, "src/main/resources/static/admin/settings-page.js");
+        assertThat(Files.exists(adminCommonJsPath)).isTrue();
+        assertThat(Files.exists(adminModuleDir)).isTrue();
         assertThat(Files.exists(settingsPageJsPath)).isTrue();
 
         Path harnessScriptPath = tempDir.resolve("settings-page-js-runtime-test.js");
@@ -32,7 +36,9 @@ class SettingsPageJsRuntimeTests {
         ProcessBuilder processBuilder = new ProcessBuilder(
                 "node",
                 harnessScriptPath.toString(),
-                settingsPageJsPath.toString()
+                adminCommonJsPath.toString(),
+                adminModuleDir.toString(),
+                "settings-page"
         );
         processBuilder.redirectErrorStream(true);
         Process process = processBuilder.start();
@@ -47,9 +53,24 @@ class SettingsPageJsRuntimeTests {
     private String buildHarnessScript() {
         return """
                 const fs = require("fs");
+                const path = require("path");
                 const vm = require("vm");
 
-                const source = fs.readFileSync(process.argv[2], "utf8");
+                const commonSource = fs.readFileSync(process.argv[2], "utf8");
+                const moduleDir = process.argv[3];
+                const modulePrefix = process.argv[4];
+                const source = fs.readdirSync(moduleDir)
+                    .filter(function (name) { return name.startsWith(modulePrefix + "-runtime-part-"); })
+                    .sort()
+                    .map(function (name) {
+                        const moduleSource = fs.readFileSync(path.join(moduleDir, name), "utf8");
+                        const matched = moduleSource.match(/export default (.*);\\s*$/s);
+                        if (!matched) {
+                            throw new Error("invalid runtime module: " + name);
+                        }
+                        return JSON.parse(matched[1]);
+                    })
+                    .join("\\n");
                 const adminTabsCalls = [];
                 const sandbox = {
                     console: console,
@@ -85,6 +106,7 @@ class SettingsPageJsRuntimeTests {
                 sandbox.window.document = sandbox.document;
                 sandbox.globalThis = sandbox;
 
+                vm.runInNewContext(commonSource, sandbox, { filename: "admin-common.js" });
                 vm.runInNewContext(source, sandbox, { filename: "settings-page.js" });
 
                 const settingsPage = sandbox.__LATTICE_ADMIN_TEST__.settingsPage;

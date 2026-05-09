@@ -2,6 +2,7 @@ package com.xbk.lattice.infra.persistence;
 
 import com.xbk.lattice.compiler.ast.domain.AstEntity;
 import com.xbk.lattice.infra.persistence.mapper.GraphEntityMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -23,6 +24,7 @@ public class GraphEntityJdbcRepository {
      *
      * @param graphEntityMapper 图谱实体 Mapper
      */
+    @Autowired
     public GraphEntityJdbcRepository(GraphEntityMapper graphEntityMapper) {
         this.graphEntityMapper = graphEntityMapper;
     }

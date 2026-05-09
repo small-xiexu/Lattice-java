@@ -1,5 +1,7 @@
 package com.xbk.lattice.source.service;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.source.domain.BundleSummary;
@@ -21,7 +23,7 @@ import java.util.Locale;
 @Service
 public class SourceDecisionPolicy {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     /**
      * 基于现有资料源做自动识别决策。
@@ -115,7 +117,7 @@ public class SourceDecisionPolicy {
     private List<KnowledgeSource> filterCandidates(List<KnowledgeSource> existingSources) {
         List<KnowledgeSource> candidates = new ArrayList<KnowledgeSource>();
         for (KnowledgeSource source : existingSources) {
-            if ("legacy-default".equals(source.getSourceCode())) {
+            if ("default-source".equals(source.getSourceCode())) {
                 continue;
             }
             if ("DISABLED".equals(source.getStatus())) {

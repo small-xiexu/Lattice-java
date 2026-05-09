@@ -3,7 +3,6 @@ package com.xbk.lattice.query.service;
 import com.xbk.lattice.infra.persistence.LexicalSearchRecord;
 import com.xbk.lattice.infra.persistence.SourceFileChunkJdbcRepository;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
 
@@ -117,7 +116,7 @@ class SourceSearchServiceTests {
                 List<LexicalSearchRecord> records,
                 List<LexicalSearchRecord> neighborRecords
         ) {
-            super(new JdbcTemplate());
+            super(null);
             this.records = records;
             this.neighborRecords = neighborRecords;
         }

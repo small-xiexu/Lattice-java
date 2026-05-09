@@ -1,5 +1,7 @@
 package com.xbk.lattice.query.service;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.ast.domain.AstEntity;
 import com.xbk.lattice.compiler.ast.domain.AstFact;
@@ -31,7 +33,7 @@ import java.util.Set;
 @Service
 public class GraphSearchService {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.moduleAwareMapper();
 
     private final GraphEntityJdbcRepository graphEntityJdbcRepository;
 

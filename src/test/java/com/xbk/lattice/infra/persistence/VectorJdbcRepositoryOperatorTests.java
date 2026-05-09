@@ -3,8 +3,9 @@ package com.xbk.lattice.infra.persistence;
 import com.xbk.lattice.query.service.ArticleChunkVectorHit;
 import com.xbk.lattice.query.service.QueryArticleHit;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import java.time.OffsetDateTime;
 import java.util.Arrays;
@@ -19,26 +20,40 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author xiexu
  */
+@SpringBootTest(properties = {
+        "spring.ai.openai.api-key=test-openai-key",
+        "spring.ai.anthropic.api-key=test-anthropic-key",
+        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
+        "spring.datasource.username=postgres",
+        "spring.datasource.password=postgres",
+        "lattice.llm.deep-research-startup-validation-enabled=false"
+})
 class VectorJdbcRepositoryOperatorTests {
 
-    private static final String JDBC_BASE_URL = "jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge";
+    private static final int BASELINE_VECTOR_DIMENSIONS = 2000;
 
-    private static final String JDBC_USERNAME = "postgres";
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
-    private static final String JDBC_PASSWORD = "postgres";
+    @Autowired
+    private ArticleVectorJdbcRepository articleVectorJdbcRepository;
+
+    @Autowired
+    private ArticleChunkVectorJdbcRepository articleChunkVectorJdbcRepository;
+
+    @Autowired
+    private ArticleJdbcRepository articleJdbcRepository;
 
     /**
      * 验证文章级向量检索在 lattice schema 下仍可正常返回命中。
      */
     @Test
     void shouldSearchArticleVectorsWhenOperatorLivesInPublicSchema() {
-        JdbcTemplate jdbcTemplate = createSchemaJdbcTemplate();
-        resetTables(jdbcTemplate);
-        Long modelProfileId = ensureEmbeddingModelProfile(jdbcTemplate);
-        seedArticle(jdbcTemplate, 1L, "refund-status", "Refund Status", "退款状态流转说明");
+        resetTables();
+        Long modelProfileId = ensureEmbeddingModelProfile();
+        seedArticle(1L, "refund-status", "Refund Status", "退款状态流转说明");
         float[] embedding = testEmbedding();
 
-        ArticleVectorJdbcRepository articleVectorJdbcRepository = new ArticleVectorJdbcRepository(jdbcTemplate);
         articleVectorJdbcRepository.upsert(new ArticleVectorRecord(
                 "refund-status",
                 modelProfileId,
@@ -64,15 +79,12 @@ class VectorJdbcRepositoryOperatorTests {
      */
     @Test
     void shouldSearchChunkVectorsWhenOperatorLivesInPublicSchema() {
-        JdbcTemplate jdbcTemplate = createSchemaJdbcTemplate();
-        resetTables(jdbcTemplate);
-        Long modelProfileId = ensureEmbeddingModelProfile(jdbcTemplate);
-        seedArticle(jdbcTemplate, 1L, "refund-status", "Refund Status", "退款状态流转说明");
+        resetTables();
+        Long modelProfileId = ensureEmbeddingModelProfile();
+        seedArticle(1L, "refund-status", "Refund Status", "退款状态流转说明");
         seedChunk(jdbcTemplate, 11L, 1L, 0, "退款完成后 T+1 日到账");
         float[] embedding = testEmbedding();
 
-        ArticleChunkVectorJdbcRepository articleChunkVectorJdbcRepository =
-                new ArticleChunkVectorJdbcRepository(jdbcTemplate);
         articleChunkVectorJdbcRepository.upsert(new ArticleChunkVectorRecord(
                 Long.valueOf(11L),
                 Long.valueOf(1L),
@@ -97,10 +109,8 @@ class VectorJdbcRepositoryOperatorTests {
 
     /**
      * 清理测试表。
-     *
-     * @param jdbcTemplate JDBC 模板
      */
-    private void resetTables(JdbcTemplate jdbcTemplate) {
+    private void resetTables() {
         jdbcTemplate.execute("CREATE EXTENSION IF NOT EXISTS vector");
         jdbcTemplate.execute(
                 """
@@ -108,38 +118,34 @@ class VectorJdbcRepositoryOperatorTests {
                         RESTART IDENTITY CASCADE
                         """
         );
+        restoreVectorSchemaBaseline();
+        synchronizeLlmSequences();
     }
 
     /**
-     * 创建绑定到 lattice schema 的 JDBC 模板。
-     *
-     * @return JDBC 模板
+     * 恢复共享测试库中的向量 schema 基线。
      */
-    private JdbcTemplate createSchemaJdbcTemplate() {
-        DriverManagerDataSource dataSource = new DriverManagerDataSource();
-        dataSource.setUrl(JDBC_BASE_URL + "?currentSchema=lattice");
-        dataSource.setUsername(JDBC_USERNAME);
-        dataSource.setPassword(JDBC_PASSWORD);
-        return new JdbcTemplate(dataSource);
+    private void restoreVectorSchemaBaseline() {
+        articleChunkVectorJdbcRepository.deleteAll();
+        articleVectorJdbcRepository.deleteAll();
+        articleVectorJdbcRepository.alignEmbeddingColumnDimensions(BASELINE_VECTOR_DIMENSIONS);
+        articleChunkVectorJdbcRepository.alignEmbeddingColumnDimensions(BASELINE_VECTOR_DIMENSIONS);
     }
 
     /**
      * 写入文章测试数据。
      *
-     * @param jdbcTemplate JDBC 模板
      * @param articleId 文章主键
      * @param conceptId 概念标识
      * @param title 标题
      * @param content 内容
      */
     private void seedArticle(
-            JdbcTemplate jdbcTemplate,
             Long articleId,
             String conceptId,
             String title,
             String content
     ) {
-        ArticleJdbcRepository articleJdbcRepository = new ArticleJdbcRepository(jdbcTemplate);
         articleJdbcRepository.upsert(
                 new ArticleRecord(
                         null,
@@ -199,10 +205,10 @@ class VectorJdbcRepositoryOperatorTests {
     /**
      * 确保测试用 embedding 模型配置存在。
      *
-     * @param jdbcTemplate JDBC 模板
      * @return 模型配置主键
      */
-    private Long ensureEmbeddingModelProfile(JdbcTemplate jdbcTemplate) {
+    private Long ensureEmbeddingModelProfile() {
+        synchronizeLlmSequences();
         jdbcTemplate.update(
                 """
                         INSERT INTO llm_provider_connections (
@@ -221,14 +227,40 @@ class VectorJdbcRepositoryOperatorTests {
                         INSERT INTO llm_model_profiles (
                             model_code, connection_id, model_name, model_kind, expected_dimensions
                         )
-                        VALUES ('vector-operator-test-embedding', ?, 'text-embedding-test', 'EMBEDDING', 2000)
+                        VALUES ('vector-operator-test-embedding', ?, 'text-embedding-test', 'EMBEDDING', ?)
                         ON CONFLICT (model_code) DO NOTHING
                         """,
-                connectionId
+                connectionId,
+                Integer.valueOf(BASELINE_VECTOR_DIMENSIONS)
         );
+        synchronizeLlmSequences();
         return jdbcTemplate.queryForObject(
                 "SELECT id FROM llm_model_profiles WHERE model_code = 'vector-operator-test-embedding'",
                 Long.class
+        );
+    }
+
+    /**
+     * 将 LLM 配置表序列同步到当前最大主键，避免默认自增撞主键。
+     */
+    private void synchronizeLlmSequences() {
+        jdbcTemplate.execute(
+                """
+                        select setval(
+                            'llm_provider_connections_id_seq'::regclass,
+                            coalesce((select max(id) from llm_provider_connections), 1),
+                            true
+                        )
+                        """
+        );
+        jdbcTemplate.execute(
+                """
+                        select setval(
+                            'llm_model_profiles_id_seq'::regclass,
+                            coalesce((select max(id) from llm_model_profiles), 1),
+                            true
+                        )
+                        """
         );
     }
 
@@ -238,7 +270,7 @@ class VectorJdbcRepositoryOperatorTests {
      * @return 测试向量
      */
     private float[] testEmbedding() {
-        float[] embedding = new float[2000];
+        float[] embedding = new float[BASELINE_VECTOR_DIMENSIONS];
         embedding[0] = 1.0F;
         embedding[1] = 2.0F;
         embedding[2] = 3.0F;

@@ -1,12 +1,15 @@
 package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.api.query.QueryResponse;
+import com.xbk.lattice.infra.persistence.ArticleChunkVectorJdbcRepository;
+import com.xbk.lattice.infra.persistence.ArticleVectorJdbcRepository;
 import com.xbk.lattice.llm.service.LlmSecretCryptoService;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
 import com.xbk.lattice.query.service.EmbeddingClientFactory;
 import com.xbk.lattice.query.service.EmbeddingRouteResolution;
 import com.xbk.lattice.query.service.QueryCacheStore;
 import com.xbk.lattice.query.service.SearchCapabilityService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.ai.document.Document;
@@ -58,6 +61,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 })
 class CompilePipelineVectorIndexingTests {
 
+    private static final int BASELINE_VECTOR_DIMENSIONS = 2000;
+
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
@@ -68,6 +73,12 @@ class CompilePipelineVectorIndexingTests {
     private ArticleVectorIndexService articleVectorIndexService;
 
     @Autowired
+    private ArticleVectorJdbcRepository articleVectorJdbcRepository;
+
+    @Autowired
+    private ArticleChunkVectorJdbcRepository articleChunkVectorJdbcRepository;
+
+    @Autowired
     private SearchCapabilityService searchCapabilityService;
 
     @Autowired
@@ -75,6 +86,17 @@ class CompilePipelineVectorIndexingTests {
 
     @Autowired
     private QueryCacheStore queryCacheStore;
+
+    /**
+     * 恢复共享测试库中的向量 schema 基线。
+     */
+    @AfterEach
+    void restoreVectorSchemaBaseline() {
+        articleChunkVectorJdbcRepository.deleteAll();
+        articleVectorJdbcRepository.deleteAll();
+        articleVectorJdbcRepository.alignEmbeddingColumnDimensions(BASELINE_VECTOR_DIMENSIONS);
+        articleChunkVectorJdbcRepository.alignEmbeddingColumnDimensions(BASELINE_VECTOR_DIMENSIONS);
+    }
 
     /**
      * 验证 full compile 完成后会落库文章向量索引。
@@ -243,13 +265,14 @@ class CompilePipelineVectorIndexingTests {
         jdbcTemplate.execute("TRUNCATE TABLE lattice.article_chunk_vector_index");
         jdbcTemplate.execute("TRUNCATE TABLE lattice.article_vector_index");
         jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
+        restoreVectorSchemaBaseline();
     }
 
     /**
      * 写入测试用 embedding profile。
      */
     private void seedEmbeddingProfile() {
-        seedEmbeddingProfile(1536);
+        seedEmbeddingProfile(BASELINE_VECTOR_DIMENSIONS);
     }
 
     /**
@@ -293,6 +316,31 @@ class CompilePipelineVectorIndexingTests {
                 true,
                 "tester",
                 "tester"
+        );
+        synchronizeLlmSequences();
+    }
+
+    /**
+     * 将 LLM 配置表序列同步到当前最大主键，避免手写 ID 后续默认自增撞主键。
+     */
+    private void synchronizeLlmSequences() {
+        jdbcTemplate.execute(
+                """
+                        select setval(
+                            'lattice.llm_provider_connections_id_seq'::regclass,
+                            coalesce((select max(id) from lattice.llm_provider_connections), 1),
+                            true
+                        )
+                        """
+        );
+        jdbcTemplate.execute(
+                """
+                        select setval(
+                            'lattice.llm_model_profiles_id_seq'::regclass,
+                            coalesce((select max(id) from lattice.llm_model_profiles), 1),
+                            true
+                        )
+                        """
         );
     }
 
@@ -426,7 +474,7 @@ class CompilePipelineVectorIndexingTests {
          */
         @Override
         public float[] embed(Document document) {
-            return createEmbedding(1536);
+            return createEmbedding(BASELINE_VECTOR_DIMENSIONS);
         }
 
         /**
@@ -437,7 +485,7 @@ class CompilePipelineVectorIndexingTests {
          */
         private int resolveDimensions(EmbeddingRequest request) {
             if (request == null) {
-                return 1536;
+                return BASELINE_VECTOR_DIMENSIONS;
             }
             EmbeddingOptions embeddingOptions = request.getOptions();
             if (embeddingOptions instanceof OpenAiEmbeddingOptions openAiEmbeddingOptions
@@ -445,7 +493,7 @@ class CompilePipelineVectorIndexingTests {
                     && openAiEmbeddingOptions.getDimensions().intValue() > 0) {
                 return openAiEmbeddingOptions.getDimensions().intValue();
             }
-            return 1536;
+            return BASELINE_VECTOR_DIMENSIONS;
         }
 
         /**

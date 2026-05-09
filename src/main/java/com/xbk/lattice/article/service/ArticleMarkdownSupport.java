@@ -1,5 +1,7 @@
 package com.xbk.lattice.article.service;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import org.yaml.snakeyaml.Yaml;
@@ -21,7 +23,7 @@ import java.util.regex.Pattern;
  */
 public final class ArticleMarkdownSupport {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private static final Yaml YAML = new Yaml();
 

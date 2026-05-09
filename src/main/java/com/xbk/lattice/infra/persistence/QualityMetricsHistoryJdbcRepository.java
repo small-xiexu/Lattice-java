@@ -1,6 +1,7 @@
 package com.xbk.lattice.infra.persistence;
 
 import com.xbk.lattice.infra.persistence.mapper.QualityMetricsHistoryMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -22,6 +23,7 @@ public class QualityMetricsHistoryJdbcRepository {
      *
      * @param qualityMetricsHistoryMapper 质量指标历史 Mapper
      */
+    @Autowired
     public QualityMetricsHistoryJdbcRepository(QualityMetricsHistoryMapper qualityMetricsHistoryMapper) {
         this.qualityMetricsHistoryMapper = qualityMetricsHistoryMapper;
     }

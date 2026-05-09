@@ -4,6 +4,7 @@ import com.xbk.lattice.infra.persistence.mapper.FactCardMapper;
 import com.xbk.lattice.query.evidence.domain.AnswerShape;
 import com.xbk.lattice.query.evidence.domain.FactCardReviewStatus;
 import com.xbk.lattice.query.evidence.domain.FactCardType;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.LinkedHashMap;
@@ -28,6 +29,7 @@ public class FactCardJdbcRepository {
      *
      * @param factCardMapper 事实证据卡 Mapper
      */
+    @Autowired
     public FactCardJdbcRepository(FactCardMapper factCardMapper) {
         this.factCardMapper = factCardMapper;
     }

@@ -1,5 +1,7 @@
 package com.xbk.lattice.governance;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,7 +27,7 @@ import java.util.UUID;
 @Service
 public class InspectionAnswerImportService {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private static final String PENDING_INSPECTION_PREFIX = "pending:";
 

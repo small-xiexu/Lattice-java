@@ -1,5 +1,7 @@
 package com.xbk.lattice.documentparse.extractor;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.poi.ss.usermodel.Cell;
@@ -27,7 +29,7 @@ import java.util.Map;
  */
 public class ExcelTextExtractor {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private static final int STRUCTURED_CELL_MAX_CHARS = 500;
 

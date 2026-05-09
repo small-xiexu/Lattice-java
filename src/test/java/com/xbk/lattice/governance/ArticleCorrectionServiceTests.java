@@ -19,7 +19,6 @@ import com.xbk.lattice.llm.service.LlmRouteResolution;
 import com.xbk.lattice.observability.StructuredEventLogger;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.lang.reflect.Constructor;
 import java.time.Duration;
@@ -579,7 +578,7 @@ class ArticleCorrectionServiceTests {
         private ArticleRecord lastUpserted;
 
         private FakeArticleJdbcRepository(List<ArticleRecord> records) {
-            super(new JdbcTemplate());
+            super(null);
             for (ArticleRecord record : records) {
                 this.records.put(record.getConceptId(), record);
             }
@@ -588,6 +587,11 @@ class ArticleCorrectionServiceTests {
         @Override
         public Optional<ArticleRecord> findByConceptId(String conceptId) {
             return Optional.ofNullable(records.get(conceptId));
+        }
+
+        @Override
+        public Optional<ArticleRecord> findByArticleKey(String articleKey) {
+            return Optional.ofNullable(records.get(articleKey));
         }
 
         @Override
@@ -618,7 +622,7 @@ class ArticleCorrectionServiceTests {
         private final Map<String, SourceFileRecord> records = new LinkedHashMap<String, SourceFileRecord>();
 
         private FakeSourceFileJdbcRepository(List<SourceFileRecord> records) {
-            super(new JdbcTemplate());
+            super(null);
             for (SourceFileRecord record : records) {
                 this.records.put(record.getFilePath(), record);
             }
@@ -642,7 +646,7 @@ class ArticleCorrectionServiceTests {
         private final List<ArticleSnapshotRecord> savedRecords = new ArrayList<ArticleSnapshotRecord>();
 
         private FakeArticleSnapshotJdbcRepository() {
-            super(new JdbcTemplate());
+            super(null);
         }
 
         @Override

@@ -1,5 +1,7 @@
 package com.xbk.lattice.mcp.stdio;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.cli.CliOutputFormatter;
 import io.modelcontextprotocol.client.McpClient;
@@ -28,7 +30,7 @@ import java.util.function.Function;
  */
 public class StdioBridgeBootstrap {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.moduleAwareMapper();
 
     private final Function<String, BridgeClient> bridgeClientFactory;
 

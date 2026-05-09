@@ -155,10 +155,10 @@ class DocumentParseRouterIntegrationTests {
 
         Path docsDir = Files.createDirectories(tempDir.resolve("docs"));
         Path imagesDir = Files.createDirectories(tempDir.resolve("images"));
-        Path legacyDocPath = docsDir.resolve("legacy-word.doc");
-        try (InputStream inputStream = getClass().getResourceAsStream("/documentparse/legacy-word.doc")) {
+        Path binaryDocPath = docsDir.resolve("binary-word.doc");
+        try (InputStream inputStream = getClass().getResourceAsStream("/documentparse/binary-word.doc")) {
             assertThat(inputStream).isNotNull();
-            Files.copy(inputStream, legacyDocPath);
+            Files.copy(inputStream, binaryDocPath);
         }
         Path csvPath = docsDir.resolve("rules.csv");
         Files.writeString(csvPath, "businessSubTypeCode,meaning\n1210,refund", StandardCharsets.UTF_8);
@@ -175,7 +175,7 @@ class DocumentParseRouterIntegrationTests {
         Path scannedPdfPath = docsDir.resolve("scanned.pdf");
         writeBlankPdf(scannedPdfPath);
 
-        RawSource docSource = documentParseRouter.parseRawSource(tempDir, legacyDocPath);
+        RawSource docSource = documentParseRouter.parseRawSource(tempDir, binaryDocPath);
         RawSource csvSource = documentParseRouter.parseRawSource(tempDir, csvPath);
         RawSource wordSource = documentParseRouter.parseRawSource(tempDir, wordPath);
         RawSource excelSource = documentParseRouter.parseRawSource(tempDir, excelPath);
@@ -190,7 +190,7 @@ class DocumentParseRouterIntegrationTests {
         assertThat(docSource.getParseProvider()).isEqualTo("poi_hwpf");
         assertThat(docSource.getMetadataJson()).contains("\"extractionStrategy\"");
         assertThat(docSource.getMetadataJson()).contains("\"listFormattingPreserved\":false");
-        assertThat(docSource.getContent()).contains("Legacy DOC payment timeout");
+        assertThat(docSource.getContent()).contains("payment timeout");
         assertThat(docSource.getContent()).contains("retry=3");
 
         assertThat(csvSource).isNotNull();
@@ -573,32 +573,32 @@ class DocumentParseRouterIntegrationTests {
     }
 
     /**
-     * 验证纯文本类文件与旧版 Excel `.xls` 仍能走本地抽取链。
+     * 验证纯文本类文件与二进制 Excel `.xls` 仍能走本地抽取链。
      *
      * @param tempDir 临时目录
      * @throws Exception 测试异常
      */
     @Test
-    void shouldParsePlainTextMarkdownJsonYamlTxtAndLegacyExcelLocally(@TempDir Path tempDir) throws Exception {
+    void shouldParsePlainTextMarkdownJsonYamlTxtAndBinaryExcelLocally(@TempDir Path tempDir) throws Exception {
         resetTables();
         Path docsDir = Files.createDirectories(tempDir.resolve("docs"));
         Path markdownPath = docsDir.resolve("guide.md");
         Path textPath = docsDir.resolve("notes.txt");
         Path jsonPath = docsDir.resolve("rules.json");
         Path yamlPath = docsDir.resolve("rules.yaml");
-        Path legacyExcelPath = docsDir.resolve("codes.xls");
+        Path binaryExcelPath = docsDir.resolve("codes.xls");
 
         Files.writeString(markdownPath, "# Payment Guide\n\n- retry=3\n", StandardCharsets.UTF_8);
         Files.writeString(textPath, "plain text fallback", StandardCharsets.UTF_8);
         Files.writeString(jsonPath, "{\"retry\":3,\"scene\":\"refund\"}", StandardCharsets.UTF_8);
         Files.writeString(yamlPath, "retry: 3\nscene: refund\n", StandardCharsets.UTF_8);
-        writeLegacyWorkbook(legacyExcelPath);
+        writeBinaryWorkbook(binaryExcelPath);
 
         RawSource markdownSource = documentParseRouter.parseRawSource(tempDir, markdownPath);
         RawSource textSource = documentParseRouter.parseRawSource(tempDir, textPath);
         RawSource jsonSource = documentParseRouter.parseRawSource(tempDir, jsonPath);
         RawSource yamlSource = documentParseRouter.parseRawSource(tempDir, yamlPath);
-        RawSource legacyExcelSource = documentParseRouter.parseRawSource(tempDir, legacyExcelPath);
+        RawSource binaryExcelSource = documentParseRouter.parseRawSource(tempDir, binaryExcelPath);
 
         assertThat(markdownSource.getParseMode()).isEqualTo("text_read");
         assertThat(markdownSource.getParseProvider()).isEqualTo("filesystem");
@@ -616,11 +616,11 @@ class DocumentParseRouterIntegrationTests {
         assertThat(yamlSource.getParseProvider()).isEqualTo("filesystem");
         assertThat(yamlSource.getContent()).contains("scene: refund");
 
-        assertThat(legacyExcelSource.getParseMode()).isEqualTo("office_extract");
-        assertThat(legacyExcelSource.getParseProvider()).isEqualTo("poi_excel");
-        assertThat(legacyExcelSource.getContent()).contains("=== Sheet: LegacyCodes ===");
-        assertThat(legacyExcelSource.getContent()).contains("1210,refund");
-        assertThat(legacyExcelSource.getMetadataJson()).contains("\"sheetCount\"");
+        assertThat(binaryExcelSource.getParseMode()).isEqualTo("office_extract");
+        assertThat(binaryExcelSource.getParseProvider()).isEqualTo("poi_excel");
+        assertThat(binaryExcelSource.getContent()).contains("=== Sheet: BinaryCodes ===");
+        assertThat(binaryExcelSource.getContent()).contains("1210,refund");
+        assertThat(binaryExcelSource.getMetadataJson()).contains("\"sheetCount\"");
     }
 
     private int startOcrServer(
@@ -742,14 +742,14 @@ class DocumentParseRouterIntegrationTests {
     }
 
     /**
-     * 写入旧版 Excel 97-2003 测试文件。
+     * 写入二进制 Excel 97-2003 测试文件。
      *
      * @param excelPath Excel 路径
      * @throws IOException IO 异常
      */
-    private void writeLegacyWorkbook(Path excelPath) throws IOException {
+    private void writeBinaryWorkbook(Path excelPath) throws IOException {
         try (HSSFWorkbook workbook = new HSSFWorkbook()) {
-            Sheet codesSheet = workbook.createSheet("LegacyCodes");
+            Sheet codesSheet = workbook.createSheet("BinaryCodes");
             Row codeHeader = codesSheet.createRow(0);
             codeHeader.createCell(0).setCellValue("businessSubTypeCode");
             codeHeader.createCell(1).setCellValue("meaning");

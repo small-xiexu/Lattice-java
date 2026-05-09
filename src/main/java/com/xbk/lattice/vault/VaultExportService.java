@@ -1,5 +1,7 @@
 package com.xbk.lattice.vault;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.service.SynthesisArtifactJdbcStore;
 import com.xbk.lattice.compiler.service.SynthesisArtifactRecord;
@@ -36,7 +38,7 @@ import java.util.Set;
 @Service
 public class VaultExportService {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private static final DateTimeFormatter FILE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH-mm-ss");
 

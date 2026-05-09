@@ -45,6 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.password=postgres",
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
+        "lattice.llm.secret-encryption-key=test-phase8-key-0123456789abcdef",
         "lattice.compiler.ingest-max-chars=800",
         "lattice.compiler.batch-max-chars=200"
 })

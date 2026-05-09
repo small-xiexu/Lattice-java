@@ -2,6 +2,7 @@ package com.xbk.lattice.llm.infra;
 
 import com.xbk.lattice.llm.domain.LlmProviderConnection;
 import com.xbk.lattice.llm.infra.mapper.LlmProviderConnectionMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -24,6 +25,7 @@ public class LlmProviderConnectionJdbcRepository {
      *
      * @param llmProviderConnectionMapper Provider 连接 Mapper
      */
+    @Autowired
     public LlmProviderConnectionJdbcRepository(LlmProviderConnectionMapper llmProviderConnectionMapper) {
         this.llmProviderConnectionMapper = llmProviderConnectionMapper;
     }

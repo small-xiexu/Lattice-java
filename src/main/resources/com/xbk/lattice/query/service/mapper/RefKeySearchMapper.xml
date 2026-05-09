@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.query.service.mapper.RefKeySearchMapper">
+
+    <resultMap id="QueryArticleHitResultMap" type="com.xbk.lattice.query.service.QueryArticleHit">
+        <constructor>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="article_key" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="content" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="review_status" javaType="java.lang.String"/>
+            <arg column="source_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="score" javaType="_double"/>
+        </constructor>
+    </resultMap>
+
+    <select id="search" resultMap="QueryArticleHitResultMap">
+        select a.source_id,
+               a.article_key,
+               a.concept_id,
+               a.title,
+               a.content,
+               a.metadata_json::text as metadata_json,
+               a.review_status,
+               a.source_paths,
+               0
+               <foreach collection="likePatterns" item="pattern">
+                   + case when lower(a.refkey_text) like #{pattern} then 5.0 else 0 end
+                   + case when lower(a.concept_id) like #{pattern} then 4.0 else 0 end
+                   + case when lower(a.title) like #{pattern} then 2.0 else 0 end
+                   + case when lower(a.metadata_json::text) like #{pattern} then 1.0 else 0 end
+               </foreach>
+               as score
+        from articles a
+        where false
+        <foreach collection="likePatterns" item="pattern">
+           or lower(a.refkey_text) like #{pattern}
+           or lower(a.concept_id) like #{pattern}
+           or lower(a.title) like #{pattern}
+           or lower(a.metadata_json::text) like #{pattern}
+        </foreach>
+        order by score desc, a.compiled_at desc, a.article_key asc
+        limit #{limit}
+    </select>
+</mapper>

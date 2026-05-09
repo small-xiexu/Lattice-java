@@ -1,5 +1,7 @@
 package com.xbk.lattice.api.admin;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,7 +33,7 @@ import java.util.Map;
 @RequestMapping("/api/v1/admin/query/retrieval")
 public class AdminQueryRetrievalAuditController {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.moduleAwareMapper();
 
     private static final TypeReference<LinkedHashMap<String, RetrievalChannelRun>> CHANNEL_RUNS_TYPE =
             new TypeReference<LinkedHashMap<String, RetrievalChannelRun>>() {

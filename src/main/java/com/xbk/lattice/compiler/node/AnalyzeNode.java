@@ -1,5 +1,7 @@
 package com.xbk.lattice.compiler.node;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.config.CompilerProperties;
@@ -29,7 +31,7 @@ import java.util.Set;
  */
 public class AnalyzeNode {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private static final String COMPILE_SCENE = "compile";
 

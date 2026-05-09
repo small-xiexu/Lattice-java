@@ -61,7 +61,7 @@ public class LifecycleItem {
     }
 
     /**
-     * 创建兼容旧调用的生命周期条目。
+     * 创建生命周期条目。
      *
      * @param conceptId 概念标识
      * @param title 标题

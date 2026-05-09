@@ -1,5 +1,7 @@
 package com.xbk.lattice.llm.service;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -79,7 +81,7 @@ public class LlmInvocationExecutor {
 
     private final StructuredEventLogger structuredEventLogger;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = JsonMappers.defaultMapper();
 
     /**
      * 创建 LLM 调用执行器。

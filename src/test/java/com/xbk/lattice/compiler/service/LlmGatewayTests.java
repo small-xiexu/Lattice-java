@@ -6,6 +6,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import com.xbk.lattice.compiler.config.LlmProperties;
+import com.xbk.lattice.compiler.error.CompileBudgetExceededException;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import com.xbk.lattice.llm.service.LlmCallResult;
 import com.xbk.lattice.llm.service.LlmClient;
@@ -161,14 +162,14 @@ class LlmGatewayTests {
                 "system-a",
                 "user-a"
         ))
-                .isInstanceOf(BudgetExceededException.class);
+                .isInstanceOf(CompileBudgetExceededException.class);
     }
 
     /**
-     * 验证 raw facade 在未启用 ChatClient executor 时，仍会通过 legacy client 返回最小调用信封。
+     * 验证 raw facade 在未启用 ChatClient executor 时，仍会通过 direct client 返回最小调用信封。
      */
     @Test
-    void shouldExposeRawInvocationEnvelopeThroughLegacyFacade() {
+    void shouldExposeRawInvocationEnvelopeThroughRawFacade() {
         FakeLlmClient compileClient = new FakeLlmClient("compiled-article", 120, 30);
         LlmGateway llmGateway = new LlmGateway(
                 compileClient,
@@ -374,7 +375,7 @@ class LlmGatewayTests {
         StubOpenAiChatServer stubServer = new StubOpenAiChatServer("codex-answer");
         stubServer.start();
         try {
-            FakeLlmClient compileClient = new FakeLlmClient("legacy-answer", 120, 30);
+            FakeLlmClient compileClient = new FakeLlmClient("direct-answer", 120, 30);
             LlmProperties llmProperties = createProperties();
             llmProperties.setCompileModel("claude-sonnet-4");
             StubExecutionLlmSnapshotService snapshotService = new StubExecutionLlmSnapshotService();
@@ -462,8 +463,8 @@ class LlmGatewayTests {
         StubAnthropicChatServer stubServer = new StubAnthropicChatServer("claude-review-answer");
         stubServer.start();
         try {
-            FakeLlmClient compileClient = new FakeLlmClient("legacy-compile", 120, 30);
-            FakeLlmClient reviewClient = new FakeLlmClient("legacy-review", 60, 10);
+            FakeLlmClient compileClient = new FakeLlmClient("direct-compile", 120, 30);
+            FakeLlmClient reviewClient = new FakeLlmClient("direct-review", 60, 10);
             LlmProperties llmProperties = createProperties();
             LlmInvocationExecutor llmInvocationExecutor = new LlmInvocationExecutor(
                     new com.xbk.lattice.llm.service.ChatClientRegistry(
@@ -516,14 +517,14 @@ class LlmGatewayTests {
     }
 
     /**
-     * 验证当 Query answer 的 ChatClient 开关关闭时，即使是 OpenAI snapshot 路由也会回退到 legacy client。
+     * 验证当 Query answer 的 ChatClient 开关关闭时，即使是 OpenAI snapshot 路由也会回退到 direct client。
      */
     @Test
-    void shouldFallbackToLegacyClientWhenQueryAnswerChatClientToggleIsDisabled() throws IOException {
+    void shouldFallbackToDirectClientWhenQueryAnswerChatClientToggleIsDisabled() throws IOException {
         StubOpenAiChatServer stubServer = new StubOpenAiChatServer("codex-answer");
         stubServer.start();
         try {
-            FakeLlmClient compileClient = new FakeLlmClient("legacy-answer", 120, 30);
+            FakeLlmClient compileClient = new FakeLlmClient("direct-answer", 120, 30);
             LlmProperties llmProperties = createProperties();
             llmProperties.getChatClient().setQueryAnswerEnabled(false);
             StubExecutionLlmSnapshotService snapshotService = new StubExecutionLlmSnapshotService();
@@ -581,7 +582,7 @@ class LlmGatewayTests {
                     "请解释订单服务为什么没有直接调用库存服务"
             );
 
-            assertThat(envelope.getContent()).isEqualTo("legacy-answer");
+            assertThat(envelope.getContent()).isEqualTo("direct-answer");
             assertThat(compileClient.getCallCount()).isEqualTo(1);
             assertThat(stubServer.getRequestCount()).isZero();
         }
@@ -591,17 +592,17 @@ class LlmGatewayTests {
     }
 
     /**
-     * 验证 snapshot-backed OpenAI legacy 路径在关闭 ChatClient 后，仍由上层统一重试并成功返回。
+     * 验证 snapshot-backed OpenAI direct 路径在关闭 ChatClient 后，仍由上层统一重试并成功返回。
      */
     @Test
-    void shouldRetrySnapshotBackedLegacyOpenAiInvocationWhenChatClientIsDisabled() throws IOException {
-        StubOpenAiChatServer stubServer = new StubOpenAiChatServer("legacy-retry-answer", 1);
+    void shouldRetrySnapshotBackedDirectOpenAiInvocationWhenChatClientIsDisabled() throws IOException {
+        StubOpenAiChatServer stubServer = new StubOpenAiChatServer("direct-retry-answer", 1);
         stubServer.start();
         try {
             MDC.put("sourceSyncRunId", "701");
             MDC.put("rootTraceId", "trace-701");
             MDC.put("traceId", "trace-701");
-            FakeLlmClient compileClient = new FakeLlmClient("legacy-answer", 120, 30);
+            FakeLlmClient compileClient = new FakeLlmClient("direct-answer", 120, 30);
             LlmProperties llmProperties = createProperties();
             llmProperties.getChatClient().setEnabled(false);
             CapturingStructuredEventLogger structuredEventLogger = new CapturingStructuredEventLogger();
@@ -664,10 +665,10 @@ class LlmGatewayTests {
                     ExecutionLlmSnapshotService.ROLE_ANSWER,
                     "query-answer",
                     "你是查询助手",
-                    "请解释为什么 legacy 路径仍然会重试"
+                    "请解释为什么 direct 路径仍然会重试"
             );
 
-            assertThat(envelope.getContent()).isEqualTo("legacy-retry-answer");
+            assertThat(envelope.getContent()).isEqualTo("direct-retry-answer");
             assertThat(stubServer.getRequestCount()).isEqualTo(2);
             assertThat(stubServer.getCapturedModels()).containsExactly("gpt-5.4", "gpt-5.4");
             assertThat(compileClient.getCallCount()).isZero();
@@ -694,14 +695,14 @@ class LlmGatewayTests {
     }
 
     /**
-     * 验证文本生成入口会在 snapshot OpenAI 路径下走动态 ChatClient，并保留 legacy L1 cache 写入语义。
+     * 验证文本生成入口会在 snapshot OpenAI 路径下走动态 ChatClient，并保留 direct L1 cache 写入语义。
      */
     @Test
     void shouldGenerateTextThroughSnapshotOpenAiRouteAndReusePromptCache() throws IOException {
         StubOpenAiChatServer stubServer = new StubOpenAiChatServer("compiled-by-codex");
         stubServer.start();
         try {
-            FakeLlmClient compileClient = new FakeLlmClient("legacy-answer", 120, 30);
+            FakeLlmClient compileClient = new FakeLlmClient("direct-answer", 120, 30);
             FakeRedisKeyValueStore redisKeyValueStore = new FakeRedisKeyValueStore();
             LlmProperties llmProperties = createProperties();
             llmProperties.setCompileModel("claude-sonnet-4");
@@ -792,7 +793,7 @@ class LlmGatewayTests {
         LlmProperties llmProperties = createProperties();
         StubExecutionLlmSnapshotService snapshotService = new StubExecutionLlmSnapshotService();
         LlmGateway llmGateway = new LlmGateway(
-                new FakeLlmClient("legacy-answer", 120, 30),
+                new FakeLlmClient("direct-answer", 120, 30),
                 new FakeLlmClient("review-result", 60, 10),
                 new FakeRedisKeyValueStore(),
                 llmProperties,
@@ -839,9 +840,22 @@ class LlmGatewayTests {
     }
 
     private void setField(Object target, String fieldName, String value) throws Exception {
-        Field field = target.getClass().getDeclaredField(fieldName);
+        Field field = findField(target.getClass(), fieldName);
         field.setAccessible(true);
         field.set(target, value);
+    }
+
+    private Field findField(Class<?> targetClass, String fieldName) throws NoSuchFieldException {
+        Class<?> currentClass = targetClass;
+        while (currentClass != null) {
+            try {
+                return currentClass.getDeclaredField(fieldName);
+            }
+            catch (NoSuchFieldException exception) {
+                currentClass = currentClass.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException(fieldName);
     }
 
     /**

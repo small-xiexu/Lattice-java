@@ -1,5 +1,7 @@
 package com.xbk.lattice.source.service;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -35,7 +37,7 @@ import java.util.stream.Stream;
 @Service
 public class SourceMaterializationService {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.moduleAwareMapper();
 
     private final SourceAdminProperties sourceAdminProperties;
 

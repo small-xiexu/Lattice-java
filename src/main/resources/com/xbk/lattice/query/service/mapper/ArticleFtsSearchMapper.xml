@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.query.service.mapper.ArticleFtsSearchMapper">
+
+    <resultMap id="QueryArticleHitResultMap" type="com.xbk.lattice.query.service.QueryArticleHit">
+        <constructor>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="article_key" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="content" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="review_status" javaType="java.lang.String"/>
+            <arg column="source_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="score" javaType="_double"/>
+        </constructor>
+    </resultMap>
+
+    <select id="search" resultMap="QueryArticleHitResultMap">
+        with query as (
+            select plainto_tsquery(cast(#{tsConfig} as regconfig), #{question}) as tsq
+        )
+        select a.source_id,
+               a.article_key,
+               a.concept_id,
+               a.title,
+               a.content,
+               a.metadata_json::text as metadata_json,
+               a.review_status,
+               a.source_paths,
+               ts_rank_cd(a.search_tsv, query.tsq) as score
+        from articles a
+        cross join query
+        where a.search_tsv @@ query.tsq
+        order by score desc, compiled_at desc
+        limit #{limit}
+    </select>
+</mapper>

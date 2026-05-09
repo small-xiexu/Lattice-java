@@ -222,10 +222,11 @@ public class StructuredQueryPlanner {
     }
 
     private boolean isCompareQuestion(String question) {
-        return question.contains("对比")
-                || question.contains("比较")
-                || question.contains("差异")
-                || question.contains("不同");
+        if (!StringUtils.hasText(question)) {
+            return false;
+        }
+        String normalizedQuestion = question.replace('、', ',').replace('，', ',');
+        return COMPARE_PROJECTION_PATTERN.matcher(normalizedQuestion).find();
     }
 
     private boolean isCountQuestion(String question) {

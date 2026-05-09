@@ -38,7 +38,7 @@ class QueryFacadeServiceVectorTests {
                 new FixedSourceSearchService(List.of()),
                 new FixedContributionSearchService(List.of()),
                 new FixedVectorSearchService(List.of(vectorHit)),
-                new FixedAnswerGenerationService("来自向量召回的答案"),
+                new AnswerGenerationService(),
                 new InMemoryQueryCacheStore(),
                 new ReviewerAgent(new FixedReviewerGateway(), new ReviewResultParser()),
                 new QueryReviewProperties(),
@@ -53,7 +53,7 @@ class QueryFacadeServiceVectorTests {
 
         QueryResponse queryResponse = queryFacadeService.query("退款状态是什么");
 
-        assertThat(queryResponse.getAnswer()).startsWith("# 查询回答");
+        assertThat(queryResponse.getAnswer()).startsWith("Refund Status");
         assertThat(queryResponse.getAnswer()).contains("退款状态流转说明");
         assertThat(queryResponse.getAnswer()).contains("[[refund-status]]");
         assertThat(queryResponse.getArticles()).extracting("conceptId").containsExactly("refund-status");
@@ -109,38 +109,6 @@ class QueryFacadeServiceVectorTests {
                     QueryRetrievalSettingsState.DEFAULT_CHUNK_VECTOR_WEIGHT,
                     QueryRetrievalSettingsState.DEFAULT_RRF_K
             );
-        }
-    }
-
-    /**
-     * 固定答案生成服务替身。
-     *
-     * @author xiexu
-     */
-    private static class FixedAnswerGenerationService extends AnswerGenerationService {
-
-        private final String answer;
-
-        /**
-         * 创建固定答案生成服务替身。
-         *
-         * @param answer 固定答案
-         */
-        private FixedAnswerGenerationService(String answer) {
-            super();
-            this.answer = answer;
-        }
-
-        /**
-         * 返回固定答案。
-         *
-         * @param question 查询问题
-         * @param articleHit 查询命中
-         * @return 固定答案
-         */
-        @Override
-        public String generate(String question, QueryArticleHit articleHit) {
-            return answer;
         }
     }
 

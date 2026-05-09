@@ -3,7 +3,6 @@ package com.xbk.lattice.query.service;
 import com.xbk.lattice.infra.persistence.ContributionJdbcRepository;
 import com.xbk.lattice.infra.persistence.LexicalSearchRecord;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
 import java.util.UUID;
@@ -63,7 +62,7 @@ class ContributionSearchServiceTests {
          * @param records 预置记录
          */
         private FakeContributionJdbcRepository(List<LexicalSearchRecord> records) {
-            super(new JdbcTemplate());
+            super(null);
             this.records = records;
         }
 

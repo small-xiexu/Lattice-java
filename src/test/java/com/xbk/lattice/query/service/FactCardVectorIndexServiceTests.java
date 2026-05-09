@@ -13,7 +13,6 @@ import org.springframework.ai.embedding.Embedding;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -284,7 +283,7 @@ class FactCardVectorIndexServiceTests {
          * 创建 fact card 向量仓储替身。
          */
         private FakeFactCardVectorJdbcRepository() {
-            super(new JdbcTemplate());
+            super(null);
         }
 
         /**

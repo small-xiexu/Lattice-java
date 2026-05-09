@@ -11,7 +11,6 @@ import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import com.xbk.lattice.query.service.PendingQueryManager;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -144,7 +143,7 @@ class StatusServiceTests {
         private final List<ArticleRecord> records;
 
         private FakeArticleJdbcRepository(List<ArticleRecord> records) {
-            super(new JdbcTemplate());
+            super(null);
             this.records = records;
         }
 
@@ -159,7 +158,7 @@ class StatusServiceTests {
         private final List<SourceFileRecord> records;
 
         private FakeSourceFileJdbcRepository(List<SourceFileRecord> records) {
-            super(new JdbcTemplate());
+            super(null);
             this.records = records;
         }
 
@@ -174,7 +173,7 @@ class StatusServiceTests {
         private final List<ContributionRecord> records;
 
         private FakeContributionJdbcRepository(List<ContributionRecord> records) {
-            super(new JdbcTemplate());
+            super(null);
             this.records = records;
         }
 
@@ -231,7 +230,7 @@ class StatusServiceTests {
         private final int pendingCount;
 
         private FixedAnswerFeedbackJdbcRepository(int pendingCount) {
-            super(new JdbcTemplate());
+            super(null);
             this.pendingCount = pendingCount;
         }
 

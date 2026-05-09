@@ -6,7 +6,6 @@ import com.xbk.lattice.governance.domain.LifecycleTransitionResult;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
@@ -39,7 +38,7 @@ class LifecycleServiceTests {
                                 "{\"lifecycle\":{\"status\":\"deprecated\",\"reason\":\"由 v2 取代\",\"updatedBy\":\"architect\"}}"
                         ),
                         article(
-                                "legacy-refund",
+                                "archived-refund",
                                 "archived",
                                 "{\"lifecycle\":{\"status\":\"archived\",\"reason\":\"历史方案归档\",\"updatedBy\":\"ops\"}}"
                         )
@@ -56,7 +55,7 @@ class LifecycleServiceTests {
                 .extracting(LifecycleItem::getConceptId, LifecycleItem::getLifecycle, LifecycleItem::getReason)
                 .contains(
                         org.assertj.core.groups.Tuple.tuple("payment-timeout-v1", "deprecated", "由 v2 取代"),
-                        org.assertj.core.groups.Tuple.tuple("legacy-refund", "archived", "历史方案归档")
+                        org.assertj.core.groups.Tuple.tuple("archived-refund", "archived", "历史方案归档")
                 );
     }
 
@@ -91,22 +90,22 @@ class LifecycleServiceTests {
     @Test
     void shouldArchiveThenReactivateArticle() {
         FakeMutableArticleJdbcRepository articleJdbcRepository = new FakeMutableArticleJdbcRepository(List.of(
-                article("legacy-refund", "deprecated", "{\"description\":\"退款旧流程\"}")
+                article("archived-refund", "deprecated", "{\"description\":\"退款旧流程\"}")
         ));
         LifecycleService lifecycleService = new LifecycleService(articleJdbcRepository);
 
         LifecycleTransitionResult archived = lifecycleService.archive(
-                "legacy-refund",
+                "archived-refund",
                 "旧流程停止维护",
                 "ops"
         );
         LifecycleTransitionResult reactivated = lifecycleService.activate(
-                "legacy-refund",
+                "archived-refund",
                 "历史问题排查需要恢复可见",
                 "ops"
         );
 
-        ArticleRecord updated = articleJdbcRepository.findByConceptId("legacy-refund").orElseThrow();
+        ArticleRecord updated = articleJdbcRepository.findByConceptId("archived-refund").orElseThrow();
         assertThat(archived.getLifecycle()).isEqualTo("archived");
         assertThat(reactivated.getLifecycle()).isEqualTo("active");
         assertThat(updated.getLifecycle()).isEqualTo("active");
@@ -145,7 +144,7 @@ class LifecycleServiceTests {
         private final Map<String, ArticleRecord> recordsByConceptId = new LinkedHashMap<String, ArticleRecord>();
 
         private FakeMutableArticleJdbcRepository(List<ArticleRecord> records) {
-            super(new JdbcTemplate());
+            super(null);
             for (ArticleRecord record : records) {
                 recordsByConceptId.put(record.getConceptId(), record);
             }
@@ -159,6 +158,11 @@ class LifecycleServiceTests {
         @Override
         public Optional<ArticleRecord> findByConceptId(String conceptId) {
             return Optional.ofNullable(recordsByConceptId.get(conceptId));
+        }
+
+        @Override
+        public Optional<ArticleRecord> findByArticleKey(String articleKey) {
+            return Optional.ofNullable(recordsByConceptId.get(articleKey));
         }
 
         @Override

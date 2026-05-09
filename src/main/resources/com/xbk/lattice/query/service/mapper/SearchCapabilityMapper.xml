@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.query.service.mapper.SearchCapabilityMapper">
+
+    <select id="textSearchConfigExists" resultType="_boolean">
+        select exists(
+            select 1
+            from pg_catalog.pg_ts_config
+            where cfgname = #{configName}
+        )
+    </select>
+
+    <select id="schemaTextSearchConfigExists" resultType="_boolean">
+        select exists(
+            select 1
+            from pg_catalog.pg_ts_config c
+            join pg_catalog.pg_namespace n on n.oid = c.cfgnamespace
+            where c.cfgname = #{configName}
+              and n.nspname = #{schemaName}
+        )
+    </select>
+
+    <select id="vectorTypeAvailable" resultType="_boolean">
+        select coalesce(to_regtype('vector'), to_regtype('public.vector')) is not null
+    </select>
+
+    <select id="tableExists" resultType="_boolean">
+        select to_regclass(current_schema() || '.' || #{tableName}) is not null
+    </select>
+</mapper>

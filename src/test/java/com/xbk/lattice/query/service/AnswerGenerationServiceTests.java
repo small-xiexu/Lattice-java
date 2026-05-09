@@ -193,9 +193,9 @@ class AnswerGenerationServiceTests {
      * @throws Exception 反射构造异常
      */
     @Test
-    void shouldFallbackToDeterministicMarkdownWhenLegacyTextOmitsCitations() throws Exception {
+    void shouldFallbackToDeterministicMarkdownWhenPlainTextOmitsCitations() throws Exception {
         RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
-                # Legacy Answer
+                # Plain Answer
 
                 - settle_window=45m
                 """);
@@ -436,15 +436,15 @@ class AnswerGenerationServiceTests {
     }
 
     /**
-     * 验证差异题已经回答完整时，会去掉“低层接口细节未覆盖”的尾部保守声明，并清理泛化引导句上的错位 citation。
+     * 验证差异题在 answer 阶段不再被二次改写。
      *
      * @throws Exception 反射构造异常
      */
     @Test
-    void shouldRemoveUnsupportedDetailCaveatFromAnsweredDiffQuestion() throws Exception {
+    void shouldKeepUnsupportedDetailCaveatInAnsweredDiffQuestion() throws Exception {
         RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
                 {
-                  "answerMarkdown":"某渠道实现在代码里不是 3 个独立渠道，而是同一渠道的不同实现路径。[→ variant-diff-notes.md]\\n\\n核心差异在正向流程：旧版接口是“权益核销 → 支付”；V2 接口改为“查券 → 支付 → `coupon` 服务核销”。[→ variant-diff-notes.md]\\n\\n逆向流程也不同：旧版接口是“权益冲正/退款 → 支付冲正/退款”；V2 冲正为“`coupon` 服务冲正 → 支付冲正”，退款为“支付退款 → `coupon` 服务退款”。[→ variant-diff-notes.md]\\n\\n简表如下： [[legacy-default--重试模式说明]]\\n\\n| 对比项 | 旧版接口 | V2 接口 |\\n|---|---|---|\\n| 正向流程 | 权益核销 → 支付 | 查券 → 支付 → `coupon` 服务核销 |\\n\\n补充：证据中只明确了流程、路由和实现类差异，没有提供 V2 与旧接口在报文字段、HTTP/API 参数、返回码等层面的逐项差异，因此这些接口字段级差异无法基于当前材料确认。 [→ field-definitions.xlsx]\\n\\n需要注意：资料只说明了流程与实现类差异，未给出 V2 与旧接口在请求字段、响应字段、接口地址、签名方式、错误码、幂等键等方面的差异；如果你要的是“接口协议/报文字段差异”，目前证据不足。 [[legacy-default--field-definitions]]",
+                  "answerMarkdown":"某渠道实现在代码里不是 3 个独立渠道，而是同一渠道的不同实现路径。[→ variant-diff-notes.md]\\n\\n核心差异在正向流程：二进制接口是“权益核销 → 支付”；V2 接口改为“查券 → 支付 → `coupon` 服务核销”。[→ variant-diff-notes.md]\\n\\n逆向流程也不同：二进制接口是“权益冲正/退款 → 支付冲正/退款”；V2 冲正为“`coupon` 服务冲正 → 支付冲正”，退款为“支付退款 → `coupon` 服务退款”。[→ variant-diff-notes.md]\\n\\n简表如下： [[default-source--重试模式说明]]\\n\\n| 对比项 | 二进制接口 | V2 接口 |\\n|---|---|---|\\n| 正向流程 | 权益核销 → 支付 | 查券 → 支付 → `coupon` 服务核销 |\\n\\n补充：证据中只明确了流程、路由和实现类差异，没有提供 V2 与旧接口在报文字段、HTTP/API 参数、返回码等层面的逐项差异，因此这些接口字段级差异无法基于当前材料确认。 [→ field-definitions.xlsx]\\n\\n需要注意：资料只说明了流程与实现类差异，未给出 V2 与旧接口在请求字段、响应字段、接口地址、签名方式、错误码、幂等键等方面的差异；如果你要的是“接口协议/报文字段差异”，目前证据不足。 [[default-source--field-definitions]]",
                   "answerOutcome":"SUCCESS",
                   "answerCacheable":true
                 }
@@ -461,11 +461,10 @@ class AnswerGenerationServiceTests {
         assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
         assertThat(answerPayload.getAnswerMarkdown()).contains("核心差异在正向流程");
         assertThat(answerPayload.getAnswerMarkdown()).contains("简表如下：");
-        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("证据中只明确");
-        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("无法基于当前材料确认");
-        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("资料只说明");
-        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("目前证据不足");
-        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("[[legacy-default--重试模式说明]]");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("证据中只明确");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("资料只说明");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("目前证据不足");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("[[default-source--重试模式说明]]");
         assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("gateway-field-definitions");
     }
 
@@ -534,6 +533,67 @@ class AnswerGenerationServiceTests {
         assertThat(answerPayload.getAnswerMarkdown()).contains("支付重试次数");
         assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("`Order`：");
         assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("`API`：");
+    }
+
+    /**
+     * 验证多维中文标签查值题会优先返回标签值行，而不是被同篇文档里的范围标识行抢占。
+     */
+    @Test
+    void shouldAnswerFocusedChineseLabelValueFactsFromFallbackEvidence() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+        String question = "QA_BATCH_01 的回答模型路由、审查模型路由、向量模型路由和向量维度分别是什么？";
+        QueryArticleHit routingHit = new QueryArticleHit(
+                QueryEvidenceType.SOURCE,
+                1L,
+                null,
+                "generic-routing.md",
+                "通用路由验收资料",
+                """
+                        # 通用路由验收资料
+
+                        ## 模型路由
+
+                        - 回答模型路由：CHAT_ROUTE_ALPHA
+                        - 审查模型路由：REVIEW_ROUTE_BETA
+                        - 向量模型路由：EMBED_ROUTE_GAMMA
+                        - 向量维度：2048
+
+                        ## 编译流程
+
+                        QA_BATCH_01 的知识编译流程按下面顺序执行：
+
+                        1. 接收上传包。
+                        2. 生成事实卡片。
+                        """,
+                "{\"description\":\"通用路由验收资料\"}",
+                List.of("generic-routing.md"),
+                4.0D
+        );
+
+        assertThat(answerGenerationService.extractStructuredFactFocusTokens(question))
+                .containsExactly("回答模型路由", "审查模型路由", "向量模型路由", "向量维度");
+        assertThat(answerGenerationService.looksLikeStructuredFactCandidate(
+                question,
+                "回答模型路由：CHAT_ROUTE_ALPHA"
+        )).isTrue();
+        assertThat(answerGenerationService.selectQuestionFocusedFallbackSnippets(
+                question,
+                routingHit,
+                QueryEvidenceRelevanceSupport.extractHighSignalTokens(question),
+                4
+        )).contains("回答模型路由：CHAT_ROUTE_ALPHA");
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                question,
+                List.of(routingHit)
+        );
+
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(answerPayload.getAnswerMarkdown()).contains("回答模型路由：CHAT_ROUTE_ALPHA");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("审查模型路由：REVIEW_ROUTE_BETA");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("向量模型路由：EMBED_ROUTE_GAMMA");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("向量维度：2048");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("知识编译流程");
     }
 
     /**
@@ -616,7 +676,7 @@ class AnswerGenerationServiceTests {
                 List.of(
                         new QueryArticleHit(
                                 QueryEvidenceType.ARTICLE,
-                                "legacy-default--重试模式说明",
+                                "default-source--重试模式说明",
                                 "重试模式说明",
                                 """
                                 当前系统对支付、退款、冲正等操作采用的自动重试机制可分为六种典型形态：
@@ -710,12 +770,12 @@ class AnswerGenerationServiceTests {
     }
 
     /**
-     * 验证主体已覆盖问题锚点时，会移除模型追加的未问量化缺口尾注。
+     * 验证主体已覆盖问题锚点时，可降级到 deterministic fallback 而不是改写模型尾注。
      *
      * @throws Exception 反射构造异常
      */
     @Test
-    void shouldRemoveUnrequestedNumericCaveatWhenMilestoneAnswerIsCovered() throws Exception {
+    void shouldUseFallbackWhenMilestoneAnswerContainsUnrequestedNumericCaveat() throws Exception {
         RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
                 {
                   "answerMarkdown":"| 时间节点 | 目标 |\\n|---|---|\\n| 到2027年 | 完成重点场景标准体系建设。 [→ standard-guide.pdf] |\\n| 到2030年 | 形成协同完善的标准体系和持续迭代机制。 [→ standard-guide.pdf] |\\n\\n以上为当前可核验原文中的目标表述；关于到2027年是否另有100项以上要求，当前证据不足，暂无法确认。",
@@ -732,8 +792,7 @@ class AnswerGenerationServiceTests {
                 buildStageTargetEvidence()
         );
 
-        assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.LLM);
-        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SUCCESS);
+        assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.DEGRADED);
         assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
         assertThat(answerPayload.getAnswerMarkdown()).contains("到2027年");
         assertThat(answerPayload.getAnswerMarkdown()).contains("到2030年");
@@ -742,12 +801,12 @@ class AnswerGenerationServiceTests {
     }
 
     /**
-     * 验证冲突题 deterministic fallback 会先给结论，再说明证据冲突与倾向。
+     * 验证冲突题 fallback 仍能返回结论性内容，但不再拼接二选一话术。
      *
      * @throws Exception 反射构造异常
      */
     @Test
-    void shouldGenerateComparisonConclusionForConflictFallback() {
+    void shouldGenerateConflictFallbackWithoutTwoWayConclusion() {
         AnswerGenerationService answerGenerationService = new AnswerGenerationService();
 
         QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
@@ -757,18 +816,19 @@ class AnswerGenerationServiceTests {
         );
 
         assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
-        assertThat(answerPayload.getAnswerMarkdown()).contains("支持“乐观锁”的材料提到：");
-        assertThat(answerPayload.getAnswerMarkdown()).contains("支持“Redis 锁”的材料提到：");
-        assertThat(answerPayload.getAnswerMarkdown()).contains("更偏向“乐观锁”");
-        assertThat(answerPayload.getAnswerMarkdown()).contains("inventory_lock_version");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("支持“乐观锁”的材料提到：");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("支持“Redis 锁”的材料提到：");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("更偏向“乐观锁”");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("Conflict Lock");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("inventory_lock_version");
         assertThat(answerPayload.getAnswerMarkdown()).contains("Redis 分布式锁");
-        assertThat(answerPayload.getAnswerMarkdown()).contains("口径还没有完全收敛");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("口径还没有完全收敛");
         assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("本条目汇总");
         assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("主要记录了");
         assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("显式提示冲突");
         assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("。；");
         assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("。。");
-        assertThat(answerPayload.getAnswerMarkdown()).contains("[[readme]]");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("[[readme]]");
         assertThat(answerPayload.getAnswerMarkdown()).contains("[[conflict-lock]]");
         assertThat(answerPayload.getAnswerMarkdown()).contains("## 参考说明");
     }
@@ -885,7 +945,7 @@ class AnswerGenerationServiceTests {
                         new QueryArticleHit(
                                 QueryEvidenceType.ARTICLE,
                                 null,
-                                "legacy-default--payments",
+                                "default-source--payments",
                                 "payments",
                                 "Payments",
                                 """
@@ -941,7 +1001,7 @@ class AnswerGenerationServiceTests {
                         new QueryArticleHit(
                                 QueryEvidenceType.ARTICLE,
                                 null,
-                                "legacy-default--payments",
+                                "default-source--payments",
                                 "payments",
                                 "Payments",
                                 """
@@ -964,7 +1024,7 @@ class AnswerGenerationServiceTests {
                         new QueryArticleHit(
                                 QueryEvidenceType.ARTICLE,
                                 null,
-                                "legacy-default--ops",
+                                "default-source--ops",
                                 "ops",
                                 "Ops",
                                 """
@@ -1043,9 +1103,9 @@ class AnswerGenerationServiceTests {
      * @throws Exception 反射构造异常
      */
     @Test
-    void shouldSkipPromptCacheWhenStructuredAnswerFallsBackToLegacyText() throws Exception {
+    void shouldSkipPromptCacheWhenStructuredAnswerFallsBackToPlainText() throws Exception {
         RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
-                # Legacy Answer
+                # Plain Answer
 
                 - settle_window=45m
                 """);
@@ -1115,7 +1175,7 @@ class AnswerGenerationServiceTests {
      * @throws Exception 反射构造异常
      */
     @Test
-    void shouldFallbackRewriteWhenLegacyMarkdownOmitsCitations() throws Exception {
+    void shouldFallbackRewriteWhenPlainMarkdownOmitsCitations() throws Exception {
         RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
                 # Rewritten Answer
 
@@ -1423,7 +1483,7 @@ class AnswerGenerationServiceTests {
     void shouldRemoveUnrequestedPathExamplesFromPathContractAnswer() throws Exception {
         RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
                 {
-                  "answerMarkdown":"`/api/v2/demo/request/return` 是一次性支付退款接口；迁移后对外 API path 与旧接口完全一致，不得发明 `/api/v1/demo/*`、`/api/v1/legacy/*` 等其他路径。[→ docs/interface-contract.md]",
+                  "answerMarkdown":"`/api/v2/demo/request/return` 是一次性支付退款接口；迁移后对外 API path 与旧接口完全一致，不得发明 `/api/v1/demo/*`、`/api/v1/classic/*` 等其他路径。[→ docs/interface-contract.md]",
                   "answerOutcome":"SUCCESS",
                   "answerCacheable":true
                 }
@@ -1442,7 +1502,7 @@ class AnswerGenerationServiceTests {
         assertThat(answerPayload.getAnswerMarkdown()).contains("/api/v2/demo/request/return");
         assertThat(answerPayload.getAnswerMarkdown()).contains("完全一致");
         assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("/api/v1/demo");
-        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("/api/v1/legacy");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("/api/v1/classic");
     }
 
     /**
@@ -1475,12 +1535,12 @@ class AnswerGenerationServiceTests {
     }
 
     /**
-     * 验证接口 path 答案会保留证据中的 HTTP 方法。
+     * 验证接口 path 答案不再由 answer 阶段补写 HTTP 方法。
      *
      * @throws Exception 反射构造异常
      */
     @Test
-    void shouldPreserveHttpMethodForRequestedPathAnswer() throws Exception {
+    void shouldKeepRequestedPathWithoutInjectingHttpMethod() throws Exception {
         RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
                 {
                   "answerMarkdown":"`/api/v2/demo/request/return` 是一次性支付退款接口。[→ docs/interface-contract.md]",
@@ -1513,7 +1573,8 @@ class AnswerGenerationServiceTests {
                 )
         );
 
-        assertThat(answerPayload.getAnswerMarkdown()).contains("POST /api/v2/demo/request/return");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("`/api/v2/demo/request/return`");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("POST /api/v2/demo/request/return");
         assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.LLM);
         assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SUCCESS);
     }
@@ -1990,7 +2051,7 @@ class AnswerGenerationServiceTests {
 
         assertThat(answerPayload.getAnswerMarkdown()).contains("JDK 21");
         assertThat(answerPayload.getAnswerMarkdown()).contains("PostgreSQL");
-        assertThat(answerPayload.getAnswerMarkdown()).contains("jdbc");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("schema.sql");
         assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("LATTICE_REDIS_HOST = 127.0.0.1");
     }
 
@@ -2710,7 +2771,7 @@ class AnswerGenerationServiceTests {
                 new QueryArticleHit(
                         QueryEvidenceType.ARTICLE,
                         1L,
-                        "legacy-default--docs-demo-refund",
+                        "default-source--docs-demo-refund",
                         "docs-demo-refund",
                         "退款链路",
                         """
@@ -2740,7 +2801,7 @@ class AnswerGenerationServiceTests {
                 new QueryArticleHit(
                         QueryEvidenceType.ARTICLE,
                         1L,
-                        "legacy-default--docs-demo-api-service",
+                        "default-source--docs-demo-api-service",
                         "docs-demo-api-service",
                         "4.1 api service",
                         """
@@ -2863,14 +2924,14 @@ class AnswerGenerationServiceTests {
         return List.of(
                 new QueryArticleHit(
                         1L,
-                        "legacy-default--版本差异说明",
+                        "default-source--版本差异说明",
                         "版本差异说明",
                         "版本差异说明",
                         """
-                        旧版实现是 GatewayPayLegacy，V2 实现是 GatewayPayV2。
-                        routeLegacy(2) 会在旧版/新版实现之间按配置切换，routeV2(11) 走 V2 实现。
-                        旧版正向流程是权益核销后走支付，V2 正向流程是查券、支付、coupon 服务核销。
-                        旧版逆向流程是权益冲正/退款后走支付冲正/退款；V2 冲正是 coupon 服务冲正后走支付冲正，退款是支付退款后走 coupon 服务退款。
+                        二进制实现是 GatewayPayClassic，V2 实现是 GatewayPayV2。
+                        routeClassic(2) 会在二进制/新版实现之间按配置切换，routeV2(11) 走 V2 实现。
+                        二进制正向流程是权益核销后走支付，V2 正向流程是查券、支付、coupon 服务核销。
+                        二进制逆向流程是权益冲正/退款后走支付冲正/退款；V2 冲正是 coupon 服务冲正后走支付冲正，退款是支付退款后走 coupon 服务退款。
                         """,
                         "{\"description\":\"渠道版本差异\"}",
                         List.of("variant-diff-notes.md"),
@@ -2878,7 +2939,7 @@ class AnswerGenerationServiceTests {
                 ),
                 new QueryArticleHit(
                         2L,
-                        "legacy-default--重试模式说明",
+                        "default-source--重试模式说明",
                         "重试模式说明",
                         "重试模式说明",
                         "重试机制文档仅描述定时补偿、MQ 延迟重投、Spring Retry 等机制。",
@@ -2897,7 +2958,7 @@ class AnswerGenerationServiceTests {
     private List<QueryArticleHit> buildGatewayFieldDefinitionEvidence() {
         return List.of(new QueryArticleHit(
                 1L,
-                "legacy-default--field-definitions",
+                "default-source--field-definitions",
                 "gateway-field-definitions",
                 "Gateway Field Definitions",
                 """

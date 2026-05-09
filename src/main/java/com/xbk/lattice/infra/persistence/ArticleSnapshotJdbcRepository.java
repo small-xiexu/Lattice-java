@@ -1,6 +1,7 @@
 package com.xbk.lattice.infra.persistence;
 
 import com.xbk.lattice.infra.persistence.mapper.ArticleSnapshotMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -23,6 +24,7 @@ public class ArticleSnapshotJdbcRepository {
      *
      * @param articleSnapshotMapper 文章快照 Mapper
      */
+    @Autowired
     public ArticleSnapshotJdbcRepository(ArticleSnapshotMapper articleSnapshotMapper) {
         this.articleSnapshotMapper = articleSnapshotMapper;
     }

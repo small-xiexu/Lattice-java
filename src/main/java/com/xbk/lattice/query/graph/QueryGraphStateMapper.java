@@ -24,9 +24,6 @@ public class QueryGraphStateMapper {
     public QueryGraphState fromMap(Map<String, Object> stateMap) {
         QueryGraphState state = new QueryGraphState();
         String queryId = readString(stateMap, QueryGraphStateKeys.QUERY_ID);
-        if (queryId == null) {
-            queryId = readString(stateMap, QueryGraphStateKeys.LEGACY_REQUEST_ID);
-        }
         state.setQueryId(queryId);
         state.setQuestion(readString(stateMap, QueryGraphStateKeys.QUESTION));
         state.setNormalizedQuestion(readString(stateMap, QueryGraphStateKeys.NORMALIZED_QUESTION));

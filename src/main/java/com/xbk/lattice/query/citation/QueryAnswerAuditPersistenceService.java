@@ -107,6 +107,7 @@ public class QueryAnswerAuditPersistenceService {
      * @param deepResearchRunId 所属 Deep Research run 主键
      * @return 审计快照
      */
+    @Transactional(rollbackFor = Exception.class)
     public QueryAnswerAuditSnapshot persist(
             String queryId,
             int answerVersion,

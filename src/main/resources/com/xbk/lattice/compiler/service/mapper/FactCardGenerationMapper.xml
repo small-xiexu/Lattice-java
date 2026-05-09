@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.compiler.service.mapper.FactCardGenerationMapper">
+
+    <resultMap id="FactCardSourceChunkViewResultMap"
+               type="com.xbk.lattice.compiler.service.FactCardSourceChunkView">
+        <constructor>
+            <arg column="id" javaType="java.lang.Long"/>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="source_file_id" javaType="java.lang.Long"/>
+            <arg column="file_path" javaType="java.lang.String"/>
+            <arg column="chunk_index" javaType="_int"/>
+            <arg column="chunk_text" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <select id="findChunksBySourceFileId" resultMap="FactCardSourceChunkViewResultMap">
+        select sfc.id,
+               sf.source_id,
+               sfc.source_file_id,
+               sfc.file_path,
+               sfc.chunk_index,
+               sfc.chunk_text
+        from source_file_chunks sfc
+        left join source_files sf on sf.id = sfc.source_file_id
+        where sfc.source_file_id = #{sourceFileId}
+        order by sfc.chunk_index asc, sfc.id asc
+    </select>
+</mapper>

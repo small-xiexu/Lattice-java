@@ -1,12 +1,15 @@
 package com.xbk.lattice.api.admin;
 
 import com.xbk.lattice.api.query.QueryResponse;
+import com.xbk.lattice.infra.persistence.ArticleChunkVectorJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
+import com.xbk.lattice.infra.persistence.ArticleVectorJdbcRepository;
 import com.xbk.lattice.llm.service.LlmSecretCryptoService;
 import com.xbk.lattice.query.service.EmbeddingClientFactory;
-import com.xbk.lattice.query.service.QueryCacheStore;
 import com.xbk.lattice.query.service.EmbeddingRouteResolution;
+import com.xbk.lattice.query.service.QueryCacheStore;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.Embedding;
@@ -71,10 +74,27 @@ class AdminVectorIndexControllerTests {
     private ArticleJdbcRepository articleJdbcRepository;
 
     @Autowired
+    private ArticleVectorJdbcRepository articleVectorJdbcRepository;
+
+    @Autowired
+    private ArticleChunkVectorJdbcRepository articleChunkVectorJdbcRepository;
+
+    @Autowired
     private LlmSecretCryptoService llmSecretCryptoService;
 
     @Autowired
     private QueryCacheStore queryCacheStore;
+
+    /**
+     * 恢复共享测试库中的向量 schema 基线。
+     */
+    @AfterEach
+    void restoreVectorSchemaBaseline() {
+        articleVectorJdbcRepository.deleteAll();
+        articleChunkVectorJdbcRepository.deleteAll();
+        articleVectorJdbcRepository.alignEmbeddingColumnDimensions(2000);
+        articleChunkVectorJdbcRepository.alignEmbeddingColumnDimensions(2000);
+    }
 
     /**
      * 验证管理侧接口可返回向量索引状态摘要。
@@ -115,7 +135,7 @@ class AdminVectorIndexControllerTests {
         ensureVectorInfrastructure();
         seedEmbeddingProfile(2000);
         articleJdbcRepository.upsert(createArticleRecord("payment-timeout"));
-        insertLegacyVectorRecord("payment-timeout", "legacy-embedding-model", "legacy-hash");
+        insertExistingVectorRecord("payment-timeout", "existing-embedding-model", "existing-hash");
 
         mockMvc.perform(post("/api/v1/admin/vector/rebuild")
                         .contentType(APPLICATION_JSON)
@@ -228,7 +248,7 @@ class AdminVectorIndexControllerTests {
      * @param modelName 模型名
      * @param contentHash 内容哈希
      */
-    private void insertLegacyVectorRecord(String conceptId, String modelName, String contentHash) {
+    private void insertExistingVectorRecord(String conceptId, String modelName, String contentHash) {
         String vectorLiteral = createVectorLiteral(0.05F, 2000);
         jdbcTemplate.update(
                 """
@@ -248,7 +268,7 @@ class AdminVectorIndexControllerTests {
                 conceptId,
                 Long.valueOf(1L),
                 Integer.valueOf(2000),
-                "legacy-2000-article-v1",
+                "existing-2000-article-v1",
                 contentHash,
                 vectorLiteral
         );
@@ -282,6 +302,7 @@ class AdminVectorIndexControllerTests {
         jdbcTemplate.execute("TRUNCATE TABLE lattice.llm_model_profiles RESTART IDENTITY CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice.llm_provider_connections RESTART IDENTITY CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
+        restoreVectorSchemaBaseline();
     }
 
     /**
@@ -323,6 +344,31 @@ class AdminVectorIndexControllerTests {
                 true,
                 "tester",
                 "tester"
+        );
+        synchronizeLlmSequences();
+    }
+
+    /**
+     * 将 LLM 配置表序列同步到当前最大主键，避免手写 ID 后续默认自增撞主键。
+     */
+    private void synchronizeLlmSequences() {
+        jdbcTemplate.execute(
+                """
+                        select setval(
+                            'lattice.llm_provider_connections_id_seq'::regclass,
+                            coalesce((select max(id) from lattice.llm_provider_connections), 1),
+                            true
+                        )
+                        """
+        );
+        jdbcTemplate.execute(
+                """
+                        select setval(
+                            'lattice.llm_model_profiles_id_seq'::regclass,
+                            coalesce((select max(id) from lattice.llm_model_profiles), 1),
+                            true
+                        )
+                        """
         );
     }
 

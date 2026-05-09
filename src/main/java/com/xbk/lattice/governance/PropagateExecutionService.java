@@ -1,5 +1,7 @@
 package com.xbk.lattice.governance;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.article.service.ArticleIdentityResolver;
@@ -30,7 +32,7 @@ import java.util.Optional;
 @Service
 public class PropagateExecutionService {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private static final String COMPILE_SCENE = "compile";
 
@@ -66,7 +68,7 @@ public class PropagateExecutionService {
     }
 
     /**
-     * 创建兼容旧构造方式的传播执行服务。
+     * 创建传播执行服务。
      *
      * @param articleJdbcRepository 文章仓储
      * @param articleSnapshotJdbcRepository 快照仓储

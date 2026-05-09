@@ -1,5 +1,7 @@
 package com.xbk.lattice.compiler.node;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.article.service.ArticleMarkdownSupport;
@@ -37,7 +39,7 @@ import java.util.regex.Pattern;
  */
 public class CompileArticleNode {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private static final Pattern REFERENTIAL_PATTERN = Pattern.compile("[A-Za-z0-9_-]+=[A-Za-z0-9._-]+|\\b\\d{3,5}\\b");
 
@@ -194,9 +196,7 @@ public class CompileArticleNode {
      * @param mergedConcept 合并概念
      * @param sourceDir 输入目录
      * @return 文章记录
-     * @deprecated 图流程已通过独立审查节点处理，此方法仅保留用于过渡期测试兼容
      */
-    @Deprecated
     public ArticleRecord compile(MergedConcept mergedConcept, Path sourceDir) {
         ArticleRecord draftArticle = compileDraft(mergedConcept, sourceDir);
         String markdownContent = draftArticle.getContent();

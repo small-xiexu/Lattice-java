@@ -5,7 +5,6 @@ import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -78,7 +77,7 @@ class CoverageTrackingServiceTests {
         private final List<SourceFileRecord> records;
 
         private FakeSourceFileJdbcRepository(List<SourceFileRecord> records) {
-            super(new JdbcTemplate());
+            super(null);
             this.records = records;
         }
 
@@ -93,7 +92,7 @@ class CoverageTrackingServiceTests {
         private final List<ArticleRecord> records;
 
         private FakeArticleJdbcRepository(List<ArticleRecord> records) {
-            super(new JdbcTemplate());
+            super(null);
             this.records = records;
         }
 

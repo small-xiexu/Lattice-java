@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.ArticleChunkVectorMapper">
+
+    <resultMap id="ArticleChunkVectorRecordResultMap"
+               type="com.xbk.lattice.infra.persistence.ArticleChunkVectorRecord">
+        <constructor>
+            <arg column="article_chunk_id" javaType="java.lang.Long"/>
+            <arg column="article_id" javaType="java.lang.Long"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="chunk_index" javaType="_int"/>
+            <arg column="model_profile_id" javaType="java.lang.Long"/>
+            <arg column="content_hash" javaType="java.lang.String"/>
+            <arg column="embedding" javaType="[F"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.PgVectorFloatArrayTypeHandler"/>
+            <arg column="updated_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="ArticleChunkVectorHitResultMap" type="com.xbk.lattice.query.service.ArticleChunkVectorHit">
+        <constructor>
+            <arg column="article_id" javaType="java.lang.Long"/>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="article_key" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="content" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="review_status" javaType="java.lang.String"/>
+            <arg column="source_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="chunk_index" javaType="_int"/>
+            <arg column="chunk_text" javaType="java.lang.String"/>
+            <arg column="score" javaType="_double"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="upsert">
+        insert into article_chunk_vector_index (
+            article_chunk_id, article_id, concept_id, chunk_index,
+            model_profile_id, content_hash, embedding, updated_at
+        )
+        values (
+            #{record.articleChunkId},
+            #{record.articleId},
+            #{record.conceptId},
+            #{record.chunkIndex},
+            #{record.modelProfileId},
+            #{record.contentHash},
+            cast(#{vectorLiteral} as ${vectorTypeName}),
+            #{record.updatedAt}
+        )
+        on conflict (article_chunk_id) do update
+        set article_id = excluded.article_id,
+            concept_id = excluded.concept_id,
+            chunk_index = excluded.chunk_index,
+            model_profile_id = excluded.model_profile_id,
+            content_hash = excluded.content_hash,
+            embedding = excluded.embedding,
+            updated_at = excluded.updated_at
+    </insert>
+
+    <select id="findByArticleChunkId" resultMap="ArticleChunkVectorRecordResultMap">
+        select article_chunk_id, article_id, concept_id, chunk_index, model_profile_id,
+               content_hash, embedding::text as embedding, updated_at
+        from article_chunk_vector_index
+        where article_chunk_id = #{articleChunkId}
+    </select>
+
+    <select id="countAll" resultType="_int">
+        select count(*)
+        from article_chunk_vector_index
+    </select>
+
+    <delete id="deleteAll">
+        delete from article_chunk_vector_index
+    </delete>
+
+    <update id="alignEmbeddingColumnDimensions">
+        alter table article_chunk_vector_index alter column embedding type ${vectorTypeName}(${targetDimensions})
+    </update>
+
+    <update id="createHnswIndex">
+        create index if not exists ${indexName}
+        on article_chunk_vector_index using hnsw (embedding ${opClass})
+    </update>
+
+    <update id="createIvfflatIndex">
+        create index if not exists ${indexName}
+        on article_chunk_vector_index using ivfflat (embedding ${opClass}) with (lists = 100)
+    </update>
+
+    <select id="findLatestUpdatedAt" resultType="java.time.OffsetDateTime">
+        select updated_at
+        from article_chunk_vector_index
+        order by updated_at desc
+        limit 1
+    </select>
+
+    <select id="findEmbeddingColumnType" resultType="java.lang.String">
+        select format_type(a.atttypid, a.atttypmod)
+        from pg_attribute a
+        join pg_class c on c.oid = a.attrelid
+        join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = current_schema()
+          and c.relname = 'article_chunk_vector_index'
+          and a.attname = 'embedding'
+          and a.attnum > 0
+          and not a.attisdropped
+    </select>
+
+    <select id="searchNearestNeighbors" resultMap="ArticleChunkVectorHitResultMap">
+        select vector_index.article_id,
+               article.source_id,
+               article.article_key,
+               vector_index.concept_id,
+               article.title,
+               article.content,
+               article.metadata_json::text as metadata_json,
+               article.review_status,
+               article.source_paths,
+               vector_index.chunk_index,
+               article_chunk.chunk_text,
+               1 - (vector_index.embedding ${distanceOperator} cast(#{vectorLiteral} as ${vectorTypeName})) as score
+        from article_chunk_vector_index vector_index
+        join articles article on article.id = vector_index.article_id
+        join article_chunks article_chunk on article_chunk.id = vector_index.article_chunk_id
+        order by vector_index.embedding ${distanceOperator} cast(#{vectorLiteral} as ${vectorTypeName}),
+                 article.compiled_at desc
+        limit #{limit}
+    </select>
+
+    <select id="resolveVectorTypeName" resultType="java.lang.String">
+        select coalesce(to_regtype('vector')::text, to_regtype('public.vector')::text)
+    </select>
+
+    <select id="resolvePreferredAnnIndexMethod" resultType="java.lang.String">
+        select amname
+        from pg_am
+        where amname in ('hnsw','ivfflat')
+        order by case amname when 'hnsw' then 0 else 1 end
+        limit 1
+    </select>
+
+    <select id="resolveVectorOperatorClass" resultType="java.lang.String">
+        select opcnamespace::regnamespace || '.vector_cosine_ops'
+        from pg_opclass
+        where opcname = 'vector_cosine_ops'
+        order by oid asc
+        limit 1
+    </select>
+
+    <update id="dropIndex">
+        drop index if exists ${indexName}
+    </update>
+</mapper>

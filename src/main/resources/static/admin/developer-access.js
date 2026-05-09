@@ -6,6 +6,7 @@
         mcpUrl: "",
         checkedAt: ""
     };
+    const formatDateTime = window.AdminCommon.formatFullDateTime;
 
     document.addEventListener("DOMContentLoaded", function () {
         if (!document.querySelector("[data-tab-group='developer-access-sections']")) {
@@ -446,12 +447,4 @@
         return normalized.length > 120 ? normalized.slice(0, 120) + "..." : normalized;
     }
 
-    function formatDateTime(value) {
-        if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
-            return "";
-        }
-        return value.toLocaleString("zh-CN", {
-            hour12: false
-        });
-    }
 })();

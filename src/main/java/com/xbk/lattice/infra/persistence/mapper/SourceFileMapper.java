@@ -91,16 +91,16 @@ public interface SourceFileMapper {
     );
 
     /**
-     * 查询 legacy-default 资料源主键。
+     * 查询 default-source 资料源主键。
      *
      * @return 资料源主键
      */
-    Long findLegacyDefaultSourceId();
+    Long findDefaultSourceId();
 
     /**
-     * 确保 legacy-default 资料源存在。
+     * 确保 default-source 资料源存在。
      *
      * @return 影响行数
      */
-    int insertLegacyDefaultSource();
+    int insertDefaultSource();
 }

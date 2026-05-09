@@ -1,5 +1,7 @@
 package com.xbk.lattice.governance.repo;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.service.SynthesisArtifactJdbcStore;
@@ -31,7 +33,7 @@ import java.util.List;
 @Service
 public class RepoSnapshotService {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.moduleAwareMapper();
 
     private final RepoSnapshotJdbcRepository repoSnapshotJdbcRepository;
 

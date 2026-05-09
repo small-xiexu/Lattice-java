@@ -58,7 +58,7 @@ public class PropagationService {
     }
 
     /**
-     * 创建兼容旧构造方式的传播服务。
+     * 创建传播服务。
      *
      * @param dependencyGraphService 依赖图服务
      * @param articleJdbcRepository 文章仓储
@@ -121,7 +121,7 @@ public class PropagationService {
     }
 
     /**
-     * 兼容旧调用的传播分析入口。
+     * 标准传播分析入口。
      *
      * @param rootConceptId 根概念标识
      * @param correctionSummary 纠错摘要

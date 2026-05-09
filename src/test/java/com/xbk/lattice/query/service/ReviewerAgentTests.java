@@ -2,6 +2,7 @@ package com.xbk.lattice.query.service;
 
 import com.xbk.lattice.query.domain.ReviewResult;
 import com.xbk.lattice.query.domain.ReviewStatus;
+import com.xbk.lattice.query.error.QueryReviewTimeoutException;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -99,7 +100,7 @@ class ReviewerAgentTests {
          */
         @Override
         public String review(String reviewPrompt) {
-            throw new ReviewTimeoutException("review timed out");
+            throw new QueryReviewTimeoutException("review timed out");
         }
     }
 

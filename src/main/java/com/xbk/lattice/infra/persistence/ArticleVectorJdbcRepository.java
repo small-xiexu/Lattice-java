@@ -1,14 +1,11 @@
 package com.xbk.lattice.infra.persistence;
 
+import com.xbk.lattice.infra.persistence.mapper.ArticleVectorMapper;
 import com.xbk.lattice.query.service.QueryArticleHit;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
-import java.sql.Array;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,15 +25,16 @@ public class ArticleVectorJdbcRepository {
 
     private static final String ANN_INDEX_NAME_IVFFLAT = "idx_article_vector_index_embedding_ivfflat";
 
-    private final JdbcTemplate jdbcTemplate;
+    private final ArticleVectorMapper articleVectorMapper;
 
     /**
-     * 创建文章向量索引 JDBC 仓储。
+     * 创建文章向量索引仓储。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @param articleVectorMapper 文章向量 Mapper
      */
-    public ArticleVectorJdbcRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    @Autowired
+    public ArticleVectorJdbcRepository(ArticleVectorMapper articleVectorMapper) {
+        this.articleVectorMapper = articleVectorMapper;
     }
 
     /**
@@ -45,7 +43,7 @@ public class ArticleVectorJdbcRepository {
      * @param articleVectorRecord 向量索引记录
      */
     public void upsert(ArticleVectorRecord articleVectorRecord) {
-        if (jdbcTemplate == null) {
+        if (articleVectorMapper == null) {
             return;
         }
 
@@ -54,31 +52,7 @@ public class ArticleVectorJdbcRepository {
             return;
         }
 
-        String sql = """
-                insert into article_vector_index (
-                    article_key, concept_id, model_profile_id, embedding_dimensions, index_version, content_hash, embedding, updated_at
-                )
-                values (?, ?, ?, ?, ?, ?, cast(? as %s), ?)
-                on conflict (article_key) do update
-                set concept_id = excluded.concept_id,
-                    model_profile_id = excluded.model_profile_id,
-                    embedding_dimensions = excluded.embedding_dimensions,
-                    index_version = excluded.index_version,
-                    content_hash = excluded.content_hash,
-                    embedding = excluded.embedding,
-                    updated_at = excluded.updated_at
-                """.formatted(vectorTypeName);
-        jdbcTemplate.update(
-                sql,
-                articleVectorRecord.getArticleKey(),
-                articleVectorRecord.getConceptId(),
-                articleVectorRecord.getModelProfileId(),
-                articleVectorRecord.getEmbeddingDimensions(),
-                articleVectorRecord.getIndexVersion(),
-                articleVectorRecord.getContentHash(),
-                formatVector(articleVectorRecord.getEmbedding()),
-                articleVectorRecord.getUpdatedAt()
-        );
+        articleVectorMapper.upsert(articleVectorRecord, formatVector(articleVectorRecord.getEmbedding()), vectorTypeName);
     }
 
     /**
@@ -88,24 +62,11 @@ public class ArticleVectorJdbcRepository {
      * @return 向量索引
      */
     public Optional<ArticleVectorRecord> findByArticleKey(String articleKey) {
-        if (jdbcTemplate == null || articleKey == null || articleKey.isBlank()) {
+        if (articleVectorMapper == null || articleKey == null || articleKey.isBlank()) {
             return Optional.empty();
         }
 
-        List<ArticleVectorRecord> records = jdbcTemplate.query(
-                """
-                        select article_key, concept_id, model_profile_id, embedding_dimensions, index_version,
-                               content_hash, embedding::text as embedding, updated_at
-                        from article_vector_index
-                        where article_key = ?
-                        """,
-                this::mapArticleVectorRecord,
-                articleKey
-        );
-        if (records.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(records.get(0));
+        return Optional.ofNullable(articleVectorMapper.findByArticleKey(articleKey));
     }
 
     /**
@@ -114,11 +75,10 @@ public class ArticleVectorJdbcRepository {
      * @return 向量索引总数
      */
     public int countAll() {
-        if (jdbcTemplate == null) {
+        if (articleVectorMapper == null) {
             return 0;
         }
-        Integer count = jdbcTemplate.queryForObject("select count(*) from article_vector_index", Integer.class);
-        return count == null ? 0 : count;
+        return articleVectorMapper.countAll();
     }
 
     /**
@@ -127,10 +87,10 @@ public class ArticleVectorJdbcRepository {
      * @return 删除记录数
      */
     public int deleteAll() {
-        if (jdbcTemplate == null) {
+        if (articleVectorMapper == null) {
             return 0;
         }
-        return jdbcTemplate.update("delete from article_vector_index");
+        return articleVectorMapper.deleteAll();
     }
 
     /**
@@ -142,7 +102,7 @@ public class ArticleVectorJdbcRepository {
      * @param targetDimensions 目标维度
      */
     public void alignEmbeddingColumnDimensions(int targetDimensions) {
-        if (jdbcTemplate == null || targetDimensions <= 0) {
+        if (articleVectorMapper == null || targetDimensions <= 0) {
             return;
         }
 
@@ -152,17 +112,14 @@ public class ArticleVectorJdbcRepository {
         }
 
         dropEmbeddingAnnIndexes();
-        jdbcTemplate.execute(
-                "alter table article_vector_index alter column embedding type "
-                        + vectorTypeName + "(" + targetDimensions + ")"
-        );
+        articleVectorMapper.alignEmbeddingColumnDimensions(vectorTypeName, targetDimensions);
     }
 
     /**
      * 确保文章向量表已具备可用的 ANN 索引。
      */
     public void ensureEmbeddingAnnIndex() {
-        if (jdbcTemplate == null) {
+        if (articleVectorMapper == null) {
             return;
         }
         String annIndexMethod = resolveCompatibleAnnIndexMethod();
@@ -174,16 +131,10 @@ public class ArticleVectorJdbcRepository {
             return;
         }
         if ("hnsw".equals(annIndexMethod)) {
-            jdbcTemplate.execute(
-                    "create index if not exists " + ANN_INDEX_NAME_HNSW
-                            + " on article_vector_index using hnsw (embedding " + opClass + ")"
-            );
+            articleVectorMapper.createHnswIndex(ANN_INDEX_NAME_HNSW, opClass);
             return;
         }
-        jdbcTemplate.execute(
-                "create index if not exists " + ANN_INDEX_NAME_IVFFLAT
-                        + " on article_vector_index using ivfflat (embedding " + opClass + ") with (lists = 100)"
-        );
+        articleVectorMapper.createIvfflatIndex(ANN_INDEX_NAME_IVFFLAT, opClass);
     }
 
     /**
@@ -192,17 +143,10 @@ public class ArticleVectorJdbcRepository {
      * @return 最近更新时间
      */
     public Optional<OffsetDateTime> findLatestUpdatedAt() {
-        if (jdbcTemplate == null) {
+        if (articleVectorMapper == null) {
             return Optional.empty();
         }
-        List<OffsetDateTime> values = jdbcTemplate.query(
-                "select updated_at from article_vector_index order by updated_at desc limit 1",
-                (resultSet, rowNum) -> resultSet.getObject("updated_at", OffsetDateTime.class)
-        );
-        if (values.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(values.get(0));
+        return Optional.ofNullable(articleVectorMapper.findLatestUpdatedAt());
     }
 
     /**
@@ -211,18 +155,10 @@ public class ArticleVectorJdbcRepository {
      * @return 模型名称列表
      */
     public List<String> findDistinctModelNames() {
-        if (jdbcTemplate == null) {
+        if (articleVectorMapper == null) {
             return List.of();
         }
-        return jdbcTemplate.queryForList(
-                """
-                        select distinct profile.model_name
-                        from article_vector_index vector_index
-                        join llm_model_profiles profile on profile.id = vector_index.model_profile_id
-                        order by profile.model_name asc
-                        """,
-                String.class
-        );
+        return articleVectorMapper.findDistinctModelNames();
     }
 
     /**
@@ -231,27 +167,10 @@ public class ArticleVectorJdbcRepository {
      * @return 向量列类型描述
      */
     public Optional<String> findEmbeddingColumnType() {
-        if (jdbcTemplate == null) {
+        if (articleVectorMapper == null) {
             return Optional.empty();
         }
-        List<String> values = jdbcTemplate.queryForList(
-                """
-                        select format_type(a.atttypid, a.atttypmod)
-                        from pg_attribute a
-                        join pg_class c on c.oid = a.attrelid
-                        join pg_namespace n on n.oid = c.relnamespace
-                        where n.nspname = current_schema()
-                          and c.relname = 'article_vector_index'
-                          and a.attname = 'embedding'
-                          and a.attnum > 0
-                          and not a.attisdropped
-                        """,
-                String.class
-        );
-        if (values.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(values.get(0));
+        return Optional.ofNullable(articleVectorMapper.findEmbeddingColumnType());
     }
 
     /**
@@ -260,30 +179,10 @@ public class ArticleVectorJdbcRepository {
      * @return ANN 索引类型
      */
     public Optional<String> findEmbeddingAnnIndexType() {
-        if (jdbcTemplate == null) {
+        if (articleVectorMapper == null) {
             return Optional.empty();
         }
-        List<String> values = jdbcTemplate.queryForList(
-                """
-                        select am.amname
-                        from pg_index idx
-                        join pg_class index_rel on index_rel.oid = idx.indexrelid
-                        join pg_class table_rel on table_rel.oid = idx.indrelid
-                        join pg_namespace namespace_rel on namespace_rel.oid = table_rel.relnamespace
-                        join pg_am am on am.oid = index_rel.relam
-                        join pg_attribute attr on attr.attrelid = table_rel.oid
-                        where namespace_rel.nspname = current_schema()
-                          and table_rel.relname = 'article_vector_index'
-                          and attr.attname = 'embedding'
-                          and attr.attnum = any(idx.indkey)
-                        order by index_rel.relname asc
-                        """,
-                String.class
-        );
-        if (values.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(values.get(0));
+        return Optional.ofNullable(articleVectorMapper.findEmbeddingAnnIndexType());
     }
 
     /**
@@ -294,7 +193,7 @@ public class ArticleVectorJdbcRepository {
      * @return 文章命中
      */
     public List<QueryArticleHit> searchNearestNeighbors(float[] embedding, int limit) {
-        if (jdbcTemplate == null || embedding == null || embedding.length == 0) {
+        if (articleVectorMapper == null || embedding == null || embedding.length == 0) {
             return List.of();
         }
 
@@ -305,96 +204,7 @@ public class ArticleVectorJdbcRepository {
         String distanceOperator = resolveDistanceOperator(vectorTypeName);
 
         String vectorLiteral = formatVector(embedding);
-        return jdbcTemplate.query(
-                """
-                        select a.source_id,
-                               a.article_key,
-                               a.concept_id,
-                               a.title,
-                               a.content,
-                               a.metadata_json::text as metadata_json,
-                               a.review_status,
-                               a.source_paths,
-                               1 - (v.embedding %s cast(? as %s)) as score
-                        from article_vector_index v
-                        join articles a on a.article_key = v.article_key
-                        order by v.embedding %s cast(? as %s), a.compiled_at desc
-                        limit ?
-                        """.formatted(distanceOperator, vectorTypeName, distanceOperator, vectorTypeName),
-                this::mapQueryArticleHit,
-                vectorLiteral,
-                vectorLiteral,
-                limit
-        );
-    }
-
-    /**
-     * 映射文章向量索引记录。
-     *
-     * @param resultSet 结果集
-     * @param rowNum 行号
-     * @return 向量索引记录
-     * @throws SQLException SQL 异常
-     */
-    private ArticleVectorRecord mapArticleVectorRecord(ResultSet resultSet, int rowNum) throws SQLException {
-        return new ArticleVectorRecord(
-                resultSet.getString("article_key"),
-                resultSet.getString("concept_id"),
-                resultSet.getObject("model_profile_id", Long.class),
-                resultSet.getInt("embedding_dimensions"),
-                resultSet.getString("index_version"),
-                resultSet.getString("content_hash"),
-                parseVector(resultSet.getString("embedding")),
-                resultSet.getObject("updated_at", OffsetDateTime.class)
-        );
-    }
-
-    /**
-     * 映射向量近邻文章命中。
-     *
-     * @param resultSet 结果集
-     * @param rowNum 行号
-     * @return 文章命中
-     * @throws SQLException SQL 异常
-     */
-    private QueryArticleHit mapQueryArticleHit(ResultSet resultSet, int rowNum) throws SQLException {
-        return new QueryArticleHit(
-                readLong(resultSet, "source_id"),
-                resultSet.getString("article_key"),
-                resultSet.getString("concept_id"),
-                resultSet.getString("title"),
-                resultSet.getString("content"),
-                resultSet.getString("metadata_json"),
-                resultSet.getString("review_status"),
-                readSourcePaths(resultSet),
-                resultSet.getDouble("score")
-        );
-    }
-
-    /**
-     * 读取来源路径数组。
-     *
-     * @param resultSet 结果集
-     * @return 来源路径
-     * @throws SQLException SQL 异常
-     */
-    private List<String> readSourcePaths(ResultSet resultSet) throws SQLException {
-        Array sourcePathsArray = resultSet.getArray("source_paths");
-        if (sourcePathsArray == null) {
-            return List.of();
-        }
-
-        Object[] values = (Object[]) sourcePathsArray.getArray();
-        List<String> sourcePaths = new ArrayList<String>();
-        for (Object value : values) {
-            sourcePaths.add(String.valueOf(value));
-        }
-        return sourcePaths;
-    }
-
-    private Long readLong(ResultSet resultSet, String columnName) throws SQLException {
-        Object value = resultSet.getObject(columnName);
-        return value == null ? null : resultSet.getLong(columnName);
+        return articleVectorMapper.searchNearestNeighbors(vectorLiteral, vectorTypeName, distanceOperator, limit);
     }
 
     /**
@@ -417,40 +227,12 @@ public class ArticleVectorJdbcRepository {
     }
 
     /**
-     * 解析向量字面量。
-     *
-     * @param vectorLiteral 向量字面量
-     * @return 向量数组
-     */
-    private float[] parseVector(String vectorLiteral) {
-        if (vectorLiteral == null || vectorLiteral.isBlank()) {
-            return new float[0];
-        }
-
-        String normalizedLiteral = vectorLiteral.trim();
-        String body = normalizedLiteral.substring(1, normalizedLiteral.length() - 1);
-        if (body.isBlank()) {
-            return new float[0];
-        }
-
-        String[] values = body.split(",");
-        float[] embedding = new float[values.length];
-        for (int index = 0; index < values.length; index++) {
-            embedding[index] = Float.parseFloat(values[index].trim());
-        }
-        return embedding;
-    }
-
-    /**
      * 解析当前可用的 vector 类型名称。
      *
      * @return vector 类型名称
      */
     private String resolveVectorTypeName() {
-        String vectorTypeName = jdbcTemplate.queryForObject(
-                "select coalesce(to_regtype('vector')::text, to_regtype('public.vector')::text, '')",
-                String.class
-        );
+        String vectorTypeName = articleVectorMapper.resolveVectorTypeName();
         if (vectorTypeName == null) {
             return "";
         }
@@ -463,14 +245,11 @@ public class ArticleVectorJdbcRepository {
      * @return 索引实现名
      */
     private String resolvePreferredAnnIndexMethod() {
-        List<String> methods = jdbcTemplate.queryForList(
-                "select amname from pg_am where amname in ('hnsw','ivfflat') order by case amname when 'hnsw' then 0 else 1 end",
-                String.class
-        );
-        if (methods.isEmpty() || methods.get(0) == null) {
+        String preferredMethod = articleVectorMapper.resolvePreferredAnnIndexMethod();
+        if (preferredMethod == null) {
             return "";
         }
-        return methods.get(0);
+        return preferredMethod;
     }
 
     /**
@@ -523,22 +302,19 @@ public class ArticleVectorJdbcRepository {
      * @return schema-qualified opclass
      */
     private String resolveVectorOperatorClass() {
-        List<String> values = jdbcTemplate.queryForList(
-                "select opcnamespace::regnamespace || '.vector_cosine_ops' from pg_opclass where opcname = 'vector_cosine_ops' order by oid asc limit 1",
-                String.class
-        );
-        if (values.isEmpty() || values.get(0) == null) {
+        String opClass = articleVectorMapper.resolveVectorOperatorClass();
+        if (opClass == null) {
             return "";
         }
-        return values.get(0);
+        return opClass;
     }
 
     /**
      * 删除历史 ANN 索引，便于在切换向量维度时重新创建。
      */
     private void dropEmbeddingAnnIndexes() {
-        jdbcTemplate.execute("drop index if exists " + ANN_INDEX_NAME_HNSW);
-        jdbcTemplate.execute("drop index if exists " + ANN_INDEX_NAME_IVFFLAT);
+        articleVectorMapper.dropIndex(ANN_INDEX_NAME_HNSW);
+        articleVectorMapper.dropIndex(ANN_INDEX_NAME_IVFFLAT);
     }
 
     /**

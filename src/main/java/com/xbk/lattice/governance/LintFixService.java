@@ -68,7 +68,7 @@ public class LintFixService {
     }
 
     /**
-     * 创建兼容旧构造方式的 Lint 自动修复服务。
+     * 创建 Lint 自动修复服务。
      *
      * @param articleJdbcRepository 文章仓储
      * @param articleSnapshotJdbcRepository 快照仓储

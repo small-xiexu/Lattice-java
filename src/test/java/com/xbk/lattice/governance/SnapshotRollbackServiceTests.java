@@ -5,7 +5,6 @@ import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotRecord;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -111,7 +110,7 @@ class SnapshotRollbackServiceTests {
         private ArticleRecord lastUpserted;
 
         private FakeArticleJdbcRepository(List<ArticleRecord> records) {
-            super(new JdbcTemplate());
+            super(null);
             for (ArticleRecord record : records) {
                 this.records.put(record.getConceptId(), record);
             }
@@ -120,6 +119,11 @@ class SnapshotRollbackServiceTests {
         @Override
         public Optional<ArticleRecord> findByConceptId(String conceptId) {
             return Optional.ofNullable(records.get(conceptId));
+        }
+
+        @Override
+        public Optional<ArticleRecord> findByArticleKey(String articleKey) {
+            return Optional.ofNullable(records.get(articleKey));
         }
 
         @Override
@@ -140,7 +144,7 @@ class SnapshotRollbackServiceTests {
         private final List<ArticleSnapshotRecord> savedRecords = new ArrayList<ArticleSnapshotRecord>();
 
         private FakeArticleSnapshotJdbcRepository(ArticleSnapshotRecord record) {
-            super(new JdbcTemplate());
+            super(null);
             this.record = record;
         }
 

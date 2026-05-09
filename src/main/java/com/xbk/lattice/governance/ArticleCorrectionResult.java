@@ -48,7 +48,7 @@ public class ArticleCorrectionResult {
     }
 
     /**
-     * 创建兼容旧调用的文章纠错结果。
+     * 创建文章纠错结果。
      *
      * @param conceptId 概念标识
      * @param revisedContent 修正后的完整文章

@@ -59,7 +59,7 @@ class SourceFileChunkJdbcRepositoryTests {
         sourceFileJdbcRepository.upsert(sourceFileRecord);
         sourceFileChunkJdbcRepository.replaceChunks(
                 "payment/order.md",
-                List.of(new SourceFileChunkRecord("payment/order.md", 0, "legacy-source-chunk", false))
+                List.of(new SourceFileChunkRecord("payment/order.md", 0, "existing-source-chunk", false))
         );
 
         int rebuiltCount = sourceFileChunkJdbcRepository.rebuildAll(sourceFileJdbcRepository.findAll());
@@ -69,7 +69,7 @@ class SourceFileChunkJdbcRepositoryTests {
         assertThat(chunkRecords).hasSize(1);
         assertThat(chunkRecords.get(0).getChunkText()).contains("# Payment Source");
         assertThat(chunkRecords.get(0).getChunkText()).contains("## Timeout Rules");
-        assertThat(chunkRecords.get(0).getChunkText()).doesNotContain("legacy-source-chunk");
+        assertThat(chunkRecords.get(0).getChunkText()).doesNotContain("existing-source-chunk");
     }
 
     /**

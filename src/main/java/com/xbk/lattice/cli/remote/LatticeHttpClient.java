@@ -1,5 +1,7 @@
 package com.xbk.lattice.cli.remote;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -22,7 +24,7 @@ import java.util.Map;
  */
 public class LatticeHttpClient {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.moduleAwareMapper();
 
     private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
 

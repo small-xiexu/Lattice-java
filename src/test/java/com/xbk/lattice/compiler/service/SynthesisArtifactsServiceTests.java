@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -165,9 +166,9 @@ class SynthesisArtifactsServiceTests {
 
     private static class RecordingScopedGateway extends LlmGateway {
 
-        private int scopedInvocations;
+        private final AtomicInteger scopedInvocations = new AtomicInteger();
 
-        private int bootstrapInvocations;
+        private final AtomicInteger bootstrapInvocations = new AtomicInteger();
 
         private RecordingScopedGateway() {
             super(
@@ -196,7 +197,7 @@ class SynthesisArtifactsServiceTests {
                 String systemPrompt,
                 String userPrompt
         ) {
-            bootstrapInvocations++;
+            bootstrapInvocations.incrementAndGet();
             return "bootstrap";
         }
 
@@ -220,16 +221,16 @@ class SynthesisArtifactsServiceTests {
                 String systemPrompt,
                 String userPrompt
         ) {
-            scopedInvocations++;
+            scopedInvocations.incrementAndGet();
             return "scoped";
         }
 
         private int getScopedInvocations() {
-            return scopedInvocations;
+            return scopedInvocations.get();
         }
 
         private int getBootstrapInvocations() {
-            return bootstrapInvocations;
+            return bootstrapInvocations.get();
         }
 
         private static LlmProperties createStaticLlmProperties() {

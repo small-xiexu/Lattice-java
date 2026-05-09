@@ -1,5 +1,7 @@
 package com.xbk.lattice.documentparse.extractor;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.pdfbox.Loader;
@@ -22,7 +24,7 @@ import java.util.Map;
  */
 public class PdfTextExtractor {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private final PaginatedTextCleaner paginatedTextCleaner = new PaginatedTextCleaner();
 

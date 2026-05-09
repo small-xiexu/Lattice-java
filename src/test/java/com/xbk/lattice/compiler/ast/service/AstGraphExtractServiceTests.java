@@ -54,7 +54,7 @@ class AstGraphExtractServiceTests {
         sourceFile.setContent("""
                 package payment;
 
-                @Deprecated
+                @Service
                 public class RoutePlanner extends BasePlanner implements Planner {
 
                     @GetMapping("/payments")

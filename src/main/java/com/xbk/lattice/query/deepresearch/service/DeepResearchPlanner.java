@@ -1,5 +1,7 @@
 package com.xbk.lattice.query.deepresearch.service;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.query.deepresearch.domain.LayeredResearchPlan;
@@ -22,7 +24,7 @@ import java.util.Locale;
 @Service
 public class DeepResearchPlanner {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private static final List<String> DEFAULT_REQUIRED_EVIDENCE_TYPES = List.of(
             "ARTICLE",

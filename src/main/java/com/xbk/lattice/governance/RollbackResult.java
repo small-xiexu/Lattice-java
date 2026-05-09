@@ -43,7 +43,7 @@ public class RollbackResult {
     }
 
     /**
-     * 创建兼容旧调用的回滚结果。
+     * 创建回滚结果。
      *
      * @param conceptId 概念标识
      * @param restoredSnapshotId 恢复来源快照标识

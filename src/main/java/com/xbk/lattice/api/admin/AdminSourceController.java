@@ -1,5 +1,7 @@
 package com.xbk.lattice.api.admin;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
@@ -38,7 +40,7 @@ import java.util.Set;
 @RequestMapping("/api/v1/admin/sources")
 public class AdminSourceController {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private static final Set<String> ALLOWED_STATUSES = Set.of("ACTIVE", "DISABLED", "ARCHIVED");
 
@@ -155,8 +157,8 @@ public class AdminSourceController {
     ) {
         KnowledgeSource existing = sourceService.findById(sourceId)
                 .orElseThrow(() -> new IllegalArgumentException("source not found: " + sourceId));
-        if ("legacy-default".equals(existing.getSourceCode())) {
-            throw new IllegalArgumentException("legacy-default source is read-only");
+        if ("default-source".equals(existing.getSourceCode())) {
+            throw new IllegalArgumentException("default-source source is read-only");
         }
         String resolvedName = resolveName(existing, request);
         String resolvedStatus = resolveStatus(existing, request);

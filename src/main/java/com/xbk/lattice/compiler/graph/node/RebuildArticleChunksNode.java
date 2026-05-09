@@ -5,6 +5,7 @@ import com.xbk.lattice.compiler.graph.CompileGraphState;
 import com.xbk.lattice.compiler.graph.CompileGraphStateMapper;
 import com.xbk.lattice.compiler.graph.CompileWorkingSetStore;
 import com.xbk.lattice.compiler.service.ArticlePersistSupport;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -12,17 +13,29 @@ import java.util.Map;
 /**
  * 重建文章分块节点
  *
- * 职责：为已落库文章重建查询用 chunk 数据
+ * 职责：保留编译图恢复边界；文章 chunk 已由 ArticleAtomicWriteService 随文章落库原子写入
  *
  * @author xiexu
  */
 @Component
 public class RebuildArticleChunksNode extends AbstractCompileGraphNode {
 
-    private final ArticlePersistSupport articlePersistSupport;
-
     /**
      * 创建重建文章分块节点。
+     *
+     * @param compileGraphStateMapper 编译图状态映射器
+     * @param compileWorkingSetStore 编译工作集存储
+     */
+    @Autowired
+    public RebuildArticleChunksNode(
+            CompileGraphStateMapper compileGraphStateMapper,
+            CompileWorkingSetStore compileWorkingSetStore
+    ) {
+        super(compileGraphStateMapper, compileWorkingSetStore);
+    }
+
+    /**
+     * 创建测试替身可注入的重建文章分块节点。
      *
      * @param compileGraphStateMapper 编译图状态映射器
      * @param compileWorkingSetStore 编译工作集存储
@@ -33,23 +46,17 @@ public class RebuildArticleChunksNode extends AbstractCompileGraphNode {
             CompileWorkingSetStore compileWorkingSetStore,
             ArticlePersistSupport articlePersistSupport
     ) {
-        super(compileGraphStateMapper, compileWorkingSetStore);
-        this.articlePersistSupport = articlePersistSupport;
+        this(compileGraphStateMapper, compileWorkingSetStore);
     }
 
     /**
-     * 重建已落库文章的分块。
+     * 确认文章分块已随文章原子写入完成。
      *
      * @param overAllState 图状态
      * @return 更新后的状态增量
      */
     public Map<String, Object> execute(OverAllState overAllState) {
         CompileGraphState state = state(overAllState);
-        if (state.getPersistedCount() > 0 && state.getReviewedArticlesRef() != null) {
-            articlePersistSupport.rebuildArticleChunks(
-                    workingSetStore().loadReviewedArticles(state.getReviewedArticlesRef())
-            );
-        }
         return delta(state);
     }
 }

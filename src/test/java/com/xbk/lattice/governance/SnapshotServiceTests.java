@@ -3,7 +3,6 @@ package com.xbk.lattice.governance;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleSnapshotRecord;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -74,7 +73,7 @@ class SnapshotServiceTests {
         private final List<ArticleSnapshotRecord> records;
 
         private FakeArticleSnapshotJdbcRepository(List<ArticleSnapshotRecord> records) {
-            super(new JdbcTemplate());
+            super(null);
             this.records = records;
         }
 

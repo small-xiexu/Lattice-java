@@ -10,7 +10,6 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.ai.openai.OpenAiEmbeddingOptions;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -42,7 +41,7 @@ class ArticleVectorIndexServiceTests {
                 querySearchProperties,
                 new FixedSearchCapabilityService(true, true, true),
                 articleVectorJdbcRepository,
-                new FixedEmbeddingModel(createEmbedding(0.11F, 1536))
+                new FixedEmbeddingModel(createEmbedding(0.11F, 2000))
         );
 
         articleVectorIndexService.indexArticle(createArticleRecord("payment-timeout", "支付超时处理说明"));
@@ -65,7 +64,7 @@ class ArticleVectorIndexServiceTests {
                 querySearchProperties,
                 new FixedSearchCapabilityService(true, true, true),
                 articleVectorJdbcRepository,
-                new FixedEmbeddingModel(createEmbedding(0.11F, 1536))
+                new FixedEmbeddingModel(createEmbedding(0.11F, 2000))
         );
 
         ArticleRecord articleRecord = createArticleRecord("payment-timeout", "支付超时处理说明");
@@ -89,7 +88,7 @@ class ArticleVectorIndexServiceTests {
                 querySearchProperties,
                 new FixedSearchCapabilityService(true, true, true),
                 articleVectorJdbcRepository,
-                new FixedEmbeddingModel(createEmbedding(0.11F, 1536))
+                new FixedEmbeddingModel(createEmbedding(0.11F, 2000))
         );
 
         ArticleRecord articleRecord = createArticleRecord("payment-timeout", "支付超时处理说明");
@@ -155,7 +154,7 @@ class ArticleVectorIndexServiceTests {
     void shouldSkipIndexingWhenEmbeddingDimensionsMismatch() {
         QuerySearchProperties querySearchProperties = new QuerySearchProperties();
         querySearchProperties.getVector().setEnabled(true);
-        querySearchProperties.getVector().setExpectedDimensions(1536);
+        querySearchProperties.getVector().setExpectedDimensions(2000);
 
         FakeArticleVectorJdbcRepository articleVectorJdbcRepository = new FakeArticleVectorJdbcRepository();
         ArticleVectorIndexService articleVectorIndexService = new ArticleVectorIndexService(
@@ -180,7 +179,7 @@ class ArticleVectorIndexServiceTests {
         querySearchProperties.getVector().setEmbeddingModel("text-embedding-3-small");
 
         FakeArticleVectorJdbcRepository articleVectorJdbcRepository = new FakeArticleVectorJdbcRepository();
-        RetryOnSecondCallEmbeddingModel embeddingModel = new RetryOnSecondCallEmbeddingModel(createEmbedding(0.11F, 1536));
+        RetryOnSecondCallEmbeddingModel embeddingModel = new RetryOnSecondCallEmbeddingModel(createEmbedding(0.11F, 2000));
         ArticleVectorIndexService articleVectorIndexService = new ArticleVectorIndexService(
                 querySearchProperties,
                 new FixedSearchCapabilityService(true, true, true),
@@ -337,7 +336,7 @@ class ArticleVectorIndexServiceTests {
          * 创建向量仓储替身。
          */
         private FakeArticleVectorJdbcRepository() {
-            super(new JdbcTemplate());
+            super(null);
         }
 
         /**

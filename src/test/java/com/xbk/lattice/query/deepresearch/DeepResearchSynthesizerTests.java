@@ -127,7 +127,7 @@ class DeepResearchSynthesizerTests {
      * 验证带维度提示的对比题会按主体与维度重组草稿，而不是只平铺 finding 列表。
      */
     @Test
-    void shouldBuildDimensionComparisonDraftForStructuredComparisonQuestion() {
+    void shouldBuildTopicComparisonDraftFromEvidenceLedger() {
         EvidenceLedger evidenceLedger = new EvidenceLedger();
 
         EvidenceCard inventoryCard = new EvidenceCard();
@@ -166,12 +166,11 @@ class DeepResearchSynthesizerTests {
                         evidenceLedger
                 );
 
-        assertThat(internalAnswerDraft.getDraftMarkdown()).contains("## 按维度对比");
-        assertThat(internalAnswerDraft.getDraftMarkdown()).contains("### 目标");
-        assertThat(internalAnswerDraft.getDraftMarkdown()).contains("### 触发时机");
-        assertThat(internalAnswerDraft.getDraftMarkdown()).contains("### 实现方式");
-        assertThat(internalAnswerDraft.getDraftMarkdown()).contains("- 库存并发控制：");
-        assertThat(internalAnswerDraft.getDraftMarkdown()).contains("- 补偿重试策略：");
+        assertThat(internalAnswerDraft.getDraftMarkdown()).contains("### 库存并发控制");
+        assertThat(internalAnswerDraft.getDraftMarkdown()).contains("### 补偿重试策略");
+        assertThat(internalAnswerDraft.getDraftMarkdown()).contains("库存并发控制采用 Redis 分布式锁串行化处理");
+        assertThat(internalAnswerDraft.getDraftMarkdown()).contains("补偿失败后会进入 retry_queue 异步重试");
+        assertThat(internalAnswerDraft.getDraftMarkdown()).doesNotContain("## 按维度对比");
         assertThat(internalAnswerDraft.getDraftMarkdown()).doesNotContain("task-1", "task-2");
     }
 

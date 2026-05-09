@@ -7,7 +7,6 @@ import org.springframework.ai.embedding.Embedding;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -218,7 +217,7 @@ class ChunkVectorSearchServiceTests {
          * @param failSearch 是否模拟查询失败
          */
         private CapturingArticleChunkVectorJdbcRepository(boolean failSearch) {
-            super(new JdbcTemplate());
+            super(null);
             this.failSearch = failSearch;
         }
 

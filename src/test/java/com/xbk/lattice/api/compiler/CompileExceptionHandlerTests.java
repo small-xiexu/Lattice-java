@@ -1,6 +1,8 @@
 package com.xbk.lattice.api.compiler;
 
-import com.xbk.lattice.source.service.SourceSyncConflictException;
+import com.xbk.lattice.source.error.SourceSyncConflictException;
+import com.xbk.lattice.compiler.error.CompileGraphAbortException;
+import com.xbk.lattice.compiler.error.CompileJobStateException;
 import org.apache.tomcat.util.http.fileupload.impl.FileSizeLimitExceededException;
 import org.apache.tomcat.util.http.fileupload.impl.SizeLimitExceededException;
 import org.junit.jupiter.api.Test;
@@ -84,6 +86,38 @@ class CompileExceptionHandlerTests {
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getCode()).isEqualTo("SOURCE_SYNC_CONFLICT");
         assertThat(response.getBody().getMessage()).isEqualTo("active source sync run already exists: 12");
+    }
+
+    /**
+     * 验证编译业务异常会透传领域错误码。
+     */
+    @Test
+    void shouldReturnBadRequestForCompileBusinessException() {
+        CompileExceptionHandler handler = new CompileExceptionHandler(createMultipartProperties());
+        CompileJobStateException exception = new CompileJobStateException("only failed job can retry: job-1");
+
+        ResponseEntity<CompileErrorResponse> response = handler.handleLatticeBusinessException(exception);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getCode()).isEqualTo("COMPILE_JOB_STATE_INVALID");
+        assertThat(response.getBody().getMessage()).isEqualTo("only failed job can retry: job-1");
+    }
+
+    /**
+     * 验证编译集成异常会透传领域错误码。
+     */
+    @Test
+    void shouldReturnServiceUnavailableForCompileIntegrationException() {
+        CompileExceptionHandler handler = new CompileExceptionHandler(createMultipartProperties());
+        CompileGraphAbortException exception = new CompileGraphAbortException("state graph compile returned empty state");
+
+        ResponseEntity<CompileErrorResponse> response = handler.handleLatticeIntegrationException(exception);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getCode()).isEqualTo("COMPILE_GRAPH_ABORTED");
+        assertThat(response.getBody().getMessage()).isEqualTo("state graph compile returned empty state");
     }
 
     /**

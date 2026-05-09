@@ -1,5 +1,7 @@
 package com.xbk.lattice.vault;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.service.SynthesisArtifactJdbcStore;
 import com.xbk.lattice.compiler.service.SynthesisArtifactRecord;
@@ -34,7 +36,7 @@ import java.util.regex.Pattern;
 @Service
 public class VaultSyncService {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private static final Pattern FRONTMATTER_PATTERN = Pattern.compile("\\A---\\R(.*?)\\R---\\R?(.*)\\z", Pattern.DOTALL);
 

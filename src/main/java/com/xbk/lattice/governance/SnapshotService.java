@@ -56,7 +56,7 @@ public class SnapshotService {
     }
 
     /**
-     * 创建兼容旧构造方式的快照服务。
+     * 创建快照服务。
      *
      * @param articleSnapshotJdbcRepository 文章快照仓储
      * @param articleJdbcRepository 文章仓储

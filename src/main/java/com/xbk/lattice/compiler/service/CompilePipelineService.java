@@ -30,7 +30,7 @@ import java.util.UUID;
 /**
  * 编译节点能力服务
  *
- * 职责：为 Graph 编排提供过渡委托层，并保留 legacy compile/retry 兼容路径
+ * 职责：为 Graph 编排提供编译节点能力与 compile/retry 执行路径
  *
  * @author xiexu
  */

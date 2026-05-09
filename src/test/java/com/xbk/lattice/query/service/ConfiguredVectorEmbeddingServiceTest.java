@@ -15,17 +15,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 可配置 embedding 服务测试
  *
- * 职责：验证 legacy fallback 路径会把模型名和维度真正下发到请求
+ * 职责：验证 property fallback 路径会把模型名和维度真正下发到请求
  *
  * @author xiexu
  */
 class ConfiguredVectorEmbeddingServiceTest {
 
     /**
-     * 验证 legacy fallback 会把模型名和维度传给 embedding 请求。
+     * 验证 property fallback 会把模型名和维度传给 embedding 请求。
      */
     @Test
-    void shouldPassConfiguredModelAndDimensionsIntoLegacyEmbeddingRequest() {
+    void shouldPassConfiguredModelAndDimensionsIntoDirectEmbeddingRequest() {
         QuerySearchProperties querySearchProperties = new QuerySearchProperties();
         querySearchProperties.getVector().setEmbeddingModel("text-embedding-3-large");
         querySearchProperties.getVector().setExpectedDimensions(3072);
@@ -43,15 +43,15 @@ class ConfiguredVectorEmbeddingServiceTest {
     }
 
     /**
-     * 验证配置了 profile 后，会优先走 profile 路由而不是 legacy Bean。
+     * 验证配置了 profile 后，会优先走 profile 路由而不是 direct EmbeddingModel。
      */
     @Test
-    void shouldPreferProfileRouteOverLegacyEmbeddingModelWhenProfileConfigured() {
+    void shouldPreferProfileRouteOverDirectEmbeddingModelWhenProfileConfigured() {
         QuerySearchProperties querySearchProperties = new QuerySearchProperties();
         querySearchProperties.getVector().setEmbeddingModelProfileId(Long.valueOf(9L));
-        querySearchProperties.getVector().setEmbeddingModel("legacy-openai-model");
-        querySearchProperties.getVector().setExpectedDimensions(1536);
-        FixedEmbeddingModel legacyEmbeddingModel = new FixedEmbeddingModel();
+        querySearchProperties.getVector().setEmbeddingModel("property-openai-model");
+        querySearchProperties.getVector().setExpectedDimensions(2000);
+        FixedEmbeddingModel directEmbeddingModel = new FixedEmbeddingModel();
         FixedEmbeddingModel profileEmbeddingModel = new FixedEmbeddingModel();
         EmbeddingRouteResolver embeddingRouteResolver = new EmbeddingRouteResolver(null, null, null) {
             @Override
@@ -77,7 +77,7 @@ class ConfiguredVectorEmbeddingServiceTest {
                 querySearchProperties,
                 embeddingRouteResolver,
                 embeddingClientFactory,
-                legacyEmbeddingModel
+                directEmbeddingModel
         );
 
         float[] embedding = embeddingService.embed("test-input");
@@ -85,7 +85,7 @@ class ConfiguredVectorEmbeddingServiceTest {
         assertThat(embedding).hasSize(3);
         assertThat(profileEmbeddingModel.getLastRequestedModel()).isEqualTo("BAAI/bge-m3");
         assertThat(profileEmbeddingModel.getLastRequestedDimensions()).isEqualTo(1024);
-        assertThat(legacyEmbeddingModel.getLastRequestedModel()).isNull();
+        assertThat(directEmbeddingModel.getLastRequestedModel()).isNull();
         assertThat(embeddingService.getConfiguredModelName()).isEqualTo("BAAI/bge-m3");
         assertThat(embeddingService.getConfiguredExpectedDimensions()).isEqualTo(1024);
     }

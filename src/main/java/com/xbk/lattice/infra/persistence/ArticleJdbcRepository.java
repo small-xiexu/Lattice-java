@@ -1,5 +1,7 @@
 package com.xbk.lattice.infra.persistence;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -25,7 +27,7 @@ import java.util.Optional;
 @Repository
 public class ArticleJdbcRepository {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.moduleAwareMapper();
 
     private final ArticleMapper articleMapper;
 
@@ -37,15 +39,6 @@ public class ArticleJdbcRepository {
     @Autowired
     public ArticleJdbcRepository(ArticleMapper articleMapper) {
         this.articleMapper = articleMapper;
-    }
-
-    /**
-     * 创建测试替身使用的 Article 仓储。
-     *
-     * @param ignored 旧测试替身占位参数
-     */
-    protected ArticleJdbcRepository(Object ignored) {
-        this.articleMapper = null;
     }
 
     /**

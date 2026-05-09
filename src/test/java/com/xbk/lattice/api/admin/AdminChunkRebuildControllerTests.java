@@ -98,10 +98,10 @@ class AdminChunkRebuildControllerTests {
                 false,
                 "payment/order.md"
         ));
-        articleChunkJdbcRepository.replaceChunks("payment-timeout", List.of("legacy-article-chunk"));
+        articleChunkJdbcRepository.replaceChunks("payment-timeout", List.of("existing-article-chunk"));
         sourceFileChunkJdbcRepository.replaceChunks(
                 "payment/order.md",
-                List.of(new SourceFileChunkRecord("payment/order.md", 0, "legacy-source-chunk", false))
+                List.of(new SourceFileChunkRecord("payment/order.md", 0, "existing-source-chunk", false))
         );
 
         mockMvc.perform(post("/api/v1/admin/compile/rebuild-chunks"))
@@ -117,10 +117,10 @@ class AdminChunkRebuildControllerTests {
 
         assertThat(articleChunks).hasSize(1);
         assertThat(articleChunks.get(0)).contains("# Payment Timeout");
-        assertThat(articleChunks.get(0)).doesNotContain("legacy-article-chunk");
+        assertThat(articleChunks.get(0)).doesNotContain("existing-article-chunk");
         assertThat(sourceChunks).hasSize(1);
         assertThat(sourceChunks.get(0).getChunkText()).contains("# Payment Source");
-        assertThat(sourceChunks.get(0).getChunkText()).doesNotContain("legacy-source-chunk");
+        assertThat(sourceChunks.get(0).getChunkText()).doesNotContain("existing-source-chunk");
     }
 
     /**

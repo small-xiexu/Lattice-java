@@ -1156,15 +1156,15 @@ INSERT INTO knowledge_sources (
     metadata_json
 )
 VALUES (
-    'legacy-default',
-    'Legacy Default Source',
+    'default-source',
+    'Default Source',
     'UPLOAD',
     'DOCUMENT',
     'ACTIVE',
     'NORMAL',
     'FULL',
     '{}'::jsonb,
-    '{"legacyDefault":true}'::jsonb
+    '{"defaultSource":true}'::jsonb
 )
 ON CONFLICT (source_code) DO NOTHING;
 

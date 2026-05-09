@@ -1,6 +1,7 @@
 package com.xbk.lattice.infra.persistence;
 
 import com.xbk.lattice.infra.persistence.mapper.ArticleReviewAuditMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -22,6 +23,7 @@ public class ArticleReviewAuditJdbcRepository {
      *
      * @param articleReviewAuditMapper 文章人工复核审计 Mapper
      */
+    @Autowired
     public ArticleReviewAuditJdbcRepository(ArticleReviewAuditMapper articleReviewAuditMapper) {
         this.articleReviewAuditMapper = articleReviewAuditMapper;
     }

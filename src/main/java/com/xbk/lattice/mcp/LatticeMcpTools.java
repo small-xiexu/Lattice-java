@@ -77,57 +77,7 @@ import java.util.List;
  * @author xiexu
  */
 @Service
-public class LatticeMcpTools {
-
-    private static final DateTimeFormatter JSON_DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
-
-    private final QueryFacadeService queryFacadeService;
-
-    private final PendingQueryManager pendingQueryManager;
-
-    private final KnowledgeSearchService knowledgeSearchService;
-
-    private final KnowledgeLookupService knowledgeLookupService;
-
-    private final StatusService statusService;
-
-    private final LintService lintService;
-
-    private LintFixService lintFixService;
-
-    private final QualityMetricsService qualityMetricsService;
-
-    private final CoverageTrackingService coverageTrackingService;
-
-    private final OmissionTrackingService omissionTrackingService;
-
-    private final CompileApplicationFacade compileApplicationFacade;
-
-    private final InspectService inspectService;
-
-    private final InspectionAnswerImportService inspectionAnswerImportService;
-
-    private final ArticleCorrectionService articleCorrectionService;
-
-    private final PropagationService propagationService;
-
-    private PropagateExecutionService propagateExecutionService;
-
-    private SourceFileJdbcRepository sourceFileJdbcRepository;
-
-    private DocumentSectionSelector documentSectionSelector;
-
-    private final SnapshotService snapshotService;
-
-    private final HistoryService historyService;
-
-    private final LifecycleService lifecycleService;
-
-    private final LinkEnhancementService linkEnhancementService;
-
-    private SourceService sourceService;
-
-    private SourceSyncWorkflowService sourceSyncWorkflowService;
+public class LatticeMcpTools extends CompileMcpTools {
 
     /**
      * 创建 Lattice MCP 工具集。
@@ -237,7 +187,7 @@ public class LatticeMcpTools {
     }
 
     /**
-     * 创建兼容旧全量构造器的 MCP 工具集。
+     * 创建完整依赖的 MCP 工具集。
      */
     public LatticeMcpTools(
             QueryFacadeService queryFacadeService,
@@ -281,7 +231,7 @@ public class LatticeMcpTools {
     }
 
     /**
-     * 创建兼容旧全量构造器的 MCP 工具集（不含 lifecycle/link-enhance）。
+     * 创建完整依赖的 MCP 工具集（不含 lifecycle/link-enhance）。
      */
     public LatticeMcpTools(
             QueryFacadeService queryFacadeService,
@@ -323,7 +273,7 @@ public class LatticeMcpTools {
     }
 
     /**
-     * 创建兼容 lifecycle 测试的 MCP 工具集。
+     * 创建 lifecycle 测试用 MCP 工具集。
      */
     public LatticeMcpTools(
             QueryFacadeService queryFacadeService,
@@ -366,7 +316,7 @@ public class LatticeMcpTools {
     }
 
     /**
-     * 创建兼容旧测试构造器的 MCP 工具集。
+     * 创建测试用 MCP 工具集。
      *
      * @param queryFacadeService 查询门面服务
      * @param pendingQueryManager PendingQuery 管理器
@@ -376,7 +326,7 @@ public class LatticeMcpTools {
     }
 
     /**
-     * 创建兼容既有单元测试的 MCP 工具集。
+     * 创建单元测试用 MCP 工具集。
      */
     public LatticeMcpTools(
             QueryFacadeService queryFacadeService,
@@ -411,7 +361,7 @@ public class LatticeMcpTools {
     }
 
     /**
-     * 创建兼容 inspect/import-answers 测试的 MCP 工具集。
+     * 创建 inspect/import-answers 测试用 MCP 工具集。
      */
     public LatticeMcpTools(
             QueryFacadeService queryFacadeService,
@@ -448,7 +398,7 @@ public class LatticeMcpTools {
     }
 
     /**
-     * 创建兼容 snapshot/history 测试的 MCP 工具集。
+     * 创建 snapshot/history 测试用 MCP 工具集。
      */
     public LatticeMcpTools(
             QueryFacadeService queryFacadeService,
@@ -487,7 +437,7 @@ public class LatticeMcpTools {
     }
 
     /**
-     * 创建兼容 correct 测试的 MCP 工具集。
+     * 创建 correct 测试用 MCP 工具集。
      */
     public LatticeMcpTools(
             QueryFacadeService queryFacadeService,
@@ -527,7 +477,7 @@ public class LatticeMcpTools {
     }
 
     /**
-     * 创建兼容 propagate 测试的 MCP 工具集。
+     * 创建 propagate 测试用 MCP 工具集。
      */
     public LatticeMcpTools(
             QueryFacadeService queryFacadeService,
@@ -572,16 +522,8 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_query", description = "Query the Lattice knowledge base and return an answer with source count and a queryId for the pending review lifecycle")
     public String query(@McpToolParam(description = "The question to ask the knowledge base") String question) {
-        QueryResponse response = queryFacadeService.query(question);
-        int sourceCount = response.getSources() == null ? 0 : response.getSources().size();
-        return "{"
-                + "\"answer\":" + jsonString(response.getAnswer()) + ","
-                + "\"queryId\":" + jsonString(response.getQueryId()) + ","
-                + "\"reviewStatus\":" + jsonString(response.getReviewStatus()) + ","
-                + "\"sourceCount\":" + sourceCount
-                + "}";
+        return super.query(question);
     }
-
     /**
      * 列出当前全部待确认记录，供外部 AI 客户端决定后续 confirm/correct/discard 操作。
      *
@@ -589,22 +531,8 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_query_pending", description = "List all pending query records that still need confirm, correct, or discard actions")
     public String queryPending() {
-        java.util.List<PendingQueryRecord> pendingRecords = pendingQueryManager.listPendingQueries();
-        StringBuilder itemsBuilder = new StringBuilder();
-        itemsBuilder.append("[");
-        for (int index = 0; index < pendingRecords.size(); index++) {
-            if (index > 0) {
-                itemsBuilder.append(",");
-            }
-            itemsBuilder.append(toPendingItemJson(pendingRecords.get(index)));
-        }
-        itemsBuilder.append("]");
-        return "{"
-                + "\"count\":" + pendingRecords.size() + ","
-                + "\"items\":" + itemsBuilder
-                + "}";
+        return super.queryPending();
     }
-
     /**
      * 对待确认查询提交纠正内容，修订答案并保持 PENDING 状态。
      *
@@ -617,14 +545,8 @@ public class LatticeMcpTools {
             @McpToolParam(description = "The queryId of the pending query to correct") String queryId,
             @McpToolParam(description = "The correction text to append to the answer") String correction
     ) {
-        PendingQueryRecord updated = pendingQueryManager.correct(queryId, correction);
-        return "{"
-                + "\"queryId\":" + jsonString(updated.getQueryId()) + ","
-                + "\"revisedAnswer\":" + jsonString(updated.getAnswer()) + ","
-                + "\"status\":\"PENDING\""
-                + "}";
+        return super.correct(queryId, correction);
     }
-
     /**
      * 确认待确认查询，将其沉淀为贡献记录并从 pending 队列中移除。
      *
@@ -633,13 +555,8 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_query_confirm", description = "Confirm a pending query answer, persisting it as a contribution and removing it from the pending queue")
     public String confirm(@McpToolParam(description = "The queryId of the pending query to confirm") String queryId) {
-        pendingQueryManager.confirm(queryId);
-        return "{"
-                + "\"queryId\":" + jsonString(queryId) + ","
-                + "\"status\":\"confirmed\""
-                + "}";
+        return super.confirm(queryId);
     }
-
     /**
      * 丢弃待确认查询并返回 discarded 状态。
      *
@@ -648,13 +565,8 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_query_discard", description = "Discard a pending query without persisting it as a contribution")
     public String discard(@McpToolParam(description = "The queryId of the pending query to discard") String queryId) {
-        pendingQueryManager.discard(queryId);
-        return "{"
-                + "\"queryId\":" + jsonString(queryId) + ","
-                + "\"status\":\"discarded\""
-                + "}";
+        return super.discard(queryId);
     }
-
     /**
      * 搜索知识库，返回融合命中的证据列表而不生成最终答案。
      *
@@ -667,22 +579,8 @@ public class LatticeMcpTools {
             @McpToolParam(description = "The question or keywords to search") String question,
             @McpToolParam(description = "The max number of hits to return") int limit
     ) {
-        List<QueryArticleHit> hits = requireKnowledgeSearchService().search(question, limit);
-        StringBuilder itemsBuilder = new StringBuilder();
-        itemsBuilder.append("[");
-        for (int index = 0; index < hits.size(); index++) {
-            if (index > 0) {
-                itemsBuilder.append(",");
-            }
-            itemsBuilder.append(toSearchItemJson(hits.get(index)));
-        }
-        itemsBuilder.append("]");
-        return "{"
-                + "\"count\":" + hits.size() + ","
-                + "\"items\":" + itemsBuilder
-                + "}";
+        return super.search(question, limit);
     }
-
     /**
      * 读取文章或源文件详情。
      *
@@ -691,20 +589,8 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_get", description = "Get a knowledge article or source file by articleKey, conceptId, or file path")
     public String get(@McpToolParam(description = "The articleKey, conceptId, or file path to fetch") String id) {
-        KnowledgeLookupResult lookupResult = requireKnowledgeLookupService().get(id);
-        return "{"
-                + "\"status\":" + jsonString(lookupResult.isFound() ? "found" : "not_found") + ","
-                + "\"type\":" + jsonString(lookupResult.getType()) + ","
-                + "\"sourceId\":" + lookupResult.getSourceId() + ","
-                + "\"articleKey\":" + jsonString(lookupResult.getArticleKey()) + ","
-                + "\"id\":" + jsonString(lookupResult.getId()) + ","
-                + "\"title\":" + jsonString(lookupResult.getTitle()) + ","
-                + "\"content\":" + jsonString(lookupResult.getContent()) + ","
-                + "\"sourcePaths\":" + jsonStringList(lookupResult.getSourcePaths()) + ","
-                + "\"metadataJson\":" + jsonString(lookupResult.getMetadataJson())
-                + "}";
+        return super.get(id);
     }
-
     /**
      * 返回当前知识库状态汇总。
      *
@@ -712,16 +598,8 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_status", description = "Return knowledge base status counts including articles, sources, contributions, and pending queries")
     public String status() {
-        StatusSnapshot statusSnapshot = requireStatusService().snapshot();
-        return "{"
-                + "\"articleCount\":" + statusSnapshot.getArticleCount() + ","
-                + "\"sourceFileCount\":" + statusSnapshot.getSourceFileCount() + ","
-                + "\"contributionCount\":" + statusSnapshot.getContributionCount() + ","
-                + "\"pendingQueryCount\":" + statusSnapshot.getPendingQueryCount() + ","
-                + "\"reviewPendingArticleCount\":" + statusSnapshot.getReviewPendingArticleCount()
-                + "}";
+        return super.status();
     }
-
     /**
      * 执行最小 6 维治理检查。
      *
@@ -729,23 +607,8 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_lint", description = "Run the minimum governance lint checks and return the discovered issues")
     public String lint() {
-        LintReport lintReport = requireLintService().lint();
-        StringBuilder itemsBuilder = new StringBuilder();
-        itemsBuilder.append("[");
-        for (int index = 0; index < lintReport.getIssues().size(); index++) {
-            if (index > 0) {
-                itemsBuilder.append(",");
-            }
-            itemsBuilder.append(toLintIssueJson(lintReport.getIssues().get(index)));
-        }
-        itemsBuilder.append("]");
-        return "{"
-                + "\"checkedDimensions\":" + jsonStringList(lintReport.getCheckedDimensions()) + ","
-                + "\"totalIssues\":" + lintReport.getTotalIssues() + ","
-                + "\"items\":" + itemsBuilder
-                + "}";
+        return super.lint();
     }
-
     /**
      * 自动修复可修复的 lint 问题。
      *
@@ -756,25 +619,8 @@ public class LatticeMcpTools {
     public String lintFix(
             @McpToolParam(description = "Comma-separated conceptIds to fix, or empty for all fixable issues") String targetIds
     ) {
-        LintReport lintReport = requireLintService().lint();
-        List<String> ids = null;
-        if (targetIds != null && !targetIds.isBlank()) {
-            ids = new ArrayList<String>();
-            for (String value : targetIds.split(",")) {
-                String trimmed = value.trim();
-                if (!trimmed.isEmpty()) {
-                    ids.add(trimmed);
-                }
-            }
-        }
-        LintFixResult result = requireLintFixService().fix(lintReport, ids);
-        return "{"
-                + "\"fixed\":" + result.getFixed() + ","
-                + "\"skipped\":" + result.getSkipped() + ","
-                + "\"errors\":" + jsonStringList(result.getErrors())
-                + "}";
+        return super.lintFix(targetIds);
     }
-
     /**
      * 返回当前知识库质量指标。
      *
@@ -782,26 +628,8 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_quality", description = "Return quality metrics for articles, review states, contributions, and source coverage")
     public String quality() {
-        QualityMetricsReport qualityMetricsReport = requireQualityMetricsService().measure();
-        QualityMetricsTrend qualityMetricsTrend = requireQualityMetricsService().trend(7);
-        return "{"
-                + "\"totalArticles\":" + qualityMetricsReport.getTotalArticles() + ","
-                + "\"passedArticles\":" + qualityMetricsReport.getPassedArticles() + ","
-                + "\"pendingReviewArticles\":" + qualityMetricsReport.getPendingReviewArticles() + ","
-                + "\"needsHumanReviewArticles\":" + qualityMetricsReport.getNeedsHumanReviewArticles() + ","
-                + "\"contributionCount\":" + qualityMetricsReport.getContributionCount() + ","
-                + "\"sourceFileCount\":" + qualityMetricsReport.getSourceFileCount() + ","
-                + "\"trend\":{"
-                + "\"days\":" + qualityMetricsTrend.getDays() + ","
-                + "\"latestMeasuredAt\":" + jsonString(formatOffsetDateTime(qualityMetricsTrend.getLatestMeasuredAt())) + ","
-                + "\"reviewPassRateDelta\":" + qualityMetricsTrend.getReviewPassRateDelta() + ","
-                + "\"groundingRateDelta\":" + qualityMetricsTrend.getGroundingRateDelta() + ","
-                + "\"referentialRateDelta\":" + qualityMetricsTrend.getReferentialRateDelta() + ","
-                + "\"totalArticlesDelta\":" + qualityMetricsTrend.getTotalArticlesDelta()
-                + "}"
-                + "}";
+        return super.quality();
     }
-
     /**
      * 返回当前知识库源文件覆盖率。
      *
@@ -809,16 +637,8 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_coverage", description = "Return source coverage metrics based on articles.source_paths and source_files")
     public String coverage() {
-        CoverageReport coverageReport = requireCoverageTrackingService().measure();
-        return "{"
-                + "\"totalSourceFileCount\":" + coverageReport.getTotalSourceFileCount() + ","
-                + "\"coveredSourceFileCount\":" + coverageReport.getCoveredSourceFileCount() + ","
-                + "\"uncoveredSourceFileCount\":" + coverageReport.getUncoveredSourceFileCount() + ","
-                + "\"coverageRatio\":" + coverageReport.getCoverageRatio() + ","
-                + "\"coveredSourcePaths\":" + jsonStringList(coverageReport.getCoveredSourcePaths())
-                + "}";
+        return super.coverage();
     }
-
     /**
      * 返回当前知识库未覆盖源文件清单。
      *
@@ -826,14 +646,8 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_omissions", description = "List source files that are not referenced by any article source_paths")
     public String omissions() {
-        OmissionReport omissionReport = requireOmissionTrackingService().track();
-        return "{"
-                + "\"totalSourceFileCount\":" + omissionReport.getTotalSourceFileCount() + ","
-                + "\"count\":" + omissionReport.getOmittedSourceFileCount() + ","
-                + "\"items\":" + jsonStringList(omissionReport.getItems())
-                + "}";
+        return super.omissions();
     }
-
     /**
      * 返回当前知识文章生命周期汇总。
      *
@@ -841,26 +655,8 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_lifecycle", description = "Return lifecycle distribution for knowledge articles and list lifecycle items")
     public String lifecycle() {
-        LifecycleReport lifecycleReport = requireLifecycleService().report();
-        StringBuilder itemsBuilder = new StringBuilder();
-        itemsBuilder.append("[");
-        for (int index = 0; index < lifecycleReport.getItems().size(); index++) {
-            if (index > 0) {
-                itemsBuilder.append(",");
-            }
-            itemsBuilder.append(toLifecycleItemJson(lifecycleReport.getItems().get(index)));
-        }
-        itemsBuilder.append("]");
-        return "{"
-                + "\"totalArticles\":" + lifecycleReport.getTotalArticles() + ","
-                + "\"activeCount\":" + lifecycleReport.getActiveCount() + ","
-                + "\"deprecatedCount\":" + lifecycleReport.getDeprecatedCount() + ","
-                + "\"archivedCount\":" + lifecycleReport.getArchivedCount() + ","
-                + "\"otherCount\":" + lifecycleReport.getOtherCount() + ","
-                + "\"items\":" + itemsBuilder
-                + "}";
+        return super.lifecycle();
     }
-
     /**
      * 将文章标记为 deprecated。
      *
@@ -875,10 +671,8 @@ public class LatticeMcpTools {
             @McpToolParam(description = "Why this article is being deprecated") String reason,
             @McpToolParam(description = "Who performs the lifecycle update") String updatedBy
     ) {
-        LifecycleTransitionResult result = requireLifecycleService().deprecate(conceptId, reason, updatedBy);
-        return toLifecycleTransitionJson(result);
+        return super.lifecycleDeprecate(conceptId, reason, updatedBy);
     }
-
     /**
      * 将文章标记为 archived。
      *
@@ -893,10 +687,8 @@ public class LatticeMcpTools {
             @McpToolParam(description = "Why this article is being archived") String reason,
             @McpToolParam(description = "Who performs the lifecycle update") String updatedBy
     ) {
-        LifecycleTransitionResult result = requireLifecycleService().archive(conceptId, reason, updatedBy);
-        return toLifecycleTransitionJson(result);
+        return super.lifecycleArchive(conceptId, reason, updatedBy);
     }
-
     /**
      * 将文章恢复为 active。
      *
@@ -911,10 +703,8 @@ public class LatticeMcpTools {
             @McpToolParam(description = "Why this article is being reactivated") String reason,
             @McpToolParam(description = "Who performs the lifecycle update") String updatedBy
     ) {
-        LifecycleTransitionResult result = requireLifecycleService().activate(conceptId, reason, updatedBy);
-        return toLifecycleTransitionJson(result);
+        return super.lifecycleActivate(conceptId, reason, updatedBy);
     }
-
     /**
      * 执行链接增强，修复标题型 broken wiki-links 并同步受管关系区块。
      *
@@ -925,27 +715,8 @@ public class LatticeMcpTools {
     public String linkEnhance(
             @McpToolParam(description = "Whether to persist the enhanced content back into articles") boolean persist
     ) {
-        LinkEnhancementReport report = requireLinkEnhancementService().enhance(persist);
-        StringBuilder itemsBuilder = new StringBuilder();
-        itemsBuilder.append("[");
-        for (int index = 0; index < report.getItems().size(); index++) {
-            if (index > 0) {
-                itemsBuilder.append(",");
-            }
-            itemsBuilder.append(toLinkEnhancementItemJson(report.getItems().get(index)));
-        }
-        itemsBuilder.append("]");
-        return "{"
-                + "\"totalArticles\":" + report.getTotalArticles() + ","
-                + "\"processedArticleCount\":" + report.getProcessedArticleCount() + ","
-                + "\"updatedArticleCount\":" + report.getUpdatedArticleCount() + ","
-                + "\"fixedLinkCount\":" + report.getFixedLinkCount() + ","
-                + "\"syncedSectionCount\":" + report.getSyncedSectionCount() + ","
-                + "\"unresolvedLinkCount\":" + report.getUnresolvedLinkCount() + ","
-                + "\"items\":" + itemsBuilder
-                + "}";
+        return super.linkEnhance(persist);
     }
-
     /**
      * 输出待人工确认的问题清单。
      *
@@ -953,22 +724,8 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_inspect", description = "List normalized inspection questions that still need human confirmation")
     public String inspect() {
-        InspectionReport inspectionReport = requireInspectService().inspect();
-        StringBuilder itemsBuilder = new StringBuilder();
-        itemsBuilder.append("[");
-        for (int index = 0; index < inspectionReport.getQuestions().size(); index++) {
-            if (index > 0) {
-                itemsBuilder.append(",");
-            }
-            itemsBuilder.append(toInspectionQuestionJson(inspectionReport.getQuestions().get(index)));
-        }
-        itemsBuilder.append("]");
-        return "{"
-                + "\"count\":" + inspectionReport.getTotalQuestions() + ","
-                + "\"items\":" + itemsBuilder
-                + "}";
+        return super.inspect();
     }
-
     /**
      * 导入人工最终答案，并将其沉淀到 contribution 层。
      *
@@ -983,17 +740,8 @@ public class LatticeMcpTools {
             @McpToolParam(description = "The final human-reviewed answer") String finalAnswer,
             @McpToolParam(description = "Who confirmed the answer") String confirmedBy
     ) {
-        InspectionImportResult importResult = requireInspectionAnswerImportService().importAnswer(
-                inspectionId,
-                finalAnswer,
-                confirmedBy
-        );
-        return "{"
-                + "\"importedCount\":" + importResult.getImportedCount() + ","
-                + "\"resolvedIds\":" + jsonStringList(importResult.getResolvedIds())
-                + "}";
+        return super.importAnswers(inspectionId, finalAnswer, confirmedBy);
     }
-
     /**
      * 执行单篇知识文章纠错，并返回修正预览与下游传播提示。
      *
@@ -1006,24 +754,8 @@ public class LatticeMcpTools {
             @McpToolParam(description = "The articleKey or conceptId that has been corrected") String conceptId,
             @McpToolParam(description = "A short summary of the correction") String correctionSummary
     ) {
-        ArticleCorrectionResult result = requireArticleCorrectionService().correct(conceptId, correctionSummary);
-        requirePropagationService().markDownstream(
-                conceptId,
-                correctionSummary,
-                result.getDownstreamIds()
-        );
-        return "{"
-                + "\"sourceId\":" + result.getSourceId() + ","
-                + "\"articleKey\":" + jsonString(result.getArticleKey()) + ","
-                + "\"conceptId\":" + jsonString(result.getConceptId()) + ","
-                + "\"revisedContentPreview\":" + jsonString(preview(result.getRevisedContent(), 500)) + ","
-                + "\"downstreamCount\":" + result.getDownstreamIds().size() + ","
-                + "\"downstreamIds\":" + jsonStringList(result.getDownstreamIds()) + ","
-                + "\"evidenceSupported\":" + result.isValidationSupported() + ","
-                + "\"nextStep\":" + jsonString("如需将纠正传播到下游文章，请调用 lattice_propagate")
-                + "}";
+        return super.correctKnowledge(conceptId, correctionSummary);
     }
-
     /**
      * 执行指定根概念的下游传播。
      *
@@ -1034,15 +766,8 @@ public class LatticeMcpTools {
     public String propagate(
             @McpToolParam(description = "The corrected root conceptId to propagate from") String rootConceptId
     ) {
-        PropagationExecutionResult result = requirePropagateExecutionService().executePropagation(rootConceptId);
-        return "{"
-                + "\"rootConceptId\":" + jsonString(rootConceptId) + ","
-                + "\"processed\":" + result.getProcessed() + ","
-                + "\"updated\":" + result.getUpdated() + ","
-                + "\"skipped\":" + result.getSkipped()
-                + "}";
+        return super.propagate(rootConceptId);
     }
-
     /**
      * 返回最近文章快照摘要。
      *
@@ -1051,22 +776,8 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_snapshot", description = "List recent article snapshots captured from article upserts")
     public String snapshot(@McpToolParam(description = "The max number of snapshots to return") int limit) {
-        SnapshotReport snapshotReport = requireSnapshotService().snapshot(limit);
-        StringBuilder itemsBuilder = new StringBuilder();
-        itemsBuilder.append("[");
-        for (int index = 0; index < snapshotReport.getItems().size(); index++) {
-            if (index > 0) {
-                itemsBuilder.append(",");
-            }
-            itemsBuilder.append(toArticleSnapshotJson(snapshotReport.getItems().get(index)));
-        }
-        itemsBuilder.append("]");
-        return "{"
-                + "\"count\":" + snapshotReport.getTotalSnapshots() + ","
-                + "\"items\":" + itemsBuilder
-                + "}";
+        return super.snapshot(limit);
     }
-
     /**
      * 返回指定概念的文章快照历史。
      *
@@ -1079,25 +790,8 @@ public class LatticeMcpTools {
             @McpToolParam(description = "The articleKey or conceptId to inspect history for") String conceptId,
             @McpToolParam(description = "The max number of history entries to return") int limit
     ) {
-        HistoryReport historyReport = requireHistoryService().history(conceptId, limit);
-        StringBuilder itemsBuilder = new StringBuilder();
-        itemsBuilder.append("[");
-        for (int index = 0; index < historyReport.getItems().size(); index++) {
-            if (index > 0) {
-                itemsBuilder.append(",");
-            }
-            itemsBuilder.append(toArticleSnapshotJson(historyReport.getItems().get(index)));
-        }
-        itemsBuilder.append("]");
-        return "{"
-                + "\"sourceId\":" + historyReport.getSourceId() + ","
-                + "\"articleKey\":" + jsonString(historyReport.getArticleKey()) + ","
-                + "\"conceptId\":" + jsonString(historyReport.getConceptId()) + ","
-                + "\"count\":" + historyReport.getTotalEntries() + ","
-                + "\"items\":" + itemsBuilder
-                + "}";
+        return super.history(conceptId, limit);
     }
-
     /**
      * 将文章恢复到指定快照版本。
      *
@@ -1110,16 +804,8 @@ public class LatticeMcpTools {
             @McpToolParam(description = "The articleKey or conceptId to restore") String conceptId,
             @McpToolParam(description = "The snapshotId to restore from") long snapshotId
     ) {
-        RollbackResult result = requireSnapshotService().rollback(conceptId, snapshotId);
-        return "{"
-                + "\"sourceId\":" + result.getSourceId() + ","
-                + "\"articleKey\":" + jsonString(result.getArticleKey()) + ","
-                + "\"conceptId\":" + jsonString(result.getConceptId()) + ","
-                + "\"restoredSnapshotId\":" + result.getRestoredSnapshotId() + ","
-                + "\"restoredAt\":" + jsonString(formatOffsetDateTime(result.getRestoredAt()))
-                + "}";
+        return super.rollback(conceptId, snapshotId);
     }
-
     /**
      * 返回源文件目录。
      *
@@ -1128,29 +814,8 @@ public class LatticeMcpTools {
      */
     @McpTool(name = "lattice_doc_toc", description = "Return heading hierarchy and line numbers for a source document")
     public String docToc(@McpToolParam(description = "The source file path to inspect") String path) {
-        SourceFileRecord sourceFileRecord = requireSourceFileJdbcRepository().findByPath(path)
-                .orElseThrow(() -> new IllegalArgumentException("source file not found: " + path));
-        List<DocumentSectionSelector.DocumentHeading> headings = requireDocumentSectionSelector().toc(sourceFileRecord.getContentText());
-        StringBuilder itemsBuilder = new StringBuilder();
-        itemsBuilder.append("[");
-        for (int index = 0; index < headings.size(); index++) {
-            if (index > 0) {
-                itemsBuilder.append(",");
-            }
-            DocumentSectionSelector.DocumentHeading heading = headings.get(index);
-            itemsBuilder.append("{")
-                    .append("\"heading\":").append(jsonString(heading.getHeading())).append(",")
-                    .append("\"level\":").append(heading.getLevel()).append(",")
-                    .append("\"line\":").append(heading.getLine())
-                    .append("}");
-        }
-        itemsBuilder.append("]");
-        return "{"
-                + "\"path\":" + jsonString(path) + ","
-                + "\"items\":" + itemsBuilder
-                + "}";
+        return super.docToc(path);
     }
-
     /**
      * 读取源文件指定章节。
      *
@@ -1163,18 +828,8 @@ public class LatticeMcpTools {
             @McpToolParam(description = "The source file path to inspect") String path,
             @McpToolParam(description = "The heading title to read") String heading
     ) {
-        SourceFileRecord sourceFileRecord = requireSourceFileJdbcRepository().findByPath(path)
-                .orElseThrow(() -> new IllegalArgumentException("source file not found: " + path));
-        DocumentSectionSelector.DocumentSection section = requireDocumentSectionSelector()
-                .readSection(sourceFileRecord.getContentText(), heading);
-        return "{"
-                + "\"path\":" + jsonString(path) + ","
-                + "\"heading\":" + jsonString(section.getHeading()) + ","
-                + "\"line\":" + section.getLine() + ","
-                + "\"content\":" + jsonString(section.getContent())
-                + "}";
+        return super.docRead(path, heading);
     }
-
     /**
      * 触发知识库编译。
      *
@@ -1188,15 +843,8 @@ public class LatticeMcpTools {
             @McpToolParam(description = "The source directory to compile") String sourceDir,
             @McpToolParam(description = "Whether to run incremental compile") boolean incremental
     ) throws IOException {
-        Path compileSourceDir = Path.of(sourceDir);
-        CompileResult compileResult = requireCompileApplicationFacade().compile(compileSourceDir, incremental, null);
-        return "{"
-                + "\"persistedCount\":" + compileResult.getPersistedCount() + ","
-                + "\"jobId\":" + jsonString(compileResult.getJobId()) + ","
-                + "\"mode\":" + jsonString(incremental ? "incremental" : "full")
-                + "}";
+        return super.compile(sourceDir, incremental);
     }
-
     /**
      * 返回资料源列表。
      *
@@ -1207,25 +855,8 @@ public class LatticeMcpTools {
     public String sourceList(
             @McpToolParam(description = "The max number of sources to return") int limit
     ) {
-        int safeLimit = limit <= 0 ? 10 : Math.min(limit, 50);
-        KnowledgeSourcePage page = requireSourceService().listSources(null, null, null, 1, safeLimit);
-        StringBuilder itemsBuilder = new StringBuilder();
-        itemsBuilder.append("[");
-        List<KnowledgeSource> items = page.getItems();
-        for (int index = 0; index < items.size(); index++) {
-            if (index > 0) {
-                itemsBuilder.append(",");
-            }
-            itemsBuilder.append(toSourceSummaryJson(items.get(index)));
-        }
-        itemsBuilder.append("]");
-        return "{"
-                + "\"count\":" + items.size() + ","
-                + "\"total\":" + page.getTotal() + ","
-                + "\"items\":" + itemsBuilder
-                + "}";
+        return super.sourceList(limit);
     }
-
     /**
      * 对资料源发起一次同步。
      *
@@ -1237,623 +868,6 @@ public class LatticeMcpTools {
     public String sourceSync(
             @McpToolParam(description = "The sourceId returned by lattice_source_list") long sourceId
     ) throws IOException {
-        SourceSyncRunDetail detail = requireSourceSyncWorkflowService().syncSource(sourceId);
-        return toSourceRunJson(detail);
-    }
-
-    /**
-     * 转换单条 pending 记录为 JSON 对象字符串。
-     *
-     * @param pendingQueryRecord 待确认记录
-     * @return JSON 对象字符串
-     */
-    private String toPendingItemJson(PendingQueryRecord pendingQueryRecord) {
-        return "{"
-                + "\"queryId\":" + jsonString(pendingQueryRecord.getQueryId()) + ","
-                + "\"question\":" + jsonString(pendingQueryRecord.getQuestion()) + ","
-                + "\"answer\":" + jsonString(pendingQueryRecord.getAnswer()) + ","
-                + "\"reviewStatus\":" + jsonString(pendingQueryRecord.getReviewStatus()) + ","
-                + "\"createdAt\":" + jsonString(pendingQueryRecord.getCreatedAt().toString()) + ","
-                + "\"expiresAt\":" + jsonString(pendingQueryRecord.getExpiresAt().toString())
-                + "}";
-    }
-
-    /**
-     * 转换单条搜索命中为 JSON。
-     *
-     * @param queryArticleHit 搜索命中
-     * @return JSON 字符串
-     */
-    private String toSearchItemJson(QueryArticleHit queryArticleHit) {
-        return "{"
-                + "\"evidenceType\":" + jsonString(queryArticleHit.getEvidenceType().name()) + ","
-                + "\"id\":" + jsonString(queryArticleHit.getConceptId()) + ","
-                + "\"title\":" + jsonString(queryArticleHit.getTitle()) + ","
-                + "\"content\":" + jsonString(queryArticleHit.getContent()) + ","
-                + "\"score\":" + queryArticleHit.getScore() + ","
-                + "\"sourcePaths\":" + jsonStringList(queryArticleHit.getSourcePaths())
-                + "}";
-    }
-
-    /**
-     * 转换单条 Lint 问题为 JSON。
-     *
-     * @param lintIssue Lint 问题
-     * @return JSON 字符串
-     */
-    private String toLintIssueJson(LintIssue lintIssue) {
-        return "{"
-                + "\"dimension\":" + jsonString(lintIssue.getDimension()) + ","
-                + "\"targetId\":" + jsonString(lintIssue.getTargetId()) + ","
-                + "\"message\":" + jsonString(lintIssue.getMessage()) + ","
-                + "\"fixable\":" + lintIssue.isFixable() + ","
-                + "\"fixSuggestion\":" + jsonString(lintIssue.getFixSuggestion())
-                + "}";
-    }
-
-    /**
-     * 转换生命周期条目为 JSON。
-     *
-     * @param lifecycleItem 生命周期条目
-     * @return JSON 字符串
-     */
-    private String toLifecycleItemJson(LifecycleItem lifecycleItem) {
-        return "{"
-                + "\"sourceId\":" + lifecycleItem.getSourceId() + ","
-                + "\"articleKey\":" + jsonString(lifecycleItem.getArticleKey()) + ","
-                + "\"conceptId\":" + jsonString(lifecycleItem.getConceptId()) + ","
-                + "\"title\":" + jsonString(lifecycleItem.getTitle()) + ","
-                + "\"lifecycle\":" + jsonString(lifecycleItem.getLifecycle()) + ","
-                + "\"reviewStatus\":" + jsonString(lifecycleItem.getReviewStatus()) + ","
-                + "\"reason\":" + jsonString(lifecycleItem.getReason()) + ","
-                + "\"updatedBy\":" + jsonString(lifecycleItem.getUpdatedBy()) + ","
-                + "\"updatedAt\":" + jsonString(lifecycleItem.getUpdatedAt())
-                + "}";
-    }
-
-    /**
-     * 转换生命周期切换结果为 JSON。
-     *
-     * @param result 生命周期切换结果
-     * @return JSON 字符串
-     */
-    private String toLifecycleTransitionJson(LifecycleTransitionResult result) {
-        return "{"
-                + "\"sourceId\":" + result.getSourceId() + ","
-                + "\"articleKey\":" + jsonString(result.getArticleKey()) + ","
-                + "\"conceptId\":" + jsonString(result.getConceptId()) + ","
-                + "\"title\":" + jsonString(result.getTitle()) + ","
-                + "\"lifecycle\":" + jsonString(result.getLifecycle()) + ","
-                + "\"reason\":" + jsonString(result.getReason()) + ","
-                + "\"updatedBy\":" + jsonString(result.getUpdatedBy()) + ","
-                + "\"updatedAt\":" + jsonString(result.getUpdatedAt())
-                + "}";
-    }
-
-    /**
-     * 转换链接增强条目为 JSON。
-     *
-     * @param item 链接增强条目
-     * @return JSON 字符串
-     */
-    private String toLinkEnhancementItemJson(LinkEnhancementItem item) {
-        return "{"
-                + "\"conceptId\":" + jsonString(item.getConceptId()) + ","
-                + "\"title\":" + jsonString(item.getTitle()) + ","
-                + "\"updated\":" + item.isUpdated() + ","
-                + "\"fixedLinkCount\":" + item.getFixedLinkCount() + ","
-                + "\"syncedSectionCount\":" + item.getSyncedSectionCount() + ","
-                + "\"unresolvedLinks\":" + jsonStringList(item.getUnresolvedLinks())
-                + "}";
-    }
-
-    /**
-     * 转换 inspection 问题为 JSON。
-     *
-     * @param inspectionQuestion inspection 问题
-     * @return JSON 字符串
-     */
-    private String toInspectionQuestionJson(InspectionQuestion inspectionQuestion) {
-        return "{"
-                + "\"id\":" + jsonString(inspectionQuestion.getId()) + ","
-                + "\"type\":" + jsonString(inspectionQuestion.getType()) + ","
-                + "\"question\":" + jsonString(inspectionQuestion.getQuestion()) + ","
-                + "\"prompt\":" + jsonString(inspectionQuestion.getPrompt()) + ","
-                + "\"suggestedAnswer\":" + jsonString(inspectionQuestion.getSuggestedAnswer()) + ","
-                + "\"sourcePaths\":" + jsonStringList(inspectionQuestion.getSourcePaths()) + ","
-                + "\"reviewStatus\":" + jsonString(inspectionQuestion.getReviewStatus()) + ","
-                + "\"createdAt\":" + jsonString(inspectionQuestion.getCreatedAt()) + ","
-                + "\"expiresAt\":" + jsonString(inspectionQuestion.getExpiresAt())
-                + "}";
-    }
-
-    /**
-     * 转换传播影响项为 JSON。
-     *
-     * @param propagationItem 传播影响项
-     * @return JSON 字符串
-     */
-    private String toPropagationItemJson(PropagationItem propagationItem) {
-        return "{"
-                + "\"conceptId\":" + jsonString(propagationItem.getConceptId()) + ","
-                + "\"title\":" + jsonString(propagationItem.getTitle()) + ","
-                + "\"depth\":" + propagationItem.getDepth() + ","
-                + "\"triggers\":" + jsonStringList(propagationItem.getTriggers())
-                + "}";
-    }
-
-    /**
-     * 转换文章快照为 JSON。
-     *
-     * @param articleSnapshotRecord 文章快照
-     * @return JSON 字符串
-     */
-    private String toArticleSnapshotJson(ArticleSnapshotRecord articleSnapshotRecord) {
-        return "{"
-                + "\"snapshotId\":" + articleSnapshotRecord.getSnapshotId() + ","
-                + "\"sourceId\":" + articleSnapshotRecord.getSourceId() + ","
-                + "\"articleKey\":" + jsonString(articleSnapshotRecord.getArticleKey()) + ","
-                + "\"conceptId\":" + jsonString(articleSnapshotRecord.getConceptId()) + ","
-                + "\"title\":" + jsonString(articleSnapshotRecord.getTitle()) + ","
-                + "\"summary\":" + jsonString(articleSnapshotRecord.getSummary()) + ","
-                + "\"lifecycle\":" + jsonString(articleSnapshotRecord.getLifecycle()) + ","
-                + "\"reviewStatus\":" + jsonString(articleSnapshotRecord.getReviewStatus()) + ","
-                + "\"compiledAt\":" + jsonString(articleSnapshotRecord.getCompiledAt() == null
-                        ? null
-                        : articleSnapshotRecord.getCompiledAt().toString()) + ","
-                + "\"capturedAt\":" + jsonString(articleSnapshotRecord.getCapturedAt() == null
-                        ? null
-                        : articleSnapshotRecord.getCapturedAt().toString()) + ","
-                + "\"snapshotReason\":" + jsonString(articleSnapshotRecord.getSnapshotReason())
-                + "}";
-    }
-
-    /**
-     * 转换资料源摘要为 JSON。
-     *
-     * @param knowledgeSource 资料源
-     * @return JSON 字符串
-     */
-    private String toSourceSummaryJson(KnowledgeSource knowledgeSource) {
-        return "{"
-                + "\"id\":" + knowledgeSource.getId() + ","
-                + "\"sourceCode\":" + jsonString(knowledgeSource.getSourceCode()) + ","
-                + "\"name\":" + jsonString(knowledgeSource.getName()) + ","
-                + "\"sourceType\":" + jsonString(knowledgeSource.getSourceType()) + ","
-                + "\"contentProfile\":" + jsonString(knowledgeSource.getContentProfile()) + ","
-                + "\"status\":" + jsonString(knowledgeSource.getStatus()) + ","
-                + "\"defaultSyncMode\":" + jsonString(knowledgeSource.getDefaultSyncMode()) + ","
-                + "\"lastSyncStatus\":" + jsonString(knowledgeSource.getLastSyncStatus()) + ","
-                + "\"lastSyncAt\":" + jsonString(formatOffsetDateTime(knowledgeSource.getLastSyncAt()))
-                + "}";
-    }
-
-    /**
-     * 转换资料源同步运行详情为 JSON。
-     *
-     * @param detail 同步运行详情
-     * @return JSON 字符串
-     */
-    private String toSourceRunJson(SourceSyncRunDetail detail) {
-        return "{"
-                + "\"runId\":" + detail.getRunId() + ","
-                + "\"sourceId\":" + detail.getSourceId() + ","
-                + "\"sourceName\":" + jsonString(detail.getSourceName()) + ","
-                + "\"sourceType\":" + jsonString(detail.getSourceType()) + ","
-                + "\"status\":" + jsonString(detail.getStatus()) + ","
-                + "\"resolverMode\":" + jsonString(detail.getResolverMode()) + ","
-                + "\"resolverDecision\":" + jsonString(detail.getResolverDecision()) + ","
-                + "\"syncAction\":" + jsonString(detail.getSyncAction()) + ","
-                + "\"matchedSourceId\":" + detail.getMatchedSourceId() + ","
-                + "\"compileJobId\":" + jsonString(detail.getCompileJobId()) + ","
-                + "\"compileJobStatus\":" + jsonString(detail.getCompileJobStatus()) + ","
-                + "\"compileDerivedStatus\":" + jsonString(detail.getCompileDerivedStatus()) + ","
-                + "\"compileCurrentStep\":" + jsonString(detail.getCompileCurrentStep()) + ","
-                + "\"compileProgressCurrent\":" + detail.getCompileProgressCurrent() + ","
-                + "\"compileProgressTotal\":" + detail.getCompileProgressTotal() + ","
-                + "\"compileProgressMessage\":" + jsonString(detail.getCompileProgressMessage()) + ","
-                + "\"displayStatus\":" + jsonString(detail.getDisplayStatus()) + ","
-                + "\"displayStatusLabel\":" + jsonString(detail.getDisplayStatusLabel()) + ","
-                + "\"currentStepLabel\":" + jsonString(detail.getCurrentStepLabel()) + ","
-                + "\"nextStepHint\":" + jsonString(detail.getNextStepHint()) + ","
-                + "\"progressText\":" + jsonString(detail.getProgressText()) + ","
-                + "\"reasonSummary\":" + jsonString(detail.getReasonSummary()) + ","
-                + "\"operationalNote\":" + jsonString(detail.getOperationalNote()) + ","
-                + "\"displayTone\":" + jsonString(detail.getDisplayTone()) + ","
-                + "\"processingActive\":" + detail.isProcessingActive() + ","
-                + "\"requiresManualAction\":" + detail.isRequiresManualAction() + ","
-                + "\"noticeTone\":" + jsonString(detail.getNoticeTone()) + ","
-                + "\"completionNotice\":" + jsonString(detail.getCompletionNotice()) + ","
-                + "\"manifestHash\":" + jsonString(detail.getManifestHash()) + ","
-                + "\"message\":" + jsonString(detail.getMessage()) + ","
-                + "\"errorMessage\":" + jsonString(detail.getErrorMessage()) + ","
-                + "\"sourceNames\":" + jsonStringList(detail.getSourceNames()) + ","
-                + "\"actions\":" + jsonTaskActions(detail.getActions()) + ","
-                + "\"progressSteps\":" + jsonTaskSteps(detail.getProgressSteps()) + ","
-                + "\"requestedAt\":" + jsonString(detail.getRequestedAt()) + ","
-                + "\"updatedAt\":" + jsonString(detail.getUpdatedAt()) + ","
-                + "\"startedAt\":" + jsonString(detail.getStartedAt()) + ","
-                + "\"finishedAt\":" + jsonString(detail.getFinishedAt())
-                + "}";
-    }
-
-    /**
-     * 将字符串列表转为 JSON 数组。
-     *
-     * @param values 字符串列表
-     * @return JSON 数组
-     */
-    private String jsonStringList(List<String> values) {
-        if (values == null) {
-            return "[]";
-        }
-        StringBuilder builder = new StringBuilder();
-        builder.append("[");
-        for (int index = 0; index < values.size(); index++) {
-            if (index > 0) {
-                builder.append(",");
-            }
-            builder.append(jsonString(values.get(index)));
-        }
-        builder.append("]");
-        return builder.toString();
-    }
-
-    private String jsonTaskActions(List<com.xbk.lattice.api.admin.AdminProcessingTaskActionResponse> actions) {
-        if (actions == null) {
-            return "[]";
-        }
-        StringBuilder builder = new StringBuilder();
-        builder.append("[");
-        for (int index = 0; index < actions.size(); index++) {
-            com.xbk.lattice.api.admin.AdminProcessingTaskActionResponse action = actions.get(index);
-            if (index > 0) {
-                builder.append(",");
-            }
-            builder.append("{")
-                    .append("\"actionKey\":").append(jsonString(action.getActionKey())).append(",")
-                    .append("\"label\":").append(jsonString(action.getLabel())).append(",")
-                    .append("\"buttonClass\":").append(jsonString(action.getButtonClass())).append(",")
-                    .append("\"runId\":").append(action.getRunId()).append(",")
-                    .append("\"sourceId\":").append(action.getSourceId()).append(",")
-                    .append("\"decision\":").append(jsonString(action.getDecision())).append(",")
-                    .append("\"decisionSourceId\":").append(action.getDecisionSourceId()).append(",")
-                    .append("\"uploadRetry\":").append(action.isUploadRetry())
-                    .append("}");
-        }
-        builder.append("]");
-        return builder.toString();
-    }
-
-    private String jsonTaskSteps(List<com.xbk.lattice.api.admin.AdminProcessingTaskStepResponse> steps) {
-        if (steps == null) {
-            return "[]";
-        }
-        StringBuilder builder = new StringBuilder();
-        builder.append("[");
-        for (int index = 0; index < steps.size(); index++) {
-            com.xbk.lattice.api.admin.AdminProcessingTaskStepResponse step = steps.get(index);
-            if (index > 0) {
-                builder.append(",");
-            }
-            builder.append("{")
-                    .append("\"key\":").append(jsonString(step.getKey())).append(",")
-                    .append("\"label\":").append(jsonString(step.getLabel())).append(",")
-                    .append("\"status\":").append(jsonString(step.getStatus())).append(",")
-                    .append("\"detail\":").append(jsonString(step.getDetail()))
-                    .append("}");
-        }
-        builder.append("]");
-        return builder.toString();
-    }
-
-    /**
-     * 生成字符串预览。
-     *
-     * @param value 原始字符串
-     * @param limit 最大长度
-     * @return 预览文本
-     */
-    private String preview(String value, int limit) {
-        if (value == null || value.length() <= limit) {
-            return value;
-        }
-        return value.substring(0, limit);
-    }
-
-    /**
-     * 把 OffsetDateTime 格式化为稳定 JSON 输出。
-     *
-     * @param value 时间值
-     * @return 格式化后的时间字符串
-     */
-    private String formatOffsetDateTime(OffsetDateTime value) {
-        if (value == null) {
-            return null;
-        }
-        return value.format(JSON_DATE_TIME_FORMATTER);
-    }
-
-    /**
-     * 获取源文件仓储。
-     *
-     * @return 源文件仓储
-     */
-    private SourceFileJdbcRepository requireSourceFileJdbcRepository() {
-        if (sourceFileJdbcRepository == null) {
-            throw new UnsupportedOperationException("sourceFileJdbcRepository not configured");
-        }
-        return sourceFileJdbcRepository;
-    }
-
-    /**
-     * 获取文档章节选择器。
-     *
-     * @return 文档章节选择器
-     */
-    private DocumentSectionSelector requireDocumentSectionSelector() {
-        if (documentSectionSelector == null) {
-            throw new UnsupportedOperationException("documentSectionSelector not configured");
-        }
-        return documentSectionSelector;
-    }
-
-    /**
-     * 获取知识检索服务。
-     *
-     * @return 知识检索服务
-     */
-    private KnowledgeSearchService requireKnowledgeSearchService() {
-        if (knowledgeSearchService == null) {
-            throw new UnsupportedOperationException("knowledgeSearchService not configured");
-        }
-        return knowledgeSearchService;
-    }
-
-    /**
-     * 获取知识详情服务。
-     *
-     * @return 知识详情服务
-     */
-    private KnowledgeLookupService requireKnowledgeLookupService() {
-        if (knowledgeLookupService == null) {
-            throw new UnsupportedOperationException("knowledgeLookupService not configured");
-        }
-        return knowledgeLookupService;
-    }
-
-    /**
-     * 获取状态服务。
-     *
-     * @return 状态服务
-     */
-    private StatusService requireStatusService() {
-        if (statusService == null) {
-            throw new UnsupportedOperationException("statusService not configured");
-        }
-        return statusService;
-    }
-
-    /**
-     * 获取 Lint 服务。
-     *
-     * @return Lint 服务
-     */
-    private LintService requireLintService() {
-        if (lintService == null) {
-            throw new UnsupportedOperationException("lintService not configured");
-        }
-        return lintService;
-    }
-
-    /**
-     * 获取 lint 自动修复服务。
-     *
-     * @return lint 自动修复服务
-     */
-    private LintFixService requireLintFixService() {
-        if (lintFixService == null) {
-            throw new UnsupportedOperationException("lintFixService not configured");
-        }
-        return lintFixService;
-    }
-
-    /**
-     * 获取质量指标服务。
-     *
-     * @return 质量指标服务
-     */
-    private QualityMetricsService requireQualityMetricsService() {
-        if (qualityMetricsService == null) {
-            throw new UnsupportedOperationException("qualityMetricsService not configured");
-        }
-        return qualityMetricsService;
-    }
-
-    /**
-     * 获取覆盖率跟踪服务。
-     *
-     * @return 覆盖率跟踪服务
-     */
-    private CoverageTrackingService requireCoverageTrackingService() {
-        if (coverageTrackingService == null) {
-            throw new UnsupportedOperationException("coverageTrackingService not configured");
-        }
-        return coverageTrackingService;
-    }
-
-    /**
-     * 获取遗漏跟踪服务。
-     *
-     * @return 遗漏跟踪服务
-     */
-    private OmissionTrackingService requireOmissionTrackingService() {
-        if (omissionTrackingService == null) {
-            throw new UnsupportedOperationException("omissionTrackingService not configured");
-        }
-        return omissionTrackingService;
-    }
-
-    /**
-     * 获取生命周期服务。
-     *
-     * @return 生命周期服务
-     */
-    private LifecycleService requireLifecycleService() {
-        if (lifecycleService == null) {
-            throw new UnsupportedOperationException("lifecycleService not configured");
-        }
-        return lifecycleService;
-    }
-
-    /**
-     * 获取链接增强服务。
-     *
-     * @return 链接增强服务
-     */
-    private LinkEnhancementService requireLinkEnhancementService() {
-        if (linkEnhancementService == null) {
-            throw new UnsupportedOperationException("linkEnhancementService not configured");
-        }
-        return linkEnhancementService;
-    }
-
-    /**
-     * 获取统一编译应用门面。
-     *
-     * @return 编译应用门面
-     */
-    private CompileApplicationFacade requireCompileApplicationFacade() {
-        if (compileApplicationFacade == null) {
-            throw new UnsupportedOperationException("compileApplicationFacade not configured");
-        }
-        return compileApplicationFacade;
-    }
-
-    /**
-     * 获取 inspect 服务。
-     *
-     * @return inspect 服务
-     */
-    private InspectService requireInspectService() {
-        if (inspectService == null) {
-            throw new UnsupportedOperationException("inspectService not configured");
-        }
-        return inspectService;
-    }
-
-    /**
-     * 获取 inspection 答案导入服务。
-     *
-     * @return inspection 答案导入服务
-     */
-    private InspectionAnswerImportService requireInspectionAnswerImportService() {
-        if (inspectionAnswerImportService == null) {
-            throw new UnsupportedOperationException("inspectionAnswerImportService not configured");
-        }
-        return inspectionAnswerImportService;
-    }
-
-    /**
-     * 获取文章纠错服务。
-     *
-     * @return 文章纠错服务
-     */
-    private ArticleCorrectionService requireArticleCorrectionService() {
-        if (articleCorrectionService == null) {
-            throw new UnsupportedOperationException("articleCorrectionService not configured");
-        }
-        return articleCorrectionService;
-    }
-
-    /**
-     * 获取传播执行服务。
-     *
-     * @return 传播执行服务
-     */
-    private PropagateExecutionService requirePropagateExecutionService() {
-        if (propagateExecutionService == null) {
-            throw new UnsupportedOperationException("propagateExecutionService not configured");
-        }
-        return propagateExecutionService;
-    }
-
-    /**
-     * 获取传播服务。
-     *
-     * @return 传播服务
-     */
-    private PropagationService requirePropagationService() {
-        if (propagationService == null) {
-            throw new UnsupportedOperationException("propagationService not configured");
-        }
-        return propagationService;
-    }
-
-    /**
-     * 获取快照服务。
-     *
-     * @return 快照服务
-     */
-    private SnapshotService requireSnapshotService() {
-        if (snapshotService == null) {
-            throw new UnsupportedOperationException("snapshotService not configured");
-        }
-        return snapshotService;
-    }
-
-    /**
-     * 获取历史服务。
-     *
-     * @return 历史服务
-     */
-    private HistoryService requireHistoryService() {
-        if (historyService == null) {
-            throw new UnsupportedOperationException("historyService not configured");
-        }
-        return historyService;
-    }
-
-    /**
-     * 获取资料源服务。
-     *
-     * @return 资料源服务
-     */
-    private SourceService requireSourceService() {
-        if (sourceService == null) {
-            throw new UnsupportedOperationException("sourceService not configured");
-        }
-        return sourceService;
-    }
-
-    /**
-     * 获取资料源同步工作流服务。
-     *
-     * @return 资料源同步工作流服务
-     */
-    private SourceSyncWorkflowService requireSourceSyncWorkflowService() {
-        if (sourceSyncWorkflowService == null) {
-            throw new UnsupportedOperationException("sourceSyncWorkflowService not configured");
-        }
-        return sourceSyncWorkflowService;
-    }
-
-    /**
-     * 将字符串转义为 JSON 字符串值（含双引号），处理 null 值与特殊字符。
-     *
-     * @param value 原始字符串
-     * @return JSON 字符串表达
-     */
-    private String jsonString(String value) {
-        if (value == null) {
-            return "null";
-        }
-        String escaped = value
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
-        return "\"" + escaped + "\"";
+        return super.sourceSync(sourceId);
     }
 }

@@ -140,7 +140,7 @@ class LatticeHttpClientTests {
                         {
                           "evidenceType": "VECTOR",
                           "sourceId": 7,
-                          "articleKey": "legacy-default--adr",
+                          "articleKey": "default-source--adr",
                           "conceptId": "adr",
                           "title": "Adr",
                           "content": "订单服务不直接同步调用库存服务",
@@ -169,7 +169,7 @@ class LatticeHttpClientTests {
 
             assertThat(searchResponse.getCount()).isEqualTo(1);
             assertThat(searchResponse.getItems()).hasSize(1);
-            assertThat(searchResponse.getItems().getFirst().getArticleKey()).isEqualTo("legacy-default--adr");
+            assertThat(searchResponse.getItems().getFirst().getArticleKey()).isEqualTo("default-source--adr");
             assertThat(searchResponse.getItems().getFirst().getSourceId()).isEqualTo(7L);
         }
         finally {

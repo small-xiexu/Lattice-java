@@ -6,7 +6,8 @@
 
     <resultMap id="ContributionRecordResultMap" type="com.xbk.lattice.infra.persistence.ContributionRecord">
         <constructor>
-            <arg column="id" javaType="java.util.UUID"/>
+            <arg column="id" javaType="java.util.UUID"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.PostgresUuidTypeHandler"/>
             <arg column="question" javaType="java.lang.String"/>
             <arg column="answer" javaType="java.lang.String"/>
             <arg column="corrections_json" javaType="java.lang.String"/>
@@ -37,7 +38,7 @@
             question_tsv, answer_tsv, corrections_tsv
         )
         values (
-            #{record.id},
+            #{record.id,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresUuidTypeHandler},
             #{record.question},
             #{record.answer},
             #{record.correctionsJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},

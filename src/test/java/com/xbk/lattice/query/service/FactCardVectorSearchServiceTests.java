@@ -7,7 +7,6 @@ import org.springframework.ai.embedding.Embedding;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -315,7 +314,7 @@ class FactCardVectorSearchServiceTests {
          * @param hits 预置命中
          */
         private CapturingFactCardVectorJdbcRepository(boolean failSearch, List<QueryArticleHit> hits) {
-            super(new JdbcTemplate());
+            super(null);
             this.failSearch = failSearch;
             this.hits = hits;
         }

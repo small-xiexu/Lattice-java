@@ -30,7 +30,7 @@ public class ConfiguredVectorEmbeddingService {
 
     private final EmbeddingClientFactory embeddingClientFactory;
 
-    private final EmbeddingModel legacyEmbeddingModel;
+    private final EmbeddingModel directEmbeddingModel;
 
     /**
      * 创建可配置向量 embedding 服务。
@@ -73,7 +73,7 @@ public class ConfiguredVectorEmbeddingService {
      * @param querySearchProperties 查询检索配置
      * @param embeddingRouteResolver embedding 路由解析器
      * @param embeddingClientFactory embedding 客户端工厂
-     * @param embeddingModel legacy embedding 模型
+     * @param embeddingModel property embedding 模型
      */
     ConfiguredVectorEmbeddingService(
             QuerySearchProperties querySearchProperties,
@@ -84,7 +84,7 @@ public class ConfiguredVectorEmbeddingService {
         this.querySearchProperties = querySearchProperties;
         this.embeddingRouteResolver = embeddingRouteResolver;
         this.embeddingClientFactory = embeddingClientFactory;
-        this.legacyEmbeddingModel = embeddingModel;
+        this.directEmbeddingModel = embeddingModel;
     }
 
     /**
@@ -93,7 +93,7 @@ public class ConfiguredVectorEmbeddingService {
      * @return 是否可用
      */
     public boolean isAvailable() {
-        return legacyEmbeddingModel != null || querySearchProperties.getVector().getEmbeddingModelProfileId() != null;
+        return directEmbeddingModel != null || querySearchProperties.getVector().getEmbeddingModelProfileId() != null;
     }
 
     /**
@@ -106,7 +106,7 @@ public class ConfiguredVectorEmbeddingService {
         if (profileId != null && embeddingRouteResolver != null) {
             return embeddingRouteResolver.resolve(profileId).getModelName();
         }
-        if (legacyEmbeddingModel == null) {
+        if (directEmbeddingModel == null) {
             return "";
         }
         String configuredModelName = querySearchProperties.getVector().getEmbeddingModel();
@@ -127,7 +127,7 @@ public class ConfiguredVectorEmbeddingService {
             Integer expectedDimensions = embeddingRouteResolver.resolve(profileId).getExpectedDimensions();
             return expectedDimensions == null ? 0 : expectedDimensions.intValue();
         }
-        if (legacyEmbeddingModel == null) {
+        if (directEmbeddingModel == null) {
             return 0;
         }
         return querySearchProperties.getVector().getExpectedDimensions();
@@ -171,10 +171,10 @@ public class ConfiguredVectorEmbeddingService {
             );
             return response.getResult().getOutput();
         }
-        if (legacyEmbeddingModel == null) {
+        if (directEmbeddingModel == null) {
             throw new IllegalStateException("Embedding profile is not configured");
         }
-        return executeLegacyEmbedding(text, startedAt);
+        return executeDirectEmbedding(text, startedAt);
     }
 
     /**
@@ -186,15 +186,15 @@ public class ConfiguredVectorEmbeddingService {
         return querySearchProperties.getVector().getEmbeddingModelProfileId();
     }
 
-    private float[] executeLegacyEmbedding(String text, long startedAt) {
-        EmbeddingRequest request = new EmbeddingRequest(List.of(text), buildLegacyEmbeddingOptions());
-        EmbeddingResponse response = legacyEmbeddingModel.call(request);
+    private float[] executeDirectEmbedding(String text, long startedAt) {
+        EmbeddingRequest request = new EmbeddingRequest(List.of(text), buildDirectEmbeddingOptions());
+        EmbeddingResponse response = directEmbeddingModel.call(request);
         if (response == null || response.getResult() == null) {
             log.info(
                     "[VECTOR][EMBED] profileId={}, modelName={}, providerType={}, dimensions={}, latencyMs={}, success=false",
                     null,
                     getConfiguredModelName(),
-                    "legacy",
+                    "property",
                     getConfiguredExpectedDimensions(),
                     System.currentTimeMillis() - startedAt
             );
@@ -204,7 +204,7 @@ public class ConfiguredVectorEmbeddingService {
                 "[VECTOR][EMBED] profileId={}, modelName={}, providerType={}, dimensions={}, latencyMs={}, success=true",
                 null,
                 getConfiguredModelName(),
-                "legacy",
+                "property",
                 getConfiguredExpectedDimensions(),
                 System.currentTimeMillis() - startedAt
         );
@@ -227,7 +227,7 @@ public class ConfiguredVectorEmbeddingService {
         return new EmbeddingRequest(List.of(text), builder.build());
     }
 
-    private OpenAiEmbeddingOptions buildLegacyEmbeddingOptions() {
+    private OpenAiEmbeddingOptions buildDirectEmbeddingOptions() {
         OpenAiEmbeddingOptions.Builder builder = OpenAiEmbeddingOptions.builder();
         String configuredModelName = querySearchProperties.getVector().getEmbeddingModel();
         if (configuredModelName != null && !configuredModelName.trim().isBlank()) {

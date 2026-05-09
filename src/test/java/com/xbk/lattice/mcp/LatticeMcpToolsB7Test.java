@@ -399,7 +399,7 @@ class LatticeMcpToolsB7Test {
                                         true,
                                         1,
                                         2,
-                                        List.of("Unknown Legacy Doc")
+                                        List.of("Unknown Archive Doc")
                                 )
                         )
                 ))
@@ -410,7 +410,7 @@ class LatticeMcpToolsB7Test {
         assertThat(result).contains("\"processedArticleCount\":4");
         assertThat(result).contains("\"updatedArticleCount\":1");
         assertThat(result).contains("\"fixedLinkCount\":1");
-        assertThat(result).contains("\"unresolvedLinks\":[\"Unknown Legacy Doc\"]");
+        assertThat(result).contains("\"unresolvedLinks\":[\"Unknown Archive Doc\"]");
     }
 
     /**

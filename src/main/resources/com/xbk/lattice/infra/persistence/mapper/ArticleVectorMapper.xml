@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.ArticleVectorMapper">
+
+    <resultMap id="ArticleVectorRecordResultMap" type="com.xbk.lattice.infra.persistence.ArticleVectorRecord">
+        <constructor>
+            <arg column="article_key" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="model_profile_id" javaType="java.lang.Long"/>
+            <arg column="embedding_dimensions" javaType="_int"/>
+            <arg column="index_version" javaType="java.lang.String"/>
+            <arg column="content_hash" javaType="java.lang.String"/>
+            <arg column="embedding" javaType="[F"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.PgVectorFloatArrayTypeHandler"/>
+            <arg column="updated_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="QueryArticleHitResultMap" type="com.xbk.lattice.query.service.QueryArticleHit">
+        <constructor>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="article_key" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="content" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="review_status" javaType="java.lang.String"/>
+            <arg column="source_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="score" javaType="_double"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="upsert">
+        insert into article_vector_index (
+            article_key, concept_id, model_profile_id, embedding_dimensions,
+            index_version, content_hash, embedding, updated_at
+        )
+        values (
+            #{record.articleKey},
+            #{record.conceptId},
+            #{record.modelProfileId},
+            #{record.embeddingDimensions},
+            #{record.indexVersion},
+            #{record.contentHash},
+            cast(#{vectorLiteral} as ${vectorTypeName}),
+            #{record.updatedAt}
+        )
+        on conflict (article_key) do update
+        set concept_id = excluded.concept_id,
+            model_profile_id = excluded.model_profile_id,
+            embedding_dimensions = excluded.embedding_dimensions,
+            index_version = excluded.index_version,
+            content_hash = excluded.content_hash,
+            embedding = excluded.embedding,
+            updated_at = excluded.updated_at
+    </insert>
+
+    <select id="findByArticleKey" resultMap="ArticleVectorRecordResultMap">
+        select article_key, concept_id, model_profile_id, embedding_dimensions, index_version,
+               content_hash, embedding::text as embedding, updated_at
+        from article_vector_index
+        where article_key = #{articleKey}
+    </select>
+
+    <select id="countAll" resultType="_int">
+        select count(*)
+        from article_vector_index
+    </select>
+
+    <delete id="deleteAll">
+        delete from article_vector_index
+    </delete>
+
+    <update id="alignEmbeddingColumnDimensions">
+        alter table article_vector_index alter column embedding type ${vectorTypeName}(${targetDimensions})
+    </update>
+
+    <update id="createHnswIndex">
+        create index if not exists ${indexName}
+        on article_vector_index using hnsw (embedding ${opClass})
+    </update>
+
+    <update id="createIvfflatIndex">
+        create index if not exists ${indexName}
+        on article_vector_index using ivfflat (embedding ${opClass}) with (lists = 100)
+    </update>
+
+    <select id="findLatestUpdatedAt" resultType="java.time.OffsetDateTime">
+        select updated_at
+        from article_vector_index
+        order by updated_at desc
+        limit 1
+    </select>
+
+    <select id="findDistinctModelNames" resultType="java.lang.String">
+        select distinct profile.model_name
+        from article_vector_index vector_index
+        join llm_model_profiles profile on profile.id = vector_index.model_profile_id
+        order by profile.model_name asc
+    </select>
+
+    <select id="findEmbeddingColumnType" resultType="java.lang.String">
+        select format_type(a.atttypid, a.atttypmod)
+        from pg_attribute a
+        join pg_class c on c.oid = a.attrelid
+        join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = current_schema()
+          and c.relname = 'article_vector_index'
+          and a.attname = 'embedding'
+          and a.attnum > 0
+          and not a.attisdropped
+    </select>
+
+    <select id="findEmbeddingAnnIndexType" resultType="java.lang.String">
+        select am.amname
+        from pg_index idx
+        join pg_class index_rel on index_rel.oid = idx.indexrelid
+        join pg_class table_rel on table_rel.oid = idx.indrelid
+        join pg_namespace namespace_rel on namespace_rel.oid = table_rel.relnamespace
+        join pg_am am on am.oid = index_rel.relam
+        join pg_attribute attr on attr.attrelid = table_rel.oid
+        where namespace_rel.nspname = current_schema()
+          and table_rel.relname = 'article_vector_index'
+          and attr.attname = 'embedding'
+          and attr.attnum = any(idx.indkey)
+        order by index_rel.relname asc
+        limit 1
+    </select>
+
+    <select id="searchNearestNeighbors" resultMap="QueryArticleHitResultMap">
+        select a.source_id,
+               a.article_key,
+               a.concept_id,
+               a.title,
+               a.content,
+               a.metadata_json::text as metadata_json,
+               a.review_status,
+               a.source_paths,
+               1 - (v.embedding ${distanceOperator} cast(#{vectorLiteral} as ${vectorTypeName})) as score
+        from article_vector_index v
+        join articles a on a.article_key = v.article_key
+        order by v.embedding ${distanceOperator} cast(#{vectorLiteral} as ${vectorTypeName}),
+                 a.compiled_at desc
+        limit #{limit}
+    </select>
+
+    <select id="resolveVectorTypeName" resultType="java.lang.String">
+        select coalesce(to_regtype('vector')::text, to_regtype('public.vector')::text, '')
+    </select>
+
+    <select id="resolvePreferredAnnIndexMethod" resultType="java.lang.String">
+        select amname
+        from pg_am
+        where amname in ('hnsw','ivfflat')
+        order by case amname when 'hnsw' then 0 else 1 end
+        limit 1
+    </select>
+
+    <select id="resolveVectorOperatorClass" resultType="java.lang.String">
+        select opcnamespace::regnamespace || '.vector_cosine_ops'
+        from pg_opclass
+        where opcname = 'vector_cosine_ops'
+        order by oid asc
+        limit 1
+    </select>
+
+    <update id="dropIndex">
+        drop index if exists ${indexName}
+    </update>
+</mapper>

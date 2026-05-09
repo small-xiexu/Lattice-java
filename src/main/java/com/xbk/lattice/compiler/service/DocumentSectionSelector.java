@@ -18,7 +18,7 @@ public class DocumentSectionSelector {
 
     private static final Pattern MARKDOWN_HEADING_PATTERN = Pattern.compile("^(#{1,6})\\s+(.+?)\\s*$");
 
-    private static final Pattern LEGACY_HEADING_PATTERN = Pattern.compile("^===\\s+(.+?)\\s*$");
+    private static final Pattern SOURCE_MARKER_HEADING_PATTERN = Pattern.compile("^===\\s+(.+?)\\s*$");
 
     /**
      * 选择与概念相关的内容片段。
@@ -38,7 +38,7 @@ public class DocumentSectionSelector {
         List<DocumentHeading> headings = toc(content);
         List<String> matchedSections = collectMatchedMarkdownSections(content, conceptTerms, headings);
         if (matchedSections.isEmpty()) {
-            matchedSections = collectMatchedLegacySections(content, conceptTerms);
+            matchedSections = collectMatchedSourceMarkerSections(content, conceptTerms);
         }
         String selected = matchedSections.isEmpty() ? content : String.join("\n\n", matchedSections);
         if (selected.length() <= maxChars) {
@@ -76,13 +76,13 @@ public class DocumentSectionSelector {
     }
 
     /**
-     * 收集命中概念关键词的旧版分隔章节。
+     * 收集命中概念关键词的二进制分隔章节。
      *
      * @param content 原始内容
      * @param conceptTerms 概念关键词
      * @return 命中的章节正文
      */
-    private List<String> collectMatchedLegacySections(String content, List<String> conceptTerms) {
+    private List<String> collectMatchedSourceMarkerSections(String content, List<String> conceptTerms) {
         String[] sections = content.split("(?m)^=== ");
         List<String> matchedSections = new ArrayList<String>();
         for (String section : sections) {
@@ -188,9 +188,9 @@ public class DocumentSectionSelector {
                     lineNumber
             );
         }
-        Matcher legacyMatcher = LEGACY_HEADING_PATTERN.matcher(line);
-        if (legacyMatcher.matches()) {
-            return new DocumentHeading(normalizeHeading(legacyMatcher.group(1)), 1, lineNumber);
+        Matcher sourceMarkerMatcher = SOURCE_MARKER_HEADING_PATTERN.matcher(line);
+        if (sourceMarkerMatcher.matches()) {
+            return new DocumentHeading(normalizeHeading(sourceMarkerMatcher.group(1)), 1, lineNumber);
         }
         return null;
     }

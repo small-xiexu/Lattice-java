@@ -1,5 +1,7 @@
 package com.xbk.lattice.query.service;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.llm.service.PromptCacheWritePolicy;
@@ -25,7 +27,7 @@ import java.util.regex.Pattern;
 @Service
 public class ReviewResultParser {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private static final Pattern ISSUE_PATTERN = Pattern.compile(
             "(?:问题|Issue|缺失|missing|遗漏|incorrect)[^\\n]*?：?\\s*([^\\n]{10,200})",

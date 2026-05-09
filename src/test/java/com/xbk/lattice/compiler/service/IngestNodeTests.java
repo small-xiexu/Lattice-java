@@ -189,12 +189,12 @@ class IngestNodeTests {
         Path pdfPath = docsDir.resolve("timeout.pdf");
         Path excelPath = docsDir.resolve("codes.xlsx");
         Path wordPath = docsDir.resolve("brief.docx");
-        Path legacyWordPath = docsDir.resolve("legacy-brief.doc");
+        Path binaryWordPath = docsDir.resolve("binary-brief.doc");
         Path pptPath = docsDir.resolve("briefing.pptx");
         writeSimplePdf(pdfPath, "Payment timeout retry = 3");
         writeSimpleWorkbook(excelPath);
         writeSimpleWord(wordPath);
-        writeLegacyWord(legacyWordPath);
+        writeBinaryWord(binaryWordPath);
         writeSimplePresentation(pptPath);
 
         CompilerProperties properties = new CompilerProperties();
@@ -216,7 +216,7 @@ class IngestNodeTests {
                 .filter(rawSource -> "docx".equals(rawSource.getFormat()))
                 .findFirst()
                 .orElseThrow();
-        RawSource legacyWordSource = rawSources.stream()
+        RawSource binaryWordSource = rawSources.stream()
                 .filter(rawSource -> "doc".equals(rawSource.getFormat()))
                 .findFirst()
                 .orElseThrow();
@@ -242,12 +242,12 @@ class IngestNodeTests {
         assertThat(wordSource.getMetadataJson()).contains("paragraphCount");
         assertThat(wordSource.getContent()).contains("Payment timeout recovery");
         assertThat(wordSource.getContent()).contains("retry=3");
-        assertThat(legacyWordSource.getRelativePath()).isEqualTo("docs/legacy-brief.doc");
-        assertThat(legacyWordSource.getMetadataJson()).contains("legacyWord");
-        assertThat(legacyWordSource.getMetadataJson()).contains("extractionStrategy");
-        assertThat(legacyWordSource.getMetadataJson()).contains("listFormattingPreserved");
-        assertThat(legacyWordSource.getContent()).contains("Legacy DOC payment timeout");
-        assertThat(legacyWordSource.getContent()).contains("retry=3");
+        assertThat(binaryWordSource.getRelativePath()).isEqualTo("docs/binary-brief.doc");
+        assertThat(binaryWordSource.getMetadataJson()).contains("binaryWord");
+        assertThat(binaryWordSource.getMetadataJson()).contains("extractionStrategy");
+        assertThat(binaryWordSource.getMetadataJson()).contains("listFormattingPreserved");
+        assertThat(binaryWordSource.getContent()).contains("payment timeout");
+        assertThat(binaryWordSource.getContent()).contains("retry=3");
         assertThat(pptSource.getRelativePath()).isEqualTo("docs/briefing.pptx");
         assertThat(pptSource.getMetadataJson()).contains("slideCount");
         assertThat(pptSource.getContent()).contains("=== Slide: 1 ===");
@@ -358,15 +358,15 @@ class IngestNodeTests {
     }
 
     /**
-     * 写入旧版 Word 测试文件。
+     * 写入二进制 Word 测试文件。
      *
-     * @param legacyWordPath Word 路径
+     * @param binaryWordPath Word 路径
      * @throws IOException IO 异常
      */
-    private void writeLegacyWord(Path legacyWordPath) throws IOException {
-        try (InputStream inputStream = getClass().getResourceAsStream("/documentparse/legacy-word.doc")) {
+    private void writeBinaryWord(Path binaryWordPath) throws IOException {
+        try (InputStream inputStream = getClass().getResourceAsStream("/documentparse/binary-word.doc")) {
             assertThat(inputStream).isNotNull();
-            Files.copy(inputStream, legacyWordPath);
+            Files.copy(inputStream, binaryWordPath);
         }
     }
 

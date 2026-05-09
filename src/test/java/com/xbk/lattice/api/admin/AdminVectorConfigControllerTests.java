@@ -39,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "lattice.query.search.vector.enabled=false",
         "lattice.query.search.vector.embedding-model-profile-id=1",
         "lattice.query.search.vector.embedding-model=bootstrap-embedding-model",
-        "lattice.query.search.vector.expected-dimensions=1536"
+        "lattice.query.search.vector.expected-dimensions=2000"
 })
 @AutoConfigureMockMvc
 class AdminVectorConfigControllerTests {
@@ -74,18 +74,18 @@ class AdminVectorConfigControllerTests {
                 .andExpect(jsonPath("$.embeddingModelProfileId").value(1))
                 .andExpect(jsonPath("$.providerType").value("openai"))
                 .andExpect(jsonPath("$.modelName").value("text-embedding-3-small"))
-                .andExpect(jsonPath("$.profileDimensions").value(1536))
+                .andExpect(jsonPath("$.profileDimensions").value(2000))
                 .andExpect(jsonPath("$.configSource").value("properties"))
                 .andExpect(jsonPath("$.rebuildRecommended").value(false));
     }
 
     /**
-     * 验证未绑定 profile 时，管理侧仍能展示 properties 提供的 legacy 向量信息。
+     * 验证未绑定 profile 时，管理侧仍能展示 properties 提供的 property 向量信息。
      *
      * @throws Exception 测试异常
      */
     @Test
-    void shouldExposeLegacyPropertyVectorSummaryWithoutProfileOverride() throws Exception {
+    void shouldExposePropertyVectorSummaryWithoutProfileOverride() throws Exception {
         resetTables();
         querySearchProperties.getVector().setEnabled(true);
         querySearchProperties.getVector().setEmbeddingModelProfileId(null);
@@ -93,9 +93,9 @@ class AdminVectorConfigControllerTests {
         mockMvc.perform(get("/api/v1/admin/vector/config"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.vectorEnabled").value(true))
-                .andExpect(jsonPath("$.providerType").value("legacy"))
+                .andExpect(jsonPath("$.providerType").value("property"))
                 .andExpect(jsonPath("$.modelName").value("bootstrap-embedding-model"))
-                .andExpect(jsonPath("$.profileDimensions").value(1536))
+                .andExpect(jsonPath("$.profileDimensions").value(2000))
                 .andExpect(jsonPath("$.configSource").value("properties"));
     }
 
@@ -159,12 +159,13 @@ class AdminVectorConfigControllerTests {
         jdbcTemplate.execute("TRUNCATE TABLE lattice.llm_model_profiles RESTART IDENTITY CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice.llm_provider_connections RESTART IDENTITY CASCADE");
         insertProviderConnection();
-        insertEmbeddingProfile(1L, "bootstrap-embedding", "text-embedding-3-small", 1536);
+        insertEmbeddingProfile(1L, "bootstrap-embedding", "text-embedding-3-small", 2000);
         insertEmbeddingProfile(2L, "large-embedding", "text-embedding-3-large", 3072);
+        synchronizeLlmSequences();
         querySearchProperties.getVector().setEnabled(false);
         querySearchProperties.getVector().setEmbeddingModelProfileId(Long.valueOf(1L));
         querySearchProperties.getVector().setEmbeddingModel("bootstrap-embedding-model");
-        querySearchProperties.getVector().setExpectedDimensions(1536);
+        querySearchProperties.getVector().setExpectedDimensions(2000);
     }
 
     private void insertProviderConnection() {
@@ -207,6 +208,30 @@ class AdminVectorConfigControllerTests {
                 true,
                 "tester",
                 "tester"
+        );
+    }
+
+    /**
+     * 将 LLM 配置表序列同步到当前最大主键，避免手写 ID 后续默认自增撞主键。
+     */
+    private void synchronizeLlmSequences() {
+        jdbcTemplate.execute(
+                """
+                        select setval(
+                            'lattice.llm_provider_connections_id_seq'::regclass,
+                            coalesce((select max(id) from lattice.llm_provider_connections), 1),
+                            true
+                        )
+                        """
+        );
+        jdbcTemplate.execute(
+                """
+                        select setval(
+                            'lattice.llm_model_profiles_id_seq'::regclass,
+                            coalesce((select max(id) from lattice.llm_model_profiles), 1),
+                            true
+                        )
+                        """
         );
     }
 }

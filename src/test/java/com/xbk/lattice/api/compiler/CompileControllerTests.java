@@ -35,7 +35,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.username=postgres",
         "spring.datasource.password=postgres",
         "spring.ai.openai.api-key=test-openai-key",
-        "spring.ai.anthropic.api-key=test-anthropic-key"
+        "spring.ai.anthropic.api-key=test-anthropic-key",
+        "lattice.llm.secret-encryption-key=test-phase8-key-0123456789abcdef"
 })
 @AutoConfigureMockMvc
 class CompileControllerTests {

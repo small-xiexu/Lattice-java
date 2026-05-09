@@ -1,5 +1,7 @@
 package com.xbk.lattice.documentparse.service;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -18,7 +20,7 @@ import org.springframework.util.StringUtils;
 @Service
 public class DocumentParseResultNormalizer {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     /**
      * 标准化为 RawSource。

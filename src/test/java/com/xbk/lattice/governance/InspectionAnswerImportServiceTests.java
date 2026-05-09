@@ -5,7 +5,6 @@ import com.xbk.lattice.infra.persistence.ContributionRecord;
 import com.xbk.lattice.infra.persistence.PendingQueryJdbcRepository;
 import com.xbk.lattice.infra.persistence.PendingQueryRecord;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -68,7 +67,7 @@ class InspectionAnswerImportServiceTests {
         private final java.util.List<String> deletedQueryIds = new java.util.ArrayList<String>();
 
         private FakePendingQueryJdbcRepository(PendingQueryRecord record) {
-            super(new JdbcTemplate());
+            super(null);
             this.record = record;
         }
 
@@ -91,7 +90,7 @@ class InspectionAnswerImportServiceTests {
         private ContributionRecord savedRecord;
 
         private FakeContributionJdbcRepository() {
-            super(new JdbcTemplate());
+            super(null);
         }
 
         @Override

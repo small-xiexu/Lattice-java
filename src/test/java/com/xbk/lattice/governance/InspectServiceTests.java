@@ -3,7 +3,6 @@ package com.xbk.lattice.governance;
 import com.xbk.lattice.infra.persistence.PendingQueryJdbcRepository;
 import com.xbk.lattice.infra.persistence.PendingQueryRecord;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -58,7 +57,7 @@ class InspectServiceTests {
         private final List<PendingQueryRecord> records;
 
         private FakePendingQueryJdbcRepository(List<PendingQueryRecord> records) {
-            super(new JdbcTemplate());
+            super(null);
             this.records = records;
         }
 

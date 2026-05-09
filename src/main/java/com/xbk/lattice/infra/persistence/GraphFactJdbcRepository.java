@@ -2,6 +2,7 @@ package com.xbk.lattice.infra.persistence;
 
 import com.xbk.lattice.compiler.ast.domain.AstFact;
 import com.xbk.lattice.infra.persistence.mapper.GraphFactMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -23,6 +24,7 @@ public class GraphFactJdbcRepository {
      *
      * @param graphFactMapper 图谱事实 Mapper
      */
+    @Autowired
     public GraphFactJdbcRepository(GraphFactMapper graphFactMapper) {
         this.graphFactMapper = graphFactMapper;
     }

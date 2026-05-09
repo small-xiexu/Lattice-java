@@ -35,7 +35,7 @@ public class HistoryReport {
     }
 
     /**
-     * 创建兼容旧调用的历史报告。
+     * 创建历史报告。
      *
      * @param conceptId 概念标识
      * @param items 历史项列表

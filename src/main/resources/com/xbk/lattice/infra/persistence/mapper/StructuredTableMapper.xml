@@ -47,8 +47,12 @@
 
     <resultMap id="StructuredTableRowShellResultMap" type="com.xbk.lattice.infra.persistence.StructuredTableRowShell">
         <constructor>
-            <arg resultMap="StructuredTableRecordResultMap" columnPrefix="table_"/>
-            <arg resultMap="StructuredTableRowRecordResultMap" columnPrefix="row_"/>
+            <arg javaType="com.xbk.lattice.infra.persistence.StructuredTableRecord"
+                 resultMap="StructuredTableRecordResultMap"
+                 columnPrefix="table_"/>
+            <arg javaType="com.xbk.lattice.infra.persistence.StructuredTableRowRecord"
+                 resultMap="StructuredTableRowRecordResultMap"
+                 columnPrefix="row_"/>
         </constructor>
     </resultMap>
 

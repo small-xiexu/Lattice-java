@@ -1,6 +1,7 @@
 package com.xbk.lattice.infra.persistence;
 
 import com.xbk.lattice.infra.persistence.mapper.QueryRewriteRuleMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -22,6 +23,7 @@ public class QueryRewriteRuleJdbcRepository {
      *
      * @param queryRewriteRuleMapper Query Rewrite 规则 Mapper
      */
+    @Autowired
     public QueryRewriteRuleJdbcRepository(QueryRewriteRuleMapper queryRewriteRuleMapper) {
         this.queryRewriteRuleMapper = queryRewriteRuleMapper;
     }

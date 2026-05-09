@@ -3,7 +3,6 @@ package com.xbk.lattice.query.service;
 import com.xbk.lattice.infra.persistence.FactCardJdbcRepository;
 import com.xbk.lattice.infra.persistence.LexicalSearchRecord;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
 
@@ -153,7 +152,7 @@ class FactCardFtsSearchServiceTests {
          * @param records 预置记录
          */
         private FakeFactCardJdbcRepository(List<LexicalSearchRecord> records) {
-            super(new JdbcTemplate());
+            super(null);
             this.records = records;
         }
 

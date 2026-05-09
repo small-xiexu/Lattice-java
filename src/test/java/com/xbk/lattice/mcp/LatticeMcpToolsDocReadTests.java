@@ -7,7 +7,6 @@ import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import com.xbk.lattice.query.service.PendingQueryManager;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
 import java.util.Optional;
@@ -81,7 +80,7 @@ class LatticeMcpToolsDocReadTests {
         private final SourceFileRecord record;
 
         private FixedSourceFileJdbcRepository(SourceFileRecord record) {
-            super(new JdbcTemplate());
+            super(null);
             this.record = record;
         }
 

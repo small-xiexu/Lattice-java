@@ -1,5 +1,7 @@
 package com.xbk.lattice.governance;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xbk.lattice.article.service.ArticleMarkdownSupport;
@@ -41,7 +43,7 @@ import java.util.Set;
 @Service
 public class ArticleCorrectionService {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private static final String COMPILE_SCENE = "compile";
 
@@ -99,7 +101,7 @@ public class ArticleCorrectionService {
     }
 
     /**
-     * 创建兼容旧构造方式的文章纠错服务。
+     * 创建文章纠错服务。
      *
      * @param articleJdbcRepository 文章仓储
      * @param sourceFileJdbcRepository 源文件仓储

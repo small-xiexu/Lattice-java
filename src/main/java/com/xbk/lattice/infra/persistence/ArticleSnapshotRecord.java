@@ -111,7 +111,7 @@ public class ArticleSnapshotRecord {
     }
 
     /**
-     * 创建兼容旧调用的文章快照记录。
+     * 创建文章快照记录。
      *
      * @param snapshotId 快照标识
      * @param conceptId 概念标识

@@ -794,7 +794,7 @@ public class AdminProcessingTaskService {
      * 解析可见资料源。
      *
      * @param compileJobRecord 编译作业记录
-     * @return 可见资料源；若仅为 legacy-default 则返回 null
+     * @return 可见资料源；若仅为 default-source 则返回 null
      */
     private KnowledgeSource resolveVisibleSource(CompileJobRecord compileJobRecord) {
         Long sourceId = compileJobRecord.getSourceId();
@@ -805,7 +805,7 @@ public class AdminProcessingTaskService {
         if (source == null) {
             return null;
         }
-        if ("legacy-default".equals(source.getSourceCode())) {
+        if ("default-source".equals(source.getSourceCode())) {
             return null;
         }
         return source;

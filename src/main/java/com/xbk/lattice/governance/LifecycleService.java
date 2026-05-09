@@ -1,5 +1,7 @@
 package com.xbk.lattice.governance;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,7 +30,7 @@ import java.util.List;
 @Service
 public class LifecycleService {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private final ArticleJdbcRepository articleJdbcRepository;
 
@@ -50,7 +52,7 @@ public class LifecycleService {
     }
 
     /**
-     * 创建兼容旧构造方式的生命周期服务。
+     * 创建生命周期服务。
      *
      * @param articleJdbcRepository 文章仓储
      */
@@ -348,7 +350,7 @@ public class LifecycleService {
             }
         }
         catch (JsonProcessingException ex) {
-            // ignore invalid legacy metadata and fall back to empty object
+            // ignore invalid non-object metadata and fall back to empty object
         }
         return OBJECT_MAPPER.createObjectNode();
     }

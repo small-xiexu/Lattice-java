@@ -35,7 +35,7 @@ class DeepResearchRouterTests {
         DeepResearchRouter deepResearchRouter = new DeepResearchRouter();
 
         QueryRequest queryRequest = new QueryRequest();
-        queryRequest.setQuestion("这个模块有哪些接入方式？旧版和 V2 有什么区别？");
+        queryRequest.setQuestion("这个模块有哪些接入方式？二进制和 V2 有什么区别？");
 
         assertThat(deepResearchRouter.shouldRoute(queryRequest)).isFalse();
     }

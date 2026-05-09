@@ -46,6 +46,12 @@ import com.xbk.lattice.infra.persistence.GraphFactJdbcRepository;
 import com.xbk.lattice.infra.persistence.GraphRelationJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
+import com.xbk.lattice.infra.persistence.mapper.ArticleChunkMapper;
+import com.xbk.lattice.infra.persistence.mapper.ArticleSourceRefMapper;
+import com.xbk.lattice.infra.persistence.mapper.GraphEntityMapper;
+import com.xbk.lattice.infra.persistence.mapper.GraphFactMapper;
+import com.xbk.lattice.infra.persistence.mapper.GraphRelationMapper;
+import com.xbk.lattice.infra.persistence.mapper.SourceFileMapper;
 import com.xbk.lattice.api.query.QueryResponse;
 import com.xbk.lattice.query.citation.Citation;
 import com.xbk.lattice.query.citation.CitationCheckReport;
@@ -119,7 +125,13 @@ import com.xbk.lattice.query.service.RrfFusionService;
 import com.xbk.lattice.query.service.SourceChunkFtsSearchService;
 import com.xbk.lattice.query.service.SourceSearchService;
 import com.xbk.lattice.query.service.VectorSearchService;
+import com.xbk.lattice.query.service.mapper.ArticleFtsSearchMapper;
+import com.xbk.lattice.query.service.mapper.RefKeySearchMapper;
+import org.apache.ibatis.session.Configuration;
+import org.apache.ibatis.session.SqlSession;
+import org.mybatis.spring.SqlSessionFactoryBean;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
@@ -1053,12 +1065,12 @@ class AstCitationDeepResearchBenchmarkRunner {
         for (JsonNode findingNode : cardNode.withArray("factFindings")) {
             evidenceCard.getFactFindings().add(toFactFinding(findingNode));
         }
-        int legacyFindingIndex = 0;
-        for (JsonNode legacyFindingNode : cardNode.withArray("findings")) {
-            legacyFindingIndex++;
-            String anchorId = resolveLegacyAnchorId(evidenceCard, legacyFindingIndex);
-            evidenceCard.getEvidenceAnchors().add(toLegacyEvidenceAnchor(legacyFindingNode, anchorId));
-            evidenceCard.getFactFindings().add(toLegacyFactFinding(cardNode, legacyFindingNode, anchorId));
+        int importedFindingIndex = 0;
+        for (JsonNode importedFindingNode : cardNode.withArray("findings")) {
+            importedFindingIndex++;
+            String anchorId = resolveImportedAnchorId(evidenceCard, importedFindingIndex);
+            evidenceCard.getEvidenceAnchors().add(toImportedEvidenceAnchor(importedFindingNode, anchorId));
+            evidenceCard.getFactFindings().add(toImportedFactFinding(cardNode, importedFindingNode, anchorId));
         }
         for (JsonNode gapNode : cardNode.withArray("gaps")) {
             evidenceCard.getGaps().add(gapNode.asText(""));
@@ -1143,21 +1155,21 @@ class AstCitationDeepResearchBenchmarkRunner {
         return Math.max(0, report.getClaimSegments().size() - report.getUnsupportedClaimCount());
     }
 
-    private String resolveLegacyAnchorId(EvidenceCard evidenceCard, int legacyFindingIndex) {
+    private String resolveImportedAnchorId(EvidenceCard evidenceCard, int importedFindingIndex) {
         String evidenceId = evidenceCard.getEvidenceId();
-        if (legacyFindingIndex == 1 && evidenceId != null && evidenceId.matches("ev#\\d+")) {
+        if (importedFindingIndex == 1 && evidenceId != null && evidenceId.matches("ev#\\d+")) {
             return evidenceId;
         }
         int stableHash = Math.abs(Objects.hash(
                 evidenceId,
                 evidenceCard.getTaskId(),
                 evidenceCard.getScope(),
-                Integer.valueOf(legacyFindingIndex)
+                Integer.valueOf(importedFindingIndex)
         ));
         return "ev#" + stableHash;
     }
 
-    private EvidenceAnchor toLegacyEvidenceAnchor(JsonNode findingNode, String anchorId) {
+    private EvidenceAnchor toImportedEvidenceAnchor(JsonNode findingNode, String anchorId) {
         EvidenceAnchor evidenceAnchor = new EvidenceAnchor();
         EvidenceAnchorSourceType sourceType = parseEvidenceAnchorSourceType(findingNode.path("sourceType").asText("ARTICLE"));
         evidenceAnchor.setAnchorId(anchorId);
@@ -1174,19 +1186,19 @@ class AstCitationDeepResearchBenchmarkRunner {
         return evidenceAnchor;
     }
 
-    private FactFinding toLegacyFactFinding(JsonNode cardNode, JsonNode findingNode, String anchorId) {
-        LegacyClaimParts legacyClaimParts = deriveLegacyClaimParts(
+    private FactFinding toImportedFactFinding(JsonNode cardNode, JsonNode findingNode, String anchorId) {
+        ImportedClaimParts importedClaimParts = deriveImportedClaimParts(
                 findingNode.path("claim").asText(""),
                 cardNode.path("scope").asText(""),
                 cardNode.path("taskId").asText("")
         );
         FactFinding factFinding = new FactFinding();
-        factFinding.setFindingId(cardNode.path("evidenceId").asText("") + "-legacy-" + anchorId);
-        factFinding.setSubject(legacyClaimParts.getSubject());
-        factFinding.setPredicate(legacyClaimParts.getPredicate());
-        factFinding.setQualifier(legacyClaimParts.getQualifier());
+        factFinding.setFindingId(cardNode.path("evidenceId").asText("") + "-imported-" + anchorId);
+        factFinding.setSubject(importedClaimParts.getSubject());
+        factFinding.setPredicate(importedClaimParts.getPredicate());
+        factFinding.setQualifier(importedClaimParts.getQualifier());
         factFinding.setFactKey(factFinding.expectedFactKey());
-        factFinding.setValueText(legacyClaimParts.getValueText());
+        factFinding.setValueText(importedClaimParts.getValueText());
         factFinding.setValueType(FactValueType.STRING);
         factFinding.setClaimText(findingNode.path("claim").asText(""));
         factFinding.setConfidence(Math.max(0.8D, findingNode.path("confidence").asDouble(0.0D)));
@@ -1195,24 +1207,24 @@ class AstCitationDeepResearchBenchmarkRunner {
         return factFinding;
     }
 
-    private LegacyClaimParts deriveLegacyClaimParts(String claim, String scope, String taskId) {
+    private ImportedClaimParts deriveImportedClaimParts(String claim, String scope, String taskId) {
         String normalizedClaim = claim == null ? "" : claim.trim();
         if (normalizedClaim.isEmpty()) {
             String subject = fallbackSubject(scope, taskId);
-            return new LegacyClaimParts(subject, "states", "legacy_benchmark", subject);
+            return new ImportedClaimParts(subject, "states", "imported_benchmark", subject);
         }
-        for (LegacySeparator separator : LegacySeparator.values()) {
+        for (ImportedSeparator separator : ImportedSeparator.values()) {
             int index = normalizedClaim.indexOf(separator.literal());
             if (index > 0) {
                 String subject = normalizedClaim.substring(0, index).trim();
                 String valueText = normalizedClaim.substring(index + separator.literal().length()).trim();
                 if (!subject.isEmpty() && !valueText.isEmpty()) {
-                    return new LegacyClaimParts(subject, separator.predicate(), "legacy_benchmark", valueText);
+                    return new ImportedClaimParts(subject, separator.predicate(), "imported_benchmark", valueText);
                 }
             }
         }
         String subject = fallbackSubject(scope, taskId);
-        return new LegacyClaimParts(subject, "states", "legacy_benchmark", normalizedClaim);
+        return new ImportedClaimParts(subject, "states", "imported_benchmark", normalizedClaim);
     }
 
     private String fallbackSubject(String scope, String taskId) {
@@ -1386,17 +1398,22 @@ class AstCitationDeepResearchBenchmarkRunner {
 
         private final JdbcTemplate jdbcTemplate;
 
+        private final BenchmarkMapperSession benchmarkMapperSession;
+
         private final KnowledgeSearchService knowledgeSearchService;
 
         private RetrievalBenchmarkHarness() {
             DriverManagerDataSource schemaDataSource = dataSource(withCurrentSchema(BENCHMARK_DB_URL, "lattice"));
             this.jdbcTemplate = new JdbcTemplate(schemaDataSource);
+            this.benchmarkMapperSession = new BenchmarkMapperSession(schemaDataSource);
 
             QueryRetrievalSettingsService queryRetrievalSettingsService = new QueryRetrievalSettingsService();
             this.knowledgeSearchService = new KnowledgeSearchService(
-                    new FtsSearchService(jdbcTemplate),
-                    new ArticleChunkFtsSearchService(new ArticleChunkJdbcRepository(jdbcTemplate)),
-                    new RefKeySearchService(jdbcTemplate),
+                    new FtsSearchService(benchmarkMapperSession.mapper(ArticleFtsSearchMapper.class)),
+                    new ArticleChunkFtsSearchService(
+                            new ArticleChunkJdbcRepository(benchmarkMapperSession.mapper(ArticleChunkMapper.class))
+                    ),
+                    new RefKeySearchService(benchmarkMapperSession.mapper(RefKeySearchMapper.class)),
                     new SourceSearchService(null),
                     new SourceChunkFtsSearchService(null),
                     new ContributionSearchService(null),
@@ -1617,6 +1634,7 @@ class AstCitationDeepResearchBenchmarkRunner {
 
         @Override
         public void close() {
+            benchmarkMapperSession.close();
         }
     }
 
@@ -1640,9 +1658,45 @@ class AstCitationDeepResearchBenchmarkRunner {
         }
     }
 
+    private static class BenchmarkMapperSession implements AutoCloseable {
+
+        private final SqlSession sqlSession;
+
+        private BenchmarkMapperSession(DriverManagerDataSource dataSource) {
+            try {
+                SqlSessionFactoryBean factoryBean = new SqlSessionFactoryBean();
+                factoryBean.setDataSource(dataSource);
+                factoryBean.setMapperLocations(new PathMatchingResourcePatternResolver()
+                        .getResources("classpath*:/com/xbk/lattice/**/mapper/*.xml"));
+                factoryBean.afterPropertiesSet();
+                org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory = factoryBean.getObject();
+                if (sqlSessionFactory == null) {
+                    throw new IllegalStateException("Benchmark MyBatis SqlSessionFactory is unavailable");
+                }
+                Configuration configuration = sqlSessionFactory.getConfiguration();
+                configuration.setMapUnderscoreToCamelCase(true);
+                this.sqlSession = sqlSessionFactory.openSession(true);
+            }
+            catch (Exception ex) {
+                throw new IllegalStateException("Failed to initialize benchmark MyBatis mappers", ex);
+            }
+        }
+
+        private <T> T mapper(Class<T> mapperType) {
+            return sqlSession.getMapper(mapperType);
+        }
+
+        @Override
+        public void close() {
+            sqlSession.close();
+        }
+    }
+
     private class RealQuestionReplayHarness implements AutoCloseable {
 
         private final JdbcTemplate jdbcTemplate;
+
+        private final BenchmarkMapperSession benchmarkMapperSession;
 
         private final SourceFileJdbcRepository sourceFileJdbcRepository;
 
@@ -1661,11 +1715,22 @@ class AstCitationDeepResearchBenchmarkRunner {
         private RealQuestionReplayHarness() {
             DriverManagerDataSource schemaDataSource = dataSource(withCurrentSchema(BENCHMARK_DB_URL, "lattice"));
             this.jdbcTemplate = new JdbcTemplate(schemaDataSource);
-            this.sourceFileJdbcRepository = new SourceFileJdbcRepository(jdbcTemplate);
-            this.graphEntityJdbcRepository = new GraphEntityJdbcRepository(jdbcTemplate);
-            this.graphFactJdbcRepository = new GraphFactJdbcRepository(jdbcTemplate);
-            this.graphRelationJdbcRepository = new GraphRelationJdbcRepository(jdbcTemplate);
-            this.articleSourceRefJdbcRepository = new ArticleSourceRefJdbcRepository(jdbcTemplate);
+            this.benchmarkMapperSession = new BenchmarkMapperSession(schemaDataSource);
+            this.sourceFileJdbcRepository = new SourceFileJdbcRepository(
+                    benchmarkMapperSession.mapper(SourceFileMapper.class)
+            );
+            this.graphEntityJdbcRepository = new GraphEntityJdbcRepository(
+                    benchmarkMapperSession.mapper(GraphEntityMapper.class)
+            );
+            this.graphFactJdbcRepository = new GraphFactJdbcRepository(
+                    benchmarkMapperSession.mapper(GraphFactMapper.class)
+            );
+            this.graphRelationJdbcRepository = new GraphRelationJdbcRepository(
+                    benchmarkMapperSession.mapper(GraphRelationMapper.class)
+            );
+            this.articleSourceRefJdbcRepository = new ArticleSourceRefJdbcRepository(
+                    benchmarkMapperSession.mapper(ArticleSourceRefMapper.class)
+            );
             QueryRetrievalSettingsState currentSettings = new QueryRetrievalSettingsService().defaultState();
             QueryRetrievalSettingsState conservativeBaseline = new QueryRetrievalSettingsState(
                     true,
@@ -1818,9 +1883,11 @@ class AstCitationDeepResearchBenchmarkRunner {
                     sourceFileJdbcRepository
             );
             return new KnowledgeSearchService(
-                    new FtsSearchService(jdbcTemplate),
-                    new ArticleChunkFtsSearchService(new ArticleChunkJdbcRepository(jdbcTemplate)),
-                    new RefKeySearchService(jdbcTemplate),
+                    new FtsSearchService(benchmarkMapperSession.mapper(ArticleFtsSearchMapper.class)),
+                    new ArticleChunkFtsSearchService(
+                            new ArticleChunkJdbcRepository(benchmarkMapperSession.mapper(ArticleChunkMapper.class))
+                    ),
+                    new RefKeySearchService(benchmarkMapperSession.mapper(RefKeySearchMapper.class)),
                     new SourceSearchService(null),
                     new SourceChunkFtsSearchService(null),
                     new ContributionSearchService(null),
@@ -2119,6 +2186,7 @@ class AstCitationDeepResearchBenchmarkRunner {
 
         @Override
         public void close() {
+            benchmarkMapperSession.close();
         }
     }
 
@@ -3127,7 +3195,7 @@ class AstCitationDeepResearchBenchmarkRunner {
         }
     }
 
-    private enum LegacySeparator {
+    private enum ImportedSeparator {
         ADOPTS("采用", "adopts"),
         USES("使用", "uses"),
         THROUGH("通过", "through"),
@@ -3142,7 +3210,7 @@ class AstCitationDeepResearchBenchmarkRunner {
 
         private final String predicate;
 
-        LegacySeparator(String literal, String predicate) {
+        ImportedSeparator(String literal, String predicate) {
             this.literal = literal;
             this.predicate = predicate;
         }
@@ -3156,7 +3224,7 @@ class AstCitationDeepResearchBenchmarkRunner {
         }
     }
 
-    private static final class LegacyClaimParts {
+    private static final class ImportedClaimParts {
 
         private final String subject;
 
@@ -3166,7 +3234,7 @@ class AstCitationDeepResearchBenchmarkRunner {
 
         private final String valueText;
 
-        private LegacyClaimParts(String subject, String predicate, String qualifier, String valueText) {
+        private ImportedClaimParts(String subject, String predicate, String qualifier, String valueText) {
             this.subject = subject;
             this.predicate = predicate;
             this.qualifier = qualifier;

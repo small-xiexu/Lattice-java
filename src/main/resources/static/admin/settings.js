@@ -1,4 +1,10 @@
 (function () {
+    const AdminCommon = window.AdminCommon;
+    const statusApi = AdminCommon.createPageNoticeApi("settings-page-notice");
+    const fetchJson = AdminCommon.fetchJson;
+    const setStatus = statusApi.setStatus;
+    const showError = statusApi.showError;
+
     document.addEventListener("DOMContentLoaded", function () {
         if (!isSettingsEntryActive()) {
             return;
@@ -88,55 +94,5 @@
         params.set("sourceId", String(sourceId));
         params.set("notice", "server-dir-created");
         window.location.assign("/admin?" + params.toString());
-    }
-
-    async function fetchJson(url, options) {
-        const requestOptions = options || {};
-        const response = await fetch(url, {
-            method: requestOptions.method || "GET",
-            headers: {"Content-Type": "application/json"},
-            body: requestOptions.body
-        });
-        if (!response.ok) {
-            throw await buildHttpError(response);
-        }
-        const contentType = response.headers.get("content-type") || "";
-        if (contentType.indexOf("application/json") >= 0) {
-            return response.json();
-        }
-        return response.text();
-    }
-
-    async function buildHttpError(response) {
-        const contentType = response.headers.get("content-type") || "";
-        if (contentType.indexOf("application/json") >= 0) {
-            const payload = await response.json();
-            const message = payload && payload.message
-                    ? payload.message
-                    : JSON.stringify(payload);
-            const error = new Error(message || ("HTTP " + response.status));
-            error.status = response.status;
-            error.payload = payload;
-            return error;
-        }
-        const text = await response.text();
-        const error = new Error(text || ("HTTP " + response.status));
-        error.status = response.status;
-        return error;
-    }
-
-    function setStatus(message, tone) {
-        const notice = document.getElementById("settings-page-notice");
-        if (!notice) {
-            return;
-        }
-        notice.hidden = !message;
-        notice.textContent = message || "";
-        notice.className = "page-notice" + (tone ? " " + tone : "");
-    }
-
-    function showError(prefix, error) {
-        const message = error && error.message ? error.message : String(error);
-        setStatus(prefix + "：" + message, "danger");
     }
 })();

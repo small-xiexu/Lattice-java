@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 /**
  * Deep Research 绑定校验器
  *
- * 职责：在应用启动时校验 deep_research scene 的 role 绑定、模型配置与连接配置是否完整可用
+ * 职责：在应用启动时检查 deep_research scene 的 role 绑定、模型配置与连接配置是否完整可用
  *
  * @author xiexu
  */
@@ -35,13 +35,22 @@ public class DeepResearchBindingValidator implements ApplicationRunner {
     }
 
     /**
-     * 启动时执行 Deep Research scene 绑定校验。
+     * 启动时检查 Deep Research scene 绑定状态。
      *
      * @param args 启动参数
      */
     @Override
     public void run(ApplicationArguments args) {
-        executionLlmSnapshotService.validateSceneBindings(ExecutionLlmSnapshotService.DEEP_RESEARCH_SCENE);
-        log.info("Validated deep_research scene bindings successfully");
+        try {
+            executionLlmSnapshotService.validateSceneBindings(ExecutionLlmSnapshotService.DEEP_RESEARCH_SCENE);
+            log.info("Validated deep_research scene bindings successfully");
+        }
+        catch (IllegalStateException exception) {
+            log.warn(
+                    "Deep Research scene bindings are not ready. Application will keep running; "
+                            + "Deep Research execution remains fail-closed until bindings are configured. reason: {}",
+                    exception.getMessage()
+            );
+        }
     }
 }

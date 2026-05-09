@@ -1,6 +1,7 @@
 package com.xbk.lattice.infra.persistence;
 
 import com.xbk.lattice.infra.persistence.mapper.ArticleSourceRefMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
@@ -25,6 +26,7 @@ public class ArticleSourceRefJdbcRepository {
      *
      * @param articleSourceRefMapper 文章来源关联 Mapper
      */
+    @Autowired
     public ArticleSourceRefJdbcRepository(ArticleSourceRefMapper articleSourceRefMapper) {
         this.articleSourceRefMapper = articleSourceRefMapper;
     }

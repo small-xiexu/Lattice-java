@@ -11,8 +11,6 @@ public final class QueryGraphStateKeys {
 
     public static final String QUERY_ID = "queryId";
 
-    public static final String LEGACY_REQUEST_ID = "requestId";
-
     public static final String QUESTION = "question";
 
     public static final String NORMALIZED_QUESTION = "normalizedQuestion";

@@ -38,7 +38,7 @@ public class HistoryService {
     }
 
     /**
-     * 创建兼容旧构造方式的历史服务。
+     * 创建历史服务。
      *
      * @param articleSnapshotJdbcRepository 文章快照仓储
      */

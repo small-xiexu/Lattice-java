@@ -3,7 +3,6 @@ package com.xbk.lattice.governance;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -88,7 +87,7 @@ class PropagationServiceTests {
         private final List<ArticleRecord> records;
 
         private FakeArticleJdbcRepository(List<ArticleRecord> records) {
-            super(new JdbcTemplate());
+            super(null);
             this.records = records;
         }
 

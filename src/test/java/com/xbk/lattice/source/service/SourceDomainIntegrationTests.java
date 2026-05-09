@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Source 领域集成测试
  *
- * 职责：验证资料源骨架表、legacy-default 回填与同步运行记录能力
+ * 职责：验证资料源骨架表、default-source 回填与同步运行记录能力
  *
  * @author xiexu
  */
@@ -39,12 +39,12 @@ class SourceDomainIntegrationTests {
     private JdbcTemplate jdbcTemplate;
 
     /**
-     * 验证 legacy-default 会自动创建，且可记录新的资料源与同步运行。
+     * 验证 default-source 会自动创建，且可记录新的资料源与同步运行。
      */
     @Test
-    void shouldCreateLegacyDefaultAndPersistSyncRuns() {
-        KnowledgeSource legacyDefault = sourceService.findBySourceCode("legacy-default").orElseThrow();
-        assertThat(legacyDefault.getName()).isEqualTo("Legacy Default Source");
+    void shouldCreateDefaultSourceAndPersistSyncRuns() {
+        KnowledgeSource defaultSource = sourceService.findBySourceCode("default-source").orElseThrow();
+        assertThat(defaultSource.getName()).isEqualTo("Default Source");
 
         KnowledgeSource source = sourceService.save(new KnowledgeSource(
                 null,
@@ -91,11 +91,11 @@ class SourceDomainIntegrationTests {
         assertThat(reloadedSource.getLastSyncRunId()).isEqualTo(completedRun.getId());
         assertThat(reloadedSource.getLastSyncStatus()).isEqualTo("SUCCEEDED");
 
-        Long legacyBackfillCount = jdbcTemplate.queryForObject(
-                "select count(*) from articles where source_id = ? and article_key like 'legacy-default--%'",
+        Long defaultBackfillCount = jdbcTemplate.queryForObject(
+                "select count(*) from articles where source_id = ? and article_key like 'default-source--%'",
                 Long.class,
-                legacyDefault.getId()
+                defaultSource.getId()
         );
-        assertThat(legacyBackfillCount).isNotNull();
+        assertThat(defaultBackfillCount).isNotNull();
     }
 }

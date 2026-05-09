@@ -1,5 +1,7 @@
 package com.xbk.lattice.vault.snapshot;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.service.SynthesisArtifactJdbcStore;
@@ -38,7 +40,7 @@ import java.util.UUID;
 @Service
 public class VaultSnapshotService {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.moduleAwareMapper();
 
     private static final String BASELINE_TRIGGER_EVENT = "manual.baseline";
 

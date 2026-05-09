@@ -45,6 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.query.cache.store=in-memory",
+        "lattice.llm.config-source=hybrid",
         "lattice.llm.secret-encryption-key=test-phase8-key-0123456789abcdef"
 })
 @AutoConfigureMockMvc

@@ -23,7 +23,11 @@ class AskJsRuntimeTests {
     @Test
     void shouldVerifyAskPageRuntimeHelpersViaNode(@TempDir Path tempDir) throws Exception {
         String userDir = System.getProperty("user.dir");
+        Path adminCommonJsPath = Path.of(userDir, "src/main/resources/static/admin/admin-common.js");
+        Path adminModuleDir = Path.of(userDir, "src/main/resources/static/admin/modules");
         Path askJsPath = Path.of(userDir, "src/main/resources/static/admin/ask.js");
+        assertThat(Files.exists(adminCommonJsPath)).isTrue();
+        assertThat(Files.exists(adminModuleDir)).isTrue();
         assertThat(Files.exists(askJsPath)).isTrue();
 
         Path harnessScriptPath = tempDir.resolve("ask-js-runtime-test.js");
@@ -32,7 +36,9 @@ class AskJsRuntimeTests {
         ProcessBuilder processBuilder = new ProcessBuilder(
                 "node",
                 harnessScriptPath.toString(),
-                askJsPath.toString()
+                adminCommonJsPath.toString(),
+                adminModuleDir.toString(),
+                "ask"
         );
         processBuilder.redirectErrorStream(true);
         Process process = processBuilder.start();
@@ -47,9 +53,24 @@ class AskJsRuntimeTests {
     private String buildHarnessScript() {
         return """
                 const fs = require("fs");
+                const path = require("path");
                 const vm = require("vm");
 
-                const source = fs.readFileSync(process.argv[2], "utf8");
+                const commonSource = fs.readFileSync(process.argv[2], "utf8");
+                const moduleDir = process.argv[3];
+                const modulePrefix = process.argv[4];
+                const source = fs.readdirSync(moduleDir)
+                    .filter(function (name) { return name.startsWith(modulePrefix + "-runtime-part-"); })
+                    .sort()
+                    .map(function (name) {
+                        const moduleSource = fs.readFileSync(path.join(moduleDir, name), "utf8");
+                        const matched = moduleSource.match(/export default (.*);\\s*$/s);
+                        if (!matched) {
+                            throw new Error("invalid runtime module: " + name);
+                        }
+                        return JSON.parse(matched[1]);
+                    })
+                    .join("\\n");
                 const elements = {
                     "submit-question": { disabled: false },
                     "clear-question": { disabled: false },
@@ -83,6 +104,7 @@ class AskJsRuntimeTests {
                 sandbox.window.document = sandbox.document;
                 sandbox.globalThis = sandbox;
 
+                vm.runInNewContext(commonSource, sandbox, { filename: "admin-common.js" });
                 vm.runInNewContext(source, sandbox, { filename: "ask.js" });
 
                 const ask = sandbox.__LATTICE_ADMIN_TEST__.ask;

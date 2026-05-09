@@ -9,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * QueryGraphStateMapper 测试
  *
- * 职责：验证 Query Graph 的 queryId 主键契约与旧 key 兼容读取
+ * 职责：验证 Query Graph 的 queryId 主键契约
  *
  * @author xiexu
  */
@@ -18,17 +18,17 @@ class QueryGraphStateMapperTests {
     private final QueryGraphStateMapper queryGraphStateMapper = new QueryGraphStateMapper();
 
     /**
-     * 验证 mapper 仍可读取旧的 requestId key。
+     * 验证 mapper 读取统一后的 queryId key。
      */
     @Test
-    void shouldReadLegacyRequestIdAsQueryId() {
+    void shouldReadQueryId() {
         QueryGraphState queryGraphState = queryGraphStateMapper.fromMap(Map.of(
-                QueryGraphStateKeys.LEGACY_REQUEST_ID, "legacy-request-id",
+                QueryGraphStateKeys.QUERY_ID, "query-id-001",
                 QueryGraphStateKeys.QUESTION, "payment timeout",
                 QueryGraphStateKeys.ANSWER_PROJECTION_BUNDLE_REF, "query-1:answer-projection-bundle"
         ));
 
-        assertThat(queryGraphState.getQueryId()).isEqualTo("legacy-request-id");
+        assertThat(queryGraphState.getQueryId()).isEqualTo("query-id-001");
         assertThat(queryGraphState.getAnswerProjectionBundleRef()).isEqualTo("query-1:answer-projection-bundle");
     }
 
@@ -78,6 +78,5 @@ class QueryGraphStateMapperTests {
                 QueryGraphStateKeys.ANSWER_PROJECTION_BUNDLE_REF,
                 "query-id-001:answer-projection-bundle"
         );
-        assertThat(stateMap).doesNotContainKey(QueryGraphStateKeys.LEGACY_REQUEST_ID);
     }
 }

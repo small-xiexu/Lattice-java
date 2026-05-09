@@ -170,14 +170,14 @@ class AdminUploadControllerTests {
      * @throws Exception 测试异常
      */
     @Test
-    void shouldAcceptLegacyDocAndCsvViaUnifiedUpload() throws Exception {
+    void shouldAcceptBinaryDocAndCsvViaUnifiedUpload() throws Exception {
         resetTables();
-        MockMultipartFile legacyDocFile;
-        try (InputStream inputStream = getClass().getResourceAsStream("/documentparse/legacy-word.doc")) {
+        MockMultipartFile binaryDocFile;
+        try (InputStream inputStream = getClass().getResourceAsStream("/documentparse/binary-word.doc")) {
             assertThat(inputStream).isNotNull();
-            legacyDocFile = new MockMultipartFile(
+            binaryDocFile = new MockMultipartFile(
                     "files",
-                    "payments/legacy-word.doc",
+                    "payments/binary-word.doc",
                     "application/msword",
                     inputStream.readAllBytes()
             );
@@ -193,7 +193,7 @@ class AdminUploadControllerTests {
         );
 
         String responseBody = mockMvc.perform(multipart("/api/v1/admin/uploads")
-                        .file(legacyDocFile)
+                        .file(binaryDocFile)
                         .file(csvFile))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("COMPILE_QUEUED"))
@@ -214,7 +214,7 @@ class AdminUploadControllerTests {
                         select count(*)
                         from lattice.source_files
                         where format = 'doc'
-                          and content_text like '%Legacy DOC payment timeout%'
+                          and content_text like '%payment timeout%'
                         """,
                 Integer.class
         );
@@ -677,15 +677,15 @@ class AdminUploadControllerTests {
                             metadata_json
                         )
                         values (
-                            'legacy-default',
-                            'Legacy Default Source',
+                            'default-source',
+                            'Default Source',
                             'UPLOAD',
                             'DOCUMENT',
                             'ACTIVE',
                             'NORMAL',
                             'FULL',
                             '{}'::jsonb,
-                            '{"legacyDefault":true}'::jsonb
+                            '{"defaultSource":true}'::jsonb
                         )
                         """
         );

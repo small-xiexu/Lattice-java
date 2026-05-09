@@ -2,6 +2,7 @@ package com.xbk.lattice.infra.persistence;
 
 import com.xbk.lattice.compiler.ast.domain.AstRelation;
 import com.xbk.lattice.infra.persistence.mapper.GraphRelationMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -23,6 +24,7 @@ public class GraphRelationJdbcRepository {
      *
      * @param graphRelationMapper 图谱关系 Mapper
      */
+    @Autowired
     public GraphRelationJdbcRepository(GraphRelationMapper graphRelationMapper) {
         this.graphRelationMapper = graphRelationMapper;
     }

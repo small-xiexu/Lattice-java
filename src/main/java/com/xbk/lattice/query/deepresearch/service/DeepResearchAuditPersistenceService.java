@@ -1,5 +1,7 @@
 package com.xbk.lattice.query.deepresearch.service;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.infra.persistence.DeepResearchAnswerProjectionJdbcRepository;
 import com.xbk.lattice.infra.persistence.DeepResearchAnswerProjectionRecord;
@@ -52,7 +54,7 @@ import java.util.Map;
 @Service
 public class DeepResearchAuditPersistenceService {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.moduleAwareMapper();
 
     private final DeepResearchRunJdbcRepository deepResearchRunJdbcRepository;
 

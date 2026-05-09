@@ -16,7 +16,6 @@ import com.xbk.lattice.llm.service.LlmClient;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -297,7 +296,7 @@ class SchemaAwarePromptsTests {
         private final Map<String, SourceFileRecord> records = new LinkedHashMap<String, SourceFileRecord>();
 
         private FixedSourceFileJdbcRepository(SourceFileRecord record) {
-            super(new JdbcTemplate());
+            super(null);
             this.records.put(record.getFilePath(), record);
         }
 

@@ -1,6 +1,7 @@
 package com.xbk.lattice.infra.persistence;
 
 import com.xbk.lattice.infra.persistence.mapper.PendingQueryMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -23,6 +24,7 @@ public class PendingQueryJdbcRepository {
      *
      * @param pendingQueryMapper 待确认查询 Mapper
      */
+    @Autowired
     public PendingQueryJdbcRepository(PendingQueryMapper pendingQueryMapper) {
         this.pendingQueryMapper = pendingQueryMapper;
     }

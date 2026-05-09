@@ -20,6 +20,11 @@ import java.util.concurrent.ConcurrentLinkedDeque;
  *
  * 职责：把 Graph 生命周期事件桥接到步骤日志记录器与结构化事件日志
  *
+ * 事务策略：编译图节点本身不直接声明事务。长链路 Pipeline 与 LLM 调用不包大事务；
+ * 需要跨表原子写入的节点必须下沉到独立 Spring Service 方法中声明事务，例如
+ * ArticleAtomicWriteService 负责文章主表、来源关联与 article_chunks 的同库原子写入。
+ * 向量刷新保留为独立节点，不与文章写入共用数据库事务，失败时依赖步骤状态与重跑补偿。
+ *
  * @author xiexu
  */
 @Component

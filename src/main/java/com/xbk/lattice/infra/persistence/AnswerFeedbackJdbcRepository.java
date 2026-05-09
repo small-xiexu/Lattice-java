@@ -1,6 +1,7 @@
 package com.xbk.lattice.infra.persistence;
 
 import com.xbk.lattice.infra.persistence.mapper.AnswerFeedbackMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
@@ -24,6 +25,7 @@ public class AnswerFeedbackJdbcRepository {
      *
      * @param answerFeedbackMapper 答案反馈 Mapper
      */
+    @Autowired
     public AnswerFeedbackJdbcRepository(AnswerFeedbackMapper answerFeedbackMapper) {
         this.answerFeedbackMapper = answerFeedbackMapper;
     }

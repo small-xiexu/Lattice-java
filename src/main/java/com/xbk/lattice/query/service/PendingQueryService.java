@@ -1,5 +1,7 @@
 package com.xbk.lattice.query.service;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.api.query.QueryArticleResponse;
@@ -34,7 +36,7 @@ import java.util.UUID;
 @Service
 public class PendingQueryService implements PendingQueryManager {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private static final int PENDING_TTL_DAYS = 7;
 

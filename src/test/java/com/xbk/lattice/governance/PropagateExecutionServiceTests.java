@@ -10,7 +10,6 @@ import com.xbk.lattice.llm.service.LlmCallResult;
 import com.xbk.lattice.llm.service.LlmClient;
 import com.xbk.lattice.query.service.RedisKeyValueStore;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.lang.reflect.Constructor;
 import java.time.Duration;
@@ -199,7 +198,7 @@ class PropagateExecutionServiceTests {
         private ArticleRecord lastUpserted;
 
         private FakeArticleJdbcRepository(List<ArticleRecord> records) {
-            super(new JdbcTemplate());
+            super(null);
             for (ArticleRecord record : records) {
                 this.records.put(record.getConceptId(), record);
             }
@@ -208,6 +207,11 @@ class PropagateExecutionServiceTests {
         @Override
         public Optional<ArticleRecord> findByConceptId(String conceptId) {
             return Optional.ofNullable(records.get(conceptId));
+        }
+
+        @Override
+        public Optional<ArticleRecord> findByArticleKey(String articleKey) {
+            return Optional.ofNullable(records.get(articleKey));
         }
 
         @Override
@@ -270,7 +274,7 @@ class PropagateExecutionServiceTests {
         private final List<ArticleSnapshotRecord> savedRecords = new ArrayList<ArticleSnapshotRecord>();
 
         private FakeArticleSnapshotJdbcRepository() {
-            super(new JdbcTemplate());
+            super(null);
         }
 
         @Override

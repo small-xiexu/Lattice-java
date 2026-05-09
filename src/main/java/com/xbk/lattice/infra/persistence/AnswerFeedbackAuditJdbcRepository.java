@@ -1,6 +1,7 @@
 package com.xbk.lattice.infra.persistence;
 
 import com.xbk.lattice.infra.persistence.mapper.AnswerFeedbackAuditMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -22,6 +23,7 @@ public class AnswerFeedbackAuditJdbcRepository {
      *
      * @param answerFeedbackAuditMapper 答案反馈审计 Mapper
      */
+    @Autowired
     public AnswerFeedbackAuditJdbcRepository(AnswerFeedbackAuditMapper answerFeedbackAuditMapper) {
         this.answerFeedbackAuditMapper = answerFeedbackAuditMapper;
     }

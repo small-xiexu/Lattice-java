@@ -149,15 +149,15 @@
         limit #{limit}
     </select>
 
-    <select id="findLegacyDefaultSourceId" resultType="java.lang.Long">
+    <select id="findDefaultSourceId" resultType="java.lang.Long">
         select id
         from knowledge_sources
-        where source_code = 'legacy-default'
+        where source_code = 'default-source'
         order by id asc
         limit 1
     </select>
 
-    <insert id="insertLegacyDefaultSource">
+    <insert id="insertDefaultSource">
         insert into knowledge_sources (
             source_code,
             name,
@@ -170,15 +170,15 @@
             metadata_json
         )
         values (
-            'legacy-default',
-            'Legacy Default Source',
+            'default-source',
+            'Default Source',
             'UPLOAD',
             'DOCUMENT',
             'ACTIVE',
             'NORMAL',
             'FULL',
             '{}'::jsonb,
-            '{"legacyDefault":true}'::jsonb
+            '{"defaultSource":true}'::jsonb
         )
         on conflict (source_code) do nothing
     </insert>

@@ -29,7 +29,11 @@ class ManagementJsRuntimeTests {
     @Test
     void shouldVerifyRunFallbackAndErrorPresentationViaNode(@TempDir Path tempDir) throws Exception {
         String userDir = System.getProperty("user.dir");
+        Path adminCommonJsPath = Path.of(userDir, "src/main/resources/static/admin/admin-common.js");
+        Path adminModuleDir = Path.of(userDir, "src/main/resources/static/admin/modules");
         Path managementJsPath = Path.of(userDir, "src/main/resources/static/admin/management.js");
+        assertThat(Files.exists(adminCommonJsPath)).isTrue();
+        assertThat(Files.exists(adminModuleDir)).isTrue();
         assertThat(Files.exists(managementJsPath)).isTrue();
 
         Path harnessScriptPath = tempDir.resolve("management-js-runtime-test.js");
@@ -46,7 +50,9 @@ class ManagementJsRuntimeTests {
         ProcessBuilder processBuilder = new ProcessBuilder(
                 "node",
                 harnessScriptPath.toString(),
-                managementJsPath.toString()
+                adminCommonJsPath.toString(),
+                adminModuleDir.toString(),
+                "management"
         );
         processBuilder.redirectErrorStream(true);
         Process process = processBuilder.start();
@@ -66,9 +72,24 @@ class ManagementJsRuntimeTests {
     private String buildHarnessScript() {
         return """
                 const fs = require("fs");
+                const path = require("path");
                 const vm = require("vm");
 
-                const source = fs.readFileSync(process.argv[2], "utf8");
+                const commonSource = fs.readFileSync(process.argv[2], "utf8");
+                const moduleDir = process.argv[3];
+                const modulePrefix = process.argv[4];
+                const source = fs.readdirSync(moduleDir)
+                    .filter(function (name) { return name.startsWith(modulePrefix + "-runtime-part-"); })
+                    .sort()
+                    .map(function (name) {
+                        const moduleSource = fs.readFileSync(path.join(moduleDir, name), "utf8");
+                        const matched = moduleSource.match(/export default (.*);\\s*$/s);
+                        if (!matched) {
+                            throw new Error("invalid runtime module: " + name);
+                        }
+                        return JSON.parse(matched[1]);
+                    })
+                    .join("\\n");
                 const sandbox = {
                     console: console,
                     URLSearchParams: URLSearchParams,
@@ -97,6 +118,7 @@ class ManagementJsRuntimeTests {
                 sandbox.window.document = sandbox.document;
                 sandbox.globalThis = sandbox;
 
+                vm.runInNewContext(commonSource, sandbox, { filename: "admin-common.js" });
                 vm.runInNewContext(source, sandbox, { filename: "management.js" });
 
                 const runs = sandbox.__LATTICE_ADMIN_TEST__.runs;
@@ -587,7 +609,7 @@ class ManagementJsRuntimeTests {
                     "selected source file detail should expose full relative path");
                 assert(fileDetailMarkup.includes("本地文件系统"),
                     "selected source file detail should render readable parse provider");
-                const legacySource = {
+                const uploadedSource = {
                     name: "SRKIT/SVC 卡履约链路从 FC 平移至 DPFM",
                     sourceCode: "srkit-svc-fc-dpfm",
                     primaryDocumentTitle: "SRKIT/SVC 卡履约链路从 FC 平移至 DPFM",
@@ -599,9 +621,9 @@ class ManagementJsRuntimeTests {
                         }
                     })
                 };
-                assert(sourceUi.resolveSourceDisplayName(legacySource) === "卡券三期-迁移方案",
+                assert(sourceUi.resolveSourceDisplayName(uploadedSource) === "卡券三期-迁移方案",
                     "source display name should prefer bundle file-oriented display name");
-                assert(sourceUi.resolveSourceDocumentTitle(legacySource) === "SRKIT/SVC 卡履约链路从 FC 平移至 DPFM",
+                assert(sourceUi.resolveSourceDocumentTitle(uploadedSource) === "SRKIT/SVC 卡履约链路从 FC 平移至 DPFM",
                     "source document title should stay available as secondary metadata");
                 const sourceListContainer = { innerHTML: "", querySelectorAll: function () { return []; } };
                 sandbox.document.getElementById = function (id) {
@@ -618,15 +640,15 @@ class ManagementJsRuntimeTests {
                     defaultSyncMode: "AUTO",
                     lastSyncStatus: "RUNNING",
                     lastSyncAt: "2026-05-05T16:54:00+08:00"
-                }, legacySource)]);
+                }, uploadedSource)]);
                 assert(sourceListContainer.innerHTML.includes("卡券三期-迁移方案"),
                     "source list should render source-level display name");
                 assert(sourceListContainer.innerHTML.includes("source-document-title"),
                     "source list should keep document title as secondary copy");
-                const legacySourceDetailElements = {};
+                const uploadedSourceDetailElements = {};
                 sandbox.document.getElementById = function (id) {
-                    if (!legacySourceDetailElements[id]) {
-                        legacySourceDetailElements[id] = {
+                    if (!uploadedSourceDetailElements[id]) {
+                        uploadedSourceDetailElements[id] = {
                             textContent: "",
                             innerHTML: "",
                             hidden: false,
@@ -635,7 +657,7 @@ class ManagementJsRuntimeTests {
                             }
                         };
                     }
-                    return legacySourceDetailElements[id];
+                    return uploadedSourceDetailElements[id];
                 };
                 sourceUi.renderSourceDetail(Object.assign({
                     id: 1,
@@ -645,10 +667,10 @@ class ManagementJsRuntimeTests {
                     defaultSyncMode: "AUTO",
                     configJson: "{}",
                     lastSyncAt: "2026-05-05T16:54:00+08:00"
-                }, legacySource), [], []);
-                assert(legacySourceDetailElements["source-detail-title"].textContent === "卡券三期-迁移方案",
+                }, uploadedSource), [], []);
+                assert(uploadedSourceDetailElements["source-detail-title"].textContent === "卡券三期-迁移方案",
                     "source detail title should render source-level display name");
-                assert(legacySourceDetailElements["source-detail-meta"].textContent.includes("文档标题：SRKIT/SVC 卡履约链路从 FC 平移至 DPFM"),
+                assert(uploadedSourceDetailElements["source-detail-meta"].textContent.includes("文档标题：SRKIT/SVC 卡履约链路从 FC 平移至 DPFM"),
                     "source detail meta should keep document title separately");
                 assert(sourceUi.isUploadSource({ sourceType: "UPLOAD" }),
                     "upload source helper should identify upload sources");

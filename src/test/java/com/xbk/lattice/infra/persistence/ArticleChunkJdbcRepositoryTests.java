@@ -91,7 +91,7 @@ class ArticleChunkJdbcRepositoryTests {
                 List.of("payment/a.md"),
                 "{\"description\":\"payment summary\"}"
         ));
-        articleChunkJdbcRepository.replaceChunks("payment", List.of("legacy-chunk"));
+        articleChunkJdbcRepository.replaceChunks("payment", List.of("existing-chunk"));
 
         int rebuiltCount = articleChunkJdbcRepository.rebuildAll(articleJdbcRepository.findAll());
         List<String> chunks = articleChunkJdbcRepository.findChunkTexts("payment");
@@ -100,7 +100,7 @@ class ArticleChunkJdbcRepositoryTests {
         assertThat(chunks).hasSize(1);
         assertThat(chunks.get(0)).contains("# Payment");
         assertThat(chunks.get(0)).contains("## Timeout Rules");
-        assertThat(chunks.get(0)).doesNotContain("legacy-chunk");
+        assertThat(chunks.get(0)).doesNotContain("existing-chunk");
     }
 
     /**

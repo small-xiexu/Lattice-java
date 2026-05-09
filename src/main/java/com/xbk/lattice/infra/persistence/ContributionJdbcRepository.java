@@ -1,6 +1,7 @@
 package com.xbk.lattice.infra.persistence;
 
 import com.xbk.lattice.infra.persistence.mapper.ContributionMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -22,6 +23,7 @@ public class ContributionJdbcRepository {
      *
      * @param contributionMapper Contribution Mapper
      */
+    @Autowired
     public ContributionJdbcRepository(ContributionMapper contributionMapper) {
         this.contributionMapper = contributionMapper;
     }

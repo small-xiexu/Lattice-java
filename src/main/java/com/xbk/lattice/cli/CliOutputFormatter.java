@@ -1,5 +1,7 @@
 package com.xbk.lattice.cli;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -13,8 +15,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
  */
 public final class CliOutputFormatter {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
-            .findAndRegisterModules()
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.moduleAwareMapper()
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     private CliOutputFormatter() {

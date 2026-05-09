@@ -183,9 +183,9 @@ public class QueryVectorConfigService {
     }
 
     /**
-     * 基于 properties 构造 legacy embedding 摘要。
+     * 基于 properties 构造 property embedding 摘要。
      *
-     * @return legacy embedding 摘要
+     * @return property embedding 摘要
      */
     private EmbeddingProfileSummary buildPropertyBackedSummary() {
         String modelName = querySearchProperties.getVector().getEmbeddingModel();
@@ -197,7 +197,7 @@ public class QueryVectorConfigService {
                 : Integer.valueOf(querySearchProperties.getVector().getExpectedDimensions());
         return new EmbeddingProfileSummary(
                 null,
-                "legacy",
+                "property",
                 modelName.trim(),
                 expectedDimensions
         );

@@ -67,14 +67,14 @@
     <select id="countAll" resultType="_long">
         select count(*)
         from knowledge_sources
-        where source_code &lt;&gt; 'legacy-default'
+        where source_code &lt;&gt; 'default-source'
         <include refid="KnowledgeSourceFilters"/>
     </select>
 
     <select id="findPage" resultMap="KnowledgeSourceResultMap">
         select <include refid="KnowledgeSourceColumns"/>
         from knowledge_sources
-        where source_code &lt;&gt; 'legacy-default'
+        where source_code &lt;&gt; 'default-source'
         <include refid="KnowledgeSourceFilters"/>
         order by updated_at desc, id desc
         limit #{limit} offset #{offset}

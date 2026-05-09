@@ -27,7 +27,7 @@ class QueryHitIntentRerankerTests {
                         new QueryArticleHit(
                                 QueryEvidenceType.ARTICLE,
                                 1L,
-                                "legacy-default--images",
+                                "default-source--images",
                                 "images",
                                 "Images",
                                 "payment timeout retry 是什么配置",
@@ -38,7 +38,7 @@ class QueryHitIntentRerankerTests {
                         new QueryArticleHit(
                                 QueryEvidenceType.ARTICLE,
                                 1L,
-                                "legacy-default--payments",
+                                "default-source--payments",
                                 "payments",
                                 "Payments",
                                 "payment.timeout.retry = 3",
@@ -66,7 +66,7 @@ class QueryHitIntentRerankerTests {
                         new QueryArticleHit(
                                 QueryEvidenceType.ARTICLE,
                                 1L,
-                                "legacy-default--项目全流程真实验收手册",
+                                "default-source--项目全流程真实验收手册",
                                 "项目全流程真实验收手册",
                                 "项目全流程真实验收手册",
                                 "这里提到过这句示例问题。",
@@ -77,7 +77,7 @@ class QueryHitIntentRerankerTests {
                         new QueryArticleHit(
                                 QueryEvidenceType.ARTICLE,
                                 1L,
-                                "legacy-default--architecture",
+                                "default-source--architecture",
                                 "architecture",
                                 "Architecture",
                                 "订单服务通过消息队列驱动库存预留，避免同步耦合。",
@@ -105,7 +105,7 @@ class QueryHitIntentRerankerTests {
                         new QueryArticleHit(
                                 QueryEvidenceType.ARTICLE,
                                 1L,
-                                "legacy-default--needs-human",
+                                "default-source--needs-human",
                                 "needs-human",
                                 "Needs Human",
                                 "externalTypeCodeList = [22,26]",
@@ -117,7 +117,7 @@ class QueryHitIntentRerankerTests {
                         new QueryArticleHit(
                                 QueryEvidenceType.ARTICLE,
                                 1L,
-                                "legacy-default--passed",
+                                "default-source--passed",
                                 "passed",
                                 "Passed",
                                 "externalTypeCodeList = [22,26,43,37]",

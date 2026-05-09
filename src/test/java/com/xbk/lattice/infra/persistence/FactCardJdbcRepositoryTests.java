@@ -31,6 +31,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 })
 class FactCardJdbcRepositoryTests {
 
+    private static final int BASELINE_VECTOR_DIMENSIONS = 2000;
+
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
@@ -228,16 +230,17 @@ class FactCardJdbcRepositoryTests {
         resetFactCards();
         FactCardRecord savedCard = factCardJdbcRepository.upsert(sampleFactCard("fc:vector", "hash-vector-card"));
         if (!factCardVectorTableExists()) {
+            float[] embedding = testEmbedding();
             factCardVectorJdbcRepository.upsert(new FactCardVectorRecord(
                     savedCard.getId(),
                     savedCard.getCardId(),
                     savedCard.getCardType(),
                     savedCard.getAnswerShape(),
                     1L,
-                    3,
+                    embedding.length,
                     "test",
                     "hash-vector",
-                    new float[] {0.1F, 0.2F, 0.3F},
+                    embedding,
                     OffsetDateTime.now()
             ));
             assertThat(factCardVectorJdbcRepository.countAll()).isZero();
@@ -245,17 +248,17 @@ class FactCardJdbcRepositoryTests {
         }
 
         Long modelProfileId = ensureEmbeddingModelProfile();
-        factCardVectorJdbcRepository.alignEmbeddingColumnDimensions(3);
+        float[] embedding = testEmbedding();
         FactCardVectorRecord vectorRecord = new FactCardVectorRecord(
                 savedCard.getId(),
                 savedCard.getCardId(),
                 savedCard.getCardType(),
                 savedCard.getAnswerShape(),
                 modelProfileId,
-                3,
+                embedding.length,
                 "test",
                 "hash-vector",
-                new float[] {0.1F, 0.2F, 0.3F},
+                embedding,
                 OffsetDateTime.now()
         );
 
@@ -263,8 +266,10 @@ class FactCardJdbcRepositoryTests {
         Optional<FactCardVectorRecord> loaded = factCardVectorJdbcRepository.findByFactCardId(savedCard.getId());
 
         assertThat(loaded).isPresent();
-        assertThat(loaded.orElseThrow().getCardId()).isEqualTo(savedCard.getCardId());
-        assertThat(loaded.orElseThrow().getEmbedding()).containsExactly(0.1F, 0.2F, 0.3F);
+        FactCardVectorRecord loadedRecord = loaded.orElseThrow();
+        assertThat(loadedRecord.getCardId()).isEqualTo(savedCard.getCardId());
+        assertThat(loadedRecord.getEmbedding()).hasSize(BASELINE_VECTOR_DIMENSIONS);
+        assertThat(loadedRecord.getEmbedding()[0]).isEqualTo(0.1F);
         assertThat(factCardVectorJdbcRepository.countAll()).isGreaterThanOrEqualTo(1);
         assertThat(factCardVectorJdbcRepository.findEmbeddingColumnType()).isPresent();
     }
@@ -274,6 +279,31 @@ class FactCardJdbcRepositoryTests {
      */
     private void resetFactCards() {
         factCardJdbcRepository.deleteAll();
+        restoreFactCardVectorSchemaBaseline();
+    }
+
+    /**
+     * 恢复 fact card 向量表维度基线。
+     */
+    private void restoreFactCardVectorSchemaBaseline() {
+        if (!factCardVectorTableExists()) {
+            return;
+        }
+        factCardVectorJdbcRepository.deleteAll();
+        factCardVectorJdbcRepository.alignEmbeddingColumnDimensions(BASELINE_VECTOR_DIMENSIONS);
+    }
+
+    /**
+     * 构造匹配正式 schema 的测试向量。
+     *
+     * @return 测试向量
+     */
+    private float[] testEmbedding() {
+        float[] embedding = new float[BASELINE_VECTOR_DIMENSIONS];
+        embedding[0] = 0.1F;
+        embedding[1] = 0.2F;
+        embedding[2] = 0.3F;
+        return embedding;
     }
 
     /**
@@ -362,6 +392,7 @@ class FactCardJdbcRepositoryTests {
      * @return 模型配置主键
      */
     private Long ensureEmbeddingModelProfile() {
+        synchronizeLlmSequences();
         jdbcTemplate.update(
                 """
                         insert into llm_provider_connections (
@@ -380,7 +411,7 @@ class FactCardJdbcRepositoryTests {
                         insert into llm_model_profiles (
                             model_code, connection_id, model_name, model_kind, expected_dimensions
                         )
-                        values ('fact-card-test-embedding', ?, 'text-embedding-test', 'EMBEDDING', 3)
+                        values ('fact-card-test-embedding', ?, 'text-embedding-test', 'EMBEDDING', 2000)
                         on conflict (model_code) do nothing
                         """,
                 connectionId
@@ -388,6 +419,30 @@ class FactCardJdbcRepositoryTests {
         return jdbcTemplate.queryForObject(
                 "select id from llm_model_profiles where model_code = 'fact-card-test-embedding'",
                 Long.class
+        );
+    }
+
+    /**
+     * 将 LLM 配置表序列同步到当前最大主键，避免默认自增撞主键。
+     */
+    private void synchronizeLlmSequences() {
+        jdbcTemplate.execute(
+                """
+                        select setval(
+                            'lattice.llm_provider_connections_id_seq'::regclass,
+                            coalesce((select max(id) from llm_provider_connections), 1),
+                            true
+                        )
+                        """
+        );
+        jdbcTemplate.execute(
+                """
+                        select setval(
+                            'lattice.llm_model_profiles_id_seq'::regclass,
+                            coalesce((select max(id) from llm_model_profiles), 1),
+                            true
+                        )
+                        """
         );
     }
 }

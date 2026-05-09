@@ -313,7 +313,7 @@ class QueryResponseCitationAssemblerTests {
     void shouldDeduplicateProjectionResponsesAcrossConceptIdAndArticleKeyIdentities() {
         QueryArticleHit articleHit = new QueryArticleHit(
                 21L,
-                "legacy-default--readme",
+                "default-source--readme",
                 "readme",
                 "Readme",
                 "payment.timeout.retry=5",
@@ -370,11 +370,11 @@ class QueryResponseCitationAssemblerTests {
         );
 
         assertThat(sourceResponses).hasSize(1);
-        assertThat(sourceResponses.get(0).getArticleKey()).isEqualTo("legacy-default--readme");
+        assertThat(sourceResponses.get(0).getArticleKey()).isEqualTo("default-source--readme");
         assertThat(sourceResponses.get(0).getConceptId()).isEqualTo("readme");
         assertThat(sourceResponses.get(0).getSourcePaths()).containsExactly("README.md");
         assertThat(articleResponses).hasSize(1);
-        assertThat(articleResponses.get(0).getArticleKey()).isEqualTo("legacy-default--readme");
+        assertThat(articleResponses.get(0).getArticleKey()).isEqualTo("default-source--readme");
         assertThat(articleResponses.get(0).getConceptId()).isEqualTo("readme");
     }
 
@@ -396,7 +396,7 @@ class QueryResponseCitationAssemblerTests {
         );
         QueryArticleHit articleHit = new QueryArticleHit(
                 22L,
-                "legacy-default--readme",
+                "default-source--readme",
                 "readme",
                 "Readme",
                 "payment.timeout.retry=5",
@@ -442,10 +442,10 @@ class QueryResponseCitationAssemblerTests {
         );
 
         assertThat(sourceResponses).hasSize(1);
-        assertThat(sourceResponses.get(0).getArticleKey()).isEqualTo("legacy-default--readme");
+        assertThat(sourceResponses.get(0).getArticleKey()).isEqualTo("default-source--readme");
         assertThat(sourceResponses.get(0).getConceptId()).isEqualTo("readme");
         assertThat(articleResponses).hasSize(1);
-        assertThat(articleResponses.get(0).getArticleKey()).isEqualTo("legacy-default--readme");
+        assertThat(articleResponses.get(0).getArticleKey()).isEqualTo("default-source--readme");
         assertThat(articleResponses.get(0).getConceptId()).isEqualTo("readme");
     }
 
@@ -493,7 +493,7 @@ class QueryResponseCitationAssemblerTests {
     void shouldDeduplicateTopKSourceResponsesAcrossEvidenceTypes() {
         QueryArticleHit articleHit = new QueryArticleHit(
                 31L,
-                "legacy-default--readme",
+                "default-source--readme",
                 "readme",
                 "Readme",
                 "payment.timeout.retry=5",
@@ -520,7 +520,7 @@ class QueryResponseCitationAssemblerTests {
         );
 
         assertThat(sourceResponses).hasSize(1);
-        assertThat(sourceResponses.get(0).getArticleKey()).isEqualTo("legacy-default--readme");
+        assertThat(sourceResponses.get(0).getArticleKey()).isEqualTo("default-source--readme");
         assertThat(sourceResponses.get(0).getSourcePaths()).containsExactly("README.md");
         assertThat(sourceResponses.get(0).getDerivation()).isEqualTo("TOP_K");
     }

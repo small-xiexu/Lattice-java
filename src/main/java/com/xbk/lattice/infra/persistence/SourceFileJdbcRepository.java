@@ -1,6 +1,7 @@
 package com.xbk.lattice.infra.persistence;
 
 import com.xbk.lattice.infra.persistence.mapper.SourceFileMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
@@ -26,6 +27,7 @@ public class SourceFileJdbcRepository {
      *
      * @param sourceFileMapper 源文件 Mapper
      */
+    @Autowired
     public SourceFileJdbcRepository(SourceFileMapper sourceFileMapper) {
         this.sourceFileMapper = sourceFileMapper;
     }
@@ -41,8 +43,8 @@ public class SourceFileJdbcRepository {
         }
 
         if (sourceFileRecord.getSourceId() == null) {
-            SourceFileRecord legacyBoundRecord = bindLegacyDefaultSource(sourceFileRecord);
-            return upsertSourceAwareRecord(legacyBoundRecord);
+            SourceFileRecord defaultBoundRecord = bindDefaultSource(sourceFileRecord);
+            return upsertSourceAwareRecord(defaultBoundRecord);
         }
         return upsertSourceAwareRecord(sourceFileRecord);
     }
@@ -157,15 +159,15 @@ public class SourceFileJdbcRepository {
         return sourceFileMapper.upsert(sourceFileRecord, filePathNorm, searchText);
     }
 
-    private SourceFileRecord bindLegacyDefaultSource(SourceFileRecord sourceFileRecord) {
-        Long legacyDefaultSourceId = resolveLegacyDefaultSourceId();
+    private SourceFileRecord bindDefaultSource(SourceFileRecord sourceFileRecord) {
+        Long defaultSourceId = resolveDefaultSourceId();
         String relativePath = sourceFileRecord.getRelativePath();
         if (relativePath == null || relativePath.isBlank()) {
             relativePath = sourceFileRecord.getFilePath();
         }
         return new SourceFileRecord(
                 sourceFileRecord.getId(),
-                legacyDefaultSourceId,
+                defaultSourceId,
                 sourceFileRecord.getFilePath(),
                 relativePath,
                 sourceFileRecord.getSourceSyncRunId(),
@@ -179,17 +181,17 @@ public class SourceFileJdbcRepository {
         );
     }
 
-    private Long resolveLegacyDefaultSourceId() {
-        Long sourceId = sourceFileMapper.findLegacyDefaultSourceId();
+    private Long resolveDefaultSourceId() {
+        Long sourceId = sourceFileMapper.findDefaultSourceId();
         if (sourceId != null) {
             return sourceId;
         }
 
-        sourceFileMapper.insertLegacyDefaultSource();
+        sourceFileMapper.insertDefaultSource();
 
-        Long ensuredSourceId = sourceFileMapper.findLegacyDefaultSourceId();
+        Long ensuredSourceId = sourceFileMapper.findDefaultSourceId();
         if (ensuredSourceId == null) {
-            throw new IllegalStateException("legacy-default knowledge source is missing");
+            throw new IllegalStateException("default-source knowledge source is missing");
         }
         return ensuredSourceId;
     }

@@ -2,6 +2,7 @@ package com.xbk.lattice.llm.infra;
 
 import com.xbk.lattice.llm.domain.LlmModelProfile;
 import com.xbk.lattice.llm.infra.mapper.LlmModelProfileMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -24,6 +25,7 @@ public class LlmModelProfileJdbcRepository {
      *
      * @param llmModelProfileMapper 模型配置 Mapper
      */
+    @Autowired
     public LlmModelProfileJdbcRepository(LlmModelProfileMapper llmModelProfileMapper) {
         this.llmModelProfileMapper = llmModelProfileMapper;
     }

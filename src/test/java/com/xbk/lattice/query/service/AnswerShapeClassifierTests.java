@@ -30,7 +30,7 @@ class AnswerShapeClassifierTests {
                 new ClassificationCase("请列出所有可选状态", AnswerShape.ENUM),
                 new ClassificationCase("这份表里包含哪些类型", AnswerShape.ENUM),
                 new ClassificationCase("支持的处理项包括什么", AnswerShape.ENUM),
-                new ClassificationCase("新旧版本的差异是什么", AnswerShape.COMPARE),
+                new ClassificationCase("新二进制本的差异是什么", AnswerShape.COMPARE),
                 new ClassificationCase("两个方案分别有什么不同", AnswerShape.COMPARE),
                 new ClassificationCase("A 模式 vs B 模式怎么比较", AnswerShape.COMPARE),
                 new ClassificationCase("变更前后配置如何对比", AnswerShape.COMPARE),

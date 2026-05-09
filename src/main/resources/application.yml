@@ -1,6 +1,12 @@
 spring:
   application:
     name: lattice-app
+  config:
+    import:
+      - optional:classpath:config/lattice-llm.yml
+      - optional:classpath:config/lattice-compiler.yml
+      - optional:classpath:config/lattice-query.yml
+      - optional:classpath:config/lattice-source.yml
   servlet:
     multipart:
       max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:20MB}
@@ -38,138 +44,3 @@ management:
     web:
       exposure:
         include: health,info
-
-lattice:
-  llm:
-    compile-model: ${LATTICE_LLM_COMPILE_MODEL:openai}
-    reviewer-model: ${LATTICE_LLM_REVIEWER_MODEL:anthropic}
-    config-source: ${LATTICE_LLM_CONFIG_SOURCE:hybrid}
-    bootstrap-enabled: ${LATTICE_LLM_BOOTSTRAP_ENABLED:true}
-    deep-research-startup-validation-enabled: ${LATTICE_LLM_DEEP_RESEARCH_STARTUP_VALIDATION_ENABLED:true}
-    secret-encryption-key: ${LATTICE_LLM_SECRET_ENCRYPTION_KEY:lattice-phase8-bootstrap-key-change-me}
-    budget-usd: ${LATTICE_LLM_BUDGET_USD:10.0}
-    cache-ttl-seconds: ${LATTICE_LLM_CACHE_TTL_SECONDS:86400}
-    cache-key-prefix: ${LATTICE_LLM_CACHE_KEY_PREFIX:llm:cache:}
-    review-enabled: ${LATTICE_LLM_REVIEW_ENABLED:false}
-    max-input-chars: ${LATTICE_LLM_MAX_INPUT_CHARS:64000}
-    chat-client:
-      enabled: ${LATTICE_LLM_CHAT_CLIENT_ENABLED:true}
-      query-answer-enabled: ${LATTICE_LLM_CHAT_CLIENT_QUERY_ANSWER_ENABLED:true}
-      query-rewrite-enabled: ${LATTICE_LLM_CHAT_CLIENT_QUERY_REWRITE_ENABLED:true}
-      query-review-enabled: ${LATTICE_LLM_CHAT_CLIENT_QUERY_REVIEW_ENABLED:true}
-      compile-review-enabled: ${LATTICE_LLM_CHAT_CLIENT_COMPILE_REVIEW_ENABLED:true}
-      governance-json-enabled: ${LATTICE_LLM_CHAT_CLIENT_GOVERNANCE_JSON_ENABLED:true}
-    admin:
-      encrypt-secrets: ${LATTICE_LLM_ADMIN_ENCRYPT_SECRETS:true}
-      mask-secrets: ${LATTICE_LLM_ADMIN_MASK_SECRETS:true}
-    pricing:
-      compile-input-price-per-1k-tokens: ${LATTICE_LLM_COMPILE_INPUT_PRICE_PER_1K:0.002500}
-      compile-output-price-per-1k-tokens: ${LATTICE_LLM_COMPILE_OUTPUT_PRICE_PER_1K:0.010000}
-      reviewer-input-price-per-1k-tokens: ${LATTICE_LLM_REVIEWER_INPUT_PRICE_PER_1K:0.003000}
-      reviewer-output-price-per-1k-tokens: ${LATTICE_LLM_REVIEWER_OUTPUT_PRICE_PER_1K:0.015000}
-  compiler:
-    ingest-max-chars: ${LATTICE_COMPILER_INGEST_MAX_CHARS:65536}
-    document-topics:
-      enabled: ${LATTICE_COMPILER_DOCUMENT_TOPICS_ENABLED:true}
-      long-document-min-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_LONG_DOCUMENT_MIN_CHARS:12000}
-      medium-document-min-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MEDIUM_DOCUMENT_MIN_CHARS:6000}
-      min-headings-for-medium-document: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MIN_HEADINGS_FOR_MEDIUM_DOCUMENT:5}
-      min-topic-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MIN_TOPIC_CHARS:700}
-      max-topic-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MAX_TOPIC_CHARS:22000}
-      max-snippet-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MAX_SNIPPET_CHARS:2400}
-      max-section-lines: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MAX_SECTION_LINES:80}
-      max-line-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MAX_LINE_CHARS:280}
-      min-heading-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MIN_HEADING_CHARS:2}
-      max-heading-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MAX_HEADING_CHARS:90}
-      max-layout-heading-chars: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MAX_LAYOUT_HEADING_CHARS:42}
-      min-layout-heading-letters: ${LATTICE_COMPILER_DOCUMENT_TOPICS_MIN_LAYOUT_HEADING_LETTERS:2}
-      nearby-heading-line-distance: ${LATTICE_COMPILER_DOCUMENT_TOPICS_NEARBY_HEADING_LINE_DISTANCE:2}
-      child-heading-max-level: ${LATTICE_COMPILER_DOCUMENT_TOPICS_CHILD_HEADING_MAX_LEVEL:3}
-      page-marker-pattern: '^===\s*Page:\s*(\d+)\s*===$'
-      heading-boundary-pattern: '^[：:\-—\s]+|[：:\-—\s]+$'
-      ignored-line-prefixes:
-        - 'table_row:'
-        - '==='
-      heading-terminal-punctuations:
-        - '。'
-        - '；'
-        - ';'
-        - '，'
-        - ','
-      body-terminal-punctuations:
-        - '。'
-        - '.'
-      heading-patterns:
-        - name: markdown
-          pattern: '^(#{1,6})\s+(.+?)\s*$'
-          title-group: 2
-          fixed-level: 1
-          level-group: 1
-          level-strategy: markdown-prefix-length
-        - name: numeric
-          pattern: '^(\d+(?:\.\d+){0,4})[、.．\s]+(.+?)\s*$'
-          title-group: 2
-          fixed-level: 1
-          level-group: 1
-          level-strategy: numeric-depth
-        - name: chinese-numeric
-          pattern: '^([一二三四五六七八九十百]+)[、.．]\s*(.+?)\s*$'
-          title-group: 2
-          fixed-level: 1
-          level-group: 1
-          level-strategy: fixed
-        - name: parenthesized-chinese-numeric
-          pattern: '^[（(]([一二三四五六七八九十百]+)[）)]\s*(.+?)\s*$'
-          title-group: 2
-          fixed-level: 2
-          level-group: 1
-          level-strategy: fixed
-    orchestration:
-      default-mode: ${LATTICE_COMPILER_ORCHESTRATION_DEFAULT_MODE:state_graph}
-    working-set:
-      store: ${LATTICE_COMPILER_WORKING_SET_STORE:redis}
-      key-prefix: ${LATTICE_COMPILER_WORKING_SET_KEY_PREFIX:lattice:compile:ws:}
-      ttl-seconds: ${LATTICE_COMPILER_WORKING_SET_TTL_SECONDS:86400}
-    file-ranking:
-      rules:
-        - pattern: ${LATTICE_COMPILER_FILE_RANKING_RULE1_PATTERN:overview.*}
-          score: ${LATTICE_COMPILER_FILE_RANKING_RULE1_SCORE:100}
-        - pattern: ${LATTICE_COMPILER_FILE_RANKING_RULE2_PATTERN:readme.*}
-          score: ${LATTICE_COMPILER_FILE_RANKING_RULE2_SCORE:95}
-    review:
-      auto-fix-enabled: ${LATTICE_COMPILER_REVIEW_AUTO_FIX_ENABLED:true}
-      max-fix-rounds: ${LATTICE_COMPILER_REVIEW_MAX_FIX_ROUNDS:1}
-      allow-persist-needs-human-review: ${LATTICE_COMPILER_REVIEW_ALLOW_PERSIST_NEEDS_HUMAN_REVIEW:true}
-    wal:
-      key-prefix: ${LATTICE_COMPILER_WAL_KEY_PREFIX:lattice:wal:}
-      ttl-seconds: ${LATTICE_COMPILER_WAL_TTL_SECONDS:86400}
-  query:
-    cache:
-      key-prefix: ${LATTICE_QUERY_CACHE_KEY_PREFIX:llm:query:cache:}
-      ttl-seconds: ${LATTICE_QUERY_CACHE_TTL_SECONDS:3600}
-    working-set:
-      store: ${LATTICE_QUERY_WORKING_SET_STORE:redis}
-      key-prefix: ${LATTICE_QUERY_WORKING_SET_KEY_PREFIX:lattice:query:ws:}
-      ttl-seconds: ${LATTICE_QUERY_WORKING_SET_TTL_SECONDS:86400}
-    review:
-      rewrite-enabled: ${LATTICE_QUERY_REVIEW_REWRITE_ENABLED:true}
-      max-rewrite-rounds: ${LATTICE_QUERY_REVIEW_MAX_REWRITE_ROUNDS:1}
-    search:
-      fts:
-        enabled: ${LATTICE_QUERY_SEARCH_FTS_ENABLED:true}
-        preferred-ts-config: ${LATTICE_QUERY_SEARCH_FTS_CONFIG:jiebacfg}
-        fallback-ts-config: ${LATTICE_QUERY_SEARCH_FTS_FALLBACK:simple}
-      vector:
-        enabled: ${LATTICE_QUERY_SEARCH_VECTOR_ENABLED:true}
-        embedding-model: ${LATTICE_QUERY_SEARCH_VECTOR_MODEL:embedding-3}
-        expected-dimensions: ${LATTICE_QUERY_SEARCH_VECTOR_DIMENSIONS:2000}
-  source:
-    admin:
-      staging-root-dir: ${LATTICE_SOURCE_ADMIN_STAGING_ROOT_DIR:${java.io.tmpdir}/lattice-source-sync}
-      allowed-server-dirs:
-        - ${LATTICE_SOURCE_ADMIN_ALLOWED_SERVER_DIR_1:${java.io.tmpdir}}
-  deep-research:
-    working-set:
-      store: ${LATTICE_DEEP_RESEARCH_WORKING_SET_STORE:redis}
-      key-prefix: ${LATTICE_DEEP_RESEARCH_WORKING_SET_KEY_PREFIX:lattice:deep-research:ws:}
-      ttl-seconds: ${LATTICE_DEEP_RESEARCH_WORKING_SET_TTL_SECONDS:86400}

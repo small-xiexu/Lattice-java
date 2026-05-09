@@ -1,14 +1,11 @@
 package com.xbk.lattice.infra.persistence;
 
+import com.xbk.lattice.infra.persistence.mapper.ArticleChunkVectorMapper;
 import com.xbk.lattice.query.service.ArticleChunkVectorHit;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
-import java.sql.Array;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,15 +25,16 @@ public class ArticleChunkVectorJdbcRepository {
 
     private static final String ANN_INDEX_NAME_IVFFLAT = "idx_article_chunk_vector_index_embedding_ivfflat";
 
-    private final JdbcTemplate jdbcTemplate;
+    private final ArticleChunkVectorMapper articleChunkVectorMapper;
 
     /**
-     * 创建文章分块向量索引 JDBC 仓储。
+     * 创建文章分块向量索引仓储。
      *
-     * @param jdbcTemplate JDBC 模板
+     * @param articleChunkVectorMapper 文章分块向量 Mapper
      */
-    public ArticleChunkVectorJdbcRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    @Autowired
+    public ArticleChunkVectorJdbcRepository(ArticleChunkVectorMapper articleChunkVectorMapper) {
+        this.articleChunkVectorMapper = articleChunkVectorMapper;
     }
 
     /**
@@ -45,7 +43,7 @@ public class ArticleChunkVectorJdbcRepository {
      * @param articleChunkVectorRecord 向量索引记录
      */
     public void upsert(ArticleChunkVectorRecord articleChunkVectorRecord) {
-        if (jdbcTemplate == null) {
+        if (articleChunkVectorMapper == null) {
             return;
         }
 
@@ -54,30 +52,10 @@ public class ArticleChunkVectorJdbcRepository {
             return;
         }
 
-        String sql = """
-                insert into article_chunk_vector_index (
-                    article_chunk_id, article_id, concept_id, chunk_index, model_profile_id, content_hash, embedding, updated_at
-                )
-                values (?, ?, ?, ?, ?, ?, cast(? as %s), ?)
-                on conflict (article_chunk_id) do update
-                set article_id = excluded.article_id,
-                    concept_id = excluded.concept_id,
-                    chunk_index = excluded.chunk_index,
-                    model_profile_id = excluded.model_profile_id,
-                    content_hash = excluded.content_hash,
-                    embedding = excluded.embedding,
-                    updated_at = excluded.updated_at
-                """.formatted(vectorTypeName);
-        jdbcTemplate.update(
-                sql,
-                articleChunkVectorRecord.getArticleChunkId(),
-                articleChunkVectorRecord.getArticleId(),
-                articleChunkVectorRecord.getConceptId(),
-                articleChunkVectorRecord.getChunkIndex(),
-                articleChunkVectorRecord.getModelProfileId(),
-                articleChunkVectorRecord.getContentHash(),
+        articleChunkVectorMapper.upsert(
+                articleChunkVectorRecord,
                 formatVector(articleChunkVectorRecord.getEmbedding()),
-                articleChunkVectorRecord.getUpdatedAt()
+                vectorTypeName
         );
     }
 
@@ -88,23 +66,10 @@ public class ArticleChunkVectorJdbcRepository {
      * @return 向量索引
      */
     public Optional<ArticleChunkVectorRecord> findByArticleChunkId(Long articleChunkId) {
-        if (jdbcTemplate == null || articleChunkId == null) {
+        if (articleChunkVectorMapper == null || articleChunkId == null) {
             return Optional.empty();
         }
-        List<ArticleChunkVectorRecord> records = jdbcTemplate.query(
-                """
-                        select article_chunk_id, article_id, concept_id, chunk_index, model_profile_id,
-                               content_hash, embedding::text as embedding, updated_at
-                        from article_chunk_vector_index
-                        where article_chunk_id = ?
-                        """,
-                this::mapRecord,
-                articleChunkId
-        );
-        if (records.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(records.get(0));
+        return Optional.ofNullable(articleChunkVectorMapper.findByArticleChunkId(articleChunkId));
     }
 
     /**
@@ -113,11 +78,10 @@ public class ArticleChunkVectorJdbcRepository {
      * @return 向量索引总数
      */
     public int countAll() {
-        if (jdbcTemplate == null) {
+        if (articleChunkVectorMapper == null) {
             return 0;
         }
-        Integer count = jdbcTemplate.queryForObject("select count(*) from article_chunk_vector_index", Integer.class);
-        return count == null ? 0 : count;
+        return articleChunkVectorMapper.countAll();
     }
 
     /**
@@ -126,10 +90,10 @@ public class ArticleChunkVectorJdbcRepository {
      * @return 删除记录数
      */
     public int deleteAll() {
-        if (jdbcTemplate == null) {
+        if (articleChunkVectorMapper == null) {
             return 0;
         }
-        return jdbcTemplate.update("delete from article_chunk_vector_index");
+        return articleChunkVectorMapper.deleteAll();
     }
 
     /**
@@ -138,7 +102,7 @@ public class ArticleChunkVectorJdbcRepository {
      * @param targetDimensions 目标维度
      */
     public void alignEmbeddingColumnDimensions(int targetDimensions) {
-        if (jdbcTemplate == null || targetDimensions <= 0) {
+        if (articleChunkVectorMapper == null || targetDimensions <= 0) {
             return;
         }
 
@@ -148,17 +112,14 @@ public class ArticleChunkVectorJdbcRepository {
         }
 
         dropEmbeddingAnnIndexes();
-        jdbcTemplate.execute(
-                "alter table article_chunk_vector_index alter column embedding type "
-                        + vectorTypeName + "(" + targetDimensions + ")"
-        );
+        articleChunkVectorMapper.alignEmbeddingColumnDimensions(vectorTypeName, targetDimensions);
     }
 
     /**
      * 确保 chunk 向量表已具备可用的 ANN 索引。
      */
     public void ensureEmbeddingAnnIndex() {
-        if (jdbcTemplate == null) {
+        if (articleChunkVectorMapper == null) {
             return;
         }
         String annIndexMethod = resolveCompatibleAnnIndexMethod();
@@ -170,16 +131,10 @@ public class ArticleChunkVectorJdbcRepository {
             return;
         }
         if ("hnsw".equals(annIndexMethod)) {
-            jdbcTemplate.execute(
-                    "create index if not exists " + ANN_INDEX_NAME_HNSW
-                            + " on article_chunk_vector_index using hnsw (embedding " + opClass + ")"
-            );
+            articleChunkVectorMapper.createHnswIndex(ANN_INDEX_NAME_HNSW, opClass);
             return;
         }
-        jdbcTemplate.execute(
-                "create index if not exists " + ANN_INDEX_NAME_IVFFLAT
-                        + " on article_chunk_vector_index using ivfflat (embedding " + opClass + ") with (lists = 100)"
-        );
+        articleChunkVectorMapper.createIvfflatIndex(ANN_INDEX_NAME_IVFFLAT, opClass);
     }
 
     /**
@@ -188,17 +143,10 @@ public class ArticleChunkVectorJdbcRepository {
      * @return 最近更新时间
      */
     public Optional<OffsetDateTime> findLatestUpdatedAt() {
-        if (jdbcTemplate == null) {
+        if (articleChunkVectorMapper == null) {
             return Optional.empty();
         }
-        List<OffsetDateTime> values = jdbcTemplate.query(
-                "select updated_at from article_chunk_vector_index order by updated_at desc limit 1",
-                (resultSet, rowNum) -> resultSet.getObject("updated_at", OffsetDateTime.class)
-        );
-        if (values.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(values.get(0));
+        return Optional.ofNullable(articleChunkVectorMapper.findLatestUpdatedAt());
     }
 
     /**
@@ -207,27 +155,10 @@ public class ArticleChunkVectorJdbcRepository {
      * @return 向量列类型描述
      */
     public Optional<String> findEmbeddingColumnType() {
-        if (jdbcTemplate == null) {
+        if (articleChunkVectorMapper == null) {
             return Optional.empty();
         }
-        List<String> values = jdbcTemplate.queryForList(
-                """
-                        select format_type(a.atttypid, a.atttypmod)
-                        from pg_attribute a
-                        join pg_class c on c.oid = a.attrelid
-                        join pg_namespace n on n.oid = c.relnamespace
-                        where n.nspname = current_schema()
-                          and c.relname = 'article_chunk_vector_index'
-                          and a.attname = 'embedding'
-                          and a.attnum > 0
-                          and not a.attisdropped
-                        """,
-                String.class
-        );
-        if (values.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(values.get(0));
+        return Optional.ofNullable(articleChunkVectorMapper.findEmbeddingColumnType());
     }
 
     /**
@@ -238,7 +169,7 @@ public class ArticleChunkVectorJdbcRepository {
      * @return chunk 命中
      */
     public List<ArticleChunkVectorHit> searchNearestNeighbors(float[] embedding, int limit) {
-        if (jdbcTemplate == null || embedding == null || embedding.length == 0) {
+        if (articleChunkVectorMapper == null || embedding == null || embedding.length == 0) {
             return List.of();
         }
 
@@ -249,95 +180,25 @@ public class ArticleChunkVectorJdbcRepository {
         String distanceOperator = resolveDistanceOperator(vectorTypeName);
 
         String vectorLiteral = formatVector(embedding);
-        return jdbcTemplate.query(
-                """
-                        select vector_index.article_id,
-                               article.source_id,
-                               article.article_key,
-                               vector_index.concept_id,
-                               article.title,
-                               article.content,
-                               article.metadata_json::text as metadata_json,
-                               article.review_status,
-                               article.source_paths,
-                               vector_index.chunk_index,
-                               article_chunk.chunk_text,
-                               1 - (vector_index.embedding %s cast(? as %s)) as score
-                        from article_chunk_vector_index vector_index
-                        join articles article on article.id = vector_index.article_id
-                        join article_chunks article_chunk on article_chunk.id = vector_index.article_chunk_id
-                        order by vector_index.embedding %s cast(? as %s), article.compiled_at desc
-                        limit ?
-                        """.formatted(distanceOperator, vectorTypeName, distanceOperator, vectorTypeName),
-                this::mapHit,
+        return articleChunkVectorMapper.searchNearestNeighbors(
                 vectorLiteral,
-                vectorLiteral,
+                vectorTypeName,
+                distanceOperator,
                 limit
         );
     }
 
-    private ArticleChunkVectorRecord mapRecord(ResultSet resultSet, int rowNum) throws SQLException {
-        return new ArticleChunkVectorRecord(
-                resultSet.getLong("article_chunk_id"),
-                resultSet.getLong("article_id"),
-                resultSet.getString("concept_id"),
-                resultSet.getInt("chunk_index"),
-                resultSet.getObject("model_profile_id", Long.class),
-                resultSet.getString("content_hash"),
-                parseVector(resultSet.getString("embedding")),
-                resultSet.getObject("updated_at", OffsetDateTime.class)
-        );
-    }
-
-    private ArticleChunkVectorHit mapHit(ResultSet resultSet, int rowNum) throws SQLException {
-        return new ArticleChunkVectorHit(
-                resultSet.getLong("article_id"),
-                readLong(resultSet, "source_id"),
-                resultSet.getString("article_key"),
-                resultSet.getString("concept_id"),
-                resultSet.getString("title"),
-                resultSet.getString("content"),
-                resultSet.getString("metadata_json"),
-                resultSet.getString("review_status"),
-                readSourcePaths(resultSet),
-                resultSet.getInt("chunk_index"),
-                resultSet.getString("chunk_text"),
-                resultSet.getDouble("score")
-        );
-    }
-
-    private List<String> readSourcePaths(ResultSet resultSet) throws SQLException {
-        Array sourcePathsArray = resultSet.getArray("source_paths");
-        if (sourcePathsArray == null) {
-            return List.of();
-        }
-
-        Object[] values = (Object[]) sourcePathsArray.getArray();
-        List<String> sourcePaths = new ArrayList<String>();
-        for (Object value : values) {
-            sourcePaths.add(String.valueOf(value));
-        }
-        return sourcePaths;
-    }
-
-    private Long readLong(ResultSet resultSet, String columnName) throws SQLException {
-        Object value = resultSet.getObject(columnName);
-        return value == null ? null : resultSet.getLong(columnName);
-    }
-
+    /**
+     * 解析当前可用的 vector 类型名称。
+     *
+     * @return vector 类型名称
+     */
     private String resolveVectorTypeName() {
-        if (jdbcTemplate == null) {
+        String vectorTypeName = articleChunkVectorMapper.resolveVectorTypeName();
+        if (vectorTypeName == null) {
             return "";
         }
-
-        List<String> values = jdbcTemplate.queryForList(
-                "select coalesce(to_regtype('vector')::text, to_regtype('public.vector')::text)",
-                String.class
-        );
-        if (values.isEmpty() || values.get(0) == null) {
-            return "";
-        }
-        return values.get(0);
+        return vectorTypeName;
     }
 
     /**
@@ -346,14 +207,11 @@ public class ArticleChunkVectorJdbcRepository {
      * @return 索引实现名
      */
     private String resolvePreferredAnnIndexMethod() {
-        List<String> methods = jdbcTemplate.queryForList(
-                "select amname from pg_am where amname in ('hnsw','ivfflat') order by case amname when 'hnsw' then 0 else 1 end",
-                String.class
-        );
-        if (methods.isEmpty() || methods.get(0) == null) {
+        String preferredMethod = articleChunkVectorMapper.resolvePreferredAnnIndexMethod();
+        if (preferredMethod == null) {
             return "";
         }
-        return methods.get(0);
+        return preferredMethod;
     }
 
     /**
@@ -403,22 +261,19 @@ public class ArticleChunkVectorJdbcRepository {
      * @return schema-qualified opclass
      */
     private String resolveVectorOperatorClass() {
-        List<String> values = jdbcTemplate.queryForList(
-                "select opcnamespace::regnamespace || '.vector_cosine_ops' from pg_opclass where opcname = 'vector_cosine_ops' order by oid asc limit 1",
-                String.class
-        );
-        if (values.isEmpty() || values.get(0) == null) {
+        String opClass = articleChunkVectorMapper.resolveVectorOperatorClass();
+        if (opClass == null) {
             return "";
         }
-        return values.get(0);
+        return opClass;
     }
 
     /**
      * 删除历史 ANN 索引，便于在切换向量维度时重新创建。
      */
     private void dropEmbeddingAnnIndexes() {
-        jdbcTemplate.execute("drop index if exists " + ANN_INDEX_NAME_HNSW);
-        jdbcTemplate.execute("drop index if exists " + ANN_INDEX_NAME_IVFFLAT);
+        articleChunkVectorMapper.dropIndex(ANN_INDEX_NAME_HNSW);
+        articleChunkVectorMapper.dropIndex(ANN_INDEX_NAME_IVFFLAT);
     }
 
     /**
@@ -458,28 +313,4 @@ public class ArticleChunkVectorJdbcRepository {
         return builder.toString();
     }
 
-    /**
-     * 解析向量字面量。
-     *
-     * @param vectorLiteral 向量字面量
-     * @return 向量数组
-     */
-    private float[] parseVector(String vectorLiteral) {
-        if (vectorLiteral == null || vectorLiteral.isBlank()) {
-            return new float[0];
-        }
-        String normalized = vectorLiteral.trim();
-        if (normalized.startsWith("[") && normalized.endsWith("]")) {
-            normalized = normalized.substring(1, normalized.length() - 1);
-        }
-        if (normalized.isBlank()) {
-            return new float[0];
-        }
-        String[] tokens = normalized.split(",");
-        float[] embedding = new float[tokens.length];
-        for (int index = 0; index < tokens.length; index++) {
-            embedding[index] = Float.parseFloat(tokens[index].trim());
-        }
-        return embedding;
-    }
 }

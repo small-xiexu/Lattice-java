@@ -43,7 +43,7 @@ public class AdminArticleQueryService {
     }
 
     /**
-     * 创建兼容旧构造方式的管理侧文章查询服务。
+     * 创建管理侧文章查询服务。
      *
      * @param articleJdbcRepository 文章仓储
      */

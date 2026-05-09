@@ -3,9 +3,11 @@ package com.xbk.lattice.compiler.service;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
 import com.xbk.lattice.compiler.config.CompileJobProperties;
+import com.xbk.lattice.compiler.error.CompileBudgetExceededException;
 import com.xbk.lattice.infra.persistence.CompileJobJdbcRepository;
 import com.xbk.lattice.infra.persistence.CompileJobRecord;
-import com.xbk.lattice.llm.service.LlmRetryExhaustedException;
+import com.xbk.lattice.compiler.error.CompileJobStateException;
+import com.xbk.lattice.llm.error.LlmRetryExhaustedException;
 import com.xbk.lattice.llm.service.LlmRetrySupport;
 import com.xbk.lattice.observability.StructuredEventLogger;
 import com.xbk.lattice.source.domain.KnowledgeSource;
@@ -37,7 +39,7 @@ import java.util.UUID;
 @Slf4j
 public class CompileJobService {
 
-    private static final String LEGACY_DEFAULT_SOURCE_CODE = "legacy-default";
+    private static final String DEFAULT_SOURCE_CODE = "default-source";
 
     private static final String ERROR_CODE_COMPILE_TOTAL_BUDGET_EXCEEDED = "COMPILE_TOTAL_BUDGET_EXCEEDED";
 
@@ -243,7 +245,7 @@ public class CompileJobService {
     public CompileJobRecord retry(String jobId) {
         CompileJobRecord compileJobRecord = getRequiredJob(jobId);
         if (!CompileJobStatuses.FAILED.equalsIgnoreCase(compileJobRecord.getStatus())) {
-            throw new IllegalStateException("only failed job can retry: " + jobId);
+            throw new CompileJobStateException("only failed job can retry: " + jobId);
         }
         compileJobJdbcRepository.retry(jobId);
         return getRequiredJob(jobId);
@@ -333,13 +335,13 @@ public class CompileJobService {
         if (sourceId != null) {
             return sourceId;
         }
-        KnowledgeSource legacyDefault = resolveKnowledgeSourceByCode(LEGACY_DEFAULT_SOURCE_CODE);
-        return legacyDefault == null ? null : legacyDefault.getId();
+        KnowledgeSource defaultSource = resolveKnowledgeSourceByCode(DEFAULT_SOURCE_CODE);
+        return defaultSource == null ? null : defaultSource.getId();
     }
 
     private KnowledgeSource resolveKnowledgeSource(Long sourceId) {
         if (sourceId == null) {
-            return resolveKnowledgeSourceByCode(LEGACY_DEFAULT_SOURCE_CODE);
+            return resolveKnowledgeSourceByCode(DEFAULT_SOURCE_CODE);
         }
         return knowledgeSourceJdbcRepository.findById(sourceId).orElse(null);
     }
@@ -414,7 +416,7 @@ public class CompileJobService {
      * @return 编译失败错误码
      */
     private String resolveFailureErrorCode(Throwable throwable) {
-        if (throwable instanceof BudgetExceededException) {
+        if (throwable instanceof CompileBudgetExceededException) {
             return ERROR_CODE_COMPILE_TOTAL_BUDGET_EXCEEDED;
         }
         if (isLlmFailure(throwable)) {
@@ -437,7 +439,7 @@ public class CompileJobService {
      * @return 编译失败错误摘要
      */
     private String resolveFailureErrorMessage(Throwable throwable) {
-        if (throwable instanceof BudgetExceededException) {
+        if (throwable instanceof CompileBudgetExceededException) {
             return throwable.getMessage();
         }
         if (isLlmFailure(throwable)) {

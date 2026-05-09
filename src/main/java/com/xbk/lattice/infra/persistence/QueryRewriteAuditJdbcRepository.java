@@ -1,5 +1,7 @@
 package com.xbk.lattice.infra.persistence;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.infra.persistence.mapper.QueryRewriteAuditMapper;
@@ -16,7 +18,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class QueryRewriteAuditJdbcRepository {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.moduleAwareMapper();
 
     private final QueryRewriteAuditMapper queryRewriteAuditMapper;
 

@@ -231,9 +231,7 @@ public class DeepResearchSynthesizer {
         answerBuilder.append(question == null ? "" : question.trim()).append("\n\n");
         answerBuilder.append("## 结论").append("\n");
         populateFactState(internalAnswerDraft, evidenceLedger);
-        Map<String, List<FactFinding>> comparisonFindingsByTopic = isComparisonQuestion(question)
-                ? collectComparisonFindingsByTopic(evidenceLedger)
-                : Map.of();
+        Map<String, List<FactFinding>> comparisonFindingsByTopic = collectComparisonFindingsByTopic(evidenceLedger);
         boolean appendedConclusion = false;
         if (!comparisonFindingsByTopic.isEmpty()) {
             appendedConclusion = appendStructuredComparisonConclusion(answerBuilder, comparisonFindingsByTopic);
@@ -253,9 +251,6 @@ public class DeepResearchSynthesizer {
             answerBuilder.append("- 当前证据不足，暂无法形成完整结论").append("\n");
         }
         answerBuilder.append("\n");
-        if (!comparisonFindingsByTopic.isEmpty()) {
-            appendStructuredComparisonDimensions(answerBuilder, question, comparisonFindingsByTopic);
-        }
         if (layerSummaries != null && !layerSummaries.isEmpty()) {
             answerBuilder.append("## 分层摘要").append("\n");
             for (LayerSummary layerSummary : layerSummaries) {
@@ -334,47 +329,6 @@ public class DeepResearchSynthesizer {
     }
 
     /**
-     * 为带维度提示的对比题追加结构化维度整理。
-     *
-     * @param answerBuilder 答案构建器
-     * @param question 原始问题
-     * @param comparisonFindingsByTopic 主体到 finding 的映射
-     */
-    private void appendStructuredComparisonDimensions(
-            StringBuilder answerBuilder,
-            String question,
-            Map<String, List<FactFinding>> comparisonFindingsByTopic
-    ) {
-        List<String> dimensions = extractComparisonDimensions(question);
-        if (answerBuilder == null || dimensions.isEmpty() || comparisonFindingsByTopic == null || comparisonFindingsByTopic.size() < 2) {
-            return;
-        }
-        answerBuilder.append("## 按维度对比").append("\n\n");
-        for (String dimension : dimensions) {
-            answerBuilder.append("### ").append(dimension).append("\n");
-            for (Map.Entry<String, List<FactFinding>> entry : comparisonFindingsByTopic.entrySet()) {
-                List<FactFinding> dimensionFindings = selectDimensionFindings(dimension, entry.getValue());
-                if (dimensionFindings.isEmpty()) {
-                    answerBuilder.append("- ")
-                            .append(entry.getKey())
-                            .append("：当前证据未直接说明该维度。")
-                            .append("\n");
-                    continue;
-                }
-                for (FactFinding dimensionFinding : distinctFindings(dimensionFindings, 2)) {
-                    answerBuilder.append("- ")
-                            .append(entry.getKey())
-                            .append("：")
-                            .append(resolveClaimText(dimensionFinding))
-                            .append(resolveAnchorLiterals(dimensionFinding))
-                            .append("\n");
-                }
-            }
-            answerBuilder.append("\n");
-        }
-    }
-
-    /**
      * 收集对比题中每个主体对应的 finding 集合。
      *
      * @param evidenceLedger 证据账本
@@ -411,55 +365,6 @@ public class DeepResearchSynthesizer {
     }
 
     /**
-     * 判断当前问题是否为带对比语义的问题。
-     *
-     * @param question 原始问题
-     * @return 是时返回 true
-     */
-    private boolean isComparisonQuestion(String question) {
-        return question != null && question.contains("对比");
-    }
-
-    /**
-     * 提取用户要求的对比维度。
-     *
-     * @param question 原始问题
-     * @return 维度列表
-     */
-    private List<String> extractComparisonDimensions(String question) {
-        List<String> dimensions = new ArrayList<String>();
-        if (question == null || question.isBlank() || !question.contains("对比")) {
-            return dimensions;
-        }
-        String prefix = question.substring(0, question.indexOf("对比")).trim();
-        prefix = prefix.replaceFirst("^请按", "").trim();
-        for (String part : prefix.split("[、，,和与及]")) {
-            String dimension = normalizeComparisonDimension(part);
-            if (!dimension.isBlank() && !dimensions.contains(dimension)) {
-                dimensions.add(dimension);
-            }
-        }
-        return dimensions;
-    }
-
-    /**
-     * 规范化对比维度文本。
-     *
-     * @param rawDimension 原始维度
-     * @return 规范化后的维度
-     */
-    private String normalizeComparisonDimension(String rawDimension) {
-        if (rawDimension == null || rawDimension.isBlank()) {
-            return "";
-        }
-        String dimension = rawDimension.trim().replaceAll("[：:。？?]+$", "");
-        if (dimension.equals("请按")) {
-            return "";
-        }
-        return dimension;
-    }
-
-    /**
      * 从 task scope 中还原主体名称。
      *
      * @param scope task scope
@@ -473,86 +378,6 @@ public class DeepResearchSynthesizer {
         topic = topic.replace("的关键结论是什么", "");
         topic = topic.replaceAll("[？?。]+$", "");
         return topic.trim();
-    }
-
-    /**
-     * 为某个维度挑选更贴近该维度的 finding。
-     *
-     * @param dimension 对比维度
-     * @param factFindings finding 列表
-     * @return 筛选后的 finding
-     */
-    private List<FactFinding> selectDimensionFindings(String dimension, List<FactFinding> factFindings) {
-        List<FactFinding> selectedFindings = new ArrayList<FactFinding>();
-        if (dimension == null || factFindings == null || factFindings.isEmpty()) {
-            return selectedFindings;
-        }
-        int bestScore = Integer.MIN_VALUE;
-        for (FactFinding factFinding : factFindings) {
-            String claimText = resolveClaimText(factFinding);
-            int score = scoreDimensionFinding(dimension, claimText);
-            if (score > bestScore) {
-                selectedFindings.clear();
-                selectedFindings.add(factFinding);
-                bestScore = score;
-                continue;
-            }
-            if (score == bestScore && score > 0 && selectedFindings.size() < 2) {
-                selectedFindings.add(factFinding);
-            }
-        }
-        if (!selectedFindings.isEmpty() && bestScore > 0) {
-            return selectedFindings;
-        }
-        selectedFindings.clear();
-        selectedFindings.add(factFindings.get(0));
-        if (factFindings.size() > 1 && "实现方式".equals(dimension)) {
-            selectedFindings.add(factFindings.get(1));
-        }
-        return selectedFindings;
-    }
-
-    /**
-     * 计算 finding 与指定对比维度的贴合度。
-     *
-     * @param dimension 对比维度
-     * @param claimText finding 文本
-     * @return 分值
-     */
-    private int scoreDimensionFinding(String dimension, String claimText) {
-        if (dimension == null || claimText == null || claimText.isBlank()) {
-            return 0;
-        }
-        int score = 0;
-        if ("目标".equals(dimension)) {
-            if (claimText.contains("避免") || claimText.contains("保证") || claimText.contains("规避")) {
-                score += 6;
-            }
-            if (claimText.contains("重试") || claimText.contains("恢复")) {
-                score += 4;
-            }
-        }
-        if ("触发时机".equals(dimension)) {
-            if (claimText.contains("失败后") || claimText.contains("场景") || claimText.contains("扣减")) {
-                score += 6;
-            }
-            if (claimText.contains("进入") || claimText.contains("触发")) {
-                score += 3;
-            }
-        }
-        if ("实现方式".equals(dimension)) {
-            if (claimText.contains("采用") || claimText.contains("通过") || claimText.contains("使用")) {
-                score += 6;
-            }
-            if (claimText.contains("Redis")
-                    || claimText.contains("乐观锁")
-                    || claimText.contains("retry_queue")
-                    || claimText.contains("RetryWorker")
-                    || claimText.contains("字段")) {
-                score += 4;
-            }
-        }
-        return score;
     }
 
     /**

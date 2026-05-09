@@ -1,5 +1,7 @@
 package com.xbk.lattice.infra.persistence;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.infra.persistence.mapper.StructuredTableMapper;
@@ -21,7 +23,7 @@ import java.util.Map;
 @Repository
 public class StructuredTableJdbcRepository {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private static final StructuredTableSchemaProfiler SCHEMA_PROFILER = new StructuredTableSchemaProfiler();
 

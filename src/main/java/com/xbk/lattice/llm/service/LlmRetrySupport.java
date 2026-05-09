@@ -1,5 +1,6 @@
 package com.xbk.lattice.llm.service;
 
+import com.xbk.lattice.llm.error.LlmRetryExhaustedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.retry.TransientAiException;
 import org.springframework.http.HttpHeaders;

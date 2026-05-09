@@ -7,6 +7,7 @@ import com.xbk.lattice.compiler.graph.CompileGraphDefinitionFactory;
 import com.xbk.lattice.compiler.graph.CompileGraphLifecycleListener;
 import com.xbk.lattice.compiler.graph.CompileGraphState;
 import com.xbk.lattice.compiler.graph.CompileGraphStateMapper;
+import com.xbk.lattice.compiler.error.CompileGraphAbortException;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
@@ -85,7 +86,9 @@ public class StateGraphCompileOrchestrator implements CompileOrchestrator {
             initialState.setRootTraceId(resolveRootTraceId(initialState.getTraceId()));
 
             Optional<OverAllState> result = compiledGraph.invoke(compileGraphStateMapper.toMap(initialState));
-            OverAllState overAllState = result.orElseThrow(() -> new IllegalStateException("state graph compile returned empty state"));
+            OverAllState overAllState = result.orElseThrow(
+                    () -> new CompileGraphAbortException("state graph compile returned empty state")
+            );
             CompileGraphState finalState = compileGraphStateMapper.fromMap(overAllState.data());
             return new CompileResult(finalState.getPersistedCount(), finalState.getJobId());
         }
@@ -98,7 +101,7 @@ public class StateGraphCompileOrchestrator implements CompileOrchestrator {
     }
 
     /**
-     * 兼容旧测试入口执行编译。
+     * 执行测试入口编译。
      *
      * @param sourceDir 源目录
      * @param incremental 是否增量编译

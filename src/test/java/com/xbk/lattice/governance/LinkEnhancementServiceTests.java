@@ -3,7 +3,6 @@ package com.xbk.lattice.governance;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
@@ -62,7 +61,7 @@ class LinkEnhancementServiceTests {
         assertThat(updated.getContent()).contains("- [[payment-config|Payment Config]]");
         assertThat(updated.getContent()).contains("<!-- lattice:auto-related:start -->");
         assertThat(updated.getContent()).contains("- [[retry-policy|Retry Policy]]");
-        assertThat(updated.getContent()).contains("[[Unknown Legacy Doc]]");
+        assertThat(updated.getContent()).contains("[[Unknown Archive Doc]]");
     }
 
     private List<ArticleRecord> seedArticles() {
@@ -75,7 +74,7 @@ class LinkEnhancementServiceTests {
                         "Refund Manual Review",
                         List.of("payment-config"),
                         List.of("retry-policy"),
-                        "# Refund Manual Review\nSee [[Payment Timeout]] and [[Unknown Legacy Doc]]"
+                        "# Refund Manual Review\nSee [[Payment Timeout]] and [[Unknown Archive Doc]]"
                 )
         );
     }
@@ -119,7 +118,7 @@ class LinkEnhancementServiceTests {
         private final Map<String, ArticleRecord> recordsByConceptId = new LinkedHashMap<String, ArticleRecord>();
 
         private FakeMutableArticleJdbcRepository(List<ArticleRecord> records) {
-            super(new JdbcTemplate());
+            super(null);
             for (ArticleRecord record : records) {
                 recordsByConceptId.put(record.getConceptId(), record);
             }

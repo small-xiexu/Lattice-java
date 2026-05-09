@@ -3,6 +3,7 @@ package com.xbk.lattice.infra.persistence;
 import com.xbk.lattice.infra.chunking.SemanticChunker;
 import com.xbk.lattice.infra.chunking.TextChunk;
 import com.xbk.lattice.infra.persistence.mapper.ArticleChunkMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
@@ -31,6 +32,7 @@ public class ArticleChunkJdbcRepository {
      *
      * @param articleChunkMapper 文章分块 Mapper
      */
+    @Autowired
     public ArticleChunkJdbcRepository(ArticleChunkMapper articleChunkMapper) {
         this.articleChunkMapper = articleChunkMapper;
         this.semanticChunker = new SemanticChunker();

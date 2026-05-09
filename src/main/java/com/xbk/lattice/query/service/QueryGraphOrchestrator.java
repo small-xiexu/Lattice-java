@@ -10,6 +10,8 @@ import com.xbk.lattice.query.graph.QueryGraphLifecycleListener;
 import com.xbk.lattice.query.graph.QueryGraphState;
 import com.xbk.lattice.query.graph.QueryGraphStateMapper;
 import com.xbk.lattice.query.graph.QueryWorkingSetStore;
+import com.xbk.lattice.query.error.NoEvidenceException;
+import com.xbk.lattice.query.error.QueryExecutionException;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
@@ -104,11 +106,13 @@ public class QueryGraphOrchestrator {
             freezeSnapshotsFailOpen(initialState);
 
             Optional<OverAllState> result = resolveCompiledGraph().invoke(queryGraphStateMapper.toMap(initialState));
-            OverAllState overAllState = result.orElseThrow(() -> new IllegalStateException("query graph returned empty state"));
+            OverAllState overAllState = result.orElseThrow(
+                    () -> new NoEvidenceException("query graph returned empty state")
+            );
             QueryGraphState finalState = queryGraphStateMapper.fromMap(overAllState.data());
             QueryResponse queryResponse = queryWorkingSetStore.loadResponse(finalState.getFinalResponseRef());
             if (queryResponse == null) {
-                throw new IllegalStateException("query graph did not produce final response");
+                throw new NoEvidenceException("query graph did not produce final response");
             }
             return queryResponse;
         }
@@ -116,7 +120,7 @@ public class QueryGraphOrchestrator {
             throw ex;
         }
         catch (Exception ex) {
-            throw new IllegalStateException("query graph execute failed", ex);
+            throw new QueryExecutionException("query graph execute failed", ex);
         }
     }
 

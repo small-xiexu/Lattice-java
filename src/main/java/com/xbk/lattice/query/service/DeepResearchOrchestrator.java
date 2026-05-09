@@ -22,6 +22,8 @@ import com.xbk.lattice.query.deepresearch.store.DeepResearchWorkingSetStore;
 import com.xbk.lattice.query.domain.AnswerOutcome;
 import com.xbk.lattice.query.domain.GenerationMode;
 import com.xbk.lattice.query.domain.ModelExecutionStatus;
+import com.xbk.lattice.query.error.EvidenceConflictException;
+import com.xbk.lattice.query.error.NoEvidenceException;
 import com.xbk.lattice.query.evidence.domain.AnswerProjectionBundle;
 import com.xbk.lattice.query.graph.QueryWorkingSetStore;
 import lombok.extern.slf4j.Slf4j;
@@ -113,7 +115,7 @@ public class DeepResearchOrchestrator {
     public QueryResponse execute(QueryRequest queryRequest, String queryId) {
         String question = queryRequest == null ? null : queryRequest.getQuestion();
         if (!deepResearchRouter.shouldRoute(queryRequest)) {
-            throw new IllegalArgumentException("当前请求未命中 Deep Research 路由");
+            throw new EvidenceConflictException("当前请求未命中 Deep Research 路由");
         }
         int maxLlmCalls = queryRequest != null && queryRequest.getMaxLlmCalls() != null
                 ? queryRequest.getMaxLlmCalls().intValue()
@@ -141,7 +143,7 @@ public class DeepResearchOrchestrator {
             CompiledGraph compiledGraph = deepResearchGraphDefinitionFactory.build(plan).compile();
             Optional<OverAllState> result = compiledGraph.invoke(deepResearchStateMapper.toMap(initialState));
             DeepResearchState finalState = deepResearchStateMapper.fromMap(
-                    result.orElseThrow(() -> new IllegalStateException("deep research graph returned empty state")).data()
+                    result.orElseThrow(() -> new NoEvidenceException("deep research graph returned empty state")).data()
             );
             AnswerProjectionBundle answerProjectionBundle = deepResearchWorkingSetStore.loadAnswerProjectionBundle(
                     finalState.getProjectionRef()
@@ -229,7 +231,7 @@ public class DeepResearchOrchestrator {
                 ExecutionLlmSnapshotService.DEEP_RESEARCH_SCENE
         );
         if (snapshots.isEmpty()) {
-            throw new IllegalStateException("deep_research scene 未能冻结任何有效 LLM 快照");
+            throw new NoEvidenceException("deep_research scene 未能冻结任何有效 LLM 快照");
         }
     }
 

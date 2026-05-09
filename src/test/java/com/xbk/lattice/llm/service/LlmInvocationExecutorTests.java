@@ -3,6 +3,7 @@ package com.xbk.lattice.llm.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.xbk.lattice.compiler.config.LlmProperties;
+import com.xbk.lattice.llm.error.LlmRetryExhaustedException;
 import com.xbk.lattice.observability.StructuredEventLogger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
