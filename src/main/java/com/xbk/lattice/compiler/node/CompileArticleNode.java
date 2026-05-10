@@ -43,8 +43,6 @@ public class CompileArticleNode {
 
     private static final Pattern REFERENTIAL_PATTERN = Pattern.compile("[A-Za-z0-9_-]+=[A-Za-z0-9._-]+|\\b\\d{3,5}\\b");
 
-    private static final int FACT_HIGHLIGHT_MAX_LINES = 10;
-
     private static final String COMPILE_SCENE = "compile";
 
     private static final String WRITER_ROLE = "writer";
@@ -473,7 +471,6 @@ public class CompileArticleNode {
         if (!summary.isBlank()) {
             contentBuilder.append(summary).append("\n\n");
         }
-        appendFactHighlights(contentBuilder, mergedConcept.getSections());
         appendSections(contentBuilder, mergedConcept.getSections());
         if (!mergedConcept.getSourcePaths().isEmpty()) {
             contentBuilder.append("## Sources").append("\n");
@@ -512,190 +509,6 @@ public class CompileArticleNode {
             }
             contentBuilder.append("\n");
         }
-    }
-
-    /**
-     * 在正文前部插入关键事实速览，优先暴露高密度精确枚举，帮助 query/fallback 先看到事实块。
-     *
-     * @param contentBuilder 内容构建器
-     * @param sections 结构化章节
-     */
-    private void appendFactHighlights(StringBuilder contentBuilder, List<ConceptSection> sections) {
-        List<String> highlights = collectFactHighlights(sections);
-        if (highlights.isEmpty()) {
-            return;
-        }
-        contentBuilder.append("## 关键事实速览").append("\n");
-        for (String highlight : highlights) {
-            contentBuilder.append("- ").append(highlight).append("\n");
-        }
-        contentBuilder.append("\n");
-    }
-
-    /**
-     * 从结构化章节中收集应优先前置的精确事实。
-     *
-     * @param sections 结构化章节
-     * @return 前置事实列表
-     */
-    private List<String> collectFactHighlights(List<ConceptSection> sections) {
-        List<String> prioritizedHighlights = new ArrayList<String>();
-        List<String> secondaryHighlights = new ArrayList<String>();
-        LinkedHashSet<String> deduplicatedHighlights = new LinkedHashSet<String>();
-        if (sections == null) {
-            return prioritizedHighlights;
-        }
-        for (ConceptSection section : sections) {
-            for (String contentLine : section.getContentLines()) {
-                String normalizedLine = contentLine == null ? "" : contentLine.trim();
-                if (normalizedLine.isEmpty()) {
-                    continue;
-                }
-                if (looksLikeHighValueFactLine(normalizedLine)) {
-                    deduplicatedHighlights.add(normalizedLine);
-                }
-            }
-        }
-        for (String highlight : deduplicatedHighlights) {
-            if (isPrimaryFactHighlight(highlight)) {
-                prioritizedHighlights.add(highlight);
-            }
-            else {
-                secondaryHighlights.add(highlight);
-            }
-            if (prioritizedHighlights.size() + secondaryHighlights.size() >= FACT_HIGHLIGHT_MAX_LINES) {
-                break;
-            }
-        }
-        prioritizedHighlights.addAll(secondaryHighlights);
-        if (prioritizedHighlights.size() > FACT_HIGHLIGHT_MAX_LINES) {
-            return new ArrayList<String>(prioritizedHighlights.subList(0, FACT_HIGHLIGHT_MAX_LINES));
-        }
-        return prioritizedHighlights;
-    }
-
-    /**
-     * 判断文本行是否像高价值精确事实。
-     *
-     * @param normalizedLine 归一化文本行
-     * @return 命中返回 true
-     */
-    private boolean looksLikeHighValueFactLine(String normalizedLine) {
-        return containsStructuredIdentifierShape(normalizedLine)
-                || containsStructuredListMarker(normalizedLine)
-                || containsConfigurationSplitSignal(normalizedLine)
-                || containsBatchSignal(normalizedLine)
-                || containsExactChangeSignal(normalizedLine);
-    }
-
-    /**
-     * 判断文本行是否应当被视为一级优先前置事实。
-     *
-     * @param normalizedLine 归一化文本行
-     * @return 一级优先返回 true
-     */
-    private boolean isPrimaryFactHighlight(String normalizedLine) {
-        return containsStructuredIdentifierShape(normalizedLine)
-                || containsConfigurationSplitSignal(normalizedLine)
-                || containsBatchSignal(normalizedLine);
-    }
-
-    /**
-     * 判断文本是否包含高密度的结构化标识形态，而不是依赖具体业务词面。
-     *
-     * @param normalizedLine 归一化文本行
-     * @return 命中返回 true
-     */
-    private boolean containsStructuredIdentifierShape(String normalizedLine) {
-        if (normalizedLine == null || normalizedLine.isBlank()) {
-            return false;
-        }
-        int slashCount = countChar(normalizedLine, '/');
-        int hashCount = countChar(normalizedLine, '#');
-        int underscoreCount = countChar(normalizedLine, '_');
-        int dashCount = countChar(normalizedLine, '-');
-        int dotCount = countChar(normalizedLine, '.');
-        if (slashCount >= 2) {
-            return true;
-        }
-        if (hashCount >= 2) {
-            return true;
-        }
-        if (underscoreCount >= 2 || dashCount >= 2) {
-            return true;
-        }
-        return dotCount >= 1 && normalizedLine.matches(".*\\b\\w+\\.\\w+.*");
-    }
-
-    /**
-     * 判断文本是否包含结构化列表信号。
-     *
-     * @param normalizedLine 归一化文本行
-     * @return 命中返回 true
-     */
-    private boolean containsStructuredListMarker(String normalizedLine) {
-        return normalizedLine.startsWith("|")
-                || normalizedLine.startsWith("*")
-                || normalizedLine.startsWith("+")
-                || normalizedLine.matches("^\\d+[.)、].*")
-                || normalizedLine.contains(" = ")
-                || normalizedLine.contains(" -> ");
-    }
-
-    /**
-     * 判断文本是否包含配置分裂 / 以谁为准的信号。
-     *
-     * @param normalizedLine 归一化文本行
-     * @return 命中返回 true
-     */
-    private boolean containsConfigurationSplitSignal(String normalizedLine) {
-        return normalizedLine.contains("分裂")
-                || normalizedLine.contains("为准")
-                || normalizedLine.contains("权威")
-                || normalizedLine.contains("不含")
-                || normalizedLine.contains("统一以");
-    }
-
-    /**
-     * 判断文本是否包含批次/序号信号。
-     *
-     * @param normalizedLine 归一化文本行
-     * @return 命中返回 true
-     */
-    private boolean containsBatchSignal(String normalizedLine) {
-        return normalizedLine.matches(".*第[一二三四五六七八九十0-9]+批.*")
-                || normalizedLine.matches("^\\d+[.)、].*");
-    }
-
-    /**
-     * 判断文本是否包含“从 X 修正为 Y / 删除 / 合并”这类精确变更信号。
-     *
-     * @param normalizedLine 归一化文本行
-     * @return 命中返回 true
-     */
-    private boolean containsExactChangeSignal(String normalizedLine) {
-        return normalizedLine.contains("修正")
-                || normalizedLine.contains("合并")
-                || normalizedLine.contains("删除")
-                || normalizedLine.contains("移除")
-                || normalizedLine.contains("改为");
-    }
-
-    /**
-     * 统计字符出现次数。
-     *
-     * @param value 原始文本
-     * @param target 目标字符
-     * @return 出现次数
-     */
-    private int countChar(String value, char target) {
-        int count = 0;
-        for (int index = 0; index < value.length(); index++) {
-            if (value.charAt(index) == target) {
-                count++;
-            }
-        }
-        return count;
     }
 
     /**

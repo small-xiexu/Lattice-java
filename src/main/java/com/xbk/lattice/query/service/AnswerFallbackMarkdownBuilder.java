@@ -14,6 +14,22 @@ import java.util.Map;
  */
 final class AnswerFallbackMarkdownBuilder {
 
+    private static final String H1_QUERY_ANSWER = "# 查询回答";
+    private static final String H1_REVISION_ANSWER = "# 修订答案";
+    private static final String H2_QUESTION = "## 问题";
+    private static final String H2_REVISION = "## 修订";
+    private static final String H2_INPUTS = "## 输入";
+    private static final String H2_EVIDENCE = "## 证据";
+    private static final String H2_REFERENCES = "## 参考说明";
+    private static final String LABEL_HISTORY_ANSWER = "- 历史答案: ";
+    private static final String LABEL_USER_CORRECTION = "- 用户修正: ";
+    private static final String LABEL_NO_KNOWLEDGE = "- 当前未找到与该问题直接相关的知识。";
+    private static final String SECTION_CONTRIBUTION = "贡献证据";
+    private static final String SECTION_FACT_CARD = "事实卡证据";
+    private static final String SECTION_SOURCE = "源文件证据";
+    private static final String SECTION_GRAPH = "图谱证据";
+    private static final String SECTION_ARTICLE = "文章证据";
+
     private final AnswerGenerationService support;
 
     /**
@@ -36,8 +52,8 @@ final class AnswerFallbackMarkdownBuilder {
         List<QueryArticleHit> fallbackHits = support.selectFallbackEvidenceHits(question, queryArticleHits);
         List<String> queryTokens = support.extractQueryTokens(question);
         StringBuilder builder = new StringBuilder();
-        builder.append("# Query Answer").append("\n\n");
-        builder.append("## Question").append("\n");
+        builder.append(H1_QUERY_ANSWER).append("\n\n");
+        builder.append(H2_QUESTION).append("\n");
         builder.append(question.trim()).append("\n\n");
         appendEvidenceConclusion(builder, question, fallbackHits, queryTokens);
         appendEvidenceReferenceSection(builder, question, fallbackHits, queryTokens);
@@ -62,26 +78,26 @@ final class AnswerFallbackMarkdownBuilder {
         List<String> queryTokens = support.extractQueryTokens(question);
         Map<QueryEvidenceType, List<QueryArticleHit>> groupedHits = support.groupHitsByEvidenceType(queryArticleHits);
         StringBuilder builder = new StringBuilder();
-        builder.append("# Revised Answer").append("\n\n");
-        builder.append("## Question").append("\n");
+        builder.append(H1_REVISION_ANSWER).append("\n\n");
+        builder.append(H2_QUESTION).append("\n");
         builder.append(question.trim()).append("\n\n");
-        builder.append("## Revision").append("\n");
+        builder.append(H2_REVISION).append("\n");
         builder.append("- ").append(SensitiveTextMasker.mask(correction == null ? "" : correction.trim())).append("\n\n");
-        builder.append("## Inputs").append("\n");
-        builder.append("- Previous answer: ").append(support.extractEvidenceSnippet(currentAnswer)).append("\n");
-        builder.append("- Correction: ").append(SensitiveTextMasker.mask(correction == null ? "" : correction.trim())).append("\n\n");
-        appendEvidenceSection(builder, "Contribution Evidence", groupedHits.get(QueryEvidenceType.CONTRIBUTION), queryArticleHits, queryTokens);
-        appendEvidenceSection(builder, "Fact Card Evidence", groupedHits.get(QueryEvidenceType.FACT_CARD), queryArticleHits, queryTokens);
-        appendEvidenceSection(builder, "Source Evidence", groupedHits.get(QueryEvidenceType.SOURCE), queryArticleHits, queryTokens);
-        appendEvidenceSection(builder, "Graph Evidence", groupedHits.get(QueryEvidenceType.GRAPH), queryArticleHits, queryTokens);
-        appendEvidenceSection(builder, "Article Evidence", groupedHits.get(QueryEvidenceType.ARTICLE), queryArticleHits, queryTokens);
+        builder.append(H2_INPUTS).append("\n");
+        builder.append(LABEL_HISTORY_ANSWER).append(support.extractEvidenceSnippet(currentAnswer)).append("\n");
+        builder.append(LABEL_USER_CORRECTION).append(SensitiveTextMasker.mask(correction == null ? "" : correction.trim())).append("\n\n");
+        appendEvidenceSection(builder, SECTION_CONTRIBUTION, groupedHits.get(QueryEvidenceType.CONTRIBUTION), queryArticleHits, queryTokens);
+        appendEvidenceSection(builder, SECTION_FACT_CARD, groupedHits.get(QueryEvidenceType.FACT_CARD), queryArticleHits, queryTokens);
+        appendEvidenceSection(builder, SECTION_SOURCE, groupedHits.get(QueryEvidenceType.SOURCE), queryArticleHits, queryTokens);
+        appendEvidenceSection(builder, SECTION_GRAPH, groupedHits.get(QueryEvidenceType.GRAPH), queryArticleHits, queryTokens);
+        appendEvidenceSection(builder, SECTION_ARTICLE, groupedHits.get(QueryEvidenceType.ARTICLE), queryArticleHits, queryTokens);
         return builder.toString().trim();
     }
 
     /**
      * 追加 Markdown 兜底答案中的证据分组。
      *
-     * @param markdownBuilder Markdown 构建器
+     * @param builder Markdown 构建器
      * @param title 标题
      * @param queryArticleHits 证据列表
      * @param citationCandidateHits citation 候选
@@ -115,7 +131,7 @@ final class AnswerFallbackMarkdownBuilder {
     /**
      * 追加 deterministic fallback 的结论段，优先先回答问题，再附证据说明。
      *
-     * @param markdownBuilder Markdown 构建器
+     * @param builder Markdown 构建器
      * @param question 用户问题
      * @param fallbackHits fallback 证据
      * @param queryTokens 查询 token
@@ -126,10 +142,10 @@ final class AnswerFallbackMarkdownBuilder {
             List<QueryArticleHit> fallbackHits,
             List<String> queryTokens
     ) {
-        builder.append("## Evidence").append("\n");
+        builder.append(H2_EVIDENCE).append("\n");
         List<String> conclusionLines = support.buildEvidenceConclusionLines(question, fallbackHits, queryTokens);
         if (conclusionLines.isEmpty()) {
-            builder.append("- NO_RELEVANT_KNOWLEDGE").append("\n\n");
+            builder.append(LABEL_NO_KNOWLEDGE).append("\n\n");
             return;
         }
         for (String conclusionLine : conclusionLines) {
@@ -141,7 +157,7 @@ final class AnswerFallbackMarkdownBuilder {
     /**
      * 追加 deterministic fallback 的参考说明，避免正文只有证据罗列。
      *
-     * @param markdownBuilder Markdown 构建器
+     * @param builder Markdown 构建器
      * @param question 用户问题
      * @param fallbackHits fallback 证据
      * @param queryTokens 查询 token
@@ -157,7 +173,7 @@ final class AnswerFallbackMarkdownBuilder {
         }
         List<String> comparisonOptions = support.extractComparisonOptions(question);
         QueryArticleHit primaryHit = fallbackHits.get(0);
-        builder.append("## References").append("\n");
+        builder.append(H2_REFERENCES).append("\n");
         for (int index = 0; index < fallbackHits.size(); index++) {
             QueryArticleHit fallbackHit = fallbackHits.get(index);
             if (index > 0

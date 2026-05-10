@@ -182,7 +182,7 @@ class CompileArticleReviewFlowTests {
     }
 
     /**
-     * 验证 fallback 文章会把关键事实速览前置到正文开头，帮助 query 更早看到精确枚举。
+     * 验证 fallback 文章不再包含关键事实速览，正文直接以原始章节内容开始。
      */
     @Test
     void shouldPlaceFactHighlightsBeforeDetailedSectionsInFallbackMarkdown() {
@@ -221,8 +221,9 @@ class CompileArticleReviewFlowTests {
         ), null);
 
         String body = com.xbk.lattice.article.service.ArticleMarkdownSupport.extractBody(articleRecord.getContent());
-        assertThat(body).contains("## 关键事实速览");
-        assertThat(body.indexOf("## 关键事实速览")).isLessThan(body.indexOf("## 配置分裂"));
+        assertThat(body).doesNotContain("## 关键事实速览");
+        assertThat(body).contains("## 配置分裂");
+        assertThat(body).contains("## 灰度批次");
         assertThat(body).contains("externalSrkitTypeCodeList = [22, 26, 43, 37]");
         assertThat(body).contains("第一批：场景6");
     }

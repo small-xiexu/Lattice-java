@@ -3,6 +3,8 @@ package com.xbk.lattice.query.structured;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import com.xbk.lattice.query.service.QuerySemanticRules;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,6 +23,8 @@ import java.util.regex.Pattern;
  */
 @Component
 public class StructuredQueryPlanner {
+
+    private final QuerySemanticRules querySemanticRules;
 
     private static final Pattern ASSIGNMENT_PATTERN = Pattern.compile(
             "([\\p{IsHan}A-Za-z_][\\p{IsHan}A-Za-z0-9_.\\- ]{0,80})\\s*(=|＝|为|是)\\s*([^，,；;？?\\s]+)"
@@ -41,6 +45,22 @@ public class StructuredQueryPlanner {
     private static final Pattern COMPARE_PROJECTION_PATTERN = Pattern.compile(
             "(?:的|字段|列)\\s*([^？?；;:：]{1,120}?)(?:有什么差异|有何差异|有什么不同|有何不同|差异|不同|对比|比较)"
     );
+
+    /**
+     * 创建结构化查询计划生成器（无参回退构造器）。
+     */
+    public StructuredQueryPlanner() {
+        this(null);
+    }
+
+    /**
+     * 创建结构化查询计划生成器。
+     *
+     * @param querySemanticRules 查询语义规则
+     */
+    public StructuredQueryPlanner(QuerySemanticRules querySemanticRules) {
+        this.querySemanticRules = querySemanticRules == null ? new QuerySemanticRules() : querySemanticRules;
+    }
 
     /**
      * 尝试生成结构化查询计划。
@@ -230,9 +250,12 @@ public class StructuredQueryPlanner {
     }
 
     private boolean isCountQuestion(String question) {
-        String normalizedQuestion = question == null ? "" : question.trim();
-        return normalizedQuestion.toLowerCase(Locale.ROOT).contains("count")
-                || normalizedQuestion.matches("(?s).*\\bcount\\b.*");
+        if (question == null || question.isBlank()) {
+            return false;
+        }
+        String normalizedQuestion = question.trim().toLowerCase(Locale.ROOT);
+        return normalizedQuestion.contains("count")
+                || querySemanticRules.containsAnyCountSignal(question);
     }
 
     private String cleanFieldCandidate(String fieldCandidate) {

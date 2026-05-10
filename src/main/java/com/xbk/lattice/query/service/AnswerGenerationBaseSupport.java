@@ -78,6 +78,8 @@ abstract class AnswerGenerationBaseSupport extends AnswerGenerationSupportContra
 
     protected final AnswerMarkdownEvidenceNormalizer answerEvidenceNormalizer = new AnswerMarkdownEvidenceNormalizer();
 
+    protected final QuerySemanticRules querySemanticRules = new QuerySemanticRules();
+
     /**
      * 创建无 LLM 网关的答案生成服务。
      */

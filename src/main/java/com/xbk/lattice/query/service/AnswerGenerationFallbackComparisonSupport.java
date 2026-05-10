@@ -125,6 +125,7 @@ List<String> extractSetupChecklistSteps(List<String> snippets) {
      * @param rightOption 右选项
      * @return 命中的选项；若都不匹配返回空字符串
      */
+    @Override
     String matchComparisonOption(QueryArticleHit fallbackHit, String leftOption, String rightOption) {
         if (fallbackHit == null) {
             return "";
@@ -168,6 +169,7 @@ List<String> extractSetupChecklistSteps(List<String> snippets) {
      * @param fallbackTokens 问题级 token
      * @return 证据摘要
      */
+    @Override
     String selectOptionSpecificFallbackSnippet(
             QueryArticleHit queryArticleHit,
             String option,

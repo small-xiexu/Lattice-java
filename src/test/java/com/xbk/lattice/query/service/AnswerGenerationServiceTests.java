@@ -1253,7 +1253,7 @@ class AnswerGenerationServiceTests {
 
         QueryAnswerPayload answerPayload = answerGenerationService.generatePayload("不存在的问题", List.of());
 
-        assertThat(answerPayload.getAnswerMarkdown()).isEqualTo("未找到相关知识");
+        assertThat(answerPayload.getAnswerMarkdown()).isEqualTo("当前未找到与该问题直接相关的知识。");
         assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.NO_RELEVANT_KNOWLEDGE);
         assertThat(answerPayload.getGenerationMode()).isEqualTo(GenerationMode.RULE_BASED);
         assertThat(answerPayload.getModelExecutionStatus()).isEqualTo(ModelExecutionStatus.SKIPPED);

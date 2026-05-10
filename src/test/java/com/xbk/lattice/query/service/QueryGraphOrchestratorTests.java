@@ -135,7 +135,7 @@ class QueryGraphOrchestratorTests {
         assertThat(queryResponse.getAnswer()).startsWith("# 查询回答");
         assertThat(queryResponse.getAnswer()).contains("[→ refund/status.md]");
         assertThat(queryResponse.getReviewStatus()).isEqualTo("ISSUES_FOUND");
-        assertThat(queryResponse.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(queryResponse.getAnswerOutcome()).isEqualTo(AnswerOutcome.PARTIAL_ANSWER);
         assertThat(queryResponse.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
         assertThat(answerGenerationService.getGenerateCount()).isEqualTo(1);
         assertThat(answerGenerationService.getReviseCount()).isEqualTo(1);
@@ -453,7 +453,7 @@ class QueryGraphOrchestratorTests {
         assertThat(queryResponse.getAnswer()).startsWith("# 查询回答");
         assertThat(queryResponse.getAnswer()).contains("[→ payment/analyze.json]");
         assertThat(queryResponse.getReviewStatus()).isEqualTo("PASSED");
-        assertThat(queryResponse.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+        assertThat(queryResponse.getAnswerOutcome()).isEqualTo(AnswerOutcome.PARTIAL_ANSWER);
         assertThat(queryResponse.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
         assertThat(queryResponse.getCitationCheck()).isNotNull();
         assertThat(queryResponse.getCitationCheck().isNoCitation()).isFalse();

@@ -266,14 +266,6 @@ Map<QueryEvidenceType, List<QueryArticleHit>> groupHitsByEvidenceType(List<Query
     }
 
     /**
-     * 按字符上限截断 Prompt 文本。
-     *
-     * @param text 原始文本
-     * @param limit 字符上限
-     * @return 截断后的文本
-     */
-
-    /**
      * 追加与当前问题最贴近的证据句，降低模型在长文章里抓错焦点的概率。
      *
      * @param promptBuilder Prompt 构建器

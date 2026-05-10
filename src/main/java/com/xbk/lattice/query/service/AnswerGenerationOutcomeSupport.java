@@ -163,7 +163,11 @@ String stripMarkdownCodeFence(String content) {
                     && countEnumerationFactLines(normalizedPayload) >= 1;
         }
         if (looksLikeExactLookupQuestion(question)
-                && (!looksLikeEnumerationQuestion(question) || containsRequestedExactPathIdentifier(question))) {
+                && (!looksLikeEnumerationQuestion(question) || containsRequestedExactPathIdentifier(question))
+                && !(looksLikeNumericQuestion(question)
+                        && (querySemanticRules.containsAnySequenceSignal(question)
+                                || querySemanticRules.containsAnyEnumSignal(question))
+                        && coversRequestedQuestionAnchors(normalizedPayload, question))) {
             return coversExactLookupUnstructuredAnswer(normalizedPayload, question);
         }
         if (looksLikeEnumerationQuestion(question)) {
@@ -175,6 +179,11 @@ String stripMarkdownCodeFence(String content) {
         }
         if (looksLikeStatusQuestion(question)) {
             return containsStatusSignal(lowerCase(normalizedPayload));
+        }
+        if ((querySemanticRules.containsAnySequenceSignal(question)
+                || querySemanticRules.containsAnyEnumSignal(question))
+                && coversRequestedQuestionAnchors(normalizedPayload, question)) {
+            return true;
         }
         return false;
     }
@@ -263,6 +272,7 @@ String stripMarkdownCodeFence(String content) {
      * @param question 用户问题
      * @return 去重后的锚点
      */
+    @Override
     List<String> extractReusableQuestionAnchors(String question) {
         Set<String> reusableAnchors = new LinkedHashSet<String>();
         for (String rawToken : QueryTokenExtractor.extract(question)) {
@@ -300,6 +310,7 @@ String stripMarkdownCodeFence(String content) {
      * @param reusableAnchors 问题锚点
      * @return 命中数量
      */
+    @Override
     int countMatchedReusableAnchors(String normalizedMarkdown, List<String> reusableAnchors) {
         int matchedAnchorCount = 0;
         for (String reusableAnchor : reusableAnchors) {

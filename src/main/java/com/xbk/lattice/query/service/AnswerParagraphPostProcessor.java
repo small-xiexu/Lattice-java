@@ -34,7 +34,7 @@ final class AnswerParagraphPostProcessor {
      * @return 收敛后的答案
      */
     String compressStructuredExactLookupAnswer(String answerMarkdown, String question) {
-        if (answerMarkdown == null || answerMarkdown.isBlank() || !support.looksLikeExactLookupQuestion(question)) {
+        if (answerMarkdown == null || answerMarkdown.isBlank()) {
             return answerMarkdown;
         }
         if (support.looksLikeComparisonQuestion(question) || support.looksLikeFlowQuestion(question)) {

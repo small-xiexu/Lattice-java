@@ -1,6 +1,7 @@
 package com.xbk.lattice.query.deepresearch.service;
 
 import com.xbk.lattice.api.query.QueryRequest;
+import com.xbk.lattice.query.service.QuerySemanticRules;
 import org.springframework.stereotype.Component;
 
 import java.util.Locale;
@@ -14,6 +15,24 @@ import java.util.Locale;
  */
 @Component
 public class DeepResearchRouter {
+
+    private final QuerySemanticRules querySemanticRules;
+
+    /**
+     * 创建 Deep Research 路由器（无参回退构造器）。
+     */
+    public DeepResearchRouter() {
+        this(null);
+    }
+
+    /**
+     * 创建 Deep Research 路由器。
+     *
+     * @param querySemanticRules 查询语义规则
+     */
+    public DeepResearchRouter(QuerySemanticRules querySemanticRules) {
+        this.querySemanticRules = querySemanticRules == null ? new QuerySemanticRules() : querySemanticRules;
+    }
 
     /**
      * 判断当前请求是否应走 Deep Research。
@@ -40,7 +59,8 @@ public class DeepResearchRouter {
                 || normalizedQuestion.contains("why")
                 || normalizedQuestion.contains("troubleshoot")
                 || normalizedQuestion.contains("call chain")
-                || normalizedQuestion.contains("impact");
+                || normalizedQuestion.contains("impact")
+                || querySemanticRules.containsAnyDeepResearchSignal(question);
     }
 
     /**
@@ -50,7 +70,8 @@ public class DeepResearchRouter {
      * @return 复杂对比题返回 true
      */
     private boolean looksLikeDeepComparisonQuestion(String normalizedQuestion) {
-        if (!containsComparisonIntent(normalizedQuestion)) {
+        boolean hasEnglishIntent = containsComparisonIntent(normalizedQuestion);
+        if (!hasEnglishIntent && !containsChineseComparisonIntent(normalizedQuestion)) {
             return false;
         }
         return hasDimensionListBeforeComparison(normalizedQuestion)
@@ -69,6 +90,16 @@ public class DeepResearchRouter {
                 || normalizedQuestion.contains("difference")
                 || normalizedQuestion.contains(" vs ")
                 || normalizedQuestion.contains(" versus ");
+    }
+
+    /**
+     * 判断原始问题是否包含中文对比意图。
+     *
+     * @param question 原始问题
+     * @return 包含返回 true
+     */
+    private boolean containsChineseComparisonIntent(String question) {
+        return querySemanticRules.containsAnyComparisonSignal(question);
     }
 
     /**
@@ -114,6 +145,15 @@ public class DeepResearchRouter {
                 firstIndex = currentIndex;
             }
         }
+        for (String signal : querySemanticRules.getComparisonSignals()) {
+            if (signal == null || signal.isBlank()) {
+                continue;
+            }
+            int currentIndex = normalizedQuestion.indexOf(signal);
+            if (currentIndex >= 0 && (firstIndex < 0 || currentIndex < firstIndex)) {
+                firstIndex = currentIndex;
+            }
+        }
         return firstIndex;
     }
 
@@ -125,7 +165,7 @@ public class DeepResearchRouter {
      */
     private int countListDelimiters(String text) {
         int delimiterCount = 0;
-        String[] delimiters = {",", "/", " and ", "&"};
+        String[] delimiters = {",", "/", " and ", "&", "、", "，", " 和 ", " 与 "};
         for (String delimiter : delimiters) {
             int searchIndex = text.indexOf(delimiter);
             while (searchIndex >= 0) {

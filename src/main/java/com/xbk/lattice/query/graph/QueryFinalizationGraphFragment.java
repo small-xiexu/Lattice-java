@@ -190,7 +190,7 @@ public class QueryFinalizationGraphFragment {
         QueryResponse queryResponse;
         if (!state.isHasFusedHits()) {
             queryResponse = new QueryResponse(
-                    "NO_RELEVANT_KNOWLEDGE",
+                    "当前未找到与该问题直接相关的知识。",
                     List.of(),
                     List.of(),
                     state.getQueryId(),

@@ -12,6 +12,24 @@ import org.springframework.stereotype.Service;
 @Service
 public class QueryIntentClassifier {
 
+    private final QuerySemanticRules querySemanticRules;
+
+    /**
+     * 创建查询意图分类器（无参回退构造器）。
+     */
+    public QueryIntentClassifier() {
+        this(null);
+    }
+
+    /**
+     * 创建查询意图分类器。
+     *
+     * @param querySemanticRules 查询语义规则
+     */
+    public QueryIntentClassifier(QuerySemanticRules querySemanticRules) {
+        this.querySemanticRules = querySemanticRules == null ? new QuerySemanticRules() : querySemanticRules;
+    }
+
     /**
      * 识别查询意图。
      *
@@ -23,6 +41,12 @@ public class QueryIntentClassifier {
             return QueryIntent.GENERAL;
         }
         if (!QueryTokenExtractor.extractExactIdentifierTokens(question).isEmpty()) {
+            return QueryIntent.CONFIGURATION;
+        }
+        if (querySemanticRules.containsAnyArchitectureSignal(question)) {
+            return QueryIntent.ARCHITECTURE;
+        }
+        if (querySemanticRules.containsAnyConfigIdentifierSignal(question)) {
             return QueryIntent.CONFIGURATION;
         }
         return QueryIntent.GENERAL;

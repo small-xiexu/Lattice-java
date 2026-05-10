@@ -22,14 +22,13 @@ public class QueryAnswerPayload {
     private final String fallbackReason;
 
     /**
-     * 创建 Query 答案载荷。
+     * 创建 Query 答案载荷（无显式 fallback 原因）。
      *
      * @param answerMarkdown Markdown 答案
      * @param answerOutcome 答案语义
      * @param generationMode 生成模式
      * @param modelExecutionStatus 模型执行状态
      * @param answerCacheable 是否允许写入 Query Cache
-     * @param fallbackReason fallback 原因
      */
     public QueryAnswerPayload(
             String answerMarkdown,

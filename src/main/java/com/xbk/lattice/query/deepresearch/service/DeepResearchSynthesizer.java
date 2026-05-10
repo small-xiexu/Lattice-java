@@ -31,6 +31,12 @@ public class DeepResearchSynthesizer {
 
     private static final CitationCheckOptions CITATION_CHECK_OPTIONS = CitationCheckOptions.defaults();
 
+    private static final String INSUFFICIENT_EVIDENCE_TEXT = "证据不足，无法生成可核验引用版答案";
+
+    private static final String LAYER_HEADING_PREFIX = "第 ";
+
+    private static final String LAYER_HEADING_SUFFIX = " 层：";
+
     private final CitationCheckService citationCheckService;
 
     private final DeepResearchProjector deepResearchProjector;
@@ -248,13 +254,13 @@ public class DeepResearchSynthesizer {
             }
         }
         if (!appendedConclusion) {
-            answerBuilder.append("- INSUFFICIENT_EVIDENCE").append("\n");
+            answerBuilder.append("- ").append(INSUFFICIENT_EVIDENCE_TEXT).append("\n");
         }
         answerBuilder.append("\n");
         if (layerSummaries != null && !layerSummaries.isEmpty()) {
             answerBuilder.append("## Layers").append("\n");
             for (LayerSummary layerSummary : layerSummaries) {
-                answerBuilder.append("- Layer ").append(layerSummary.getLayerIndex() + 1).append(": ")
+                answerBuilder.append("- ").append(LAYER_HEADING_PREFIX).append(layerSummary.getLayerIndex() + 1).append(LAYER_HEADING_SUFFIX)
                         .append(resolveLayerSummaryMarkdown(layerSummary))
                         .append("\n");
             }
@@ -528,7 +534,7 @@ public class DeepResearchSynthesizer {
         if (normalizedSegments.isEmpty()) {
             return "NO_EVIDENCE";
         }
-        return String.join("; ", normalizedSegments);
+        return String.join("；", normalizedSegments);
     }
 
     /**

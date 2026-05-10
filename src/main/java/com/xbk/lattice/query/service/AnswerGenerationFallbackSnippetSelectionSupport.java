@@ -359,6 +359,7 @@ abstract class AnswerGenerationFallbackSnippetSelectionSupport extends AnswerGen
      * @param preferredTokens 查询 token
      * @return 候选分值
      */
+    @Override
     int scoreQuestionFocusedFallbackLine(
             String question,
             String rawLine,
@@ -513,6 +514,7 @@ abstract class AnswerGenerationFallbackSnippetSelectionSupport extends AnswerGen
      * @param question 用户问题
      * @return 覆盖返回 true
      */
+    @Override
     boolean containsRequestedExactIdentifier(String normalizedLine, String question) {
         if (normalizedLine == null || normalizedLine.isBlank()) {
             return false;

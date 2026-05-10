@@ -200,6 +200,7 @@ List<QueryArticleHit> selectFallbackEvidenceHits(String question, List<QueryArti
      * @param queryTokens 查询 token
      * @return 更贴题的证据句
      */
+    @Override
     String selectQuestionFocusedFallbackSnippet(
             String question,
             QueryArticleHit queryArticleHit,
@@ -221,6 +222,7 @@ List<QueryArticleHit> selectFallbackEvidenceHits(String question, List<QueryArti
      * @param limit 最大条数
      * @return 证据句列表
      */
+    @Override
     List<String> selectQuestionFocusedFallbackSnippets(
             String question,
             QueryArticleHit queryArticleHit,
@@ -345,6 +347,7 @@ List<QueryArticleHit> selectFallbackEvidenceHits(String question, List<QueryArti
      * @param queryArticleHit 查询命中
      * @return path 契约候选行
      */
+    @Override
     List<String> selectPathContractCandidateLines(QueryArticleHit queryArticleHit) {
         if (queryArticleHit == null) {
             return List.of();

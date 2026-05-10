@@ -130,9 +130,11 @@ public class DeepResearchProjector {
         return cleanedMarkdown.trim();
     }
 
+    private static final String INSUFFICIENT_EVIDENCE_TEXT = "证据不足，无法生成可核验引用版答案";
+
     private AnswerProjectionBundle insufficientBundle() {
         return new AnswerProjectionBundle(
-                "INSUFFICIENT_EVIDENCE",
+                INSUFFICIENT_EVIDENCE_TEXT,
                 List.of()
         );
     }

@@ -66,8 +66,10 @@ boolean looksLikeStructuredFactQuestion(String question) {
     boolean looksLikeExactLookupQuestion(String question) {
         String normalizedQuestion = lowerCase(question);
         return looksLikeStructuredFactQuestion(question)
+                || looksLikePathQuestion(question)
                 || looksLikeRuleConstraintQuestion(question)
                 || looksLikeChangeTrackingQuestion(question)
+                || looksLikeNumericQuestion(question)
                 || containsStructuredQuestionSignal(normalizedQuestion);
     }
 
@@ -266,7 +268,8 @@ boolean looksLikeStructuredFactQuestion(String question) {
         String normalizedQuestion = lowerCase(question);
         return normalizedQuestion.contains("endpoint")
                 || normalizedQuestion.contains("url")
-                || !QueryTokenExtractor.extractExactIdentifierTokens(question).isEmpty();
+                || !QueryTokenExtractor.extractExactIdentifierTokens(question).isEmpty()
+                || querySemanticRules.containsAnyConfigIdentifierSignal(question);
     }
 
     /**
@@ -342,7 +345,8 @@ boolean looksLikeStructuredFactQuestion(String question) {
                 || normalizedQuestion.contains("options")
                 || normalizedQuestion.contains("types")
                 || normalizedQuestion.contains("fields")
-                || normalizedQuestion.contains("steps");
+                || normalizedQuestion.contains("steps")
+                || querySemanticRules.containsAnyEnumSignal(question);
     }
 
     /**
@@ -390,6 +394,9 @@ boolean looksLikeStructuredFactQuestion(String question) {
      * @return 链路题返回 true
      */
     boolean looksLikeFlowQuestion(String question) {
+        if (looksLikePathQuestion(question)) {
+            return false;
+        }
         String normalizedQuestion = lowerCase(question);
         return normalizedQuestion.contains("workflow")
                 || normalizedQuestion.contains("process")

@@ -261,7 +261,7 @@ public class DeepResearchAuditPersistenceService {
      *
      * @param runId run 主键
      * @param evidenceCards 证据卡列表
-     * @param evidenceLedger 证据账本
+     * @param anchorCanonicalization 锚点规范化结果
      */
     private void persistFindingsAndAnchors(
             Long runId,
@@ -398,8 +398,7 @@ public class DeepResearchAuditPersistenceService {
      * 持久化锚点主表与初始校验轨迹。
      *
      * @param runId run 主键
-     * @param evidenceCards 证据卡列表
-     * @param evidenceLedger 证据账本
+     * @param anchorCanonicalization 锚点规范化结果
      */
     private void persistAnchors(Long runId, AnchorCanonicalization anchorCanonicalization) {
         if (anchorCanonicalization == null || anchorCanonicalization.getCanonicalAnchorsById().isEmpty()) {
@@ -446,7 +445,7 @@ public class DeepResearchAuditPersistenceService {
      * @param runId run 主键
      * @param answerAuditSnapshot 答案审计快照
      * @param answerProjectionBundle 答案投影包
-     * @param evidenceLedger 证据账本
+     * @param anchorCanonicalization 锚点规范化结果
      */
     private void persistAnswerProjections(
             Long runId,

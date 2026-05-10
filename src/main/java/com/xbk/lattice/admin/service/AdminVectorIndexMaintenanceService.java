@@ -62,11 +62,16 @@ public class AdminVectorIndexMaintenanceService {
     /**
      * 创建管理侧向量索引维护服务。
      *
-     * @param querySearchProperties 查询检索配置
      * @param searchCapabilityService 检索能力探测服务
+     * @param queryVectorConfigService 查询向量配置服务
      * @param articleJdbcRepository 文章仓储
+     * @param articleChunkJdbcRepository 文章块仓储
      * @param articleVectorJdbcRepository 向量索引仓储
      * @param articleVectorIndexService 向量索引服务
+     * @param articleChunkVectorJdbcRepository 文章块向量索引仓储
+     * @param articleChunkVectorIndexService 文章块向量索引服务
+     * @param vectorSchemaInspector 向量 schema 检查器
+     * @param queryCacheStore Query 缓存存储
      */
     public AdminVectorIndexMaintenanceService(
             SearchCapabilityService searchCapabilityService,

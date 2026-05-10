@@ -257,6 +257,7 @@ abstract class AnswerGenerationReferenceIdentifierSupport extends AnswerGenerati
         }
         removeContextIdentifiersBeforeScopeMarker(question, requestedIdentifiers);
         removeContainerIdentifiersWhenSpecificFieldsExist(requestedIdentifiers);
+        removeIdentifiersSubsumedByPaths(requestedIdentifiers);
         return requestedIdentifiers;
     }
 
@@ -294,7 +295,10 @@ abstract class AnswerGenerationReferenceIdentifierSupport extends AnswerGenerati
                 "docx",
                 "pdf",
                 "markdown",
-                "md"
+                "md",
+                "path",
+                "url",
+                "endpoint"
         ).contains(normalizedIdentifier);
     }
 
@@ -335,6 +339,43 @@ abstract class AnswerGenerationReferenceIdentifierSupport extends AnswerGenerati
             return;
         }
         requestedIdentifiers.removeIf(this::isPayloadContainerIdentifier);
+    }
+
+    /**
+     * 移除已被路径标识覆盖的纯字母子词，避免路径分片词被当作独立精确标识。
+     *
+     * @param requestedIdentifiers 标识列表
+     */
+    void removeIdentifiersSubsumedByPaths(List<String> requestedIdentifiers) {
+        if (requestedIdentifiers == null || requestedIdentifiers.size() <= 1) {
+            return;
+        }
+        List<String> pathIdentifiers = new ArrayList<String>();
+        for (String identifier : requestedIdentifiers) {
+            if (identifier.contains("/")) {
+                pathIdentifiers.add(lowerCase(identifier));
+            }
+        }
+        if (pathIdentifiers.isEmpty()) {
+            return;
+        }
+        requestedIdentifiers.removeIf(identifier -> {
+            if (identifier.contains("/")) {
+                return false;
+            }
+            if (identifier.contains("_") || identifier.contains("-")
+                    || identifier.contains("=") || identifier.contains(".")) {
+                return false;
+            }
+            String normalizedIdentifier = lowerCase(identifier);
+            for (String pathIdentifier : pathIdentifiers) {
+                if (pathIdentifier.contains("/" + normalizedIdentifier + "/")
+                        || pathIdentifier.contains("/" + normalizedIdentifier)) {
+                    return true;
+                }
+            }
+            return false;
+        });
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.xbk.lattice.query.deepresearch.service;
 
+import com.xbk.lattice.query.service.QuerySemanticRules;
 import com.xbk.lattice.shared.json.JsonMappers;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -24,6 +25,8 @@ import java.util.Locale;
 @Service
 public class DeepResearchPlanner {
 
+    private final QuerySemanticRules querySemanticRules;
+
     private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private static final List<String> DEFAULT_REQUIRED_EVIDENCE_TYPES = List.of(
@@ -32,6 +35,22 @@ public class DeepResearchPlanner {
             "GRAPH",
             "CONTRIBUTION"
     );
+
+    /**
+     * 创建 Deep Research 规划器（无参回退构造器）。
+     */
+    public DeepResearchPlanner() {
+        this(null);
+    }
+
+    /**
+     * 创建 Deep Research 规划器。
+     *
+     * @param querySemanticRules 查询语义规则
+     */
+    public DeepResearchPlanner(QuerySemanticRules querySemanticRules) {
+        this.querySemanticRules = querySemanticRules == null ? new QuerySemanticRules() : querySemanticRules;
+    }
 
     /**
      * 生成分层研究计划。
@@ -262,7 +281,8 @@ public class DeepResearchPlanner {
                 || normalizedQuestion.contains("comparison")
                 || normalizedQuestion.contains("difference")
                 || normalizedQuestion.contains(" vs ")
-                || normalizedQuestion.contains(" versus ")) {
+                || normalizedQuestion.contains(" versus ")
+                || querySemanticRules.containsAnyComparisonSignal(question)) {
             return ResearchTaskType.COMPARE;
         }
         if (normalizedQuestion.contains("why") || normalizedQuestion.contains("cause")) {
@@ -285,9 +305,10 @@ public class DeepResearchPlanner {
                 || lowercaseQuestion.contains("comparison")
                 || lowercaseQuestion.contains("difference")
                 || lowercaseQuestion.contains(" vs ")
-                || lowercaseQuestion.contains(" versus ")) {
+                || lowercaseQuestion.contains(" versus ")
+                || querySemanticRules.containsAnyComparisonSignal(normalizedQuestion)) {
             String cleanedQuestion = extractComparisonSubject(normalizedQuestion);
-            String[] parts = cleanedQuestion.split("(?i)\\s+(?:vs|versus|and)\\s+|[,/&+]");
+            String[] parts = cleanedQuestion.split("(?i)\\s+(?:vs|versus|and)\\s+|[,/&+和与]");
             for (String part : parts) {
                 String trimmedPart = part == null ? "" : part.trim();
                 if (!trimmedPart.isBlank()) {
@@ -314,9 +335,19 @@ public class DeepResearchPlanner {
      */
     private String extractComparisonSubject(String question) {
         String normalizedQuestion = question == null ? "" : question.trim();
-        int compareIndex = normalizedQuestion.indexOf("对比");
-        if (compareIndex >= 0 && compareIndex < normalizedQuestion.length() - 2) {
-            normalizedQuestion = normalizedQuestion.substring(compareIndex + 2).trim();
+        for (String signal : querySemanticRules.getComparisonSignals()) {
+            if (signal == null || signal.isBlank()) {
+                continue;
+            }
+            int signalIndex = normalizedQuestion.indexOf(signal);
+            if (signalIndex < 0) {
+                continue;
+            }
+            String suffix = normalizedQuestion.substring(signalIndex + signal.length()).trim();
+            if (suffix.length() >= 2) {
+                normalizedQuestion = suffix;
+                break;
+            }
         }
         normalizedQuestion = normalizedQuestion.replace("有什么区别", "");
         normalizedQuestion = normalizedQuestion.replace("区别是什么", "");

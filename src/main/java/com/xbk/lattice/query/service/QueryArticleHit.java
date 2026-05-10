@@ -155,14 +155,12 @@ public class QueryArticleHit {
     /**
      * 创建查询文章命中。
      *
-     * @param evidenceType 证据类型
      * @param sourceId 资料源主键
      * @param articleKey 文章唯一键
      * @param conceptId 概念标识
      * @param title 标题
      * @param content 内容
      * @param metadataJson 元数据 JSON
-     * @param reviewStatus 审查状态
      * @param sourcePaths 来源路径
      * @param score 评分
      */

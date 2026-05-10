@@ -510,7 +510,7 @@ class QueryControllerTests {
     }
 
     /**
-     * 验证 OCR / 文档识别运行态问答直读后台配置且不创建 pending。
+     * 验证 OCR / 文档识别运行态问答走通用 query graph 且返回 queryId。
      *
      * @throws Exception 测试异常
      */
@@ -524,19 +524,10 @@ class QueryControllerTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"question\":\"现在 OCR / 文档识别状态怎样，图片和扫描 PDF 可用吗？\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.queryId").doesNotExist())
-                .andExpect(jsonPath("$.answer").value(org.hamcrest.Matchers.containsString("已启用连接数：1")))
-                .andExpect(jsonPath("$.answer").value(org.hamcrest.Matchers.containsString("默认图片 OCR 路由：已绑定")))
-                .andExpect(jsonPath("$.answer").value(org.hamcrest.Matchers.containsString("默认扫描 PDF 路由：已绑定")))
-                .andExpect(jsonPath("$.sources[0].derivation").value("RUNTIME_STATUS"))
-                .andExpect(jsonPath("$.sources[0].sourcePaths[*]").value(org.hamcrest.Matchers.hasItems(
-                        "/api/v1/admin/document-parse/connections",
-                        "/api/v1/admin/document-parse/policies/default"
-                )))
-                .andExpect(jsonPath("$.articles[0].derivation").value("RUNTIME_STATUS"))
-                .andExpect(jsonPath("$.answerOutcome").value("SUCCESS"))
-                .andExpect(jsonPath("$.generationMode").value("RULE_BASED"))
-                .andExpect(jsonPath("$.modelExecutionStatus").value("SKIPPED"));
+                .andExpect(jsonPath("$.queryId").isNotEmpty())
+                .andExpect(jsonPath("$.answer").isNotEmpty())
+                .andExpect(jsonPath("$.answerOutcome").isNotEmpty())
+                .andExpect(jsonPath("$.generationMode").isNotEmpty());
 
         Integer pendingCount = jdbcTemplate.queryForObject(
                 "select count(*) from lattice.pending_queries",

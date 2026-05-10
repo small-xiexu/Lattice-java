@@ -36,3 +36,60 @@
 - B1 默认不引入向量 ORM 映射；向量字段写入和检索后置到 B3，优先使用 `JdbcTemplate/jOOQ + SQL`
 - 涉及 PostgreSQL 本机端口访问、Docker `exec` 或外网依赖下载时，注意当前环境可能需要额外权限
 - 若做后台/真实链路验收，默认先走 OpenAI 成本更可控的模型绑定完成主回归；只有在“验证 Claude 角色选路是否仍可用”这一类专项场景下，才临时切到 Claude 绑定并在验收后恢复
+
+## Query 红线通用规则定义
+
+- 通用文本结构规则：仅限路径、URL、文件后缀、数字、Markdown、JSON、表格、引用标记、代码符号等与业务无关的格式解析。
+- 通用证据排序规则：只能基于证据质量、覆盖度、结构完整度、引用可用性、来源优先级等通用信号，不得绑定具体业务域、文档标题、文件名、术语或样例问题。
+- 通用提示词约束：只能约束回答必须基于证据、不得编造、引用格式、缺证处理等通用行为，不得写入特定资料的答案模板或业务结论。
+- allowlist candidate：路径、URL、数字、Markdown、JSON、表格等通用解析命中只能标记为候选，不得静默放过；是否保留必须经过人工确认。
+- 红线硬编码：任何依赖具体业务域、具体文档、具体文件名、具体术语、具体问题问法、具体样例字符串、具体答案片段来改变检索、路由、重写、排序、生成或兜底行为的分支，都按红线处理。
+
+## Query / Answer 修复执行禁令
+
+- 任何 Query、检索、回答、fallback、citation、rerank、AnswerGeneration 相关修复，默认先分析后改代码；未输出失败归因报告前，不准修改 `src/main/java`。
+- 每轮只允许处理一个明确根因，不准一轮同时修多个 RC，不准为了“顺手”扩范围。
+- 默认不准修改 `src/test/java`；只有用户明确确认“测试断言过期”或“测试预期需要更新”时，才允许改测试。
+- 默认不准修改 `scripts/scan-redline.sh`、`AGENTS.md`、`CLAUDE.md`、redline allowlist。
+- `AnswerGenerationService`、fallback outcome、evidence selector、snippet selector、fallback conclusion builder 属于高危主链；修改前必须说明：失败类型、通用修复点、为什么不是 case 特判、影响哪些测试、如何验证没有 outcome 过度升级。
+- 禁止为了某个测试样例加入具体业务词、文档名、文件名、答案片段、问题问法判断。
+- 中文问法识别只能使用配置化、通用语言信号；不得在 Java 主链硬编码。
+
+## 质量工程推进流程
+
+- 后续推进项目质量、Query 准确率、检索/回答链路或 bad case 修复时，默认必须按以下顺序执行，不允许跳步。
+- 第一步：红线扫描。先运行 `bash scripts/scan-redline.sh special_cases_report.md`，必须确认 `BLOCKER=0`；不允许通过修改 `scripts/scan-redline.sh`、扩大 allowlist 或删除扫描规则来通过门禁。
+- 第二步：基础测试。运行 `mvn test`；若测试失败，先修通用工程问题，不进入准确率调优。
+- 第三步：干净基线评测。运行现有 query regression，输出 `baseline_report.md`；本阶段只允许评测，不允许修改 `src/main/java`。
+- 第四步：失败类型归因。每个失败 case 必须归入且只能归入以下类别之一：资料缺失、编译抽取缺失、chunk 切分问题、检索未召回、rerank 排序低、证据已召回但回答漏点、引用错误、应拒答但编造、多证据冲突未处理。
+- 第五步：通用能力修复。只能基于失败类型修通用能力，不允许针对单个 case 写保护逻辑；优先级依次为证据召回、证据排序、citation binding、answer grounding、prompt 和表达。
+- 第六步：回归验证。每次修复后必须重新运行 redline scan、`mvn test`、query regression，并输出修复前后指标对比。
+
+## 准确率指标定义
+
+- 不得只使用单一 Answer Accuracy 判断项目质量；每次 query regression 至少输出以下指标。
+- Answer Accuracy：最终答案是否正确。
+- Recall@5：正确证据是否进入前 5 条候选。
+- Recall@10：正确证据是否进入前 10 条候选。
+- Citation Accuracy：引用是否真实支撑答案。
+- Abstain Accuracy：证据不足时是否正确拒答。
+- Hallucination Count：无证据编造次数。
+- 若 Recall@10 不达标，优先修检索、编译、chunk、fact card、source_ref、rerank，不得通过 prompt 或答案模板硬补。
+
+## Eval 使用规则
+
+- 评测集分为 public eval 与 hidden eval。
+- public eval：允许 AI 查看，用于调试和失败归因。
+- hidden eval：不允许 AI 查看，只用于最终验收。
+- 禁止将 hidden eval 的问题、标准答案、关键词、文件名、case id、expected citation 写入 `src/main/java`、`src/main/resources`、prompt 模板、`config/rules.yaml`、`config/synonyms.yaml`、SQL 初始化数据或回归脚本。
+- 若 hidden eval 准确率明显低于 public eval，优先判断是否存在过拟合或测试集污染。
+
+## Bad Case 修复路径
+
+- 先复现并记录到 `eval/bad_cases.jsonl` 或新的执行清单，不在 query 主链直接写保护逻辑。
+- 若问题来自知识缺失，优先补充或修正 `kb/sources`。
+- 若问题来自术语归一，优先迁移到 `config/synonyms.yaml`。
+- 若问题来自可配置规则，优先迁移到 `config/rules.yaml` 或 `compiler/config`。
+- 若问题来自抽取质量，优先修正编译抽取、结构化证据、索引字段或证据排序。
+- 若问题来自回答约束，优先调整通用提示词或通用后处理规则，不写特定答案模板。
+- 修复后必须用 bad case 回归验证；未经验证不得标记完成。

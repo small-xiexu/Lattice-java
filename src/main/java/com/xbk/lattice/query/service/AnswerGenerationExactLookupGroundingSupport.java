@@ -171,13 +171,6 @@ abstract class AnswerGenerationExactLookupGroundingSupport extends AnswerGenerat
     }
 
     /**
-     * 从证据中提取接口或 URL path。
-     *
-     * @param snippets 证据句
-     * @return 路径列表
-     */
-
-    /**
      * 删除显式路径契约题答案中未被用户点名的反例路径，避免把证据里的旁路示例扩写进最终结论。
      *
      * @param answerMarkdown 答案 Markdown

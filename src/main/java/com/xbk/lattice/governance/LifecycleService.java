@@ -184,7 +184,8 @@ public class LifecycleService {
     /**
      * 执行单篇文章生命周期切换。
      *
-     * @param conceptId 概念标识
+     * @param articleId 文章唯一键
+     * @param sourceId 资料源主键
      * @param lifecycle 目标生命周期
      * @param reason 原因
      * @param updatedBy 更新人

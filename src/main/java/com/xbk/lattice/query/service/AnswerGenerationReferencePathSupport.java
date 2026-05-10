@@ -56,7 +56,7 @@ List<String> extractEvidencePaths(List<String> snippets) {
         if (snippets == null || snippets.isEmpty()) {
             return paths;
         }
-        Pattern pathPattern = Pattern.compile("/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._*{}-]+)+");
+        Pattern pathPattern = Pattern.compile("/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._*{}-]+)*");
         for (String snippet : snippets) {
             if (snippet == null || snippet.isBlank()) {
                 continue;

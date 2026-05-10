@@ -109,7 +109,7 @@ abstract class LlmGatewayInvocationSupport extends LlmGatewayRouteSupport {
      * 执行带缓存与预算守卫的模型调用。
      *
      * @param llmClient 模型客户端
-     * @param modelName 模型标识
+     * @param routeResolution 路由解析结果
      * @param purpose 调用用途
      * @param systemPrompt 系统提示词
      * @param userPrompt 用户提示词

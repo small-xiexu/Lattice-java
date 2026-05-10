@@ -6,6 +6,7 @@ spring:
       - optional:classpath:config/lattice-llm.yml
       - optional:classpath:config/lattice-compiler.yml
       - optional:classpath:config/lattice-query.yml
+      - optional:classpath:config/lattice-query-semantic.yml
       - optional:classpath:config/lattice-source.yml
   servlet:
     multipart:

@@ -103,13 +103,13 @@ class StructuredTableQueryRegressionTests {
                 ),
                 new RegressionCase(
                         "按 status 统计各多少",
-                        List.of("done=2", "pending=1", "总行数=3"),
+                        List.of("done=2", "pending=1", "total_rows=3"),
                         "GROUP_BY",
                         null
                 ),
                 new RegressionCase(
                         "按 category 统计各多少",
-                        List.of("core=2", "edge=1", "总行数=3"),
+                        List.of("core=2", "edge=1", "total_rows=3"),
                         "GROUP_BY",
                         null
                 ),

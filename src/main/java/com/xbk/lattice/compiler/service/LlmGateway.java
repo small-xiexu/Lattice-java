@@ -54,12 +54,16 @@ public class LlmGateway extends LlmGatewayInvocationSupport {
      * @param openAiChatModel OpenAI ChatModel
      * @param restClientBuilder RestClient 构建器
      * @param objectMapper Jackson 对象映射器
+     * @param openAiBaseUrl OpenAI 基础地址
+     * @param openAiApiKey OpenAI API Key
+     * @param openAiChatOptionsModel OpenAI Chat 模型名
      * @param anthropicConnectionProperties Anthropic 连接配置
      * @param anthropicChatProperties Anthropic Chat 配置
      * @param redisKeyValueStore Redis 键值存储
      * @param llmProperties LLM 配置
      * @param llmClientFactory LLM 客户端工厂
      * @param executionLlmSnapshotService 运行时快照服务
+     * @param llmInvocationExecutor LLM 调用执行器
      * @param structuredEventLogger 结构化事件日志器
      */
     @Autowired
@@ -299,6 +303,7 @@ public class LlmGateway extends LlmGatewayInvocationSupport {
      * @param envelope 调用信封
      * @param promptCacheWritePolicy prompt cache 写策略
      */
+    @Override
     public void applyPromptCacheWritePolicy(
             LlmInvocationEnvelope envelope,
             PromptCacheWritePolicy promptCacheWritePolicy

@@ -23,7 +23,7 @@ import java.util.Set;
 @Service
 public class CitationCheckService {
 
-    private static final String INSUFFICIENT_EVIDENCE_MARKER = "[insufficient-evidence]";
+    private static final String INSUFFICIENT_EVIDENCE_MARKER = "（当前证据不足）";
 
     private final CitationExtractor citationExtractor;
 
@@ -396,7 +396,7 @@ public class CitationCheckService {
         if (normalizedClaimText.isBlank()) {
             return INSUFFICIENT_EVIDENCE_MARKER;
         }
-        return normalizedClaimText + " " + INSUFFICIENT_EVIDENCE_MARKER;
+        return normalizedClaimText + INSUFFICIENT_EVIDENCE_MARKER;
     }
 
     private String normalizeEvidenceInsufficientMarkers(String answerMarkdown) {

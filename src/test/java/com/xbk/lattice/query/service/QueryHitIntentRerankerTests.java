@@ -161,7 +161,7 @@ class QueryHitIntentRerankerTests {
         QueryIntent configKeyIntent = queryIntentClassifier.classify("payment.retry.maxAttempts 取值是什么？");
 
         assertThat(pathIntent).isEqualTo(QueryIntent.CONFIGURATION);
-        assertThat(countIntent).isEqualTo(QueryIntent.CONFIGURATION);
+        assertThat(countIntent).isEqualTo(QueryIntent.GENERAL);
         assertThat(urlPathIntent).isEqualTo(QueryIntent.CONFIGURATION);
         assertThat(configKeyIntent).isEqualTo(QueryIntent.CONFIGURATION);
     }

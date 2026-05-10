@@ -24,7 +24,7 @@ class AnswerFallbackMarkdownBuilderTests {
      */
     @Test
     void shouldBuildFallbackMarkdownWithoutEvidence() {
-        String answerMarkdown = fallbackMarkdownBuilder.buildFallbackMarkdown("timeout 配置是多少", List.of());
+        String answerMarkdown = fallbackMarkdownBuilder.buildEvidenceMarkdown("timeout 配置是多少", List.<QueryArticleHit>of());
 
         assertThat(answerMarkdown).contains("# 查询回答");
         assertThat(answerMarkdown).contains("## 问题");
@@ -47,7 +47,7 @@ class AnswerFallbackMarkdownBuilderTests {
                 0.8
         );
 
-        String revisionMarkdown = fallbackMarkdownBuilder.buildFallbackRevisionMarkdown(
+        String revisionMarkdown = fallbackMarkdownBuilder.buildRevisionEvidenceMarkdown(
                 "timeout 配置是多少",
                 "旧答案 timeout=20",
                 "timeout 应为 30",

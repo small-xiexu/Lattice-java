@@ -51,6 +51,7 @@ abstract class AnswerGenerationFallbackOutcomeSupport extends AnswerGenerationEx
         super(llmGateway);
     }
 
+    @Override
     List<String> extractQueryTokens(String question) {
         List<String> focusedTokens = QueryEvidenceRelevanceSupport.extractHighSignalTokens(question);
         if (!focusedTokens.isEmpty()) {
@@ -66,6 +67,7 @@ abstract class AnswerGenerationFallbackOutcomeSupport extends AnswerGenerationEx
      * @param queryTokens 查询 token
      * @return 匹配内容行
      */
+    @Override
     List<String> selectMatchedLines(String content, List<String> queryTokens) {
         List<String> matchedLines = new ArrayList<String>();
         String bodyContent = ArticleMarkdownSupport.extractBody(content);
@@ -103,6 +105,7 @@ abstract class AnswerGenerationFallbackOutcomeSupport extends AnswerGenerationEx
      * @param metadataJson 元数据 JSON
      * @return 描述
      */
+    @Override
     String extractDescription(String metadataJson) {
         if (metadataJson == null || metadataJson.isBlank()) {
             return "";
@@ -163,6 +166,7 @@ abstract class AnswerGenerationFallbackOutcomeSupport extends AnswerGenerationEx
      * @param fallbackReason fallback 原因
      * @return fallback 载荷
      */
+    @Override
     QueryAnswerPayload buildEvidencePayload(
             String question,
             List<QueryArticleHit> queryArticleHits,
@@ -204,13 +208,12 @@ abstract class AnswerGenerationFallbackOutcomeSupport extends AnswerGenerationEx
         if (preferredOutcome == null || preferredOutcome == AnswerOutcome.SUCCESS) {
             return evidenceOutcome;
         }
-        if (preferredOutcome == AnswerOutcome.PARTIAL_ANSWER && evidenceOutcome == AnswerOutcome.SUCCESS) {
-            return AnswerOutcome.SUCCESS;
-        }
-        if (preferredOutcome == AnswerOutcome.PARTIAL_ANSWER
-                && evidenceOutcome == AnswerOutcome.NO_RELEVANT_KNOWLEDGE
-                && (looksLikeStrictExactIdentifierQuestion(question) || looksLikeRequiredFacetQuestion(question))) {
-            return AnswerOutcome.NO_RELEVANT_KNOWLEDGE;
+        if (preferredOutcome == AnswerOutcome.PARTIAL_ANSWER) {
+            if (evidenceOutcome == AnswerOutcome.NO_RELEVANT_KNOWLEDGE
+                    && (looksLikeStrictExactIdentifierQuestion(question) || looksLikeRequiredFacetQuestion(question))) {
+                return AnswerOutcome.NO_RELEVANT_KNOWLEDGE;
+            }
+            return evidenceOutcome;
         }
         return preferredOutcome;
     }
@@ -276,6 +279,7 @@ abstract class AnswerGenerationFallbackOutcomeSupport extends AnswerGenerationEx
      * @param queryArticleHit 查询命中
      * @return 可直接回答返回 true
      */
+    @Override
     boolean isDirectFallbackAnswerable(String question, QueryArticleHit queryArticleHit) {
         if (queryArticleHit == null) {
             return false;

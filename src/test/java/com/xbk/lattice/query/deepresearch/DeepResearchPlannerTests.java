@@ -121,6 +121,6 @@ class DeepResearchPlannerTests {
 
         assertThat(plan.getLayers()).hasSize(2);
         assertThat(plan.getLayers().get(0).getTasks()).extracting(ResearchTask::getQuestion)
-                .containsExactly("库存并发控制 的关键结论是什么", "补偿重试策略 的关键结论是什么");
+                .containsExactly("库存并发控制", "补偿重试策略");
     }
 }

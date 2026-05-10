@@ -131,7 +131,7 @@ class AnswerCoverageCheckServiceTests {
 
         assertThat(result.getCoverageStatus()).isEqualTo(AnswerCoverageStatus.PARTIAL);
         assertThat(result.getSuggestedOutcome()).isEqualTo(AnswerOutcome.PARTIAL_ANSWER);
-        assertThat(result.getMissingItems()).anyMatch(item -> item.contains("顺序不一致"));
+        assertThat(result.getMissingItems()).anyMatch(item -> item.contains("SEQUENCE_ORDER_MISMATCH"));
     }
 
     /**

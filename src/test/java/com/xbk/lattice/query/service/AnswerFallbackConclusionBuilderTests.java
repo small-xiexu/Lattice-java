@@ -24,9 +24,9 @@ class AnswerFallbackConclusionBuilderTests {
      */
     @Test
     void shouldReturnEmptyConclusionWhenEvidenceMissing() {
-        List<String> conclusionLines = conclusionBuilder.buildFallbackConclusionLines(
+        List<String> conclusionLines = conclusionBuilder.buildEvidenceConclusionLines(
                 "timeout 配置是多少",
-                List.of(),
+                List.<QueryArticleHit>of(),
                 support.extractQueryTokens("timeout 配置是多少")
         );
 
@@ -48,7 +48,7 @@ class AnswerFallbackConclusionBuilderTests {
                 0.8
         );
 
-        List<String> conclusionLines = conclusionBuilder.buildFallbackConclusionLines(
+        List<String> conclusionLines = conclusionBuilder.buildEvidenceConclusionLines(
                 "timeout 配置是多少",
                 List.of(sourceHit),
                 support.extractQueryTokens("timeout 配置是多少")

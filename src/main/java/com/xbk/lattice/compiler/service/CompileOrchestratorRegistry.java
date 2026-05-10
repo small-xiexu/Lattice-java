@@ -34,7 +34,6 @@ public class CompileOrchestratorRegistry {
     /**
      * 执行编译。
      *
-     * @param orchestrationMode 编排模式
      * @param executionRequest 执行请求
      * @return 编译结果
      * @throws IOException IO 异常

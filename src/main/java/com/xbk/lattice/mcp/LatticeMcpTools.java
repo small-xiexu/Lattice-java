@@ -520,6 +520,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param question 查询问题
      * @return JSON 字符串，包含 answer / queryId / reviewStatus / sourceCount
      */
+    @Override
     @McpTool(name = "lattice_query", description = "Query the Lattice knowledge base and return an answer with source count and a queryId for the pending review lifecycle")
     public String query(@McpToolParam(description = "The question to ask the knowledge base") String question) {
         return super.query(question);
@@ -529,6 +530,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      *
      * @return JSON 字符串，包含 count / items
      */
+    @Override
     @McpTool(name = "lattice_query_pending", description = "List all pending query records that still need confirm, correct, or discard actions")
     public String queryPending() {
         return super.queryPending();
@@ -540,6 +542,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param correction 纠正内容
      * @return JSON 字符串，包含 queryId / revisedAnswer / status
      */
+    @Override
     @McpTool(name = "lattice_query_correct", description = "Submit a correction to a pending query answer; the query remains pending until confirmed")
     public String correct(
             @McpToolParam(description = "The queryId of the pending query to correct") String queryId,
@@ -553,6 +556,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param queryId 待确认查询标识
      * @return JSON 字符串，包含 queryId / status
      */
+    @Override
     @McpTool(name = "lattice_query_confirm", description = "Confirm a pending query answer, persisting it as a contribution and removing it from the pending queue")
     public String confirm(@McpToolParam(description = "The queryId of the pending query to confirm") String queryId) {
         return super.confirm(queryId);
@@ -563,6 +567,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param queryId 待确认查询标识
      * @return JSON 字符串，包含 queryId / status
      */
+    @Override
     @McpTool(name = "lattice_query_discard", description = "Discard a pending query without persisting it as a contribution")
     public String discard(@McpToolParam(description = "The queryId of the pending query to discard") String queryId) {
         return super.discard(queryId);
@@ -574,6 +579,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param limit 返回数量
      * @return JSON 字符串，包含 count / items
      */
+    @Override
     @McpTool(name = "lattice_search", description = "Search the Lattice knowledge base and return fused evidence hits without generating a final answer")
     public String search(
             @McpToolParam(description = "The question or keywords to search") String question,
@@ -587,6 +593,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param id 概念标识或源文件路径
      * @return JSON 字符串，包含 status / type / content 等字段
      */
+    @Override
     @McpTool(name = "lattice_get", description = "Get a knowledge article or source file by articleKey, conceptId, or file path")
     public String get(@McpToolParam(description = "The articleKey, conceptId, or file path to fetch") String id) {
         return super.get(id);
@@ -596,6 +603,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      *
      * @return JSON 字符串，包含文章、源文件、反馈与 pending 数量
      */
+    @Override
     @McpTool(name = "lattice_status", description = "Return knowledge base status counts including articles, sources, contributions, and pending queries")
     public String status() {
         return super.status();
@@ -605,6 +613,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      *
      * @return JSON 字符串，包含 totalIssues / checkedDimensions / items
      */
+    @Override
     @McpTool(name = "lattice_lint", description = "Run the minimum governance lint checks and return the discovered issues")
     public String lint() {
         return super.lint();
@@ -615,6 +624,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param targetIds 逗号分隔的概念标识，空串表示修全部
      * @return JSON 字符串，包含修复结果
      */
+    @Override
     @McpTool(name = "lattice_lint_fix", description = "Auto-fix lint issues that are marked as fixable using LLM")
     public String lintFix(
             @McpToolParam(description = "Comma-separated conceptIds to fix, or empty for all fixable issues") String targetIds
@@ -626,6 +636,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      *
      * @return JSON 字符串，包含文章审查与反馈沉淀汇总
      */
+    @Override
     @McpTool(name = "lattice_quality", description = "Return quality metrics for articles, review states, contributions, and source coverage")
     public String quality() {
         return super.quality();
@@ -635,6 +646,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      *
      * @return JSON 字符串，包含覆盖率汇总与已覆盖源文件列表
      */
+    @Override
     @McpTool(name = "lattice_coverage", description = "Return source coverage metrics based on articles.source_paths and source_files")
     public String coverage() {
         return super.coverage();
@@ -644,6 +656,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      *
      * @return JSON 字符串，包含遗漏数量与遗漏源文件列表
      */
+    @Override
     @McpTool(name = "lattice_omissions", description = "List source files that are not referenced by any article source_paths")
     public String omissions() {
         return super.omissions();
@@ -653,6 +666,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      *
      * @return JSON 字符串，包含生命周期分布与条目列表
      */
+    @Override
     @McpTool(name = "lattice_lifecycle", description = "Return lifecycle distribution for knowledge articles and list lifecycle items")
     public String lifecycle() {
         return super.lifecycle();
@@ -665,6 +679,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param updatedBy 更新人
      * @return JSON 字符串，包含生命周期切换结果
      */
+    @Override
     @McpTool(name = "lattice_lifecycle_deprecate", description = "Mark an article as deprecated and persist lifecycle metadata")
     public String lifecycleDeprecate(
             @McpToolParam(description = "The articleKey or conceptId to deprecate") String conceptId,
@@ -681,6 +696,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param updatedBy 更新人
      * @return JSON 字符串，包含生命周期切换结果
      */
+    @Override
     @McpTool(name = "lattice_lifecycle_archive", description = "Archive an article and persist lifecycle metadata")
     public String lifecycleArchive(
             @McpToolParam(description = "The articleKey or conceptId to archive") String conceptId,
@@ -697,6 +713,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param updatedBy 更新人
      * @return JSON 字符串，包含生命周期切换结果
      */
+    @Override
     @McpTool(name = "lattice_lifecycle_activate", description = "Reactivate an article and persist lifecycle metadata")
     public String lifecycleActivate(
             @McpToolParam(description = "The articleKey or conceptId to reactivate") String conceptId,
@@ -711,6 +728,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param persist 是否落库
      * @return JSON 字符串，包含增强汇总与明细条目
      */
+    @Override
     @McpTool(name = "lattice_link_enhance", description = "Repair broken title-based wiki-links and sync managed depends_on / related blocks")
     public String linkEnhance(
             @McpToolParam(description = "Whether to persist the enhanced content back into articles") boolean persist
@@ -722,6 +740,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      *
      * @return JSON 字符串，包含 count / items
      */
+    @Override
     @McpTool(name = "lattice_inspect", description = "List normalized inspection questions that still need human confirmation")
     public String inspect() {
         return super.inspect();
@@ -734,6 +753,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param confirmedBy 确认人
      * @return JSON 字符串，包含 importedCount / resolvedIds
      */
+    @Override
     @McpTool(name = "lattice_import_answers", description = "Import a human-reviewed final answer for an inspection item and persist it into contributions")
     public String importAnswers(
             @McpToolParam(description = "The inspection item id returned by lattice_inspect") String inspectionId,
@@ -749,6 +769,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param correctionSummary 纠错摘要
      * @return JSON 字符串，包含修正预览、下游数量与证据支持情况
      */
+    @Override
     @McpTool(name = "lattice_correct", description = "Correct a knowledge article using LLM rewrite with source file cross-validation")
     public String correctKnowledge(
             @McpToolParam(description = "The articleKey or conceptId that has been corrected") String conceptId,
@@ -762,6 +783,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param rootConceptId 根概念标识
      * @return JSON 字符串，包含处理统计
      */
+    @Override
     @McpTool(name = "lattice_propagate", description = "Execute downstream propagation: rewrite all articles that depend on a corrected concept")
     public String propagate(
             @McpToolParam(description = "The corrected root conceptId to propagate from") String rootConceptId
@@ -774,6 +796,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param limit 返回数量
      * @return JSON 字符串，包含 count / items
      */
+    @Override
     @McpTool(name = "lattice_snapshot", description = "List recent article snapshots captured from article upserts")
     public String snapshot(@McpToolParam(description = "The max number of snapshots to return") int limit) {
         return super.snapshot(limit);
@@ -785,6 +808,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param limit 返回数量
      * @return JSON 字符串，包含 conceptId / count / items
      */
+    @Override
     @McpTool(name = "lattice_history", description = "List article snapshot history for an articleKey or conceptId")
     public String history(
             @McpToolParam(description = "The articleKey or conceptId to inspect history for") String conceptId,
@@ -799,6 +823,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param snapshotId 快照标识
      * @return JSON 字符串，包含恢复结果
      */
+    @Override
     @McpTool(name = "lattice_rollback", description = "Restore an article to a previous snapshot version")
     public String rollback(
             @McpToolParam(description = "The articleKey or conceptId to restore") String conceptId,
@@ -812,6 +837,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param path 源文件路径
      * @return JSON 字符串，包含章节标题、层级与行号
      */
+    @Override
     @McpTool(name = "lattice_doc_toc", description = "Return heading hierarchy and line numbers for a source document")
     public String docToc(@McpToolParam(description = "The source file path to inspect") String path) {
         return super.docToc(path);
@@ -823,6 +849,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param heading 章节标题
      * @return JSON 字符串，包含章节标题、行号与正文
      */
+    @Override
     @McpTool(name = "lattice_doc_read", description = "Read a specific heading section from a source document")
     public String docRead(
             @McpToolParam(description = "The source file path to inspect") String path,
@@ -838,6 +865,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @return JSON 字符串，包含 persistedCount / jobId / mode
      * @throws IOException IO 异常
      */
+    @Override
     @McpTool(name = "lattice_compile", description = "Compile a source directory into the knowledge base, optionally in incremental mode")
     public String compile(
             @McpToolParam(description = "The source directory to compile") String sourceDir,
@@ -851,6 +879,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @param limit 返回数量
      * @return JSON 字符串，包含 count / items
      */
+    @Override
     @McpTool(name = "lattice_source_list", description = "List knowledge sources with status, type, and last sync summary")
     public String sourceList(
             @McpToolParam(description = "The max number of sources to return") int limit
@@ -864,6 +893,7 @@ public class LatticeMcpTools extends CompileMcpTools {
      * @return JSON 字符串，包含 runId / status / sourceId / compileJobStatus 等字段
      * @throws IOException IO 异常
      */
+    @Override
     @McpTool(name = "lattice_source_sync", description = "Trigger a source sync run and return the run detail")
     public String sourceSync(
             @McpToolParam(description = "The sourceId returned by lattice_source_list") long sourceId

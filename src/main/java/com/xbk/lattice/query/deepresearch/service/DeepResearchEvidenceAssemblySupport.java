@@ -268,6 +268,7 @@ abstract class DeepResearchEvidenceAssemblySupport extends DeepResearchResearche
      * @param hits 检索命中
      * @return 降级摘要
      */
+    @Override
     protected String fallbackSummaryFromHits(List<QueryArticleHit> hits) {
         if (hits == null || hits.isEmpty()) {
             return "";

@@ -170,6 +170,7 @@ abstract class AnswerGenerationFallbackAggregationSupport extends AnswerGenerati
      * @param conclusionLines 输出结论
      * @param selectedSemanticKeys 已选语义键
      */
+    @Override
     void appendAggregatedConclusionLine(
             String question,
             EvidenceLineMatch match,
@@ -364,6 +365,7 @@ abstract class AnswerGenerationFallbackAggregationSupport extends AnswerGenerati
      * @param snippet 候选句
      * @return 去重键
      */
+    @Override
     String aggregatedEvidenceSemanticKey(String question, String snippet) {
         if (snippet == null || snippet.isBlank()) {
             return "";
@@ -402,6 +404,7 @@ abstract class AnswerGenerationFallbackAggregationSupport extends AnswerGenerati
      * @param snippet 候选句
      * @return 标识列表
      */
+    @Override
     List<String> extractMachineIdentifiers(String snippet) {
         List<String> identifiers = new ArrayList<String>();
         if (snippet == null || snippet.isBlank()) {

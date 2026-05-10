@@ -213,9 +213,10 @@ public class AdminArticleController {
     /**
      * 切换文章生命周期。
      *
-     * @param conceptId 概念标识
+     * @param articleId 文章唯一键
      * @param action 生命周期动作
      * @param lifecycleRequest 生命周期请求
+     * @param sourceId 资料源主键
      * @return 切换结果
      */
     @PostMapping("/{conceptId}/lifecycle/{action}")
@@ -241,8 +242,9 @@ public class AdminArticleController {
     /**
      * 纠正单篇文章。
      *
-     * @param conceptId 概念标识
+     * @param articleId 文章唯一键
      * @param request 纠错请求
+     * @param sourceId 资料源主键
      * @return 纠错结果
      */
     @PostMapping("/{conceptId}/correct")

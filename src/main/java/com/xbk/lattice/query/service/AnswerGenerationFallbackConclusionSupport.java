@@ -72,13 +72,14 @@ String buildEvidenceMarkdown(String question, List<QueryArticleHit> queryArticle
     }
 
     /**
-     * 判断精确路径结论是否覆盖问题需要的契约维度。
+     * 构建精确路径结论行。
      *
      * @param question 用户问题
-     * @param exactPathLines 精确路径结论行
-     * @return 覆盖返回 true
+     * @param fallbackHits fallback 命中列表
+     * @param queryTokens 查询 token
+     * @return 路径结论行
      */
-
+    @Override
     List<String> buildExactPathConclusionLines(
             String question,
             List<QueryArticleHit> fallbackHits,
@@ -154,6 +155,7 @@ String buildEvidenceMarkdown(String question, List<QueryArticleHit> queryArticle
      * @param queryTokens 查询 token
      * @return 候选行
      */
+    @Override
     List<String> selectExactPathCandidateLines(
             String question,
             QueryArticleHit fallbackHit,
@@ -189,6 +191,7 @@ String buildEvidenceMarkdown(String question, List<QueryArticleHit> queryArticle
      * @param selectedSemanticKeys 已选语义键
      * @return 补充事实
      */
+    @Override
     List<EvidenceLineMatch> selectExactPathCompanionMatches(
             String question,
             List<QueryArticleHit> fallbackHits,
@@ -227,13 +230,13 @@ String buildEvidenceMarkdown(String question, List<QueryArticleHit> queryArticle
     }
 
     /**
-     * 判断候选行是否能补充路径题里的规则、变更或状态维度。
+     * 构建聚合证据结论行。
      *
      * @param question 用户问题
-     * @param normalizedLine 归一化候选行
-     * @return 可作为补充返回 true
+     * @param fallbackHits fallback 命中列表
+     * @param queryTokens 查询 token
+     * @return 聚合结论行
      */
-
     List<String> buildAggregatedEvidenceConclusionLines(
             String question,
             List<QueryArticleHit> fallbackHits,
@@ -315,13 +318,4 @@ String buildEvidenceMarkdown(String question, List<QueryArticleHit> queryArticle
                 || looksLikeRuleConstraintQuestion(question);
     }
 
-    /**
-     * 跨命中收集已排序且去重后的证据行。
-     *
-     * @param question 用户问题
-     * @param fallbackHits fallback 证据
-     * @param queryTokens 查询 token
-     * @param limit 最大条数
-     * @return 证据行匹配结果
-     */
 }

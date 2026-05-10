@@ -18,6 +18,8 @@ import java.util.List;
  */
 final class AnswerGenerationPayloadOrchestrator {
 
+    private static final String NO_KNOWLEDGE_MESSAGE = "当前未找到与该问题直接相关的知识。";
+
     private final AnswerGenerationService support;
 
     /**
@@ -38,7 +40,7 @@ final class AnswerGenerationPayloadOrchestrator {
      */
     String generateSingleArticleAnswer(String question, QueryArticleHit articleHit) {
         if (articleHit == null) {
-            return "NO_RELEVANT_KNOWLEDGE";
+            return NO_KNOWLEDGE_MESSAGE;
         }
 
         List<String> queryTokens = support.extractQueryTokens(question);
@@ -90,7 +92,7 @@ final class AnswerGenerationPayloadOrchestrator {
             List<QueryArticleHit> queryArticleHits
     ) {
         if (queryArticleHits == null || queryArticleHits.isEmpty()) {
-            return QueryAnswerPayload.ruleBased("NO_RELEVANT_KNOWLEDGE", AnswerOutcome.NO_RELEVANT_KNOWLEDGE);
+            return QueryAnswerPayload.ruleBased("当前未找到与该问题直接相关的知识。", AnswerOutcome.NO_RELEVANT_KNOWLEDGE);
         }
         if (support.containsOnlyArticleEvidence(queryArticleHits)) {
             QueryArticleHit articleHit = queryArticleHits.get(0);
@@ -194,8 +196,14 @@ final class AnswerGenerationPayloadOrchestrator {
             return markdownPayload;
         }
         if (support.canReuseMarkdownAnswer(llmAnswer)) {
-            return QueryAnswerPayload.fallback(
+            List<QueryArticleHit> fallbackHits = support.selectFallbackEvidenceHits(question, queryArticleHits);
+            AnswerOutcome outcome = support.resolveFallbackAnswerOutcome(question, fallbackHits, null);
+            return new QueryAnswerPayload(
                     SensitiveTextMasker.mask(llmAnswer.trim()),
+                    outcome,
+                    GenerationMode.FALLBACK,
+                    ModelExecutionStatus.DEGRADED,
+                    false,
                     AnswerGenerationService.FALLBACK_REASON_LLM_UNSTRUCTURED_FALLBACK
             );
         }

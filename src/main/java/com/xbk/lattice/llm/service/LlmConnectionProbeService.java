@@ -459,12 +459,6 @@ public class LlmConnectionProbeService {
     }
 
     /**
-     * 规范化基础地址。
-     *
-     * @param baseUrl 原始基础地址
-     * @return 规范化后的基础地址
-     */
-    /**
      * 解析 Provider 展示名称。
      *
      * @param providerType Provider 类型
