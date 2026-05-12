@@ -145,6 +145,10 @@ public class QueryFinalizationGraphFragment {
                 ));
             }
             state.setCitationRepairAttemptCount(state.getCitationRepairAttemptCount() + 1);
+            AnswerOutcome currentOutcome = readAnswerOutcome(state.getAnswerOutcome());
+            if (currentOutcome == AnswerOutcome.SUCCESS) {
+                state.setAnswerOutcome(AnswerOutcome.PARTIAL_ANSWER.name());
+            }
         }
         return queryGraphStateMapper.toDeltaMap(state);
     }
@@ -157,6 +161,12 @@ public class QueryFinalizationGraphFragment {
      */
     public Map<String, Object> persistResponse(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
         QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
+        if (state.getCitationRepairAttemptCount() > 0) {
+            AnswerOutcome currentOutcome = readAnswerOutcome(state.getAnswerOutcome());
+            if (currentOutcome == AnswerOutcome.SUCCESS) {
+                state.setAnswerOutcome(AnswerOutcome.PARTIAL_ANSWER.name());
+            }
+        }
         CitationCheckReport report = queryWorkingSetStore.loadCitationCheckReport(state.getCitationCheckReportRef());
         QueryAnswerAuditSnapshot answerAuditSnapshot = persistAnswerAudit(state, report);
         if (answerAuditSnapshot != null) {

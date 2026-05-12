@@ -184,21 +184,21 @@ final class AnswerMarkdownEvidenceNormalizer {
         if (!normalizedCells.isEmpty() && normalizedCells.get(0).contains("=")) {
             String assignmentSentence = normalizeAssignmentCell(normalizedCells.get(0));
             if (normalizedCells.size() >= 2) {
-                return assignmentSentence + "，" + normalizedCells.get(1);
+                return joinRemainingCells(assignmentSentence, normalizedCells, 1);
             }
             return assignmentSentence;
         }
         if (normalizedCells.size() >= 2 && looksLikeConfigFactKey(normalizedCells.get(0))) {
             String baseSentence = normalizedCells.get(0) + " = " + normalizedCells.get(1);
             if (normalizedCells.size() >= 3) {
-                return baseSentence + "，" + normalizedCells.get(2);
+                return joinRemainingCells(baseSentence, normalizedCells, 2);
             }
             return baseSentence;
         }
         if (looksLikeLabelValueTableRow(normalizedCells)) {
             String baseSentence = normalizedCells.get(0) + " = " + normalizedCells.get(1);
             if (normalizedCells.size() >= 3) {
-                return baseSentence + "，" + normalizedCells.get(2);
+                return joinRemainingCells(baseSentence, normalizedCells, 2);
             }
             return baseSentence;
         }
@@ -426,6 +426,14 @@ final class AnswerMarkdownEvidenceNormalizer {
      * @param normalizedCells 归一化单元格
      * @return 标签值行返回 true
      */
+    private String joinRemainingCells(String prefix, List<String> cells, int startIndex) {
+        StringBuilder sb = new StringBuilder(prefix);
+        for (int i = startIndex; i < cells.size(); i++) {
+            sb.append("，").append(cells.get(i));
+        }
+        return sb.toString();
+    }
+
     private boolean looksLikeLabelValueTableRow(List<String> normalizedCells) {
         if (normalizedCells == null || normalizedCells.size() < 2) {
             return false;

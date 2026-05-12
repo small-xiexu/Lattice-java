@@ -57,24 +57,23 @@ final class AnswerSpreadsheetFieldDefinitionConclusionBuilder {
             datasetSignals.add("code mappings");
         }
         if (!datasetSignals.isEmpty()) {
-            conclusionLines.add("Structured field definitions: "
-                    + String.join(", ", datasetSignals)
-                    + ". "
+            conclusionLines.add("结构化字段定义："
+                    + String.join("、", datasetSignals)
+                    + "。"
                     + citationLiteral);
         }
         for (FieldDefinitionTableSummary tableSummary : tableSummaries) {
             conclusionLines.add(tableSummary.getDisplayName()
-                    + "has "
+                    + "共 "
                     + tableSummary.getFieldDefinitions().size()
-                    + " fields: "
-                    + String.join("; ", tableSummary.getFieldDefinitions())
-                    + ". "
+                    + " 个字段："
+                    + String.join("；", tableSummary.getFieldDefinitions())
                     + citationLiteral);
         }
         if (!codeMappings.isEmpty()) {
-            conclusionLines.add("Code mappings: "
-                    + String.join("; ", codeMappings)
-                    + ". "
+            conclusionLines.add("编码对照："
+                    + String.join("；", codeMappings)
+                    + "。"
                     + citationLiteral);
         }
         return conclusionLines;
@@ -99,14 +98,50 @@ final class AnswerSpreadsheetFieldDefinitionConclusionBuilder {
             return List.of();
         }
         List<String> conclusionLines = new ArrayList<String>();
+        QueryArticleHit primarySourceHit = null;
         for (String requestedIdentifier : requestedIdentifiers) {
             FieldDefinitionMatch definitionMatch = findFieldDefinitionMatch(fallbackHits, requestedIdentifier);
             if (definitionMatch == null) {
                 continue;
             }
+            if (primarySourceHit == null) {
+                primarySourceHit = definitionMatch.getQueryArticleHit();
+            }
             conclusionLines.add(definitionMatch.getDefinitionLine()
                     + " "
                     + support.joinConclusionCitations(List.of(definitionMatch.getQueryArticleHit())));
+        }
+        if (primarySourceHit != null && !conclusionLines.isEmpty()) {
+            String content = primarySourceHit.getContent();
+            if (content != null && !content.isBlank()) {
+                for (String rawLine : content.split("\\R")) {
+                    if (rawLine.isBlank()) {
+                        continue;
+                    }
+                    if (rawLine.trim().startsWith("#")) {
+                        continue;
+                    }
+                    boolean alreadyMatched = false;
+                    for (String identifier : requestedIdentifiers) {
+                        if (lineContainsIdentifier(rawLine, identifier)) {
+                            alreadyMatched = true;
+                            break;
+                        }
+                    }
+                    if (alreadyMatched) {
+                        continue;
+                    }
+                    if (looksLikeJsonStructuralFragment(rawLine)) {
+                        continue;
+                    }
+                    String normalizedLine = evidenceNormalizer.normalizeFallbackLineCandidate(rawLine);
+                    if (!normalizedLine.isBlank()) {
+                        conclusionLines.add(normalizedLine
+                                + " "
+                                + support.joinConclusionCitations(List.of(primarySourceHit)));
+                    }
+                }
+            }
         }
         return conclusionLines;
     }
@@ -294,21 +329,21 @@ final class AnswerSpreadsheetFieldDefinitionConclusionBuilder {
         String enumValue = selectEnumCell(nonBlankTailCells, description);
         List<String> parts = new ArrayList<String>();
         if (!type.isBlank()) {
-            parts.add("type `" + type + "`");
+            parts.add("类型 `" + type + "`");
         }
         if (!length.isBlank()) {
-            parts.add("length `" + length + "`");
+            parts.add("长度 `" + length + "`");
         }
         if (!description.isBlank()) {
             parts.add(description);
         }
         if (!enumValue.isBlank()) {
-            parts.add("enum/value: " + enumValue);
+            parts.add("枚举/取值：" + enumValue);
         }
         if (parts.isEmpty()) {
             return "";
         }
-        return "`" + identifier + "`: " + String.join("; ", parts) + ".";
+        return "`" + identifier + "`：" + String.join("；", parts);
     }
 
     /**
@@ -529,7 +564,10 @@ final class AnswerSpreadsheetFieldDefinitionConclusionBuilder {
         if (question == null || question.isBlank() || primaryHit == null) {
             return false;
         }
-        if (support.extractRequestedReferentialIdentifiers(question).isEmpty()) {
+        if (!support.extractRequestedReferentialIdentifiers(question).isEmpty()) {
+            return !extractFieldDefinitionTableSummaries(primaryHit.getContent()).isEmpty();
+        }
+        if (!support.looksLikeEnumerationQuestion(question)) {
             return false;
         }
         return !extractFieldDefinitionTableSummaries(primaryHit.getContent()).isEmpty();
@@ -652,16 +690,16 @@ final class AnswerSpreadsheetFieldDefinitionConclusionBuilder {
         String normalizedHeading = cleanupHeadingLine(heading);
         List<String> identifiers = extractBacktickIdentifiers(normalizedHeading);
         if (!identifiers.isEmpty()) {
-            return "field group `" + identifiers.get(0) + "` ";
+            return "字段组 `" + identifiers.get(0) + "` ";
         }
         Matcher latinIdentifierMatcher = Pattern.compile("([A-Za-z][A-Za-z0-9_]{2,})").matcher(normalizedHeading);
         if (latinIdentifierMatcher.find()) {
-            return "field group `" + latinIdentifierMatcher.group(1) + "` ";
+            return "字段组 `" + latinIdentifierMatcher.group(1) + "` ";
         }
         if (!normalizedHeading.isBlank()) {
-            return "field group \"" + normalizedHeading + "\" ";
+            return "字段组 \"" + normalizedHeading + "\" ";
         }
-        return "field group " + tableIndex + " ";
+        return "字段组 " + tableIndex + " ";
     }
 
     /**
@@ -706,8 +744,11 @@ final class AnswerSpreadsheetFieldDefinitionConclusionBuilder {
      */
     private boolean isGenericFieldDefinitionSubheading(String heading) {
         String normalizedHeading = lowerCase(heading);
-        return normalizedHeading.contains("field")
-                && normalizedHeading.contains("attribute");
+        if (normalizedHeading.contains("field")
+                && normalizedHeading.contains("attribute")) {
+            return true;
+        }
+        return normalizedHeading.matches("^\\d+\\.\\d+.*");
     }
 
     /**
@@ -842,6 +883,23 @@ final class AnswerSpreadsheetFieldDefinitionConclusionBuilder {
             return false;
         }
         return value.matches(".*\\p{IsHan}.*");
+    }
+
+    /**
+     * 判断候选行是否仅为 JSON 结构片段，避免括号等渲染为独立证据条目。
+     *
+     * @param line 候选行
+     * @return JSON 结构片段返回 true
+     */
+    private boolean looksLikeJsonStructuralFragment(String line) {
+        if (line == null || line.isBlank()) {
+            return true;
+        }
+        String trimmed = line.trim();
+        if (trimmed.matches("[\\[\\]{}](?:,)?\\s*")) {
+            return true;
+        }
+        return trimmed.matches("\"[^\"]+\"\\s*:\\s*[\\[\\{].*");
     }
 
     /**

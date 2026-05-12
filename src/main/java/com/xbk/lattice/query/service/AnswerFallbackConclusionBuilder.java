@@ -245,7 +245,8 @@ final class AnswerFallbackConclusionBuilder {
         if (!exactPathLines.isEmpty() && support.coversRequiredExactPathConclusion(question, exactPathLines)) {
             return exactPathLines;
         }
-        if (support.looksLikeSetupChecklistQuestion(question)) {
+        if (support.looksLikeSetupChecklistQuestion(question)
+                || contentContainsMultipleSetupChecklistItems(primaryHit.getContent())) {
             List<String> setupSnippets = support.selectFallbackContentLines(primaryHit.getContent());
             List<String> setupSteps = support.extractSetupChecklistSteps(setupSnippets);
             if (setupSteps.isEmpty()) {
@@ -293,5 +294,20 @@ final class AnswerFallbackConclusionBuilder {
                     + support.joinConclusionCitations(List.of(secondaryHit)));
         }
         return conclusionLines;
+    }
+
+    /**
+     * 检测 content 中是否包含多个 setup checklist 条目（编号列表 + setup 信号）。
+     *
+     * @param content 证据内容
+     * @return 是否包含 >= 2 个 setup checklist 条目
+     */
+    private boolean contentContainsMultipleSetupChecklistItems(String content) {
+        if (content == null || content.isBlank()) {
+            return false;
+        }
+        List<String> contentLines = support.selectFallbackContentLines(content);
+        List<String> setupSteps = support.extractSetupChecklistSteps(contentLines);
+        return setupSteps.size() >= 2;
     }
 }

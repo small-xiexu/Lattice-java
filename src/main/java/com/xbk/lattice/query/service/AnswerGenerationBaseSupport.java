@@ -216,6 +216,8 @@ abstract class AnswerGenerationBaseSupport extends AnswerGenerationSupportContra
         }
         if (normalizedLine.contains("`")) {
             score += 6;
+        } else if (rawLine != null && rawLine.contains("`")) {
+            score += 6;
         }
         if (lowerCaseLine.contains("采用")
                 || lowerCaseLine.contains("通过")

@@ -376,8 +376,24 @@ abstract class AnswerGenerationFallbackSnippetSelectionSupport extends AnswerGen
         if (answerEvidenceNormalizer.looksLikeTableOfContentsLine(normalizedLine)) {
             score -= 80;
         }
-        if (looksLikeEnumerationQuestion(question) && looksLikeEnumerationFactLine(rawLine, normalizedLine)) {
+        if (looksLikeEnumerationQuestion(question)
+                && !looksLikeNonFactEnumerationLine(rawLine, normalizedLine)
+                && (looksLikeEnumerationFactLine(rawLine, normalizedLine)
+                    || looksLikeNormalizedTableRow(normalizedLine))) {
             score += 32;
+            if (looksLikeNormalizedTableRow(normalizedLine)
+                    && !answerEvidenceNormalizer.looksLikeConfigFactKey(
+                        extractAssignmentKey(normalizedLine))) {
+                score += 36;
+            }
+            if (looksLikeNormalizedTableRow(normalizedLine)
+                    && containsAnyQuestionBigram(question, lowerCase(normalizedLine))) {
+                score += 6;
+            }
+        }
+        if (looksLikeEnumerationQuestion(question)
+                && looksLikeNonFactEnumerationLine(rawLine, normalizedLine)) {
+            score -= 80;
         }
         if (looksLikeNumericQuestion(question) && containsCountConclusionSignal(normalizedLine)) {
             score += 28;
@@ -527,5 +543,22 @@ abstract class AnswerGenerationFallbackSnippetSelectionSupport extends AnswerGen
             }
         }
         return false;
+    }
+
+    /**
+     * 从归一化行中提取赋值键（" = " 之前的部分）。
+     *
+     * @param normalizedLine 归一化候选句
+     * @return 赋值键；无 " = " 时返回空串
+     */
+    private String extractAssignmentKey(String normalizedLine) {
+        if (normalizedLine == null || normalizedLine.isBlank()) {
+            return "";
+        }
+        int equalsIndex = normalizedLine.indexOf(" = ");
+        if (equalsIndex <= 0) {
+            return "";
+        }
+        return normalizedLine.substring(0, equalsIndex).trim();
     }
 }

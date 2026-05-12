@@ -57,6 +57,22 @@ public class QuerySemanticRules {
             "必须遵守", "policy", "rule", "constraint", "requirement", "must", "forbid", "forbidden", "allowed"
     );
 
+    private List<String> capabilitySignals = List.of(
+            "接入方式", "哪些入口", "开发接入", "支持哪些", "集成方式", "接入能力", "入口方式"
+    );
+
+    private List<String> flowSignals = List.of(
+            "运行流程", "流程是什么", "流程", "链路", "流转", "怎么走"
+    );
+
+    private List<String> multiFocusSignals = List.of(
+            "和"
+    );
+
+    private List<String> boilerplateSectionSignals = List.of(
+            "附录"
+    );
+
     /**
      * 获取计数信号列表。
      *
@@ -267,6 +283,126 @@ public class QuerySemanticRules {
      */
     public void setPolicySignals(List<String> policySignals) {
         this.policySignals = policySignals == null ? List.of() : policySignals;
+    }
+
+    /**
+     * 获取能力/接入信号列表。
+     *
+     * @return 能力信号
+     */
+    public List<String> getCapabilitySignals() {
+        return capabilitySignals;
+    }
+
+    /**
+     * 设置能力/接入信号列表。
+     *
+     * @param capabilitySignals 能力信号
+     */
+    public void setCapabilitySignals(List<String> capabilitySignals) {
+        this.capabilitySignals = capabilitySignals == null ? List.of() : capabilitySignals;
+    }
+
+    /**
+     * 判断问题是否包含任意能力/接入信号。
+     *
+     * @param question 查询问题
+     * @return 包含则返回 true
+     */
+    public boolean containsAnyCapabilitySignal(String question) {
+        return containsAnySignal(question, capabilitySignals);
+    }
+
+    /**
+     * 获取流程/流转信号列表。
+     *
+     * @return 流程信号
+     */
+    public List<String> getFlowSignals() {
+        return flowSignals;
+    }
+
+    /**
+     * 设置流程/流转信号列表。
+     *
+     * @param flowSignals 流程信号
+     */
+    public void setFlowSignals(List<String> flowSignals) {
+        this.flowSignals = flowSignals == null ? List.of() : flowSignals;
+    }
+
+    /**
+     * 判断问题是否包含任意流程/流转信号。
+     *
+     * @param question 查询问题
+     * @return 包含则返回 true
+     */
+    public boolean containsAnyFlowSignal(String question) {
+        return containsAnySignal(question, flowSignals);
+    }
+
+    /**
+     * 获取多焦点分隔信号列表。
+     *
+     * @return 多焦点分隔信号
+     */
+    public List<String> getMultiFocusSignals() {
+        return multiFocusSignals;
+    }
+
+    /**
+     * 设置多焦点分隔信号列表。
+     *
+     * @param multiFocusSignals 多焦点分隔信号
+     */
+    public void setMultiFocusSignals(List<String> multiFocusSignals) {
+        this.multiFocusSignals = multiFocusSignals == null ? List.of() : multiFocusSignals;
+    }
+
+    /**
+     * 判断问题是否包含任意多焦点分隔信号。
+     *
+     * @param question 查询问题
+     * @return 包含则返回 true
+     */
+    public boolean containsAnyMultiFocusSeparator(String question) {
+        return containsAnySignal(question, multiFocusSignals);
+    }
+
+    /**
+     * 获取文档附录/结构标记信号列表。
+     *
+     * @return 附录信号
+     */
+    public List<String> getBoilerplateSectionSignals() {
+        return boilerplateSectionSignals;
+    }
+
+    /**
+     * 设置文档附录/结构标记信号列表。
+     *
+     * @param boilerplateSectionSignals 附录信号
+     */
+    public void setBoilerplateSectionSignals(List<String> boilerplateSectionSignals) {
+        this.boilerplateSectionSignals = boilerplateSectionSignals == null ? List.of() : boilerplateSectionSignals;
+    }
+
+    /**
+     * 判断文本行是否以任意附录/文档结构标记开头。
+     *
+     * @param line 候选文本行
+     * @return 以标记开头则返回 true
+     */
+    public boolean startsWithAnyBoilerplateSectionSignal(String line) {
+        if (!StringUtils.hasText(line) || boilerplateSectionSignals == null || boilerplateSectionSignals.isEmpty()) {
+            return false;
+        }
+        for (String signal : boilerplateSectionSignals) {
+            if (signal != null && !signal.isBlank() && line.startsWith(signal)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

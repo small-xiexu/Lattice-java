@@ -130,6 +130,12 @@ abstract class AnswerGenerationQuestionTypeSupport extends AnswerGenerationQuest
             requestedShapeCount++;
         }
         if (requestedShapeCount > 1) {
+            if (containsMultiFocusSeparator(normalizedQuestion)) {
+                int focusTokenCount = extractStructuredFactFocusTokens(question).size();
+                if (focusTokenCount > requestedShapeCount) {
+                    return Math.min(6, focusTokenCount);
+                }
+            }
             return Math.min(4, requestedShapeCount);
         }
         if (containsMultiFocusSeparator(normalizedQuestion)) {
@@ -179,7 +185,7 @@ abstract class AnswerGenerationQuestionTypeSupport extends AnswerGenerationQuest
     }
 
     /**
-     * 从“X 和 Y 分别是多少”这类题目里提取需要覆盖的结构化焦点。
+     * 从"X 和 Y 分别是多少"这类题目里提取需要覆盖的结构化焦点。
      *
      * @param question 用户问题
      * @return 焦点列表
@@ -192,13 +198,18 @@ abstract class AnswerGenerationQuestionTypeSupport extends AnswerGenerationQuest
         if (!shouldExtractStructuredFactFocusTokens(question)) {
             return focusTokens;
         }
-        String[] rawSegments = question.split("[,/&+;]");
+        String[] rawSegments = question.split("[,/&+;、，]");
         for (String rawSegment : rawSegments) {
             String focusToken = cleanupStructuredFactQuestionSegment(rawSegment);
-            if (focusToken.isBlank() || focusTokens.contains(focusToken)) {
+            if (focusToken.isBlank()) {
                 continue;
             }
-            focusTokens.add(focusToken);
+            for (String subToken : focusToken.split("和|与|以及|及")) {
+                String trimmed = subToken.trim();
+                if (!trimmed.isBlank() && !focusTokens.contains(trimmed)) {
+                    focusTokens.add(trimmed);
+                }
+            }
         }
         if (!focusTokens.isEmpty()) {
             return focusTokens;
@@ -251,7 +262,16 @@ abstract class AnswerGenerationQuestionTypeSupport extends AnswerGenerationQuest
         normalizedSegment = normalizedSegment.replace("parameter", " ");
         normalizedSegment = normalizedSegment.replace("config", " ");
         normalizedSegment = normalizedSegment.replace("what is", " ");
-        normalizedSegment = normalizedSegment.replaceAll("[？?。！!：:（）()“”\"'`]", " ");
+        normalizedSegment = normalizedSegment.replace("分别是什么", " ");
+        normalizedSegment = normalizedSegment.replace("分别是多少", " ");
+        normalizedSegment = normalizedSegment.replace("分别是", " ");
+        normalizedSegment = normalizedSegment.replace("各是什么", " ");
+        normalizedSegment = normalizedSegment.replace("是什么", " ");
+        normalizedSegment = normalizedSegment.replace("有多少", " ");
+        normalizedSegment = normalizedSegment.replace("多少", " ");
+        normalizedSegment = normalizedSegment.replace("现在", " ");
+        normalizedSegment = normalizedSegment.replace("目前", " ");
+        normalizedSegment = normalizedSegment.replaceAll("[？?。！!：:（）()\"\"'`]", " ");
         normalizedSegment = normalizedSegment.replaceAll("\\s+", " ").trim();
         if (normalizedSegment.isBlank()) {
             return "";
@@ -263,7 +283,7 @@ abstract class AnswerGenerationQuestionTypeSupport extends AnswerGenerationQuest
     }
 
     /**
-     * 去掉“某批次/某系统的 X”这类片段里的前置范围，只保留真正要取值的 X。
+     * 去掉"某批次/某系统的 X"这类片段里的前置范围，只保留真正要取值的 X。
      *
      * @param normalizedSegment 已归一化的问题片段
      * @return 去掉前置范围后的片段
@@ -273,15 +293,38 @@ abstract class AnswerGenerationQuestionTypeSupport extends AnswerGenerationQuest
             return "";
         }
         int possessiveIndex = normalizedSegment.lastIndexOf(" of ");
-        if (possessiveIndex < 0 || possessiveIndex >= normalizedSegment.length() - 1) {
-            return normalizedSegment;
+        if (possessiveIndex > 0 && possessiveIndex < normalizedSegment.length() - 1) {
+            String scopePart = normalizedSegment.substring(0, possessiveIndex).trim();
+            String focusPart = normalizedSegment.substring(possessiveIndex + 4).trim();
+            if (!scopePart.isBlank() && !focusPart.isBlank()) {
+                return focusPart;
+            }
         }
-        String scopePart = normalizedSegment.substring(0, possessiveIndex).trim();
-        String focusPart = normalizedSegment.substring(possessiveIndex + 4).trim();
-        if (scopePart.isBlank() || focusPart.isBlank()) {
-            return normalizedSegment;
+        possessiveIndex = normalizedSegment.indexOf("的");
+        if (possessiveIndex > 0 && possessiveIndex < normalizedSegment.length() - 1) {
+            String scopePart = normalizedSegment.substring(0, possessiveIndex).trim();
+            String focusPart = normalizedSegment.substring(possessiveIndex + 1).trim();
+            if (!scopePart.isBlank() && !focusPart.isBlank()) {
+                return focusPart;
+            }
         }
-        return focusPart;
+        return normalizedSegment;
+    }
+
+    /**
+     * 当问题已用中文枚举标点列出了多个焦点时，不应优先走批次/序号候选路径，
+     * 否则 label-value 行会被"QA_BATCH_01"这类范围标识抢占。
+     *
+     * @param normalizedQuestion 归一化问题
+     * @return 期望批次/序号答案返回 true
+     */
+    @Override
+    boolean expectsBatchOrOrdinalAnswer(String normalizedQuestion) {
+        if (normalizedQuestion != null
+                && (normalizedQuestion.contains("、") || normalizedQuestion.contains("，"))) {
+            return false;
+        }
+        return super.expectsBatchOrOrdinalAnswer(normalizedQuestion);
     }
 
     /**
@@ -295,6 +338,9 @@ abstract class AnswerGenerationQuestionTypeSupport extends AnswerGenerationQuest
                 && (normalizedQuestion.contains(",")
                 || normalizedQuestion.contains("/")
                 || normalizedQuestion.contains("&")
-                || normalizedQuestion.contains("+"));
+                || normalizedQuestion.contains("+")
+                || normalizedQuestion.contains("、")
+                || normalizedQuestion.contains("，")
+                || querySemanticRules.containsAnyMultiFocusSeparator(normalizedQuestion));
     }
 }

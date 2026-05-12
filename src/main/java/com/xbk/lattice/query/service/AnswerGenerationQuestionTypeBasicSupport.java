@@ -27,7 +27,7 @@ import java.util.regex.Pattern;
 
 /**
  * 答案生成基础问题类型支持
- *
+ * <p>
  * 职责：识别精确查值、枚举、对比、状态、流程、规则和变更类问题
  *
  * @author xiexu
@@ -51,7 +51,7 @@ abstract class AnswerGenerationQuestionTypeBasicSupport extends AnswerGeneration
         super(llmGateway);
     }
 
-boolean looksLikeStructuredFactQuestion(String question) {
+    boolean looksLikeStructuredFactQuestion(String question) {
         String normalizedQuestion = lowerCase(question);
         return containsStructuredQuestionSignal(normalizedQuestion)
                 || !QueryTokenExtractor.extractExactIdentifierTokens(question).isEmpty();
@@ -235,7 +235,7 @@ boolean looksLikeStructuredFactQuestion(String question) {
      * 判断候选句是否更像与主问题无关的相邻枚举项。
      *
      * @param normalizedLine 归一化候选句
-     * @param question 用户问题
+     * @param question       用户问题
      * @return 相邻枚举噪音返回 true
      */
     boolean looksLikeAdjacentEnumerationNoise(String normalizedLine, String question) {
@@ -329,7 +329,8 @@ boolean looksLikeStructuredFactQuestion(String question) {
                 || normalizedQuestion.contains("support")
                 || normalizedQuestion.contains("entry")
                 || normalizedQuestion.contains("integration")
-                || normalizedQuestion.contains("option");
+                || normalizedQuestion.contains("option")
+                || querySemanticRules.containsAnyCapabilitySignal(question);
     }
 
     /**
@@ -361,7 +362,8 @@ boolean looksLikeStructuredFactQuestion(String question) {
                 || normalizedQuestion.contains("comparison")
                 || normalizedQuestion.contains("difference")
                 || normalizedQuestion.contains(" vs ")
-                || normalizedQuestion.contains(" versus ");
+                || normalizedQuestion.contains(" versus ")
+                || querySemanticRules.containsAnyComparisonSignal(question);
     }
 
     /**
@@ -403,7 +405,8 @@ boolean looksLikeStructuredFactQuestion(String question) {
                 || normalizedQuestion.contains("steps")
                 || normalizedQuestion.contains("topic")
                 || normalizedQuestion.contains("queue")
-                || normalizedQuestion.contains("route");
+                || normalizedQuestion.contains("route")
+                || querySemanticRules.containsAnyFlowSignal(question);
     }
 
     /**

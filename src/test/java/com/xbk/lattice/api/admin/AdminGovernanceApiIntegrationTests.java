@@ -569,6 +569,8 @@ class AdminGovernanceApiIntegrationTests {
         jdbcTemplate.execute("TRUNCATE TABLE lattice.repo_snapshots RESTART IDENTITY CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice.source_files CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice.synthesis_artifacts");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.llm_model_profiles RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.llm_provider_connections RESTART IDENTITY CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
     }
 

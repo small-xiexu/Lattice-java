@@ -470,7 +470,8 @@ abstract class AnswerGenerationFallbackAggregationSupport extends AnswerGenerati
                 && (normalizedQuestion.contains(",")
                 || normalizedQuestion.contains("/")
                 || normalizedQuestion.contains("&")
-                || normalizedQuestion.contains("+"));
+                || normalizedQuestion.contains("+")
+                || querySemanticRules.containsAnyMultiFocusSeparator(normalizedQuestion));
     }
 
     /**

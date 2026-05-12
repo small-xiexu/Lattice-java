@@ -386,6 +386,84 @@ abstract class AnswerGenerationEvidenceSignalSupport extends AnswerGenerationCor
     }
 
     /**
+     * 判断候选行是否为非事实枚举行（概览导读句、目录式 bullet、附录标记行等）。
+     * 这些行在结构上可能被误判为枚举事实项，但不含实际答案内容。
+     *
+     * @param rawLine 原始候选行
+     * @param normalizedLine 归一化候选行
+     * @return 非事实枚举行返回 true
+     */
+    boolean looksLikeNonFactEnumerationLine(String rawLine, String normalizedLine) {
+        if (normalizedLine == null || normalizedLine.isBlank()) {
+            return false;
+        }
+        if (looksLikeLeadInSentence(normalizedLine)) {
+            return true;
+        }
+        String normalizedRawLine = rawLine == null ? "" : rawLine.trim();
+        if (normalizedRawLine.startsWith("• ")
+                || normalizedRawLine.startsWith("- ")
+                || normalizedRawLine.startsWith("* ")) {
+            if (!normalizedLine.contains("；")
+                    && !normalizedLine.contains("、")
+                    && !normalizedLine.contains("：")
+                    && !normalizedLine.contains("=")
+                    && !normalizedLine.matches(".*\\d.*")) {
+                return true;
+            }
+        }
+        if (normalizedLine.contains("：")
+                && !containsBatchOrOrdinalSignal(normalizedLine)
+                && !normalizedLine.contains("；")
+                && !normalizedLine.contains("、")
+                && !normalizedLine.contains("=")
+                && !normalizedLine.contains("`")
+                && !normalizedLine.matches(".*\\d.*")) {
+            return true;
+        }
+        return querySemanticRules.startsWithAnyBoilerplateSectionSignal(normalizedLine);
+    }
+
+    /**
+     * 判断归一化行是否像 Markdown 表格行归一化产物（"label = value，desc" 形态）。
+     *
+     * @param normalizedLine 归一化候选句
+     * @return 表格行归一化产物返回 true
+     */
+    boolean looksLikeNormalizedTableRow(String normalizedLine) {
+        if (normalizedLine == null || normalizedLine.isBlank()) {
+            return false;
+        }
+        return normalizedLine.contains(" = ") && normalizedLine.contains("，");
+    }
+
+    /**
+     * 判断归一化行是否包含问题中的任意 2-gram 子串。
+     * N-gram token 采样可能漏掉关键 2-gram，此方法直接从问题原文匹配。
+     *
+     * @param question 用户问题
+     * @param lowerCaseLine 归一化候选句（已小写）
+     * @return 命中返回 true
+     */
+    boolean containsAnyQuestionBigram(String question, String lowerCaseLine) {
+        if (question == null || question.isBlank()
+                || lowerCaseLine == null || lowerCaseLine.isBlank()) {
+            return false;
+        }
+        String normalizedQuestion = lowerCase(question).replaceAll("[?？，。！!\\s]+", "");
+        for (int i = 0; i <= normalizedQuestion.length() - 2; i++) {
+            String bigram = normalizedQuestion.substring(i, i + 2);
+            if (bigram.codePoints().anyMatch(cp -> !Character.isIdeographic(cp))) {
+                continue;
+            }
+            if (lowerCaseLine.contains(bigram)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * 判断候选句是否只是复述用户问题或章节目录标题。
      *
      * @param question 用户问题

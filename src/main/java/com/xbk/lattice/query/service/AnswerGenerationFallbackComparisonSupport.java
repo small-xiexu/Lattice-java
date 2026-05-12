@@ -104,6 +104,17 @@ List<String> extractSetupChecklistSteps(List<String> snippets) {
         if (looksLikeStatusQuestion(question)) {
             return containsStatusSignal(lowerCase(secondarySnippet)) && secondaryScore >= primaryScore - 12;
         }
+        if (looksLikeStructuredFactQuestion(question) && primaryHit != null) {
+            List<String> focusTokens = extractStructuredFactFocusTokens(question);
+            if (!focusTokens.isEmpty()) {
+                String primaryContent = lowerCase(primaryHit.getContent());
+                boolean primaryCoversAllFocusTokens = focusTokens.stream()
+                        .allMatch(token -> lowerCase(primaryContent).contains(lowerCase(token)));
+                if (primaryCoversAllFocusTokens) {
+                    return false;
+                }
+            }
+        }
         return secondaryScore >= Math.max(primaryScore - 10, 8);
     }
 

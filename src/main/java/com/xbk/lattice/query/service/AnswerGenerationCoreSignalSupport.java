@@ -108,7 +108,7 @@ boolean containsStatusSignal(String normalizedLine) {
         if (normalizedLine == null || normalizedLine.isBlank()) {
             return false;
         }
-        return normalizedLine.matches("(?s).*[A-Za-z0-9]+[-_][A-Za-z0-9][A-Za-z0-9_-]*.*");
+        return normalizedLine.matches("(?s).*[A-Za-z0-9]+[-_.][A-Za-z0-9][A-Za-z0-9_-]*.*");
     }
 
     /**

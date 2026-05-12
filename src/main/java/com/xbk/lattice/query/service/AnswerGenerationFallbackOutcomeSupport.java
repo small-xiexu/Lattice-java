@@ -213,6 +213,9 @@ abstract class AnswerGenerationFallbackOutcomeSupport extends AnswerGenerationEx
                     && (looksLikeStrictExactIdentifierQuestion(question) || looksLikeRequiredFacetQuestion(question))) {
                 return AnswerOutcome.NO_RELEVANT_KNOWLEDGE;
             }
+            if (evidenceOutcome == AnswerOutcome.NO_RELEVANT_KNOWLEDGE) {
+                return AnswerOutcome.PARTIAL_ANSWER;
+            }
             return evidenceOutcome;
         }
         return preferredOutcome;
@@ -398,7 +401,8 @@ abstract class AnswerGenerationFallbackOutcomeSupport extends AnswerGenerationEx
         return normalizedQuestion.contains(",")
                 || normalizedQuestion.contains("/")
                 || normalizedQuestion.contains("&")
-                || normalizedQuestion.contains("+");
+                || normalizedQuestion.contains("+")
+                || querySemanticRules.containsAnyMultiFocusSeparator(normalizedQuestion);
     }
 
     /**
