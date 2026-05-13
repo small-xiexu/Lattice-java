@@ -1,0 +1,898 @@
+{
+  "suiteId": "swip-query-eval-candidates",
+  "version": "0.1.0",
+  "description": "SWIP 智能键盘系统使用手册与安装手册的候选问答评测题集。该文件仅用于人工审题和后续筛选，尚未接入 query regression。",
+  "sourceDocuments": [
+    {
+      "source": "/Users/sxie/Downloads/SWIP智能键盘系统使用手册-20250702.docx",
+      "kind": "usage_manual",
+      "notes": "门店操作、支付、结算、重印、FAQ 排障"
+    },
+    {
+      "source": "/Users/sxie/Desktop/SWIP智能键盘系统安装手册-202509.docx",
+      "kind": "installation_manual",
+      "notes": "系统架构、设备初始化、证书、APP 安装、POS 初始化、日志和信息安全"
+    }
+  ],
+  "reviewPolicy": {
+    "status": "APPROVED_FOR_INTERNAL_EVAL",
+    "notes": [
+      "用户已人工审查题目、答案要点和证据线索。",
+      "当前题集可作为 SWIP 内部 eval 候选集。",
+      "仍不得直接写入生产代码、prompt、检索规则或 fallback。"
+    ]
+  },
+  "cases": [
+    {
+      "id": "SWIP-USAGE-GOAL-001",
+      "priority": "P0",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "系统目标",
+      "type": "ARCHITECTURE_SUMMARY",
+      "question": "SWIP 系统的目标是什么，它解决了门店哪些问题？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "SWIP 将银行卡、实体 SVC 卡、银行积分兑换、杉德卡/得仕卡/苏州市民卡等多个有线密码键盘能力合并到一个智能无线密码键盘",
+        "系统通过自研 APP 和后端控制支付并进行支付请求路由转发",
+        "目标是在不改变 POS 银行卡及预付费卡操作习惯的基础上简化操作、节省吧台空间、解耦 POS 和支付机具",
+        "系统增加监控能力，用于及时发现问题并告警"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统使用手册-20250702.docx",
+          "quoteHint": "系统目标是将门店现存的分别进行银行卡/实体SVC卡、银行积分兑换、杉德卡/得仕卡/苏州市民卡等支付的3个有线密码键盘合并为1个智能无线密码键盘"
+        },
+        {
+          "source": "SWIP智能键盘系统安装手册-202509.docx",
+          "quoteHint": "系统目标"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "智能无线密码键盘",
+        "路由转发",
+        "POS",
+        "监控"
+      ],
+      "requiredSourceTerms": [
+        "系统目标"
+      ],
+      "mustNotClaim": [
+        "SWIP 会改变 POS 原有银行卡和预付费卡操作习惯",
+        "SWIP 只支持银行卡"
+      ],
+      "humanJudgement": {
+        "passRule": "回答必须覆盖合并多类支付键盘、支付路由转发、简化门店操作和监控告警四个要点。"
+      }
+    },
+    {
+      "id": "SWIP-USAGE-SVC-READ-001",
+      "priority": "P0",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "SVC卡操作",
+      "type": "EXACT_FACT",
+      "question": "SVC 卡支付、查询和退款在 SWIP 中由谁执行，SWIP 的读卡功能返回什么？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "目前 SVC 卡的支付、查询和退款都是经过 UPP 执行",
+        "SWIP 系统仅通过读卡功能返回卡号等信息",
+        "选择实体卡会触发读卡操作，读卡成功后 POS 提示读卡成功"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统使用手册-20250702.docx",
+          "quoteHint": "目前SVC卡的支付、查询和退款都是经过UPP执行的，SWIP系统仅通过读卡功能，返回卡号等信息。"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "UPP",
+        "读卡",
+        "卡号"
+      ],
+      "requiredSourceTerms": [
+        "SVC卡",
+        "读卡"
+      ],
+      "mustNotClaim": [
+        "SWIP 直接执行 SVC 卡支付、查询和退款",
+        "读卡功能会直接完成扣款"
+      ],
+      "humanJudgement": {
+        "passRule": "必须区分 UPP 执行交易与 SWIP 读卡返回卡号，不能把读卡等同于支付完成。"
+      }
+    },
+    {
+      "id": "SWIP-USAGE-BANK-REFUND-001",
+      "priority": "P0",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "银行卡操作",
+      "type": "PROCEDURE",
+      "question": "银行卡退款时需要输入哪些原交易信息，原交易日期格式是什么？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "银行卡退款时需要先输入原交易参考号",
+        "随后需要输入原交易日期",
+        "原交易日期默认当天，可清除后修改",
+        "日期格式是 4 位数字的月月日日格式"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统使用手册-20250702.docx",
+          "quoteHint": "会弹窗提示输入原交易参考号；输入参考号后，提示输入原交易日期，默认当天；4位数字月月日日格式"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "参考号",
+        "原交易日期",
+        "月月日日"
+      ],
+      "requiredSourceTerms": [
+        "退款",
+        "原交易参考号"
+      ],
+      "mustNotClaim": [
+        "退款只需要刷卡不需要原交易参考号",
+        "原交易日期格式是年年月月日日"
+      ],
+      "humanJudgement": {
+        "passRule": "回答需明确参考号和原交易日期两个输入项，并写出 4 位月月日日格式。"
+      }
+    },
+    {
+      "id": "SWIP-USAGE-BANK-SETTLEMENT-001",
+      "priority": "P1",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "银行卡结算",
+      "type": "PROCEDURE",
+      "question": "银行卡结算建议在什么时候执行，执行后会出现什么结果？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "每日日结后，建议进行银行卡结算操作",
+        "入口是在 POS 系统的功能&报表、管理员、IP Bank 管理中点击日结",
+        "结账成功后 SWIP 密码键盘提示结算成功",
+        "弹窗关闭后返回 POS 并打印结算小票"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统使用手册-20250702.docx",
+          "quoteHint": "每日日结后，建议进行银行卡结算操作；结账成功SWIP密码键盘会提示结算成功；弹窗关闭后会打印结算小票"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "每日日结后",
+        "结算成功",
+        "结算小票"
+      ],
+      "requiredSourceTerms": [
+        "银行卡",
+        "结算"
+      ],
+      "mustNotClaim": [
+        "银行卡结算每天开店前执行",
+        "结算成功后不打印小票"
+      ],
+      "humanJudgement": {
+        "passRule": "必须说明建议执行时机和结算成功后的键盘提示、POS 返回、打印小票结果。"
+      }
+    },
+    {
+      "id": "SWIP-USAGE-REPRINT-001",
+      "priority": "P1",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "银行卡重印",
+      "type": "PROCEDURE",
+      "question": "银行卡签购单重印支持哪两种方式，如果不知道流水号应该怎么办？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "可以重印最后一笔成功交易",
+        "也可以按流水号打印成功交易",
+        "如果不知道流水号，可以先通过查询交易明细查询原交易流水号",
+        "找到原交易后 POS 会打印银行卡签购单"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统使用手册-20250702.docx",
+          "quoteHint": "重印最后一笔成功交易；按流水号打印成功交易；如果不知道流水号，可以参考查询交易明细"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "最后一笔",
+        "流水号",
+        "查询交易明细"
+      ],
+      "requiredSourceTerms": [
+        "重印",
+        "查询交易明细"
+      ],
+      "mustNotClaim": [
+        "只能重印最后一笔交易",
+        "不知道流水号时无法重印"
+      ],
+      "humanJudgement": {
+        "passRule": "回答需列出两种重印方式，并说明查询流水号的处理方式。"
+      }
+    },
+    {
+      "id": "SWIP-USAGE-SAND-SIGN-001",
+      "priority": "P0",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "杉德操作",
+      "type": "EXACT_FACT",
+      "question": "新安装的 SWIP 智能键盘是否必须执行杉德签到，之后签到频率是什么？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "新安装的 SWIP 智能键盘必须执行杉德签到",
+        "每天开店前需要执行一次杉德签到",
+        "可在 POS 系统的功能&报表、卡类功能中点击杉德签到查看签到状态，部分 POS 在管理员中"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统使用手册-20250702.docx",
+          "quoteHint": "对于新安装的SWIP智能键盘，必须执行杉德签到；每天开店前，执行一次杉德签到。"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "必须",
+        "每天开店前",
+        "杉德签到"
+      ],
+      "requiredSourceTerms": [
+        "杉德签到"
+      ],
+      "mustNotClaim": [
+        "杉德签到只需要安装时执行一次",
+        "杉德签到每天营业结束后执行"
+      ],
+      "humanJudgement": {
+        "passRule": "必须同时覆盖新安装必须签到和每天开店前签到两个要点。"
+      }
+    },
+    {
+      "id": "SWIP-USAGE-SAND-SETTLEMENT-001",
+      "priority": "P1",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "杉德结算",
+      "type": "PROCEDURE",
+      "question": "杉德手工结算应在什么时候执行，有交易和无交易时分别会怎样？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "每天结束营业前执行一次杉德手工结算",
+        "入口在 POS 系统功能&报表、卡类功能中的杉德手工结算",
+        "当天未做过结算的交易会按卡种分别打印结算单",
+        "无交易则不打印结算单"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统使用手册-20250702.docx",
+          "quoteHint": "每天结束营业前，执行一次杉德手工结算；会按卡种分别打印结算单；无交易则不打印。"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "每天结束营业前",
+        "按卡种",
+        "无交易则不打印"
+      ],
+      "requiredSourceTerms": [
+        "杉德手工结算"
+      ],
+      "mustNotClaim": [
+        "杉德手工结算每天开店前执行",
+        "无交易也会打印结算单"
+      ],
+      "humanJudgement": {
+        "passRule": "回答需说明执行时机、入口、按卡种打印和无交易不打印。"
+      }
+    },
+    {
+      "id": "SWIP-USAGE-DESHI-VOID-001",
+      "priority": "P0",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "得仕卡撤销",
+      "type": "RULE_CONSTRAINT",
+      "question": "当日撤销功能适用于哪些卡，交易需要满足什么条件？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "当日撤销功能仅得仕卡支持",
+        "只允许对当日发生的消费交易撤销",
+        "交易必须未做过结算",
+        "撤销为全额撤销，退款金额必须与得仕卡消费时原金额一致"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统使用手册-20250702.docx",
+          "quoteHint": "本功能仅得仕卡支持，对当日发生的并且未做过结算的消费交易允许进行全额撤销；退款金额必须与得仕卡消费时的原金额一致"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "仅得仕卡",
+        "当日",
+        "未做过结算",
+        "全额撤销"
+      ],
+      "requiredSourceTerms": [
+        "当日撤销",
+        "得仕卡"
+      ],
+      "mustNotClaim": [
+        "杉德卡和苏州市民卡也支持当日撤销",
+        "可以部分撤销得仕卡消费"
+      ],
+      "humanJudgement": {
+        "passRule": "必须明确卡种限制、当日限制、未结算限制和全额撤销限制。"
+      }
+    },
+    {
+      "id": "SWIP-USAGE-EBUY-SETTLEMENT-001",
+      "priority": "P1",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "银行积分",
+      "type": "PROCEDURE",
+      "question": "银行积分每日结算在哪里执行，如果第一次结算返回处理中应该怎么办？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "银行积分每日结算入口是报表&功能、卡类功能、eBuy 日结打印",
+        "如果第一次结算返回处理中，需要再次执行结算"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统使用手册-20250702.docx",
+          "quoteHint": "报表&功能 – 卡类功能 – eBuy日结打印（如第一次结算返回处理中，请再次执行结算）"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "eBuy日结打印",
+        "返回处理中",
+        "再次执行"
+      ],
+      "requiredSourceTerms": [
+        "每日结算",
+        "eBuy"
+      ],
+      "mustNotClaim": [
+        "返回处理中时无需再次操作",
+        "银行积分日结在 IP Bank 管理中执行"
+      ],
+      "humanJudgement": {
+        "passRule": "必须写出 eBuy 日结打印入口，并说明返回处理中时再次执行结算。"
+      }
+    },
+    {
+      "id": "SWIP-FAQ-NO-RESPONSE-001",
+      "priority": "P0",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "FAQ排障",
+      "type": "TROUBLESHOOTING",
+      "question": "SWIP 系统无响应时应该先检查哪些状态？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "先检查键盘是否连接到门店无线网络 SNIFF",
+        "如果已连接 SNIFF，再检查系统运行状态",
+        "通过屏幕左下角放大镜查看网络连接、网络状况、HTTPS 服务等信息",
+        "网络连接应为已连接，网络状况应为良好，HTTPS 服务应为已启动",
+        "任一状态异常时联系区域 IT 伙伴协助解决"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统使用手册-20250702.docx",
+          "quoteHint": "系统无响应；网络连接应该显示为 SNIFF；网络连接：已连接，网络状况：良好，HTTPS服务：已启动"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "SNIFF",
+        "HTTPS服务",
+        "已启动",
+        "区域IT伙伴"
+      ],
+      "requiredSourceTerms": [
+        "系统无响应"
+      ],
+      "mustNotClaim": [
+        "系统无响应时优先卸载 APP",
+        "只要重启 POS 就能恢复"
+      ],
+      "humanJudgement": {
+        "passRule": "回答必须覆盖网络连接、运行状态、HTTPS 服务和异常时联系区域 IT。"
+      }
+    },
+    {
+      "id": "SWIP-FAQ-TERMINATE-STUCK-001",
+      "priority": "P0",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "FAQ排障",
+      "type": "TROUBLESHOOTING",
+      "question": "密码键盘卡死不响应时，如何终止未返回的交易？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "这种情况通常是同步调用等待支付渠道 APP 返回，渠道 APP 异常未及时返回结果",
+        "需要先确保上一笔交易已经失败",
+        "长按密码键盘上的星巴克 LOGO 10 秒钟",
+        "屏幕出现确认终止当前交易提示框后点击确认",
+        "确认后终止之前未返回的交易并恢复正常待机状态"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统使用手册-20250702.docx",
+          "quoteHint": "长按密码键盘上的星巴克LOGO 10秒钟，屏幕上会出现确认终止当前交易提示框，点击确认"
+        },
+        {
+          "source": "SWIP智能键盘系统安装手册-202509.docx",
+          "quoteHint": "终止键盘卡死不响应的交易"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "上一笔交易已经失败",
+        "星巴克LOGO",
+        "10秒",
+        "确认"
+      ],
+      "requiredSourceTerms": [
+        "终止键盘卡死不响应"
+      ],
+      "mustNotClaim": [
+        "交易未确认失败时直接终止",
+        "长按电源键即可终止交易"
+      ],
+      "humanJudgement": {
+        "passRule": "必须包含前置条件、长按 LOGO 10 秒和点击确认三个关键步骤。"
+      }
+    },
+    {
+      "id": "SWIP-INSTALL-CERT-NAMING-001",
+      "priority": "P0",
+      "visibility": "INTERNAL_ONLY",
+      "category": "证书配置",
+      "type": "EXACT_FACT",
+      "question": "SWIP 键盘入网证书和 HTTPS 服务证书的命名规则分别是什么？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "无线键盘入网证书命名规则是 swip-门店号-POS机号.starbucks.net",
+        "无线键盘 HTTPS 服务证书命名规则是 swip-https-门店号-POS机号.starbucks.net",
+        "相同名称的证书只允许申请一次，后续只能续约或补下载安装"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统安装手册-202509.docx",
+          "quoteHint": "无线键盘入网证书的名称规则是：swip-门店号-POS机号.starbucks.net；无线键盘HTTPS服务证书的命名规则为：swip-https-门店号-POS机号.starbucks.net"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "swip-门店号-POS机号.starbucks.net",
+        "swip-https-门店号-POS机号.starbucks.net",
+        "只允许申请一次"
+      ],
+      "requiredSourceTerms": [
+        "证书",
+        "命名规则"
+      ],
+      "mustNotClaim": [
+        "证书可以重复申请任意次数",
+        "HTTPS 服务证书和入网证书使用同一名称"
+      ],
+      "humanJudgement": {
+        "passRule": "两个证书命名规则必须完整准确；该 case 含内部证书信息，只能用于内部评测。"
+      }
+    },
+    {
+      "id": "SWIP-INSTALL-APP-LIST-001",
+      "priority": "P0",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "APP安装",
+      "type": "ENUMERATION",
+      "question": "SWIP 系统一共有几个 APP，分别是什么？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "包含 SWIP APP Store 在内，SWIP 系统一共有 9 个 APP",
+        "APP 包括 SWIP APP Store、SWIP 网关、资和信星礼卡、资和信银行卡、易百银行积分兑换",
+        "还包括杉德星主控、杉德卡、得仕卡、苏州市民卡",
+        "杉德相关 APP 受地区限制：杉德星主控和杉德卡仅限江浙沪门店，得仕卡仅限上海门店，苏州市民卡仅限苏州门店"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统安装手册-202509.docx",
+          "quoteHint": "包含SWIP APP Store，SWIP系统共有9个APP，分别是..."
+        }
+      ],
+      "requiredAnswerTerms": [
+        "9个APP",
+        "SWIP APP Store",
+        "SWIP网关",
+        "资和信",
+        "易百",
+        "杉德",
+        "得仕卡",
+        "苏州市民卡"
+      ],
+      "requiredSourceTerms": [
+        "安装APP",
+        "9个APP"
+      ],
+      "mustNotClaim": [
+        "SWIP 系统只有 7 个 APP",
+        "得仕卡 APP 适用于所有门店"
+      ],
+      "humanJudgement": {
+        "passRule": "必须列出数量和全部 9 个 APP；地区限制可简述但不能说反。"
+      }
+    },
+    {
+      "id": "SWIP-INSTALL-IP-SUFFIX-001",
+      "priority": "P0",
+      "visibility": "INTERNAL_ONLY",
+      "category": "IP规则",
+      "type": "RULE_CONSTRAINT",
+      "question": "POS 机号 1 和 POS 机号 2 分别对应键盘 IP 的哪个后缀，如果顺序颠倒应该怎么调整？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "POS 机号 1 对应键盘 IP 后缀 149",
+        "POS 机号 2 对应键盘 IP 后缀 150",
+        "如果顺序颠倒，先将后缀 149 的机器改成 151",
+        "再把 150 的机器改成 149",
+        "最后再把 151 的机器改成 150"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统安装手册-202509.docx",
+          "quoteHint": "POS机号1，对应的键盘IP后缀一定是149；POS机号2，对应的键盘IP后缀一定是150；如果出现顺序颠倒..."
+        }
+      ],
+      "requiredAnswerTerms": [
+        "149",
+        "150",
+        "151"
+      ],
+      "requiredSourceTerms": [
+        "POS机号",
+        "IP后缀"
+      ],
+      "mustNotClaim": [
+        "POS 机号 1 对应后缀 150",
+        "直接把两个机器 IP 对调即可"
+      ],
+      "humanJudgement": {
+        "passRule": "必须准确回答 149/150 对应关系和 149→151→150→149→151→150 的调整思路；该 case 含内部网络规则，只用于内部评测。"
+      }
+    },
+    {
+      "id": "SWIP-INSTALL-SWIP-POS-JSON-001",
+      "priority": "P0",
+      "visibility": "INTERNAL_ONLY",
+      "category": "POS绑定",
+      "type": "CONFIG_LOOKUP",
+      "question": "swip-pos.json 中需要配置哪些字段，如果该文件不存在 POS 会使用什么模式？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "swip-pos.json 中示例字段包括 storeId、stationId、pinpadIp",
+        "storeId 是当前门店号，stationId 是当前 POS 机编号，pinpadIp 是当前 POS 绑定的密码键盘 IP 地址",
+        "swip-pos.json 一旦部署到 POS 机上，无论是否配置内容，POS 和原有有线密码键盘连接就会断开",
+        "如果 POS 系统中没有 c:\\SWIP\\swip-pos.json 文件，系统会自动使用原来有线键盘模式"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统安装手册-202509.docx",
+          "quoteHint": "修改其中的swip-pos.json中的storeId为当前的门店号，stationId为当前POS机编号，pinpadIp为当前POS机绑定的密码键盘的IP地址"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "storeId",
+        "stationId",
+        "pinpadIp",
+        "有线键盘"
+      ],
+      "requiredSourceTerms": [
+        "swip-pos.json"
+      ],
+      "mustNotClaim": [
+        "swip-pos.json 不存在时 POS 无法工作",
+        "部署 swip-pos.json 后仍保持原有有线密码键盘连接"
+      ],
+      "humanJudgement": {
+        "passRule": "必须列出三个字段及语义，并说明文件存在/不存在对键盘模式的影响。"
+      }
+    },
+    {
+      "id": "SWIP-INSTALL-KEY-FILE-001",
+      "priority": "P1",
+      "visibility": "INTERNAL_ONLY",
+      "category": "交易密钥",
+      "type": "EXACT_FACT",
+      "question": "POS 机获得 SWIP 后台交易秘钥后，可以检查哪个文件判断秘钥是否下载成功？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "POS 机和 SWIP 后端服务对接要求一机一密",
+        "获得交易秘钥后，可检查 c:\\SWIP\\swip-keys.p13 是否存在",
+        "如果该文件存在，说明秘钥下载成功"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统安装手册-202509.docx",
+          "quoteHint": "可以在POS机检查文件 c:\\SWIP\\swip-keys.p13 是否存在，如果存在就说明秘钥下载成功"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "c:\\SWIP\\swip-keys.p13",
+        "秘钥下载成功",
+        "一机一密"
+      ],
+      "requiredSourceTerms": [
+        "交易秘钥",
+        "swip-keys.p13"
+      ],
+      "mustNotClaim": [
+        "检查 swip-pos.json 是否存在即可判断秘钥下载成功",
+        "所有 POS 共用同一个秘钥"
+      ],
+      "humanJudgement": {
+        "passRule": "必须答出文件路径 c:\\SWIP\\swip-keys.p13，并说明它用于判断秘钥下载成功。"
+      }
+    },
+    {
+      "id": "SWIP-INSTALL-DLL-ORDER-001",
+      "priority": "P1",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "POS初始化",
+      "type": "RULE_CONSTRAINT",
+      "question": "POS 上初始化各渠道系统时，文档对执行顺序有什么要求？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "SWIP 系统提供统一的 POS DLL 初始化和回滚脚本",
+        "脚本文件会随 POS 点单系统下发到 c:\\marimba_bat\\swip_initialization_files\\",
+        "各渠道系统在 POS 上初始化时必须按照文档前后顺序执行"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统安装手册-202509.docx",
+          "quoteHint": "请按照文档的前后顺序进行各渠道系统在POS上的初始化"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "前后顺序",
+        "POS DLL",
+        "swip_initialization_files"
+      ],
+      "requiredSourceTerms": [
+        "POS机初始化"
+      ],
+      "mustNotClaim": [
+        "各渠道初始化脚本可以任意顺序执行",
+        "不需要 POS DLL 初始化脚本"
+      ],
+      "humanJudgement": {
+        "passRule": "必须明确按文档顺序执行，不能回答成任意顺序或只需执行某一个渠道。"
+      }
+    },
+    {
+      "id": "SWIP-INSTALL-APP-UPGRADE-IMPACT-001",
+      "priority": "P1",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "APP升级影响",
+      "type": "COMPARISON",
+      "question": "SWIP APP Store、SWIP 网关 APP、资和信 APP、杉德 APP、易百 APP 升级或卸载重装对签到和日结有什么影响？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "SWIP APP Store 通过自身功能更新和重装不影响签到和日结，但严禁手动卸载",
+        "SWIP 网关 APP 升级安装时已配置过则无需额外配置，卸载后安装非常不推荐且需要重新做键盘信息、证书、入网、HTTPS 设置",
+        "资和信银行卡/SVC APP 的下载公钥安装后不变动终生一次，但卸载重装或升级都需要再做；签到按需，卸载重装或升级也需要再做；不要在日结前卸载重装或升级",
+        "杉德相关 APP 初始化安装后不变动终生一次，卸载重装需要再做，升级不需要；签到每天一次，卸载重装需要再做，升级不需要；日结每天一次",
+        "易百银行积分兑换签到每天一次，卸载重装或升级都需要再做；日结每天一次，日结前不要卸载重装或升级"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统安装手册-202509.docx",
+          "quoteHint": "SWIP系统APP升级、卸载重装对系统签到和日结的影响"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "SWIP APP Store",
+        "SWIP网关APP",
+        "资和信",
+        "杉德",
+        "易百",
+        "签到",
+        "日结"
+      ],
+      "requiredSourceTerms": [
+        "APP升级",
+        "卸载重装",
+        "签到",
+        "日结"
+      ],
+      "mustNotClaim": [
+        "所有 APP 升级都不影响签到",
+        "所有 APP 卸载重装后都无需重新配置",
+        "日结前可以随意卸载重装支付 APP"
+      ],
+      "humanJudgement": {
+        "passRule": "这是多点比较题，回答必须按 APP 类型分组，不能只回答其中一类。"
+      }
+    },
+    {
+      "id": "SWIP-INSTALL-LOGS-001",
+      "priority": "P1",
+      "visibility": "INTERNAL_ONLY",
+      "category": "日志排查",
+      "type": "EXACT_FACT",
+      "question": "如何访问键盘上的日志，常见 APP 日志目录分别是什么？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "可在星巴克门店内通过 https://xxx.xxx.xxx.xxx:9999/log 访问键盘日志",
+        "也可在内网电脑访问 https://{密码键盘的IP}:6666 获得键盘上的日志信息",
+        "日志目录包括 XBKS W 或 XBKSW 对应星巴克网关 APP、ebxbk 对应易百银行积分兑换、XBKYH 对应资和信银行卡、XBKXT 对应资和信 SVC 卡、sand 对应杉德卡/得仕卡/苏州市民卡",
+        "log.today.txt 在 Chrome 中输入 thisisunsafe 可绕过证书错误强制访问，这是紧急操作"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统安装手册-202509.docx",
+          "quoteHint": "可以在星巴克门店内容通过访问：https://xxx.xxx.xxx.xxx:9999/log；访问：https://{密码键盘的IP}:6666；目录结构"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "9999/log",
+        "6666",
+        "XBKSW",
+        "ebxbk",
+        "XBKYH",
+        "XBKXT",
+        "sand"
+      ],
+      "requiredSourceTerms": [
+        "日志文件",
+        "查看键盘上的日志信息"
+      ],
+      "mustNotClaim": [
+        "杉德 APP 保存近 7 天日志",
+        "日志只能从 POS 机查看"
+      ],
+      "humanJudgement": {
+        "passRule": "必须回答访问方式和目录映射；该 case 涉及内部访问地址，只适合内部评测。"
+      }
+    },
+    {
+      "id": "SWIP-INSTALL-CERT-UPDATE-001",
+      "priority": "P1",
+      "visibility": "INTERNAL_ONLY",
+      "category": "证书更新",
+      "type": "EXACT_FACT",
+      "question": "SWIP 系统自动证书更新会在什么时候通知和执行，键盘需要满足什么状态？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "星巴克要求证书有效期只有一年",
+        "系统会提前 51/31 天晚上 11 点进行设备证书更新通知，并由系统和键盘自动续约、下载、安装",
+        "系统还会提前 50/30 天晚上 11 点进行设备证书更新通知，并自动续约、下载、安装",
+        "需要确保键盘晚上处于开机状态，且 SWIP 网关 APP 正常运行"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统安装手册-202509.docx",
+          "quoteHint": "提前51/31天晚上11点；提前50/30天晚上11点；请确保键盘在晚上处于开机状态，并且SWIP网关APP处于正常运行状态"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "51/31天",
+        "50/30天",
+        "晚上11点",
+        "开机",
+        "SWIP网关APP"
+      ],
+      "requiredSourceTerms": [
+        "系统自动证书更新"
+      ],
+      "mustNotClaim": [
+        "证书需要门店每月手工更新",
+        "键盘关机也能自动完成证书更新"
+      ],
+      "humanJudgement": {
+        "passRule": "必须包含两个提前天数窗口、晚上 11 点和键盘开机/网关 APP 运行要求。"
+      }
+    },
+    {
+      "id": "SWIP-FAQ-PRINT-PAPER-001",
+      "priority": "P2",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "耗材",
+      "type": "EXACT_FACT",
+      "question": "SWIP 密码键盘打印纸规格是什么，不同门店由谁准备热敏纸？",
+      "answerability": "ANSWERABLE",
+      "expectedPoints": [
+        "密码键盘打印纸规格是直径 40mm、长度 58mm 的标准打印纸",
+        "江浙沪非工坊门店由杉德提供热敏纸，因为只有杉德支付需要键盘打印签购单",
+        "烘焙工坊店由工坊自行准备，因为工坊店银行卡刷卡支付要打印签购单"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统使用手册-20250702.docx",
+          "quoteHint": "直径40mm * 长度58mm，标准打印纸尺寸；江浙沪非工坊门店；烘焙工坊店"
+        },
+        {
+          "source": "SWIP智能键盘系统安装手册-202509.docx",
+          "quoteHint": "密码键盘打印纸规格"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "40mm",
+        "58mm",
+        "杉德",
+        "工坊"
+      ],
+      "requiredSourceTerms": [
+        "打印纸规格"
+      ],
+      "mustNotClaim": [
+        "所有门店都由杉德提供热敏纸",
+        "打印纸规格是 58mm 直径"
+      ],
+      "humanJudgement": {
+        "passRule": "必须准确给出尺寸，并区分江浙沪非工坊门店和烘焙工坊店。"
+      }
+    },
+    {
+      "id": "SWIP-NEG-UNANSWERABLE-001",
+      "priority": "P0",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "无答案保护",
+      "type": "NO_ANSWER",
+      "question": "SWIP 系统是否支持支付宝和微信扫码支付的完整交易流程？",
+      "answerability": "UNANSWERABLE",
+      "expectedPoints": [
+        "应说明所给两份手册没有提供支付宝和微信扫码支付完整交易流程",
+        "可以提到安装手册只在获取 SWIP 交易秘钥时提到对现有支付宝微信签到功能做了增强",
+        "不应编造支付宝或微信扫码支付的操作步骤"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统安装手册-202509.docx",
+          "quoteHint": "对现有的支付宝微信签到功能进行了增强，增加了获得SWIP交易秘钥的功能"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "未提供",
+        "支付宝",
+        "微信"
+      ],
+      "requiredSourceTerms": [
+        "支付宝微信签到"
+      ],
+      "mustNotClaim": [
+        "文档详细说明了支付宝扫码支付流程",
+        "文档详细说明了微信扫码支付流程",
+        "可以直接按银行卡消费流程处理支付宝和微信"
+      ],
+      "humanJudgement": {
+        "passRule": "应正确拒答或限定回答范围，不能编造扫码支付步骤。"
+      }
+    },
+    {
+      "id": "SWIP-NEG-UNANSWERABLE-002",
+      "priority": "P1",
+      "visibility": "PUBLIC_INTERNAL",
+      "category": "无答案保护",
+      "type": "NO_ANSWER",
+      "question": "SWIP 后端数据库的表结构和字段含义是什么？",
+      "answerability": "UNANSWERABLE",
+      "expectedPoints": [
+        "应说明两份 SWIP 手册没有提供后端数据库表结构完整说明",
+        "安装手册只零散提到 pinpad_information 表的部分字段现象，不足以回答完整表结构",
+        "不应编造数据库表、字段或字段含义"
+      ],
+      "expectedEvidence": [
+        {
+          "source": "SWIP智能键盘系统安装手册-202509.docx",
+          "quoteHint": "pinpad_information表device_certificate_expired_time字段为空；health_status：up"
+        }
+      ],
+      "requiredAnswerTerms": [
+        "没有提供",
+        "表结构",
+        "pinpad_information"
+      ],
+      "requiredSourceTerms": [
+        "pinpad_information"
+      ],
+      "mustNotClaim": [
+        "文档完整列出了 SWIP 后端数据库表结构",
+        "编造未知表名或字段定义"
+      ],
+      "humanJudgement": {
+        "passRule": "应拒绝完整回答并说明证据不足，只可引用文档中零散提到的字段。"
+      }
+    }
+  ]
+}
