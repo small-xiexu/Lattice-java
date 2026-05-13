@@ -13,9 +13,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(properties = {
         "spring.ai.openai.api-key=test-openai-key",
         "spring.ai.anthropic.api-key=test-anthropic-key",
-        "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge?currentSchema=lattice",
-        "spring.datasource.username=postgres",
-        "spring.datasource.password=postgres",
         "lattice.llm.deep-research-startup-validation-enabled=false"
 })
 class LatticeApplicationTests {

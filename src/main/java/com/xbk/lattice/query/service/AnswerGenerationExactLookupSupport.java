@@ -193,17 +193,24 @@ QueryAnswerPayload preferDeterministicExactLookupPayload(
         }
         String normalizedQuestion = lowerCase(question);
         String normalizedAnswer = lowerCase(answerMarkdown);
-        if (looksLikePathQuestion(question)
+        List<String> requestedPathIdentifiers = extractRequestedPathIdentifiers(question);
+        boolean explicitPathCovered = !requestedPathIdentifiers.isEmpty()
+                && coversRequestedPaths(normalizedAnswer, requestedPathIdentifiers);
+        if (!explicitPathCovered
+                && looksLikePathQuestion(question)
+                && !isArchitectureQuestionWithoutExplicitPathRequest(question)
                 && containsAnySnippetToken(focusSnippets, "/")
                 && !coversRequiredPathShape(question, normalizedAnswer, focusSnippets)) {
             return ExactLookupGroundingStatus.MISSING_PATH_SHAPE;
         }
-        if (looksLikeNumericQuestion(question)
+        if (!explicitPathCovered
+                && looksLikeNumericQuestion(question)
                 && containsAnySnippetDigit(focusSnippets)
                 && !normalizedAnswer.matches("(?s).*\\d.*")) {
             return ExactLookupGroundingStatus.MISSING_DIGIT;
         }
-        if (looksLikeNumericQuestion(question)
+        if (!explicitPathCovered
+                && looksLikeNumericQuestion(question)
                 && !coversRequiredNumericShape(normalizedQuestion, normalizedAnswer, focusSnippets)) {
             return ExactLookupGroundingStatus.MISSING_NUMERIC_SHAPE;
         }
@@ -296,10 +303,17 @@ QueryAnswerPayload preferDeterministicExactLookupPayload(
     }
 
     /**
-     * 判断路径题答案是否覆盖了证据里的具体路径形态。
+     * 判断问题是否携带架构/边界语义信号且本身不含显式路径。
+     * 此类问题不应因证据中存在 API path 而被 path-shape grounding 误抢。
      *
-     * @param normalizedAnswer 归一化答案
-     * @param focusSnippets 贴题证据句
-     * @return 覆盖足够返回 true
+     * @param question 用户问题
+     * @return 满足条件返回 true
      */
+    private boolean isArchitectureQuestionWithoutExplicitPathRequest(String question) {
+        if (question == null || question.isBlank()) {
+            return false;
+        }
+        return querySemanticRules.containsAnyArchitectureSignal(question)
+                && !question.contains("/");
+    }
 }

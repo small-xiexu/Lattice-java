@@ -41,13 +41,48 @@
       "forceSimple": true,
       "expect": {
         "httpStatus": 200,
-        "answerOutcomeAny": ["SUCCESS"],
-        "generationModeAny": ["RULE_BASED"],
-        "modelExecutionStatusAny": ["SKIPPED"],
-        "requireQueryId": false,
+        "answerOutcomeAny": [
+          "SUCCESS"
+        ],
+        "generationModeAny": [
+          "LLM",
+          "RULE_BASED"
+        ],
+        "modelExecutionStatusAny": [
+          "SUCCESS",
+          "SKIPPED"
+        ],
+        "requireQueryId": true,
         "minSourceCount": 1,
-        "requiredAnswerTerms": ["OCR", "文档"],
-        "requiredSourceTerms": ["/api/v1/admin/document-parse"]
+        "minCitationCoverage": 0.6,
+        "requiredAnswerTerms": [
+          "OCR",
+          "文档识别",
+          "配置",
+          "连接"
+        ],
+        "requiredSourceTerms": [
+          "文档识别与OCR运行态说明"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "说明 OCR / 文档识别当前可用状态取决于 Provider 连接配置",
+          "说明图片或扫描 PDF 的识别是否可用取决于 OCR Provider 是否已配置并启用",
+          "答案应基于知识库中的运行态说明文档，走通用 query graph"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/文档识别与OCR运行态说明.md",
+            "quoteHint": "OCR Provider 连接配置、文件类型识别路径、管理入口 /api/v1/admin/document-parse/connections"
+          }
+        ],
+        "mustNotClaim": [
+          "在无运行态证据时声称 OCR 已可用",
+          "把架构中支持 PDF 解析等同于 OCR 已上线"
+        ],
+        "humanJudgement": {
+          "passRule": "回答需基于知识库运行态文档说明 OCR/文档识别状态和图片/扫描 PDF 可用性；允许走通用 query graph 返回 LLM 生成结果。"
+        }
       }
     },
     {
@@ -56,12 +91,45 @@
       "question": "scenario_id=100912 这一行的 case_num、场景名称、备注分别是什么？注意不要把 scenario_id 当 case_num。",
       "expect": {
         "httpStatus": 200,
-        "answerOutcomeAny": ["SUCCESS"],
-        "generationModeAny": ["RULE_BASED", "LLM"],
-        "modelExecutionStatusAny": ["SKIPPED", "SUCCESS"],
+        "answerOutcomeAny": [
+          "SUCCESS"
+        ],
+        "generationModeAny": [
+          "RULE_BASED",
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SKIPPED",
+          "SUCCESS"
+        ],
         "minSourceCount": 1,
-        "requiredAnswerTerms": ["100912", "case_num", "remark"],
-        "requiredSourceTerms": ["scenarios.xlsx"]
+        "requiredAnswerTerms": [
+          "100912",
+          "case_num",
+          "remark"
+        ],
+        "requiredSourceTerms": [
+          "scenarios.xlsx"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "定位 scenario_id=100912 对应的唯一行",
+          "返回该行 case_num、场景名称、备注",
+          "不得把 scenario_id 当作 case_num"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/scenarios.xlsx",
+            "quoteHint": "scenario_id=100912 所在行"
+          }
+        ],
+        "mustNotClaim": [
+          "case_num 等于 100912，除非表格原始行确实如此",
+          "使用其他 scenario_id 或其他行的值"
+        ],
+        "humanJudgement": {
+          "passRule": "三个字段值必须来自同一行，字段名和值对应正确；允许中英文字段名混用，但不能串行。"
+        }
       }
     },
     {
@@ -70,12 +138,46 @@
       "question": "case_num=100714 这一行的 name、expected、module 分别是什么？",
       "expect": {
         "httpStatus": 200,
-        "answerOutcomeAny": ["SUCCESS"],
-        "generationModeAny": ["RULE_BASED", "LLM"],
-        "modelExecutionStatusAny": ["SKIPPED", "SUCCESS"],
+        "answerOutcomeAny": [
+          "SUCCESS"
+        ],
+        "generationModeAny": [
+          "RULE_BASED",
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SKIPPED",
+          "SUCCESS"
+        ],
         "minSourceCount": 1,
-        "requiredAnswerTerms": ["100714", "name", "expected", "module"],
-        "requiredSourceTerms": ["scenarios.xlsx"]
+        "requiredAnswerTerms": [
+          "100714",
+          "name",
+          "expected",
+          "module"
+        ],
+        "requiredSourceTerms": [
+          "scenarios.xlsx"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "定位 case_num=100714 对应的唯一行",
+          "返回该行 name、expected、module 三个字段",
+          "只投影被问到的字段，不混入其他行"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/scenarios.xlsx",
+            "quoteHint": "case_num=100714 所在行"
+          }
+        ],
+        "mustNotClaim": [
+          "使用 case_num=100716 或其他行的字段值",
+          "把 expected 字段解释成模型推测结果"
+        ],
+        "humanJudgement": {
+          "passRule": "name、expected、module 三个值均需与表格行一致；少一个字段或引用错行均不通过。"
+        }
       }
     },
     {
@@ -84,12 +186,45 @@
       "question": "按 category 统计场景用例各有多少条？请列出每个 category 和数量。",
       "expect": {
         "httpStatus": 200,
-        "answerOutcomeAny": ["SUCCESS", "PARTIAL_ANSWER"],
-        "generationModeAny": ["RULE_BASED", "LLM"],
-        "modelExecutionStatusAny": ["SKIPPED", "SUCCESS"],
+        "answerOutcomeAny": [
+          "SUCCESS",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "RULE_BASED",
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SKIPPED",
+          "SUCCESS"
+        ],
         "minSourceCount": 1,
-        "requiredAnswerTerms": ["category", "数量"],
-        "requiredSourceTerms": ["scenarios.xlsx"]
+        "requiredAnswerTerms": [
+          "category",
+          "数量"
+        ],
+        "requiredSourceTerms": [
+          "scenarios.xlsx"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "按 category 分组统计 scenarios.xlsx 中场景用例数量",
+          "列出每个 category 及其数量",
+          "数量之和应等于参与统计的总行数"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/scenarios.xlsx",
+            "quoteHint": "category 列及所有数据行"
+          }
+        ],
+        "mustNotClaim": [
+          "只列部分 category 却声称完整",
+          "用非 category 字段分组"
+        ],
+        "humanJudgement": {
+          "passRule": "分组字段必须是 category；所有 category 都应出现，数量不能凭模型估算。"
+        }
       }
     },
     {
@@ -98,12 +233,45 @@
       "question": "对比 case_num=100714 和 case_num=100716：两行的 name、expected 有什么差异？",
       "expect": {
         "httpStatus": 200,
-        "answerOutcomeAny": ["SUCCESS", "PARTIAL_ANSWER"],
-        "generationModeAny": ["RULE_BASED", "LLM"],
-        "modelExecutionStatusAny": ["SKIPPED", "SUCCESS"],
+        "answerOutcomeAny": [
+          "SUCCESS",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "RULE_BASED",
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SKIPPED",
+          "SUCCESS"
+        ],
         "minSourceCount": 1,
-        "requiredAnswerTerms": ["100714", "100716"],
-        "requiredSourceTerms": ["scenarios.xlsx"]
+        "requiredAnswerTerms": [
+          "100714",
+          "100716"
+        ],
+        "requiredSourceTerms": [
+          "scenarios.xlsx"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "分别定位 case_num=100714 和 case_num=100716 两行",
+          "比较两行 name 字段差异",
+          "比较两行 expected 字段差异"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/scenarios.xlsx",
+            "quoteHint": "case_num=100714 与 case_num=100716 两行"
+          }
+        ],
+        "mustNotClaim": [
+          "只回答其中一行",
+          "把 module 或其他字段当成 name/expected 差异"
+        ],
+        "humanJudgement": {
+          "passRule": "必须同时覆盖两行、两个字段；允许用表格表达，不能把缺失字段编造成差异。"
+        }
       }
     },
     {
@@ -112,15 +280,49 @@
       "question": "/api/v2/fulfillment/request/return 这个是什么接口？它迁移后对外 path 可以改吗？",
       "expect": {
         "httpStatus": 200,
-        "answerOutcomeAny": ["SUCCESS", "PARTIAL_ANSWER"],
-        "generationModeAny": ["LLM"],
-        "modelExecutionStatusAny": ["SUCCESS"],
+        "answerOutcomeAny": [
+          "SUCCESS",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SUCCESS"
+        ],
         "requireQueryId": true,
         "minSourceCount": 1,
         "minCitationMarkerCount": 1,
-        "retrievalTargets": ["docs/卡券三期-迁移方案.md"],
-        "requiredAnswerTerms": ["/api/v2/fulfillment/request/return", "path"],
-        "forbiddenAnswerTerms": ["/api/v1/srkit", "/api/v1/svc"]
+        "retrievalTargets": [
+          "docs/卡券三期-迁移方案.md"
+        ],
+        "requiredAnswerTerms": [
+          "/api/v2/fulfillment/request/return",
+          "path"
+        ],
+        "forbiddenAnswerTerms": [
+          "/api/v1/srkit",
+          "/api/v1/svc"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "识别 /api/v2/fulfillment/request/return 是迁移方案中的履约退货/return 请求接口",
+          "说明迁移后对外 path 应保持与 FC 旧接口兼容或不得随意改动",
+          "解释原因应落在入口防腐层、上游感知最小化或接口契约兼容"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/卡券三期-迁移方案.md",
+            "quoteHint": "/api/v2/fulfillment/request/return 与入口防腐层 / path 兼容约束"
+          }
+        ],
+        "mustNotClaim": [
+          "迁移后可以任意改 path",
+          "把 /api/v1/srkit 或 /api/v1/svc 当作该接口新 path"
+        ],
+        "humanJudgement": {
+          "passRule": "必须回答接口含义和 path 是否可改两个子问题；引用需支撑接口 path 或防腐层兼容约束。"
+        }
       }
     },
     {
@@ -129,15 +331,49 @@
       "question": "为什么 dpfm-api-service 不应该消费自己发的 MQ？dpfm-consumer-service 和回调类服务边界是什么？",
       "expect": {
         "httpStatus": 200,
-        "answerOutcomeAny": ["SUCCESS", "PARTIAL_ANSWER"],
-        "generationModeAny": ["LLM"],
-        "modelExecutionStatusAny": ["SUCCESS"],
+        "answerOutcomeAny": [
+          "SUCCESS",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SUCCESS"
+        ],
         "requireQueryId": true,
         "minSourceCount": 1,
         "minCitationMarkerCount": 1,
-        "retrievalTargets": ["docs/卡券三期-迁移方案.md"],
-        "requiredAnswerTerms": ["dpfm-api-service", "MQ"],
-        "minCitationCoverage": 0.5
+        "retrievalTargets": [
+          "docs/卡券三期-迁移方案.md"
+        ],
+        "requiredAnswerTerms": [
+          "dpfm-api-service",
+          "MQ"
+        ],
+        "minCitationCoverage": 0.5,
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "dpfm-api-service 只做 API 接收、持久化、MQ 发送",
+          "dpfm-api-service 不消费自己发出的 MQ",
+          "SRKIT / SVC 相关 MQ 消费者统一落在 dpfm-callback-service",
+          "dpfm-consumer-service 仅保留原有电商券、订单、归档等消费职责",
+          "边界原因应围绕职责分离、入口服务不承担消费逻辑和迁移新增消费者归属"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/卡券三期-迁移方案.md",
+            "quoteHint": "MQ 消费者归属（强约束）与 dpfm-api-service 职责说明"
+          }
+        ],
+        "mustNotClaim": [
+          "dpfm-api-service 负责消费自己发出的 MQ",
+          "dpfm-consumer-service 新增 SRKIT/SVC 消费者",
+          "消费者边界可以由调用方自行决定"
+        ],
+        "humanJudgement": {
+          "passRule": "至少覆盖 api-service 职责、callback-service 归属、consumer-service 保留职责三类要点；citationCoverage 不低于 case 阈值。"
+        }
       }
     },
     {
@@ -146,12 +382,49 @@
       "question": "当前项目本地开发默认使用哪个 PostgreSQL 和 Redis？端口、数据库名分别是什么？",
       "expect": {
         "httpStatus": 200,
-        "answerOutcomeAny": ["SUCCESS", "PARTIAL_ANSWER"],
-        "generationModeAny": ["LLM", "FALLBACK"],
-        "modelExecutionStatusAny": ["SUCCESS", "DEGRADED", "FAILED"],
+        "answerOutcomeAny": [
+          "SUCCESS",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "LLM",
+          "FALLBACK"
+        ],
+        "modelExecutionStatusAny": [
+          "SUCCESS",
+          "DEGRADED",
+          "FAILED"
+        ],
         "minSourceCount": 1,
-        "retrievalTargets": ["docs/项目启动配置清单.md"],
-        "requiredAnswerTerms": ["PostgreSQL", "Redis"]
+        "retrievalTargets": [
+          "docs/项目启动配置清单.md"
+        ],
+        "requiredAnswerTerms": [
+          "PostgreSQL",
+          "Redis"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "本地 PostgreSQL 默认复用 vector_db 容器",
+          "PostgreSQL 默认端口为 5432",
+          "默认数据库为 ai-rag-knowledge",
+          "Redis 默认复用 redis 容器",
+          "Redis 默认端口为 6379"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/项目启动配置清单.md",
+            "quoteHint": "PostgreSQL、Redis、本地容器、端口、数据库名配置说明"
+          }
+        ],
+        "mustNotClaim": [
+          "默认数据库为 ai-rag-knowledge-test",
+          "要求默认启动新的 PostgreSQL 或 Redis 容器",
+          "把测试库配置当成本地开发默认配置"
+        ],
+        "humanJudgement": {
+          "passRule": "必须区分开发默认库和测试隔离库；端口、容器、数据库名至少覆盖 PostgreSQL 与 Redis。"
+        }
       }
     },
     {
@@ -164,13 +437,51 @@
       "timeoutMs": 210000,
       "expect": {
         "httpStatus": 200,
-        "answerOutcomeAny": ["SUCCESS", "PARTIAL_ANSWER"],
-        "generationModeAny": ["LLM", "FALLBACK"],
-        "modelExecutionStatusAny": ["SUCCESS", "DEGRADED", "FAILED"],
+        "answerOutcomeAny": [
+          "SUCCESS",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "LLM",
+          "FALLBACK"
+        ],
+        "modelExecutionStatusAny": [
+          "SUCCESS",
+          "DEGRADED",
+          "FAILED"
+        ],
         "requireQueryId": true,
         "minSourceCount": 1,
-        "retrievalTargets": ["docs/卡券三期-迁移方案.md"],
-        "requiredAnswerTerms": ["FC", "DPFM", "MQ"]
+        "retrievalTargets": [
+          "docs/卡券三期-迁移方案.md"
+        ],
+        "requiredAnswerTerms": [
+          "FC",
+          "DPFM",
+          "MQ"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "FC 是迁移前/旧链路中的履约中台或旧接口契约来源",
+          "DPFM 新链路入口侧通过入口防腐层保持 API path、请求参数、响应参数与 FC 兼容",
+          "上游只需切换调用地址，降低上游改造成本",
+          "SRKIT / SVC 相关 MQ 消费者统一落在 dpfm-callback-service",
+          "dpfm-consumer-service 保留原有消费职责，dpfm-api-service 只做 API 接收、持久化、MQ 发送"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/卡券三期-迁移方案.md",
+            "quoteHint": "入口防腐层、上游感知最小化、MQ 消费者归属三组约束"
+          }
+        ],
+        "mustNotClaim": [
+          "DPFM 可以改变对外接口契约",
+          "dpfm-api-service 负责消费自己发出的 MQ",
+          "Deep Research 在无证据锚点时仍给出确定结论"
+        ],
+        "humanJudgement": {
+          "passRule": "必须综合 FC/DPFM/入口防腐层/MQ 边界四类关系，并解释降低上游改造成本的依据；至少 1 个可核验证据锚点支撑核心结论。"
+        }
       }
     },
     {
@@ -179,12 +490,43 @@
       "question": "请查询一个不存在的内部配置项 xbk_nonexistent_config_key_20260506 的取值和负责人。",
       "expect": {
         "httpStatus": 200,
-        "answerOutcomeAny": ["NO_RELEVANT_KNOWLEDGE", "INSUFFICIENT_EVIDENCE", "PARTIAL_ANSWER"],
-        "generationModeAny": ["RULE_BASED", "FALLBACK", "LLM"],
-        "modelExecutionStatusAny": ["SKIPPED", "FAILED", "DEGRADED", "SUCCESS"],
+        "answerOutcomeAny": [
+          "NO_RELEVANT_KNOWLEDGE",
+          "INSUFFICIENT_EVIDENCE",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "RULE_BASED",
+          "FALLBACK",
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SKIPPED",
+          "FAILED",
+          "DEGRADED",
+          "SUCCESS"
+        ],
         "minSourceCount": 0,
         "minCitationCoverage": 0,
-        "forbiddenAnswerTerms": ["负责人是", "取值为"]
+        "forbiddenAnswerTerms": [
+          "负责人是",
+          "取值为"
+        ],
+        "answerability": "UNANSWERABLE",
+        "expectedPoints": [
+          "明确当前知识库没有 xbk_nonexistent_config_key_20260506 的可靠证据",
+          "不编造取值",
+          "不编造负责人"
+        ],
+        "expectedEvidence": [],
+        "mustNotClaim": [
+          "负责人是",
+          "取值为",
+          "该配置项存在且值为"
+        ],
+        "humanJudgement": {
+          "passRule": "应拒答或说明证据不足；如给出具体取值或负责人则失败，即使格式看起来完整。"
+        }
       }
     }
   ]

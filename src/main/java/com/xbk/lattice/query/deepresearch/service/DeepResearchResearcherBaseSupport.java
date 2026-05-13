@@ -84,6 +84,9 @@ abstract class DeepResearchResearcherBaseSupport {
     protected EvidenceAnchor buildEvidenceAnchor(String anchorId, QueryArticleHit hit, String quoteText) {
         EvidenceAnchorSourceType sourceType = mapSourceType(hit);
         String sourceId = resolveSourceId(hit);
+        if (hit.getEvidenceType() == QueryEvidenceType.FACT_CARD && firstSourcePath(hit) != null) {
+            sourceId = firstSourcePath(hit);
+        }
         if (sourceType == null || sourceId.isBlank() || quoteText == null || quoteText.isBlank()) {
             return null;
         }
@@ -294,6 +297,9 @@ abstract class DeepResearchResearcherBaseSupport {
         }
         if (hit.getEvidenceType() == QueryEvidenceType.GRAPH) {
             return EvidenceAnchorSourceType.GRAPH_FACT;
+        }
+        if (hit.getEvidenceType() == QueryEvidenceType.FACT_CARD) {
+            return EvidenceAnchorSourceType.SOURCE_FILE;
         }
         if (hit.getEvidenceType() == QueryEvidenceType.CONTRIBUTION) {
             return EvidenceAnchorSourceType.CONTRIBUTION;

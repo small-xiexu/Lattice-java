@@ -37,7 +37,7 @@ public class CitationValidator {
     );
 
     private static final Pattern LATIN_TERM_PATTERN = Pattern.compile(
-            "(?<![A-Za-z0-9_./-])([A-Za-z][A-Za-z0-9-]{2,})(?![A-Za-z0-9_./-])"
+            "(?<![A-Za-z0-9_./-])([A-Za-z][-A-Za-z0-9./]{2,})(?![A-Za-z0-9_./-])"
     );
 
     private static final Pattern HAN_TERM_PATTERN = Pattern.compile("([\\p{IsHan}]{3,})");
@@ -374,6 +374,7 @@ public class CitationValidator {
         if (hardFactTokens.size() < 2) {
             appendHanTermMatches(hardFactTokens, HAN_TERM_PATTERN.matcher(normalizedClaimText));
         }
+        appendCompositeTokenPartsForClaim(hardFactTokens);
         return hardFactTokens;
     }
 
@@ -427,6 +428,25 @@ public class CitationValidator {
                 }
             }
         }
+    }
+
+    private void appendCompositeTokenPartsForClaim(List<String> hardFactTokens) {
+        List<String> compositeParts = new ArrayList<String>();
+        for (String token : hardFactTokens) {
+            if (token == null || token.isBlank()) {
+                continue;
+            }
+            String[] parts = token.split("[./-]+");
+            for (String part : parts) {
+                if (part != null && !part.isBlank() && (part.length() >= 2 || isNumericToken(part))) {
+                    String normalized = normalizeToken(part);
+                    if (!hardFactTokens.contains(normalized) && !compositeParts.contains(normalized)) {
+                        compositeParts.add(normalized);
+                    }
+                }
+            }
+        }
+        hardFactTokens.addAll(compositeParts);
     }
 
     private boolean isGenericHanLiteral(String literal) {
