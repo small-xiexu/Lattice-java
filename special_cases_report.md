@@ -1,6 +1,6 @@
 # Special Cases Report
 
-- 扫描时间：2026-05-14 07:05:07 +0800
+- 扫描时间：2026-05-15 17:38:59 +0800
 - 扫描范围：`src/main/java/com/xbk/lattice/query src/main/java/com/xbk/lattice/compiler src/main/java/com/xbk/lattice/article src/main/java/com/xbk/lattice/source`
 - 重点文件名：`(Fallback|Intent|Reranker|Grounding|Lookup|PostProcessor|Prompt|Rewrite)`
 - risk_type：`BLOCKER` 会导致脚本返回 1；`REVIEW` 只进入人工复核；`ALLOWLIST` 是通用解析或工程常量候选。
@@ -1927,7 +1927,9 @@
 | `src/main/java/com/xbk/lattice/query/service/ReviewerGateway.java:42` | `ReviewerGateway` | `return "rule-based";` | `固定答案 return` | REVIEW | `固定字符串命中但未确认是回答模板，进入人工复核` | 中 | 固定答案 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/query/service/RrfFusionService.java:429` | `RrfFusionService` | `return channels.contains(RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS)` | `.contains(` | REVIEW | `命中疑似红线模式，需要人工复核` | 中 | 术语特判 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/query/service/RrfFusionService.java:430` | `RrfFusionService` | `\|\| channels.contains(RetrievalStrategyResolver.CHANNEL_FACT_CARD_VECTOR)` | `.contains(` | REVIEW | `命中疑似红线模式，需要人工复核` | 中 | 术语特判 | 保留但需人工确认 | 是 |
-| `src/main/java/com/xbk/lattice/query/service/RrfFusionService.java:431` | `RrfFusionService` | `\|\| channels.contains(RetrievalStrategyResolver.CHANNEL_SOURCE_CHUNK_FTS);` | `.contains(` | REVIEW | `命中疑似红线模式，需要人工复核` | 中 | 术语特判 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/RrfFusionService.java:431` | `RrfFusionService` | `\|\| channels.contains(RetrievalStrategyResolver.CHANNEL_SOURCE_CHUNK_FTS)` | `.contains(` | REVIEW | `命中疑似红线模式，需要人工复核` | 中 | 术语特判 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/RrfFusionService.java:432` | `RrfFusionService` | `\|\| channels.contains(RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR)` | `.contains(` | REVIEW | `命中疑似红线模式，需要人工复核` | 中 | 术语特判 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/RrfFusionService.java:433` | `RrfFusionService` | `\|\| channels.contains(RetrievalStrategyResolver.CHANNEL_CHUNK_VECTOR);` | `.contains(` | REVIEW | `命中疑似红线模式，需要人工复核` | 中 | 术语特判 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/query/service/SearchCapabilityServiceConfiguration.java:26` | `SearchCapabilityServiceConfiguration` | `public SearchCapabilityService fallbackSearchCapabilityService() {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/query/service/SearchCapabilityServiceConfiguration.java:27` | `SearchCapabilityServiceConfiguration` | `log.warn("SearchCapabilityService implementation missing, fallback to disabled capability detection");` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/query/service/StructuredRetrievalTopKQualityService.java:89` | `StructuredRetrievalTopKQualityService` | `if (target.matches(topKHit)) {` | `.matches(` | REVIEW | `命中疑似红线模式，需要人工复核` | 中 | 术语特判 | 保留但需人工确认 | 是 |
@@ -2059,10 +2061,10 @@
 
 ## 汇总
 
-- 总命中：2047
+- 总命中：2049
 - 高风险：0
-- 中风险：1828
+- 中风险：1830
 - 低风险：219
 - BLOCKER：0
-- REVIEW：1828
+- REVIEW：1830
 - ALLOWLIST：219
