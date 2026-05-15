@@ -428,7 +428,9 @@ public class RrfFusionService {
         }
         return channels.contains(RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS)
                 || channels.contains(RetrievalStrategyResolver.CHANNEL_FACT_CARD_VECTOR)
-                || channels.contains(RetrievalStrategyResolver.CHANNEL_SOURCE_CHUNK_FTS);
+                || channels.contains(RetrievalStrategyResolver.CHANNEL_SOURCE_CHUNK_FTS)
+                || channels.contains(RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR)
+                || channels.contains(RetrievalStrategyResolver.CHANNEL_CHUNK_VECTOR);
     }
 
     /**

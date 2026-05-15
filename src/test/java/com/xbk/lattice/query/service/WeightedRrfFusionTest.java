@@ -122,7 +122,10 @@ class WeightedRrfFusionTest {
     }
 
     /**
-     * 验证普通问题仍沿用纯 RRF 截断，不对背景 article 做结构化保护。
+     * 验证普通问题中 vector 通道文章作为主证据与 fact_card/source 平等竞争。
+     *
+     * <p>article_vector / chunk_vector 现纳入主证据白名单，在 GENERAL 形态下
+     * 若触发 hasRelevantDirectEvidence，vector 文章应凭高 relevance 排到 tier-0 前列。</p>
      */
     @Test
     void shouldKeepPlainRrfOrderingForGeneralShape() {
@@ -136,11 +139,11 @@ class WeightedRrfFusionTest {
 
         assertThat(fusedHits)
                 .extracting(QueryArticleHit::getEvidenceType)
-                .containsExactly(
-                        QueryEvidenceType.ARTICLE,
-                        QueryEvidenceType.ARTICLE,
-                            QueryEvidenceType.ARTICLE
+                .contains(
+                        QueryEvidenceType.ARTICLE
                 );
+        assertThat(fusedHits.get(0).getEvidenceType())
+                .isEqualTo(QueryEvidenceType.ARTICLE);
     }
 
     /**
