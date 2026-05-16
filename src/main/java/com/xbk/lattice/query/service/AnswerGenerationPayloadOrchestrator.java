@@ -20,6 +20,51 @@ final class AnswerGenerationPayloadOrchestrator {
 
     private static final String NO_KNOWLEDGE_MESSAGE = "当前未找到与该问题直接相关的知识。";
 
+    private static final String[] INSUFFICIENT_EVIDENCE_SIGNALS = {
+            "当前证据不足",
+            "证据不足",
+            "没有足够信息",
+            "缺少直接证据",
+            "缺乏直接证据",
+            "缺少可验证证据",
+            "缺乏可验证证据",
+            "无法确认",
+            "不能确认",
+            "无法判定",
+            "不能判定",
+            "无法判断",
+            "不能判断",
+            "无法确定",
+            "不能确定",
+            "未提供",
+            "没有提供",
+            "未明确说明",
+            "没有明确说明",
+            "无法得出",
+            "不能得出",
+            "不足以判断",
+            "不支持直接判断",
+            "insufficient evidence",
+            "not enough evidence",
+            "no direct evidence",
+            "cannot confirm",
+            "cannot determine",
+            "not provided"
+    };
+
+    private static final String[] INSUFFICIENT_EVIDENCE_CONCLUSION_PREFIXES = {
+            "结论",
+            "因此",
+            "所以",
+            "综上",
+            "整体来看",
+            "总体来看",
+            "基于当前证据",
+            "根据当前证据",
+            "从当前证据看",
+            "基于证据"
+    };
+
     private final AnswerGenerationService support;
 
     /**
@@ -296,6 +341,9 @@ final class AnswerGenerationPayloadOrchestrator {
             String question,
             List<QueryArticleHit> queryArticleHits
     ) {
+        if (answerOutcome == AnswerOutcome.SUCCESS && looksLikeInsufficientEvidenceAnswer(answerMarkdown)) {
+            return AnswerOutcome.INSUFFICIENT_EVIDENCE;
+        }
         if (answerOutcome != AnswerOutcome.PARTIAL_ANSWER) {
             return answerOutcome;
         }
@@ -322,5 +370,140 @@ final class AnswerGenerationPayloadOrchestrator {
         return support.isDirectFallbackAnswerable(question, fallbackHits.get(0))
                 ? AnswerOutcome.SUCCESS
                 : answerOutcome;
+    }
+
+    /**
+     * 判断 SUCCESS 载荷正文是否整体更像证据不足或无法判定，而非可缓存的完整回答。
+     *
+     * @param answerMarkdown 答案正文
+     * @return 应下调答案语义返回 true
+     */
+    private boolean looksLikeInsufficientEvidenceAnswer(String answerMarkdown) {
+        if (answerMarkdown == null || answerMarkdown.isBlank()) {
+            return false;
+        }
+        String normalizedAnswer = support.lowerCase(support.stripEmbeddedCitationLiterals(answerMarkdown));
+        String firstAnswerLine = firstMeaningfulAnswerLine(normalizedAnswer);
+        if (containsEarlyInsufficientEvidenceSignal(firstAnswerLine)) {
+            return true;
+        }
+        int signalLineCount = 0;
+        for (String rawLine : normalizedAnswer.split("\\R")) {
+            String normalizedLine = normalizeOutcomeLine(rawLine);
+            if (normalizedLine.isBlank()) {
+                continue;
+            }
+            if (!containsInsufficientEvidenceSignal(normalizedLine)) {
+                continue;
+            }
+            signalLineCount++;
+            if (signalLineCount >= 2 && looksLikeInsufficientEvidenceConclusionLine(normalizedLine)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 提取第一条承载答案语义的正文行。
+     *
+     * @param normalizedAnswer 已归一化答案
+     * @return 正文行；没有则返回空串
+     */
+    private String firstMeaningfulAnswerLine(String normalizedAnswer) {
+        for (String rawLine : normalizedAnswer.split("\\R")) {
+            String normalizedLine = normalizeOutcomeLine(rawLine);
+            if (normalizedLine.isBlank() || isGenericAnswerSectionLabel(normalizedLine)) {
+                continue;
+            }
+            return normalizedLine;
+        }
+        return "";
+    }
+
+    /**
+     * 归一化用于 outcome 判断的答案行。
+     *
+     * @param rawLine 原始行
+     * @return 归一化后的行
+     */
+    private String normalizeOutcomeLine(String rawLine) {
+        if (rawLine == null) {
+            return "";
+        }
+        return rawLine.trim()
+                .replaceFirst("^#+\\s*", "")
+                .replaceFirst("^(?:[-*+]|\\d+[.)]|[（(]?[一二三四五六七八九十]+[）).、])\\s*", "")
+                .replace("`", "")
+                .replace("|", " ")
+                .trim();
+    }
+
+    /**
+     * 判断是否为答案包装中的通用章节标签。
+     *
+     * @param line 归一化行
+     * @return 章节标签返回 true
+     */
+    private boolean isGenericAnswerSectionLabel(String line) {
+        return "查询回答".equals(line)
+                || "问题".equals(line)
+                || "证据".equals(line)
+                || "参考说明".equals(line);
+    }
+
+    /**
+     * 判断答案首行是否在开头附近表达证据不足。
+     *
+     * @param line 答案首行
+     * @return 命中返回 true
+     */
+    private boolean containsEarlyInsufficientEvidenceSignal(String line) {
+        if (line == null || line.isBlank()) {
+            return false;
+        }
+        for (String signal : INSUFFICIENT_EVIDENCE_SIGNALS) {
+            int signalIndex = line.indexOf(signal);
+            if (signalIndex >= 0 && signalIndex <= 12) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断结论行是否表达证据不足。
+     *
+     * @param line 归一化行
+     * @return 命中返回 true
+     */
+    private boolean looksLikeInsufficientEvidenceConclusionLine(String line) {
+        if (!containsInsufficientEvidenceSignal(line)) {
+            return false;
+        }
+        for (String prefix : INSUFFICIENT_EVIDENCE_CONCLUSION_PREFIXES) {
+            if (line.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断文本是否包含通用证据不足信号。
+     *
+     * @param line 归一化行
+     * @return 命中返回 true
+     */
+    private boolean containsInsufficientEvidenceSignal(String line) {
+        if (line == null || line.isBlank()) {
+            return false;
+        }
+        for (String signal : INSUFFICIENT_EVIDENCE_SIGNALS) {
+            if (line.contains(signal)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
