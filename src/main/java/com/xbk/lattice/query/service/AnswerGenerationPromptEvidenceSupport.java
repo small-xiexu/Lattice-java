@@ -35,6 +35,12 @@ import java.util.regex.Pattern;
 @Slf4j
 abstract class AnswerGenerationPromptEvidenceSupport extends AnswerGenerationFallbackConclusionSupport {
 
+    private static final int PROMPT_FOCUS_DISTRIBUTED_SNIPPET_LIMIT = 3;
+
+    private static final int PROMPT_FOCUS_WINDOW_CHAR_LIMIT = 560;
+
+    private static final int PROMPT_FOCUS_WINDOW_FORWARD_LINE_LIMIT = 6;
+
     /**
      * 创建无 LLM 的答案生成拆分支持。
      */
@@ -324,25 +330,435 @@ Map<QueryEvidenceType, List<QueryArticleHit>> groupHitsByEvidenceType(List<Query
         if (queryArticleHit == null) {
             return List.of();
         }
-        int snippetCount = looksLikeExactLookupQuestion(question)
+        List<String> effectiveQueryTokens = queryTokens == null ? extractQueryTokens(question) : queryTokens;
+        int snippetCount = resolvePromptFocusSnippetLimit(question);
+        List<String> snippets = new ArrayList<String>();
+        if (shouldUseDistributedPromptFocusSnippets(question)) {
+            snippets.addAll(selectDistributedPromptFocusSnippets(
+                    question,
+                    effectiveQueryTokens,
+                    queryArticleHit,
+                    snippetCount
+            ));
+        }
+        snippets.addAll(selectQuestionFocusedFallbackSnippets(
+                question,
+                queryArticleHit,
+                effectiveQueryTokens,
+                snippetCount
+        ));
+        List<String> sanitizedSnippets = new ArrayList<String>();
+        for (String snippet : snippets) {
+            String normalizedSnippet = sanitizePromptEvidenceSnippet(snippet);
+            if (!normalizedSnippet.isBlank() && !sanitizedSnippets.contains(normalizedSnippet)) {
+                sanitizedSnippets.add(normalizedSnippet);
+            }
+            if (sanitizedSnippets.size() >= snippetCount) {
+                break;
+            }
+        }
+        return sanitizedSnippets;
+    }
+
+    /**
+     * 解析单条 hit 内允许放入 Prompt 的贴题片段数量。
+     *
+     * @param question 用户问题
+     * @return 片段数量上限
+     */
+    private int resolvePromptFocusSnippetLimit(String question) {
+        if (shouldUseDistributedPromptFocusSnippets(question)) {
+            return PROMPT_FOCUS_DISTRIBUTED_SNIPPET_LIMIT;
+        }
+        return looksLikeExactLookupQuestion(question)
                 || looksLikeEnumerationQuestion(question)
                 || looksLikeFlowQuestion(question)
                 ? 2
                 : 1;
-        List<String> snippets = selectQuestionFocusedFallbackSnippets(
-                question,
-                queryArticleHit,
-                queryTokens == null ? extractQueryTokens(question) : queryTokens,
-                snippetCount
-        );
-        List<String> sanitizedSnippets = new ArrayList<String>();
-        for (String snippet : snippets) {
-            String normalizedSnippet = sanitizePromptEvidenceSnippet(snippet);
-            if (!normalizedSnippet.isBlank()) {
-                sanitizedSnippets.add(normalizedSnippet);
+    }
+
+    /**
+     * 判断是否应在同一 hit 内按多个局部窗口分散选择片段。
+     *
+     * @param question 用户问题
+     * @return 需要分散选择返回 true
+     */
+    private boolean shouldUseDistributedPromptFocusSnippets(String question) {
+        if (question == null || question.isBlank()) {
+            return false;
+        }
+        if (looksLikePathQuestion(question) || containsRequestedExactPathIdentifier(question)) {
+            return false;
+        }
+        return looksLikeFlowQuestion(question)
+                || looksLikeEnumerationQuestion(question)
+                || looksLikeStatusQuestion(question)
+                || looksLikeCompoundExactLookupQuestion(question)
+                || querySemanticRules.containsAnyStatusSignal(question)
+                || querySemanticRules.containsAnySequenceSignal(question)
+                || querySemanticRules.containsAnyMultiFocusSeparator(question);
+    }
+
+    /**
+     * 从同一 hit 内容中选择覆盖不同局部窗口的贴题片段。
+     *
+     * @param question 用户问题
+     * @param queryTokens 查询 token
+     * @param queryArticleHit 查询命中
+     * @param limit 片段数量上限
+     * @return 贴题片段
+     */
+    private List<String> selectDistributedPromptFocusSnippets(
+            String question,
+            List<String> queryTokens,
+            QueryArticleHit queryArticleHit,
+            int limit
+    ) {
+        if (queryArticleHit == null || limit <= 0) {
+            return List.of();
+        }
+        List<String> contentLines = selectPromptFocusContentLines(queryArticleHit.getContent());
+        if (contentLines.isEmpty()) {
+            return List.of();
+        }
+        List<PromptFocusWindowCandidate> candidates = new ArrayList<PromptFocusWindowCandidate>();
+        for (int index = 0; index < contentLines.size(); index++) {
+            String contentLine = contentLines.get(index);
+            if (!isPromptFocusAnchorLine(question, contentLine, queryTokens)) {
+                continue;
+            }
+            PromptFocusWindowCandidate candidate = buildPromptFocusWindowCandidate(
+                    question,
+                    queryTokens,
+                    contentLines,
+                    index
+            );
+            if (candidate != null) {
+                candidates.add(candidate);
             }
         }
-        return sanitizedSnippets;
+        candidates.sort((leftCandidate, rightCandidate) -> Integer.compare(
+                rightCandidate.score,
+                leftCandidate.score
+        ));
+        return selectNonOverlappingPromptFocusWindows(candidates, limit);
+    }
+
+    /**
+     * 提取可用于 Prompt focus 的有序正文行。
+     *
+     * @param content 原始正文
+     * @return 有序正文行
+     */
+    private List<String> selectPromptFocusContentLines(String content) {
+        List<String> contentLines = new ArrayList<String>();
+        String bodyContent = ArticleMarkdownSupport.extractBody(content);
+        if (bodyContent == null || bodyContent.isBlank()) {
+            return contentLines;
+        }
+        String[] rawLines = bodyContent.split("\\R");
+        for (int index = 0; index < rawLines.length; index++) {
+            String rawLine = rawLines[index];
+            String normalizedLine = rawLine == null ? "" : rawLine.trim();
+            if (normalizedLine.isEmpty()
+                    || normalizedLine.startsWith("#")
+                    || normalizedLine.startsWith(">")
+                    || answerEvidenceNormalizer.isMarkdownTableHeaderWithDivider(
+                        normalizedLine,
+                        index + 1 < rawLines.length ? rawLines[index + 1] : null)
+                    || answerEvidenceNormalizer.isNonTextMediaLine(normalizedLine)) {
+                continue;
+            }
+            String plainLine = normalizedLine.startsWith("- ") ? normalizedLine.substring(2) : normalizedLine;
+            String normalizedCandidate = answerEvidenceNormalizer.normalizeFallbackLineCandidate(plainLine);
+            if (!normalizedCandidate.isBlank()) {
+                contentLines.add(normalizedCandidate);
+            }
+        }
+        return contentLines;
+    }
+
+    /**
+     * 判断某行是否适合作为局部 focus 窗口起点。
+     *
+     * @param question 用户问题
+     * @param contentLine 正文行
+     * @param queryTokens 查询 token
+     * @return 适合返回 true
+     */
+    private boolean isPromptFocusAnchorLine(String question, String contentLine, List<String> queryTokens) {
+        if (contentLine == null || contentLine.isBlank()) {
+            return false;
+        }
+        if (containsAnyPromptFocusQueryToken(contentLine, queryTokens)) {
+            return true;
+        }
+        return (looksLikeFlowQuestion(question) || looksLikeStatusQuestion(question))
+                && containsPromptFocusStructureSignal(contentLine);
+    }
+
+    /**
+     * 构造某个 anchor 起点附近的有界 focus 窗口。
+     *
+     * @param question 用户问题
+     * @param queryTokens 查询 token
+     * @param contentLines 有序正文行
+     * @param anchorIndex 起点行索引
+     * @return focus 窗口候选
+     */
+    private PromptFocusWindowCandidate buildPromptFocusWindowCandidate(
+            String question,
+            List<String> queryTokens,
+            List<String> contentLines,
+            int anchorIndex
+    ) {
+        List<String> selectedLines = new ArrayList<String>();
+        Set<String> coveredTokens = new LinkedHashSet<String>();
+        int score = 0;
+        for (int index = anchorIndex; index < contentLines.size(); index++) {
+            if (index > anchorIndex + PROMPT_FOCUS_WINDOW_FORWARD_LINE_LIMIT) {
+                break;
+            }
+            String contentLine = contentLines.get(index);
+            if (index > anchorIndex && !shouldKeepPromptFocusNeighborLine(question, contentLine, queryTokens)) {
+                continue;
+            }
+            String nextWindow = selectedLines.isEmpty()
+                    ? contentLine
+                    : String.join(" / ", selectedLines) + " / " + contentLine;
+            if (nextWindow.length() > PROMPT_FOCUS_WINDOW_CHAR_LIMIT) {
+                break;
+            }
+            selectedLines.add(contentLine);
+            score += scorePromptFocusLine(question, contentLine, queryTokens, index - anchorIndex);
+            addCoveredPromptFocusTokens(coveredTokens, contentLine, queryTokens);
+        }
+        if (selectedLines.isEmpty()) {
+            return null;
+        }
+        String snippet = String.join(" / ", selectedLines);
+        int coverageScore = coveredTokens.size() * 36;
+        return new PromptFocusWindowCandidate(snippet, anchorIndex, score + coverageScore, coveredTokens);
+    }
+
+    /**
+     * 判断相邻行是否值得并入当前 focus 窗口。
+     *
+     * @param question 用户问题
+     * @param contentLine 正文行
+     * @param queryTokens 查询 token
+     * @return 值得并入返回 true
+     */
+    private boolean shouldKeepPromptFocusNeighborLine(String question, String contentLine, List<String> queryTokens) {
+        if (contentLine == null || contentLine.isBlank()) {
+            return false;
+        }
+        return containsAnyPromptFocusQueryToken(contentLine, queryTokens)
+                || containsPromptFocusStructureSignal(contentLine)
+                || looksLikePromptFocusListOrTableLine(contentLine)
+                || looksLikeSequentialPromptFocusQuestion(question);
+    }
+
+    /**
+     * 计算局部 focus 行的通用证据信号分。
+     *
+     * @param question 用户问题
+     * @param contentLine 正文行
+     * @param queryTokens 查询 token
+     * @param distanceFromAnchor 距离 anchor 的行数
+     * @return 分值
+     */
+    private int scorePromptFocusLine(
+            String question,
+            String contentLine,
+            List<String> queryTokens,
+            int distanceFromAnchor
+    ) {
+        int score = 0;
+        if (containsAnyPromptFocusQueryToken(contentLine, queryTokens)) {
+            score += 42;
+        }
+        if (containsPromptFocusStructureSignal(contentLine)) {
+            score += 24;
+        }
+        if (looksLikePromptFocusListOrTableLine(contentLine)) {
+            score += 16;
+        }
+        if (looksLikeSequentialPromptFocusQuestion(question)) {
+            score += 18;
+        }
+        score -= distanceFromAnchor * 3;
+        return score;
+    }
+
+    /**
+     * 判断候选行是否包含查询 token。
+     *
+     * @param contentLine 正文行
+     * @param queryTokens 查询 token
+     * @return 包含返回 true
+     */
+    private boolean containsAnyPromptFocusQueryToken(String contentLine, List<String> queryTokens) {
+        if (contentLine == null || contentLine.isBlank() || queryTokens == null || queryTokens.isEmpty()) {
+            return false;
+        }
+        String lowerCaseLine = lowerCase(contentLine);
+        for (String queryToken : queryTokens) {
+            String normalizedToken = lowerCase(queryToken);
+            if (!normalizedToken.isBlank() && lowerCaseLine.contains(normalizedToken)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 记录当前行覆盖到的问题 token。
+     *
+     * @param coveredTokens 已覆盖 token
+     * @param contentLine 正文行
+     * @param queryTokens 查询 token
+     */
+    private void addCoveredPromptFocusTokens(Set<String> coveredTokens, String contentLine, List<String> queryTokens) {
+        if (coveredTokens == null || contentLine == null || queryTokens == null) {
+            return;
+        }
+        String lowerCaseLine = lowerCase(contentLine);
+        for (String queryToken : queryTokens) {
+            String normalizedToken = lowerCase(queryToken);
+            if (!normalizedToken.isBlank() && lowerCaseLine.contains(normalizedToken)) {
+                coveredTokens.add(normalizedToken);
+            }
+        }
+    }
+
+    /**
+     * 判断候选行是否带有结构化 evidence 信号。
+     *
+     * @param contentLine 正文行
+     * @return 命中返回 true
+     */
+    private boolean containsPromptFocusStructureSignal(String contentLine) {
+        if (contentLine == null || contentLine.isBlank()) {
+            return false;
+        }
+        String lowerCaseLine = lowerCase(contentLine);
+        return containsFlowSignal(contentLine)
+                || containsFlowTransitionSignal(contentLine)
+                || containsStatusSignal(lowerCaseLine)
+                || containsCorrectionOrStatusSignal(lowerCaseLine)
+                || containsSetupSignal(contentLine)
+                || answerEvidenceNormalizer.startsWithDirectStructuredFactAssignment(contentLine);
+    }
+
+    /**
+     * 判断候选行是否像列表、表格或连续步骤项。
+     *
+     * @param contentLine 正文行
+     * @return 命中返回 true
+     */
+    private boolean looksLikePromptFocusListOrTableLine(String contentLine) {
+        if (contentLine == null || contentLine.isBlank()) {
+            return false;
+        }
+        String trimmedLine = contentLine.trim();
+        return trimmedLine.startsWith("|")
+                || trimmedLine.matches("^\\d+[.、].*")
+                || trimmedLine.startsWith("- ")
+                || trimmedLine.contains(" | ");
+    }
+
+    /**
+     * 按覆盖增益挑选互不重复的局部窗口。
+     *
+     * @param candidates 候选窗口
+     * @param limit 数量上限
+     * @return 选中的窗口文本
+     */
+    private List<String> selectNonOverlappingPromptFocusWindows(
+            List<PromptFocusWindowCandidate> candidates,
+            int limit
+    ) {
+        List<String> snippets = new ArrayList<String>();
+        List<PromptFocusWindowCandidate> selectedCandidates = new ArrayList<PromptFocusWindowCandidate>();
+        Set<String> coveredTokens = new LinkedHashSet<String>();
+        for (PromptFocusWindowCandidate candidate : candidates) {
+            if (snippets.size() >= limit) {
+                break;
+            }
+            if (overlapsSelectedPromptFocusWindow(candidate, selectedCandidates)
+                    && coveredTokens.containsAll(candidate.coveredTokens)) {
+                continue;
+            }
+            snippets.add(candidate.snippet);
+            selectedCandidates.add(candidate);
+            coveredTokens.addAll(candidate.coveredTokens);
+        }
+        return snippets;
+    }
+
+    /**
+     * 判断候选窗口是否与已选窗口过度重叠。
+     *
+     * @param candidate 当前候选
+     * @param selectedCandidates 已选候选
+     * @return 重叠返回 true
+     */
+    private boolean overlapsSelectedPromptFocusWindow(
+            PromptFocusWindowCandidate candidate,
+            List<PromptFocusWindowCandidate> selectedCandidates
+    ) {
+        if (candidate == null || selectedCandidates == null || selectedCandidates.isEmpty()) {
+            return false;
+        }
+        for (PromptFocusWindowCandidate selectedCandidate : selectedCandidates) {
+            int distance = Math.abs(candidate.anchorIndex - selectedCandidate.anchorIndex);
+            if (distance <= PROMPT_FOCUS_WINDOW_FORWARD_LINE_LIMIT) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断当前问题是否适合保留 anchor 后方的短连续窗口。
+     *
+     * @param question 用户问题
+     * @return 适合返回 true
+     */
+    private boolean looksLikeSequentialPromptFocusQuestion(String question) {
+        return looksLikeFlowQuestion(question)
+                || looksLikeEnumerationQuestion(question)
+                || looksLikeStatusQuestion(question)
+                || querySemanticRules.containsAnyStatusSignal(question)
+                || querySemanticRules.containsAnySequenceSignal(question)
+                || querySemanticRules.containsAnyMultiFocusSeparator(question);
+    }
+
+    /**
+     * Prompt focus 局部窗口候选。
+     */
+    private static final class PromptFocusWindowCandidate {
+
+        private final String snippet;
+
+        private final int anchorIndex;
+
+        private final int score;
+
+        private final Set<String> coveredTokens;
+
+        private PromptFocusWindowCandidate(
+                String snippet,
+                int anchorIndex,
+                int score,
+                Set<String> coveredTokens
+        ) {
+            this.snippet = snippet;
+            this.anchorIndex = anchorIndex;
+            this.score = score;
+            this.coveredTokens = coveredTokens;
+        }
     }
 
     /**

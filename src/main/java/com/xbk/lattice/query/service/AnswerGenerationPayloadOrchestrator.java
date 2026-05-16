@@ -6,8 +6,12 @@ import com.xbk.lattice.query.domain.AnswerOutcome;
 import com.xbk.lattice.query.domain.GenerationMode;
 import com.xbk.lattice.query.domain.ModelExecutionStatus;
 import com.xbk.lattice.query.domain.QueryAnswerPayload;
+import lombok.extern.slf4j.Slf4j;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * 答案生成载荷编排器
@@ -16,9 +20,24 @@ import java.util.List;
  *
  * @author xiexu
  */
+@Slf4j
 final class AnswerGenerationPayloadOrchestrator {
 
     private static final String NO_KNOWLEDGE_MESSAGE = "当前未找到与该问题直接相关的知识。";
+
+    private static final int PROMPT_AUDIT_QUERY_TOKEN_LIMIT = 12;
+
+    private static final String PROMPT_AUDIT_SNAPSHOT_ENABLED_ENV =
+            "LATTICE_QUERY_ANSWER_PROMPT_AUDIT_SNAPSHOT_ENABLED";
+
+    private static final String[] PROMPT_AUDIT_SECTION_TITLES = {
+            "QUESTION-FOCUSED EVIDENCE",
+            "CONTRIBUTION EVIDENCE",
+            "STRUCTURED FACT CARD EVIDENCE",
+            "SOURCE EVIDENCE",
+            "GRAPH EVIDENCE",
+            "ARTICLE EVIDENCE"
+    };
 
     private static final String[] INSUFFICIENT_EVIDENCE_SIGNALS = {
             "当前证据不足",
@@ -185,13 +204,15 @@ final class AnswerGenerationPayloadOrchestrator {
             return null;
         }
         try {
+            String answerPrompt = support.answerPromptBuilder.buildAnswerPrompt(question, queryArticleHits);
+            logPromptAudit(question, answerPrompt);
             LlmInvocationEnvelope envelope = support.answerLlmInvoker.invokeRawWithScope(
                     scopeId,
                     scene,
                     agentRole,
                     "query-answer-structured",
                     support.answerPromptBuilder.systemQueryAnswer(),
-                    support.answerPromptBuilder.buildAnswerPrompt(question, queryArticleHits)
+                    answerPrompt
             );
             QueryAnswerPayload parsedPayload = parseLlmPayload(envelope, question, queryArticleHits);
             if (parsedPayload != null) {
@@ -209,6 +230,154 @@ final class AnswerGenerationPayloadOrchestrator {
             );
         }
         return null;
+    }
+
+    /**
+     * 记录答案 LLM Prompt 的运行时审计摘要，不改变 Prompt 内容。
+     *
+     * @param question 用户问题
+     * @param answerPrompt 答案 Prompt
+     */
+    private void logPromptAudit(String question, String answerPrompt) {
+        String safePrompt = answerPrompt == null ? "" : answerPrompt;
+        String evidencePrompt = extractEvidencePrompt(safePrompt);
+        log.info(
+                "Answer LLM prompt audit. promptLength: {}, sectionAudit: {}, evidenceQueryTermPresence: {}, "
+                        + "containsTruncatedSuffix: {}, containsOmittedMarker: {}",
+                Integer.valueOf(safePrompt.length()),
+                buildSectionAuditSummary(safePrompt),
+                buildEvidenceQueryTermPresenceSummary(question, evidencePrompt),
+                Boolean.valueOf(safePrompt.contains(AnswerGenerationBaseSupport.PROMPT_TRUNCATED_SUFFIX)),
+                Boolean.valueOf(safePrompt.contains("OMITTED:"))
+        );
+        if (isPromptAuditSnapshotEnabled()) {
+            log.info("Answer LLM prompt snapshot. maskedPrompt: {}", SensitiveTextMasker.mask(safePrompt));
+        }
+        else if (log.isDebugEnabled()) {
+            log.debug("Answer LLM prompt snapshot. maskedPrompt: {}", SensitiveTextMasker.mask(safePrompt));
+        }
+    }
+
+    /**
+     * 判断是否输出脱敏后的完整 Prompt snapshot。
+     *
+     * @return 是否启用 snapshot 审计
+     */
+    private boolean isPromptAuditSnapshotEnabled() {
+        String enabled = System.getenv(PROMPT_AUDIT_SNAPSHOT_ENABLED_ENV);
+        if (enabled == null || enabled.isBlank()) {
+            enabled = System.getProperty(PROMPT_AUDIT_SNAPSHOT_ENABLED_ENV);
+        }
+        if (enabled == null || enabled.isBlank()) {
+            return false;
+        }
+        return "1".equals(enabled.trim())
+                || "true".equalsIgnoreCase(enabled.trim())
+                || "yes".equalsIgnoreCase(enabled.trim());
+    }
+
+    /**
+     * 截取 Prompt 中证据段起始后的内容。
+     *
+     * @param answerPrompt 答案 Prompt
+     * @return 证据 Prompt 内容
+     */
+    private String extractEvidencePrompt(String answerPrompt) {
+        if (answerPrompt == null || answerPrompt.isBlank()) {
+            return "";
+        }
+        int evidenceStart = answerPrompt.indexOf(PROMPT_AUDIT_SECTION_TITLES[0]);
+        if (evidenceStart < 0) {
+            return "";
+        }
+        return answerPrompt.substring(evidenceStart);
+    }
+
+    /**
+     * 构建证据段摘要审计。
+     *
+     * @param answerPrompt 答案 Prompt
+     * @return 证据段摘要
+     */
+    private String buildSectionAuditSummary(String answerPrompt) {
+        StringBuilder summaryBuilder = new StringBuilder();
+        String safePrompt = answerPrompt == null ? "" : answerPrompt;
+        for (String sectionTitle : PROMPT_AUDIT_SECTION_TITLES) {
+            if (summaryBuilder.length() > 0) {
+                summaryBuilder.append("; ");
+            }
+            String sectionContent = extractPromptSection(safePrompt, sectionTitle);
+            boolean present = !sectionContent.isEmpty() || safePrompt.contains(sectionTitle);
+            boolean containsTruncatedSuffix = sectionContent.contains(AnswerGenerationBaseSupport.PROMPT_TRUNCATED_SUFFIX);
+            boolean containsOmittedMarker = sectionContent.contains("OMITTED:");
+            summaryBuilder.append(sectionTitle)
+                    .append("[present=")
+                    .append(present)
+                    .append(", length=")
+                    .append(sectionContent.length())
+                    .append(", truncated=")
+                    .append(containsTruncatedSuffix)
+                    .append(", omitted=")
+                    .append(containsOmittedMarker)
+                    .append("]");
+        }
+        return summaryBuilder.toString();
+    }
+
+    /**
+     * 提取指定 Prompt section 的正文。
+     *
+     * @param answerPrompt 答案 Prompt
+     * @param sectionTitle section 标题
+     * @return section 正文
+     */
+    private String extractPromptSection(String answerPrompt, String sectionTitle) {
+        if (answerPrompt == null || answerPrompt.isBlank() || sectionTitle == null || sectionTitle.isBlank()) {
+            return "";
+        }
+        int sectionStart = answerPrompt.indexOf(sectionTitle);
+        if (sectionStart < 0) {
+            return "";
+        }
+        int contentStart = sectionStart + sectionTitle.length();
+        int nextSectionStart = answerPrompt.length();
+        for (String candidateTitle : PROMPT_AUDIT_SECTION_TITLES) {
+            if (candidateTitle.equals(sectionTitle)) {
+                continue;
+            }
+            int candidateStart = answerPrompt.indexOf(candidateTitle, contentStart);
+            if (candidateStart >= 0 && candidateStart < nextSectionStart) {
+                nextSectionStart = candidateStart;
+            }
+        }
+        return answerPrompt.substring(contentStart, nextSectionStart).trim();
+    }
+
+    /**
+     * 构建查询高信号 token 在证据 Prompt 中的出现情况。
+     *
+     * @param question 用户问题
+     * @param evidencePrompt 证据 Prompt
+     * @return token 出现情况摘要
+     */
+    private String buildEvidenceQueryTermPresenceSummary(String question, String evidencePrompt) {
+        List<String> queryTokens = support.extractQueryTokens(question);
+        Map<String, Boolean> termPresence = new LinkedHashMap<String, Boolean>();
+        String normalizedEvidencePrompt = evidencePrompt == null ? "" : evidencePrompt.toLowerCase(Locale.ROOT);
+        int tokenCount = 0;
+        for (String queryToken : queryTokens) {
+            if (queryToken == null || queryToken.isBlank()) {
+                continue;
+            }
+            String normalizedQueryToken = queryToken.toLowerCase(Locale.ROOT);
+            String safeQueryToken = SensitiveTextMasker.mask(normalizedQueryToken);
+            termPresence.put(safeQueryToken, Boolean.valueOf(normalizedEvidencePrompt.contains(normalizedQueryToken)));
+            tokenCount++;
+            if (tokenCount >= PROMPT_AUDIT_QUERY_TOKEN_LIMIT) {
+                break;
+            }
+        }
+        return termPresence.toString();
     }
 
     /**
