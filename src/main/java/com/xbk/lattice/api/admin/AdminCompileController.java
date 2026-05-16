@@ -1,6 +1,7 @@
 package com.xbk.lattice.api.admin;
 
 import com.xbk.lattice.admin.service.AdminUploadWorkspaceService;
+import com.xbk.lattice.admin.service.AdminCompileReviewSummaryService;
 import com.xbk.lattice.compiler.service.ChunkRebuildResult;
 import com.xbk.lattice.compiler.service.ChunkRebuildService;
 import com.xbk.lattice.compiler.service.CompileJobDerivedStatusResolver;
@@ -39,6 +40,8 @@ public class AdminCompileController {
 
     private final CompileJobDerivedStatusResolver compileJobDerivedStatusResolver;
 
+    private final AdminCompileReviewSummaryService adminCompileReviewSummaryService;
+
     /**
      * 创建管理侧编译控制器。
      *
@@ -46,17 +49,20 @@ public class AdminCompileController {
      * @param adminUploadWorkspaceService 上传暂存服务
      * @param chunkRebuildService chunk 全量重建服务
      * @param compileJobDerivedStatusResolver 编译作业派生状态解析器
+     * @param adminCompileReviewSummaryService 编译审查摘要服务
      */
     public AdminCompileController(
             CompileJobService compileJobService,
             AdminUploadWorkspaceService adminUploadWorkspaceService,
             ChunkRebuildService chunkRebuildService,
-            CompileJobDerivedStatusResolver compileJobDerivedStatusResolver
+            CompileJobDerivedStatusResolver compileJobDerivedStatusResolver,
+            AdminCompileReviewSummaryService adminCompileReviewSummaryService
     ) {
         this.compileJobService = compileJobService;
         this.adminUploadWorkspaceService = adminUploadWorkspaceService;
         this.chunkRebuildService = chunkRebuildService;
         this.compileJobDerivedStatusResolver = compileJobDerivedStatusResolver;
+        this.adminCompileReviewSummaryService = adminCompileReviewSummaryService;
     }
 
     /**
@@ -176,6 +182,7 @@ public class AdminCompileController {
                 compileJobRecord.getPersistedCount(),
                 compileJobRecord.getErrorMessage(),
                 compileJobRecord.getAttemptCount(),
+                adminCompileReviewSummaryService.resolve(compileJobRecord.getJobId()),
                 compileJobRecord.getRequestedAt() == null ? null : compileJobRecord.getRequestedAt().toString(),
                 compileJobRecord.getStartedAt() == null ? null : compileJobRecord.getStartedAt().toString(),
                 compileJobRecord.getFinishedAt() == null ? null : compileJobRecord.getFinishedAt().toString()

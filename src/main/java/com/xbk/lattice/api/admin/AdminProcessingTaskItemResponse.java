@@ -91,6 +91,8 @@ public class AdminProcessingTaskItemResponse {
 
     private final String completionNotice;
 
+    private final AdminCompileReviewSummaryResponse compileReviewSummary;
+
     private final String evidenceJson;
 
     private final String requestedAt;
@@ -144,6 +146,7 @@ public class AdminProcessingTaskItemResponse {
      * @param requiresManualAction 是否需要人工处理
      * @param noticeTone 通知语气
      * @param completionNotice 完成提示
+     * @param compileReviewSummary 编译审查摘要
      * @param evidenceJson 证据 JSON
      * @param requestedAt 提交时间
      * @param updatedAt 更新时间
@@ -191,6 +194,7 @@ public class AdminProcessingTaskItemResponse {
             boolean requiresManualAction,
             String noticeTone,
             String completionNotice,
+            AdminCompileReviewSummaryResponse compileReviewSummary,
             String evidenceJson,
             String requestedAt,
             String updatedAt,
@@ -237,6 +241,7 @@ public class AdminProcessingTaskItemResponse {
         this.requiresManualAction = requiresManualAction;
         this.noticeTone = noticeTone;
         this.completionNotice = completionNotice;
+        this.compileReviewSummary = compileReviewSummary;
         this.evidenceJson = evidenceJson;
         this.requestedAt = requestedAt;
         this.updatedAt = updatedAt;
@@ -402,6 +407,10 @@ public class AdminProcessingTaskItemResponse {
 
     public String getCompletionNotice() {
         return completionNotice;
+    }
+
+    public AdminCompileReviewSummaryResponse getCompileReviewSummary() {
+        return compileReviewSummary;
     }
 
     public String getEvidenceJson() {

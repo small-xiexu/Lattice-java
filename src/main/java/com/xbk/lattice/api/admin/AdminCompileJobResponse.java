@@ -47,6 +47,8 @@ public class AdminCompileJobResponse {
 
     private final int attemptCount;
 
+    private final AdminCompileReviewSummaryResponse reviewSummary;
+
     private final String requestedAt;
 
     private final String startedAt;
@@ -74,6 +76,7 @@ public class AdminCompileJobResponse {
      * @param persistedCount 持久化数量
      * @param errorMessage 错误信息
      * @param attemptCount 尝试次数
+     * @param reviewSummary 审查摘要
      * @param requestedAt 提交时间
      * @param startedAt 开始时间
      * @param finishedAt 完成时间
@@ -97,6 +100,7 @@ public class AdminCompileJobResponse {
             int persistedCount,
             String errorMessage,
             int attemptCount,
+            AdminCompileReviewSummaryResponse reviewSummary,
             String requestedAt,
             String startedAt,
             String finishedAt
@@ -119,6 +123,7 @@ public class AdminCompileJobResponse {
         this.persistedCount = persistedCount;
         this.errorMessage = errorMessage;
         this.attemptCount = attemptCount;
+        this.reviewSummary = reviewSummary;
         this.requestedAt = requestedAt;
         this.startedAt = startedAt;
         this.finishedAt = finishedAt;
@@ -284,6 +289,15 @@ public class AdminCompileJobResponse {
      */
     public int getAttemptCount() {
         return attemptCount;
+    }
+
+    /**
+     * 获取审查摘要。
+     *
+     * @return 审查摘要
+     */
+    public AdminCompileReviewSummaryResponse getReviewSummary() {
+        return reviewSummary;
     }
 
     /**

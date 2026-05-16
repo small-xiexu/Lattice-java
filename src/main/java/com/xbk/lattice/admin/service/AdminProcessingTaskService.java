@@ -2,9 +2,11 @@ package com.xbk.lattice.admin.service;
 
 import com.xbk.lattice.api.admin.AdminKnowledgeHelpActionResponse;
 import com.xbk.lattice.api.admin.AdminKnowledgeHelpStateResponse;
+import com.xbk.lattice.api.admin.AdminCompileReviewSummaryResponse;
 import com.xbk.lattice.api.admin.AdminProcessingTaskSummaryCardResponse;
 import com.xbk.lattice.api.admin.AdminProcessingTaskItemResponse;
 import com.xbk.lattice.api.admin.AdminProcessingTaskListResponse;
+import com.xbk.lattice.api.admin.AdminProcessingTaskStepResponse;
 import com.xbk.lattice.api.admin.AdminProcessingTaskSummaryResponse;
 import com.xbk.lattice.api.admin.AdminProcessingTaskActionResponse;
 import com.xbk.lattice.compiler.service.CompileJobDerivedStatusResolver;
@@ -52,6 +54,8 @@ public class AdminProcessingTaskService {
 
     private final AdminProcessingTaskPresentationResolver presentationResolver;
 
+    private final AdminCompileReviewSummaryService adminCompileReviewSummaryService;
+
     private final StatusService statusService;
 
     /**
@@ -63,6 +67,7 @@ public class AdminProcessingTaskService {
      * @param sourceService 资料源服务
      * @param adminUploadWorkspaceService 上传工作目录服务
      * @param presentationResolver 当前处理任务展示解析器
+     * @param adminCompileReviewSummaryService 编译审查摘要服务
      * @param statusService 状态服务
      */
     public AdminProcessingTaskService(
@@ -72,6 +77,7 @@ public class AdminProcessingTaskService {
             SourceService sourceService,
             AdminUploadWorkspaceService adminUploadWorkspaceService,
             AdminProcessingTaskPresentationResolver presentationResolver,
+            AdminCompileReviewSummaryService adminCompileReviewSummaryService,
             StatusService statusService
     ) {
         this.sourceUploadService = sourceUploadService;
@@ -80,6 +86,7 @@ public class AdminProcessingTaskService {
         this.sourceService = sourceService;
         this.adminUploadWorkspaceService = adminUploadWorkspaceService;
         this.presentationResolver = presentationResolver;
+        this.adminCompileReviewSummaryService = adminCompileReviewSummaryService;
         this.statusService = statusService;
     }
 
@@ -189,6 +196,11 @@ public class AdminProcessingTaskService {
                 runDetail.getErrorMessage(),
                 runDetail.getSourceId()
         );
+        AdminCompileReviewSummaryResponse compileReviewSummary = adminCompileReviewSummaryService.resolve(runDetail.getCompileJobId());
+        List<AdminProcessingTaskStepResponse> progressSteps = enrichReviewStepDetail(
+                presentation.getProgressSteps(),
+                compileReviewSummary
+        );
         return new AdminProcessingTaskItemResponse(
                 "source-run:" + String.valueOf(runDetail.getRunId()),
                 AdminProcessingTaskPresentationResolver.TASK_TYPE_SOURCE_SYNC,
@@ -224,12 +236,13 @@ public class AdminProcessingTaskService {
                 presentation.getProgressText(),
                 presentation.getReasonSummary(),
                 presentation.getOperationalNote(),
-                presentation.getProgressSteps(),
+                progressSteps,
                 presentation.getDisplayTone(),
                 presentation.isProcessingActive(),
                 presentation.isRequiresManualAction(),
                 presentation.getNoticeTone(),
                 presentation.getCompletionNotice(),
+                compileReviewSummary,
                 runDetail.getEvidenceJson(),
                 runDetail.getRequestedAt(),
                 runDetail.getUpdatedAt(),
@@ -268,6 +281,11 @@ public class AdminProcessingTaskService {
                 compileJobRecord.getErrorMessage(),
                 sourceId
         );
+        AdminCompileReviewSummaryResponse compileReviewSummary = adminCompileReviewSummaryService.resolve(compileJobRecord.getJobId());
+        List<AdminProcessingTaskStepResponse> progressSteps = enrichReviewStepDetail(
+                presentation.getProgressSteps(),
+                compileReviewSummary
+        );
         return new AdminProcessingTaskItemResponse(
                 "compile-job:" + compileJobRecord.getJobId(),
                 AdminProcessingTaskPresentationResolver.TASK_TYPE_STANDALONE_COMPILE,
@@ -303,18 +321,54 @@ public class AdminProcessingTaskService {
                 presentation.getProgressText(),
                 presentation.getReasonSummary(),
                 presentation.getOperationalNote(),
-                presentation.getProgressSteps(),
+                progressSteps,
                 presentation.getDisplayTone(),
                 presentation.isProcessingActive(),
                 presentation.isRequiresManualAction(),
                 presentation.getNoticeTone(),
                 presentation.getCompletionNotice(),
+                compileReviewSummary,
                 null,
                 formatTime(compileJobRecord.getRequestedAt()),
                 formatTime(updatedAt),
                 formatTime(compileJobRecord.getStartedAt()),
                 formatTime(compileJobRecord.getFinishedAt())
         );
+    }
+
+    /**
+     * 将真实审查路由摘要补充到处理任务步骤详情。
+     *
+     * @param progressSteps 原始展示步骤
+     * @param compileReviewSummary 编译审查摘要
+     * @return 补充审查摘要后的展示步骤
+     */
+    private List<AdminProcessingTaskStepResponse> enrichReviewStepDetail(
+            List<AdminProcessingTaskStepResponse> progressSteps,
+            AdminCompileReviewSummaryResponse compileReviewSummary
+    ) {
+        String reviewDetail = adminCompileReviewSummaryService.buildStepDetail(compileReviewSummary);
+        if (reviewDetail == null || reviewDetail.isBlank() || progressSteps == null || progressSteps.isEmpty()) {
+            return progressSteps;
+        }
+        List<AdminProcessingTaskStepResponse> enrichedSteps = new ArrayList<AdminProcessingTaskStepResponse>();
+        for (AdminProcessingTaskStepResponse progressStep : progressSteps) {
+            if (progressStep == null) {
+                continue;
+            }
+            if (AdminProcessingTaskStep.REVIEW_ARTICLES.getCode().equals(progressStep.getKey())) {
+                enrichedSteps.add(new AdminProcessingTaskStepResponse(
+                        progressStep.getKey(),
+                        progressStep.getLabel(),
+                        progressStep.getStatus(),
+                        reviewDetail
+                ));
+            }
+            else {
+                enrichedSteps.add(progressStep);
+            }
+        }
+        return enrichedSteps;
     }
 
     /**
