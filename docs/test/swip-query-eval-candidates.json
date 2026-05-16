@@ -62,6 +62,20 @@
       ],
       "humanJudgement": {
         "passRule": "回答必须覆盖合并多类支付键盘、支付路由转发、简化门店操作和监控告警四个要点。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "智能无线密码键盘",
+          "路由转发"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统使用手册-20250702.docx",
+          "SWIP智能键盘系统安装手册-202509.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "SWIP 会改变 POS 原有银行卡和预付费卡操作习惯",
+          "SWIP 只支持银行卡"
+        ]
       }
     },
     {
@@ -98,6 +112,20 @@
       ],
       "humanJudgement": {
         "passRule": "必须区分 UPP 执行交易与 SWIP 读卡返回卡号，不能把读卡等同于支付完成。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "UPP",
+          "读卡",
+          "卡号"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统使用手册-20250702.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "SWIP 直接执行 SVC 卡支付、查询和退款",
+          "读卡功能会直接完成扣款"
+        ]
       }
     },
     {
@@ -135,6 +163,20 @@
       ],
       "humanJudgement": {
         "passRule": "回答需明确参考号和原交易日期两个输入项，并写出 4 位月月日日格式。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "参考号",
+          "原交易日期",
+          "月月日日"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统使用手册-20250702.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "退款只需要刷卡不需要原交易参考号",
+          "原交易日期格式是年年月月日日"
+        ]
       }
     },
     {
@@ -172,6 +214,20 @@
       ],
       "humanJudgement": {
         "passRule": "必须说明建议执行时机和结算成功后的键盘提示、POS 返回、打印小票结果。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "日结",
+          "结算成功",
+          "小票"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统使用手册-20250702.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "银行卡结算每天开店前执行",
+          "结算成功后不打印小票"
+        ]
       }
     },
     {
@@ -209,6 +265,19 @@
       ],
       "humanJudgement": {
         "passRule": "回答需列出两种重印方式，并说明查询流水号的处理方式。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "流水号",
+          "查询交易明细"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统使用手册-20250702.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "只能重印最后一笔交易",
+          "不知道流水号时无法重印"
+        ]
       }
     },
     {
@@ -244,6 +313,19 @@
       ],
       "humanJudgement": {
         "passRule": "必须同时覆盖新安装必须签到和每天开店前签到两个要点。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "开店前",
+          "杉德签到"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统使用手册-20250702.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "杉德签到只需要安装时执行一次",
+          "杉德签到每天营业结束后执行"
+        ]
       }
     },
     {
@@ -280,6 +362,18 @@
       ],
       "humanJudgement": {
         "passRule": "回答需说明执行时机、入口、按卡种打印和无交易不打印。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "卡种"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统使用手册-20250702.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "杉德手工结算每天开店前执行",
+          "无交易也会打印结算单"
+        ]
       }
     },
     {
@@ -318,6 +412,21 @@
       ],
       "humanJudgement": {
         "passRule": "必须明确卡种限制、当日限制、未结算限制和全额撤销限制。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "得仕卡",
+          "当日",
+          "未做过结算",
+          "全额撤销"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统使用手册-20250702.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "杉德卡和苏州市民卡也支持当日撤销",
+          "可以部分撤销得仕卡消费"
+        ]
       }
     },
     {
@@ -353,6 +462,20 @@
       ],
       "humanJudgement": {
         "passRule": "必须写出 eBuy 日结打印入口，并说明返回处理中时再次执行结算。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "eBuy日结打印",
+          "处理中",
+          "再次执行"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统使用手册-20250702.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "返回处理中时无需再次操作",
+          "银行积分日结在 IP Bank 管理中执行"
+        ]
       }
     },
     {
@@ -391,6 +514,21 @@
       ],
       "humanJudgement": {
         "passRule": "回答必须覆盖网络连接、运行状态、HTTPS 服务和异常时联系区域 IT。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "SNIFF",
+          "HTTPS服务",
+          "已启动",
+          "区域IT伙伴"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统使用手册-20250702.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "系统无响应时优先卸载 APP",
+          "只要重启 POS 就能恢复"
+        ]
       }
     },
     {
@@ -433,6 +571,21 @@
       ],
       "humanJudgement": {
         "passRule": "必须包含前置条件、长按 LOGO 10 秒和点击确认三个关键步骤。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "LOGO",
+          "10",
+          "确认"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统使用手册-20250702.docx",
+          "SWIP智能键盘系统安装手册-202509.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "交易未确认失败时直接终止",
+          "长按电源键即可终止交易"
+        ]
       }
     },
     {
@@ -469,6 +622,19 @@
       ],
       "humanJudgement": {
         "passRule": "两个证书命名规则必须完整准确；该 case 含内部证书信息，只能用于内部评测。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "swip-门店号-POS机号.starbucks.net",
+          "swip-https-门店号-POS机号.starbucks.net"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统安装手册-202509.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "证书可以重复申请任意次数",
+          "HTTPS 服务证书和入网证书使用同一名称"
+        ]
       }
     },
     {
@@ -511,6 +677,25 @@
       ],
       "humanJudgement": {
         "passRule": "必须列出数量和全部 9 个 APP；地区限制可简述但不能说反。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "9",
+          "SWIP APP Store",
+          "SWIP网关",
+          "资和信",
+          "易百",
+          "杉德",
+          "得仕卡",
+          "苏州市民卡"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统安装手册-202509.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "SWIP 系统只有 7 个 APP",
+          "得仕卡 APP 适用于所有门店"
+        ]
       }
     },
     {
@@ -549,6 +734,20 @@
       ],
       "humanJudgement": {
         "passRule": "必须准确回答 149/150 对应关系和 149→151→150→149→151→150 的调整思路；该 case 含内部网络规则，只用于内部评测。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "149",
+          "150",
+          "151"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统安装手册-202509.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "POS 机号 1 对应后缀 150",
+          "直接把两个机器 IP 对调即可"
+        ]
       }
     },
     {
@@ -586,6 +785,21 @@
       ],
       "humanJudgement": {
         "passRule": "必须列出三个字段及语义，并说明文件存在/不存在对键盘模式的影响。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "storeId",
+          "stationId",
+          "pinpadIp",
+          "有线键盘"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统安装手册-202509.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "swip-pos.json 不存在时 POS 无法工作",
+          "部署 swip-pos.json 后仍保持原有有线密码键盘连接"
+        ]
       }
     },
     {
@@ -622,6 +836,18 @@
       ],
       "humanJudgement": {
         "passRule": "必须答出文件路径 c:\\SWIP\\swip-keys.p13，并说明它用于判断秘钥下载成功。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "c:\\SWIP\\swip-keys.p13"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统安装手册-202509.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "检查 swip-pos.json 是否存在即可判断秘钥下载成功",
+          "所有 POS 共用同一个秘钥"
+        ]
       }
     },
     {
@@ -657,6 +883,18 @@
       ],
       "humanJudgement": {
         "passRule": "必须明确按文档顺序执行，不能回答成任意顺序或只需执行某一个渠道。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "前后顺序"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统安装手册-202509.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "各渠道初始化脚本可以任意顺序执行",
+          "不需要 POS DLL 初始化脚本"
+        ]
       }
     },
     {
@@ -702,6 +940,23 @@
       ],
       "humanJudgement": {
         "passRule": "这是多点比较题，回答必须按 APP 类型分组，不能只回答其中一类。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "SWIP APP Store",
+          "SWIP网关APP",
+          "资和信",
+          "杉德",
+          "易百"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统安装手册-202509.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "所有 APP 升级都不影响签到",
+          "所有 APP 卸载重装后都无需重新配置",
+          "日结前可以随意卸载重装支付 APP"
+        ]
       }
     },
     {
@@ -743,6 +998,24 @@
       ],
       "humanJudgement": {
         "passRule": "必须回答访问方式和目录映射；该 case 涉及内部访问地址，只适合内部评测。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "9999/log",
+          "6666",
+          "XBKSW",
+          "ebxbk",
+          "XBKYH",
+          "XBKXT",
+          "sand"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统安装手册-202509.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "杉德 APP 保存近 7 天日志",
+          "日志只能从 POS 机查看"
+        ]
       }
     },
     {
@@ -781,6 +1054,22 @@
       ],
       "humanJudgement": {
         "passRule": "必须包含两个提前天数窗口、晚上 11 点和键盘开机/网关 APP 运行要求。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "51/31天",
+          "50/30天",
+          "晚上11点",
+          "开机",
+          "SWIP网关APP"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统安装手册-202509.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "证书需要门店每月手工更新",
+          "键盘关机也能自动完成证书更新"
+        ]
       }
     },
     {
@@ -821,6 +1110,22 @@
       ],
       "humanJudgement": {
         "passRule": "必须准确给出尺寸，并区分江浙沪非工坊门店和烘焙工坊店。"
+      },
+      "expect": {
+        "requiredAnswerTerms": [
+          "40mm",
+          "58mm",
+          "杉德",
+          "工坊"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统使用手册-20250702.docx",
+          "SWIP智能键盘系统安装手册-202509.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "所有门店都由杉德提供热敏纸",
+          "打印纸规格是 58mm 直径"
+        ]
       }
     },
     {
@@ -857,6 +1162,21 @@
       ],
       "humanJudgement": {
         "passRule": "应正确拒答或限定回答范围，不能编造扫码支付步骤。"
+      },
+      "expect": {
+        "answerOutcomeAny": [
+          "INSUFFICIENT_EVIDENCE",
+          "NO_RELEVANT_KNOWLEDGE",
+          "PARTIAL_ANSWER"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统安装手册-202509.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "文档详细说明了支付宝扫码支付流程",
+          "文档详细说明了微信扫码支付流程",
+          "可以直接按银行卡消费流程处理支付宝和微信"
+        ]
       }
     },
     {
@@ -892,6 +1212,19 @@
       ],
       "humanJudgement": {
         "passRule": "应拒绝完整回答并说明证据不足，只可引用文档中零散提到的字段。"
+      },
+      "expect": {
+        "answerOutcomeAny": [
+          "INSUFFICIENT_EVIDENCE",
+          "PARTIAL_ANSWER"
+        ],
+        "expectedRetrievalTargets": [
+          "SWIP智能键盘系统安装手册-202509.docx"
+        ],
+        "forbiddenAnswerTerms": [
+          "文档完整列出了 SWIP 后端数据库表结构",
+          "编造未知表名或字段定义"
+        ]
       }
     }
   ]

@@ -55,6 +55,55 @@
 - 禁止为了某个测试样例加入具体业务词、文档名、文件名、答案片段、问题问法判断。
 - 中文问法识别只能使用配置化、通用语言信号；不得在 Java 主链硬编码。
 
+## 多 Agent 协作规范
+
+- 项目允许并行使用多个 agent，但必须按职责隔离；同一轮最多只能有一个 agent 修改 `src/main/java/**`。
+- 每轮代码修复只能有一个可归因变量。若 agentA 正在修 RRF，其他 agent 不准同时修 prompt、fallback、citation、runner、题集或模型配置。
+- Query / Answer / Retrieval / Rerank / Citation / Compiler 主链修复，不允许多个 agent 并行改代码。
+
+| Agent | 默认职责 | 是否允许修改生产代码 |
+|---|---|---|
+| 架构/质量顾问 | 阅读报告、判断风险、拆分下一步、生成提示词、控制红线范围 | 否 |
+| agentA | 代码执行 Agent；只按明确提示词执行一个最小代码修复 | 是；每轮只能有一个 |
+| agentB | 治理/链路分析 Agent；做只读分析、设计报告、风险判断 | 否 |
+| agentC | 报告清理/文档 Agent；整理报告、状态台账、文档说明 | 否，除文档/报告 |
+| agentD | 验证/测试 Agent；运行 redline、`mvn test`、query baseline、业务 eval 并输出验证报告 | 否，除报告 |
+
+### 并行规则
+
+- 允许多个只读 agent 并行做失败归因、治理分析、报告清理规划、文档整理、数据库只读审计。
+- 允许验证/测试 Agent 在代码修复完成后运行门禁；代码修复进行中不得擅自清库、重建或跑会干扰归因的业务 eval。
+- 如果已有一个 agent 正在修改主链代码，其他 agent 禁止修改：
+  - `src/main/java/**`
+  - `src/test/java/**`
+  - `src/main/resources/**`
+  - `scripts/**`
+  - `docs/test/**`
+  - `.claude/**`
+- 报告清理 Agent 在代码修复进行中只能做清理规划，不直接删除仍可能被当前修复引用的报告。
+
+### 提示词分发规则
+
+- 架构/质量顾问输出提示词时必须明确写明：交给哪个 agent、本轮目标、允许修改范围、禁止修改范围、是否允许改代码、是否允许跑测试、是否允许清库/重建、输出报告名称、redline / `mvn test` / baseline 要求。
+- 代码执行 Agent 的交付物命名为 `*_fix_result_report.md`。
+- 验证/测试 Agent 的交付物命名为 `*_verification_report.md` 或 `*_gate_report.md`。
+- 治理/链路分析 Agent 的交付物命名为 `*_analysis_report.md` 或 `*_design_report.md`。
+- 清理/文档 Agent 的交付物命名为 `*_cleanup_report.md`、`*_cleanup_plan.md` 或 `*_status.md`。
+
+### 失败处理
+
+- redline `BLOCKER > 0`：所有 agent 停止准确率、baseline、eval 和测试修复；下一步只允许处理 redline BLOCKER。
+- `mvn test` 编译失败：停止 baseline / eval；下一步只允许处理编译失败。
+- baseline 或业务 eval 下降：先判断是否由本轮唯一代码改动造成；若是，优先回退或缩小本轮改动，不得继续扩大修改。
+- 报告显示“预期通过”但未端到端实测：不得标记完成，必须进入验证轮。
+
+### 质量打磨台账
+
+- 后续推进质量打磨、Query/SWIP eval、baseline 修复、多 agent 协作前，必须先读取 [`docs/quality-progress-and-lessons.md`](/Users/sxie/xbk/Lattice-java/docs/quality-progress-and-lessons.md)。
+- 分配 agent 或选择模型前，必须先读取 [`docs/multi-agent-model-routing-guide.md`](/Users/sxie/xbk/Lattice-java/docs/multi-agent-model-routing-guide.md)；模型与 agent 分工由用户按该手册手动指定，不允许执行 agent 自行决定。
+- 如果本轮改变了当前 gate、下一步计划、踩坑结论或 agent 分工，必须同步更新该文档。
+- 该文档是质量打磨阶段的进度台账，不替代计划文件；如果用户指定 `docs/**/plans/*.md`，仍以计划文件为唯一进度台账。
+
 ## 质量工程推进流程
 
 - 后续推进项目质量、Query 准确率、检索/回答链路或 bad case 修复时，默认必须按以下顺序执行，不允许跳步。
