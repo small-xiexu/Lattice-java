@@ -1,6 +1,6 @@
 # 项目质量打磨进度与踩坑台账
 
-更新时间：2026-05-17（LLM reviewer fail-closed 验证通过后更新）
+更新时间：2026-05-17（LLM reviewer 小流量复验通过后更新）
 
 本台账记录质量打磨、Query/SWIP eval、baseline 修复与多 agent 协作的当前状态。后续推进前先读本文件；阶段结论变化后必须回写。
 
@@ -17,22 +17,25 @@
 - compile review persist gate：`PersistArticlesNode` 已修复，不再合并 `needsHumanReviewArticlesRef`，只允许 `review_status=passed` 的 article 进入正式 persist。测试补强已完成，新增 `PersistArticlesNodeTests` 覆盖混合 status 旧风险路径。详见 `compile_review_persist_gate_fix_result_report.md`、`compile_review_persist_gate_runtime_verification_report.md`、`compile_review_persist_gate_test_result_report.md`。
 - compile review query visibility hard filter：5 条 article-backed 通道 SQL 已增加 `review_status='passed' AND lifecycle='ACTIVE'` 条件，RefKey/ArticleChunk 的 OR 条件已用括号包裹防止绕过。source/source_chunk/fact_card 未修改。最终验证通过：redline BLOCKER=0、article-backed 定向测试 8/0/0、source/fact card 定向测试 33/0/0、全量 mvn test=814/0/0。详见 `compile_review_query_visibility_filter_verification_report.md`。
 - compile review LLM reviewer fail-closed 安全底座：`ArticleReviewerGateway` 已修复（1 行变更），`review-enabled=true` 且 LLM 调用异常或解析失败时不再回退到 rule-based pass，改为返回 `TIMEOUT_FALLBACK` / `PARSE_FAILED`（均进入 `needs_human_review`）。`review-enabled=false` 行为保持不变。未启用 LLM reviewer。详见 `compile_review_llm_reviewer_fail_closed_fix_result_report.md`、`compile_review_llm_reviewer_fail_closed_verification_report.md`。
-- 下阶段：agentD 做 fail-closed pre-commit 质量复核。
+- compile review LLM reviewer 小流量复验：在测试库 `ai-rag-knowledge-test` 通过运行时环境变量 `LATTICE_LLM_REVIEW_ENABLED=true` 临时启用，writer = `compile.writer.baseline-gpt-5-5-chat`，reviewer = `compile.reviewer.baseline-gpt-5-5-chat`（非 rule-based），LLM approved → passed → persist 全链路完整，后台可观测性正常。验证后已恢复默认关闭，主库未触碰。详见 `compile_review_llm_reviewer_small_flow_reverification_report.md`。
+- 当前仍未生产默认启用 LLM reviewer。
+- 下阶段：小范围启用策略设计。
 
 ## 当前 Gate
 
 | 项 | 当前状态 | 说明 |
 |---|---|---|
 | redline | `BLOCKER=0` | LLM reviewer fail-closed 验证后：`BLOCKER=0 / REVIEW=1853 / ALLOWLIST=239`，REVIEW +1 来自新增测试类名匹配，无业务特判。最终以 pre-commit 复核结果为准。 |
-| mvn test | `816/0/0` 通过 | LLM reviewer fail-closed 测试补强后：`ArticleReviewerGatewayTests` 新增 2 个 fail-closed case（5→7，但 2 个新 case），全量 816 通过。测试库已隔离到 `ai-rag-knowledge-test`。 |
+| mvn test | `816/0/0` 通过 | 全量 mvn test 从 814 增至 816（新增 2 个 fail-closed case），ArticleReviewerGatewayTests 共 5 个 case。测试库已隔离到 `ai-rag-knowledge-test`。 |
 | main baseline | 阶段 gate 已通过 | `final_query_baseline_gate_report.md` 为 `9/10` 且 gate 通过；`phase12_final_clean_rebuild_gate_report.md` 为 `8/10` 且 6 项 gate 通过。 |
 | SWIP strict eval | 稳定区间 `15-17/23` | focus snippet patch 副作用复核三轮：16/23、17/23、15/23；BANK-SETTLEMENT-001 三轮稳定 PASS；保护 case 三轮稳定 PASS。详见 `swip_focus_snippet_patch_side_effect_review_report.md`。 |
 | 当前数据库状态 | SWIP clean 库 | 据 RRF/QFE 报告：`source_files=2`、`articles=4`，只含 SWIP 两份 docx；不能在该库跑主 baseline。 |
-| 模型配置状态 | 不在本轮变更范围 | Phase 12 主链曾配置 `gpt-5.5 + zhipu_embedding`；compile review 当前默认 `review-enabled=false`，实际 review route 为 rule-based。 |
+| 模型配置状态 | 测试库已绑定，生产默认关闭 | LLM reviewer 小流量复验使用测试库 binding：writer=`compile.writer.baseline-gpt-5-5-chat`，reviewer=`compile.reviewer.baseline-gpt-5-5-chat`。生产 `review-enabled=false`，默认仍为 rule-based。 |
 | compile review observability | API + UI 验证通过 | `compile_review_observability_fix_result_report.md` 显示 redline BLOCKER=0、mvn test=811/0/0；`compile_review_observability_verification_report.md` 确认 API 与后台 UI 均展示 route/outcome/fix 信息。提交前仍需最终复核。 |
 | compile review persist gate | 修复 + 测试补强完成 | `PersistArticlesNode` 已移除 `needsHumanReviewArticlesRef` 合并，只 persist `passed`；新增 `PersistArticlesNodeTests` 覆盖混合 status 旧风险路径。运行时验证 passed 全链路完整。`needs_human_review` 端到端场景当前无法自然构造，已通过源码审查 + 定向单元测试闭合。 |
 | compile review query visibility | 修复 + 验证通过 | 5 条 article-backed mapper SQL 均增加 `review_status='passed' AND lifecycle='ACTIVE'`；RefKey/ArticleChunk OR 条件已用括号包裹防绕过；source/fact_card 未修改。定向测试 8/0/0（article-backed）+ 33/0/0（source/fact card），全量 814/0/0。详见 `compile_review_query_visibility_filter_verification_report.md`。 |
 | compile review LLM reviewer fail-closed | 修复 + 验证通过 | `ArticleReviewerGateway` 1 行变更：LLM 异常/解析失败不再回退 rule-based pass，返回 `TIMEOUT_FALLBACK`/`PARSE_FAILED`（进入 `needs_human_review`）。`review-enabled=false` 行为不变。未启用 LLM reviewer。详见 `compile_review_llm_reviewer_fail_closed_verification_report.md`。 |
+| compile review LLM reviewer 小流量复验 | 测试库全链路通过 | 测试库 `ai-rag-knowledge-test` 临时启用：writer/reviewer route 均非 rule-based，JSON 可解析，approved→passed→persist 完整，后台可观测性正常。验证后已恢复默认关闭，主库未触碰。详见 `compile_review_llm_reviewer_small_flow_reverification_report.md`。 |
 
 ## 多 Agent 当前职责
 
@@ -40,8 +43,8 @@
 |---|---|---|---|
 | agentA | 单一代码修复执行者 | answer grounding + focus snippet patch 均已完成，副作用复核通过；待提交 | 是，但同一轮只能有一个 agentA 改主链 |
 | agentB | 治理/链路分析 | 已产出 compile review 治理分析；只读判断 rule-based 不等于 LLM 内容审查 | 否 |
-| agentC | 项目进度台账与文档治理 | 已完成 LLM reviewer fail-closed 台账更新与报告输出 | 否，除文档/报告 |
-| agentD | 验证/测试 | 负责 redline、`mvn test`、baseline、业务 eval 验证报告；已完成 compile review observability + persist gate + query visibility + LLM reviewer fail-closed 验证；下一步做 fail-closed pre-commit 质量复核 | 否，除验证报告 |
+| agentC | 项目进度台账与文档治理 | 已完成 LLM reviewer 小流量复验台账更新与报告输出 | 否，除文档/报告 |
+| agentD | 验证/测试 | 负责 redline、`mvn test`、baseline、业务 eval 验证报告；已完成 compile review 全链路验证（observability + persist gate + query visibility + fail-closed + 小流量复验）；下一步配合小范围启用策略设计 | 否，除验证报告 |
 
 ## 已验证结论
 
@@ -64,7 +67,9 @@
 - persist gate 与 query visibility hard filter 互补：persist gate 防止新入库的非 passed article 进入正式表；query filter 防止历史脏数据或人工操作残留被 query 召回。两道门禁缺一不可。
 - LLM reviewer fail-closed 安全底座已完成：`review-enabled=true` 时 LLM 异常或解析失败返回非 pass（`TIMEOUT_FALLBACK`/`PARSE_FAILED`），不再静默回退到 rule-based pass。`review-enabled=false` 仍为 rule-based，行为不变。当前未启用 LLM reviewer。
 - fail-closed 依赖现有两道门禁兜底：persist gate 阻止 `needs_human_review` 入库，query visibility hard filter 阻止非 `passed/ACTIVE` 被查询。fail-closed 本身不新增门禁。
-- 当前未开启 LLM reviewer。
+- LLM reviewer 小流量复验通过：在测试库使用 `compile.reviewer.baseline-gpt-5-5-chat` 成功调用 LLM reviewer，JSON 可解析，approved→passed→persist 全链路完整，后台可观测性正常。writer 路由也使用测试库 binding，与 reviewer 一致。
+- 当前仍未生产默认启用 LLM reviewer。小流量复验仅在测试库通过环境变量临时启用，验证后已恢复默认关闭。
+- LLM reviewer 全链路 compile review 治理体系已就绪：fail-closed 安全底座 → persist gate → query visibility hard filter，三道防线全部验证通过。小流量复验确认正向路径（LLM approved→passed→persist）可行，fail-closed 路径在前序轮次已独立验证。
 
 ## 踩坑记录
 
@@ -116,9 +121,9 @@
 8. （已完成）compile review persist gate 修复 + 运行时验证 + 测试补强已完成。详见 `compile_review_persist_gate_fix_result_report.md`、`compile_review_persist_gate_runtime_verification_report.md`、`compile_review_persist_gate_test_result_report.md`。
 9. （已完成）compile review query visibility hard filter 修复 + 测试补强 + 最终验证已完成。详见 `compile_review_query_visibility_filter_verification_report.md`。
 10. （已完成）compile review LLM reviewer fail-closed 安全底座修复 + 独立验证已完成。详见 `compile_review_llm_reviewer_fail_closed_fix_result_report.md`、`compile_review_llm_reviewer_fail_closed_verification_report.md`。
-11. （当前）agentD 做 fail-closed pre-commit 质量复核：确认 redline BLOCKER=0、mvn test=816/0/0、工作区只含允许变更。
-12. （后续）提交 fail-closed 后进入 LLM reviewer enablement gate，按 `compile_review_llm_reviewer_enablement_readiness_report.md` 评估启用条件。
-13. （后续）不直接开启 LLM reviewer；必须通过 enablement gate 独立验收。
+11. （已完成）compile review LLM reviewer 小流量复验通过：测试库全链路 LLM approved→passed→persist，后台可观测性正常。详见 `compile_review_llm_reviewer_small_flow_reverification_report.md`。
+12. （当前）小范围启用策略设计：决定哪些 source、哪些文档类型、什么频率先启用 LLM reviewer。
+13. （后续）不直接全量开启 LLM reviewer；按启用策略分阶段推进。
 
 ## 更新规则
 
