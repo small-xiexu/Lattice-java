@@ -127,6 +127,8 @@
         from article_chunk_vector_index vector_index
         join articles article on article.id = vector_index.article_id
         join article_chunks article_chunk on article_chunk.id = vector_index.article_chunk_id
+        where article.review_status = 'passed'
+          and article.lifecycle = 'ACTIVE'
         order by vector_index.embedding ${distanceOperator} cast(#{vectorLiteral} as ${vectorTypeName}),
                  article.compiled_at desc
         limit #{limit}

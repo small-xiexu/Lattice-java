@@ -35,6 +35,8 @@
         from articles a
         cross join query
         where a.search_tsv @@ query.tsq
+          and a.review_status = 'passed'
+          and a.lifecycle = 'ACTIVE'
         order by score desc, compiled_at desc
         limit #{limit}
     </select>

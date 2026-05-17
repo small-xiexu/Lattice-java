@@ -113,11 +113,93 @@ class ArticleChunkJdbcRepositoryTests {
                 "ACTIVE",
                 OffsetDateTime.now(),
                 List.of("payment/a.md"),
-                "{\"description\":\"payment summary\"}"
+                "{\"description\":\"payment summary\"}",
+                "",
+                List.of(),
+                List.of(),
+                List.of(),
+                "medium",
+                "passed"
         ));
         articleChunkJdbcRepository.replaceChunks(
                 "payment",
                 List.of("retry interval is 30s", "unrelated shipping content")
+        );
+        articleJdbcRepository.upsert(new ArticleRecord(
+                "payment-pending",
+                "Payment Pending",
+                "# Payment Pending",
+                "ACTIVE",
+                OffsetDateTime.now(),
+                List.of("payment/pending.md"),
+                "{\"description\":\"pending payment summary\"}",
+                "",
+                List.of(),
+                List.of(),
+                List.of(),
+                "medium",
+                "pending"
+        ));
+        articleChunkJdbcRepository.replaceChunks(
+                "payment-pending",
+                List.of("retry interval pending content")
+        );
+        articleJdbcRepository.upsert(new ArticleRecord(
+                "payment-needs-human-review",
+                "Payment Needs Human Review",
+                "# Payment Needs Human Review",
+                "ACTIVE",
+                OffsetDateTime.now(),
+                List.of("payment/needs-human-review.md"),
+                "{\"description\":\"needs human review payment summary\"}",
+                "",
+                List.of(),
+                List.of(),
+                List.of(),
+                "medium",
+                "needs_human_review"
+        ));
+        articleChunkJdbcRepository.replaceChunks(
+                "payment-needs-human-review",
+                List.of("retry interval needs human review content")
+        );
+        articleJdbcRepository.upsert(new ArticleRecord(
+                "payment-rejected",
+                "Payment Rejected",
+                "# Payment Rejected",
+                "ACTIVE",
+                OffsetDateTime.now(),
+                List.of("payment/rejected.md"),
+                "{\"description\":\"rejected payment summary\"}",
+                "",
+                List.of(),
+                List.of(),
+                List.of(),
+                "medium",
+                "rejected"
+        ));
+        articleChunkJdbcRepository.replaceChunks(
+                "payment-rejected",
+                List.of("retry interval rejected content")
+        );
+        articleJdbcRepository.upsert(new ArticleRecord(
+                "payment-archived",
+                "Payment Archived",
+                "# Payment Archived",
+                "ARCHIVED",
+                OffsetDateTime.now(),
+                List.of("payment/archived.md"),
+                "{\"description\":\"archived payment summary\"}",
+                "",
+                List.of(),
+                List.of(),
+                List.of(),
+                "medium",
+                "passed"
+        ));
+        articleChunkJdbcRepository.replaceChunks(
+                "payment-archived",
+                List.of("retry interval archived content")
         );
 
         List<LexicalSearchRecord> hits = articleChunkJdbcRepository.searchLexical(
@@ -130,5 +212,13 @@ class ArticleChunkJdbcRepositoryTests {
         assertThat(hits).isNotEmpty();
         assertThat(hits.get(0).getContent()).contains("retry interval");
         assertThat(hits.get(0).getConceptId()).isEqualTo("payment");
+        assertThat(hits)
+                .extracting(LexicalSearchRecord::getConceptId)
+                .doesNotContain(
+                        "payment-pending",
+                        "payment-needs-human-review",
+                        "payment-rejected",
+                        "payment-archived"
+                );
     }
 }

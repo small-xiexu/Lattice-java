@@ -142,6 +142,8 @@
                1 - (v.embedding ${distanceOperator} cast(#{vectorLiteral} as ${vectorTypeName})) as score
         from article_vector_index v
         join articles a on a.article_key = v.article_key
+        where a.review_status = 'passed'
+          and a.lifecycle = 'ACTIVE'
         order by v.embedding ${distanceOperator} cast(#{vectorLiteral} as ${vectorTypeName}),
                  a.compiled_at desc
         limit #{limit}

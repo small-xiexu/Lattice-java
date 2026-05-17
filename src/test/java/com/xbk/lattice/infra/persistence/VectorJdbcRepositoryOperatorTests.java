@@ -49,6 +49,23 @@ class VectorJdbcRepositoryOperatorTests {
         resetTables();
         Long modelProfileId = ensureEmbeddingModelProfile();
         seedArticle(1L, "refund-status", "Refund Status", "退款状态流转说明");
+        seedArticle(2L, "refund-status-pending", "Refund Status Pending", "退款待复核状态流转说明", "pending");
+        seedArticle(
+                3L,
+                "refund-status-needs-human-review",
+                "Refund Status Needs Human Review",
+                "退款人工复核状态流转说明",
+                "needs_human_review"
+        );
+        seedArticle(4L, "refund-status-rejected", "Refund Status Rejected", "退款拒绝状态流转说明", "rejected");
+        seedArticle(
+                5L,
+                "refund-status-archived",
+                "Refund Status Archived",
+                "退款归档状态流转说明",
+                "passed",
+                "ARCHIVED"
+        );
         float[] embedding = testEmbedding();
 
         articleVectorJdbcRepository.upsert(new ArticleVectorRecord(
@@ -57,6 +74,42 @@ class VectorJdbcRepositoryOperatorTests {
                 embedding.length,
                 "repo-operator-test",
                 "hash-article",
+                embedding,
+                OffsetDateTime.now()
+        ));
+        articleVectorJdbcRepository.upsert(new ArticleVectorRecord(
+                "refund-status-pending",
+                modelProfileId,
+                embedding.length,
+                "repo-operator-test",
+                "hash-article-pending",
+                embedding,
+                OffsetDateTime.now()
+        ));
+        articleVectorJdbcRepository.upsert(new ArticleVectorRecord(
+                "refund-status-needs-human-review",
+                modelProfileId,
+                embedding.length,
+                "repo-operator-test",
+                "hash-article-needs-human-review",
+                embedding,
+                OffsetDateTime.now()
+        ));
+        articleVectorJdbcRepository.upsert(new ArticleVectorRecord(
+                "refund-status-rejected",
+                modelProfileId,
+                embedding.length,
+                "repo-operator-test",
+                "hash-article-rejected",
+                embedding,
+                OffsetDateTime.now()
+        ));
+        articleVectorJdbcRepository.upsert(new ArticleVectorRecord(
+                "refund-status-archived",
+                modelProfileId,
+                embedding.length,
+                "repo-operator-test",
+                "hash-article-archived",
                 embedding,
                 OffsetDateTime.now()
         ));
@@ -69,6 +122,14 @@ class VectorJdbcRepositoryOperatorTests {
         assertThat(hits).hasSize(1);
         assertThat(hits.get(0).getConceptId()).isEqualTo("refund-status");
         assertThat(hits.get(0).getScore()).isGreaterThan(0.99D);
+        assertThat(hits)
+                .extracting(QueryArticleHit::getConceptId)
+                .doesNotContain(
+                        "refund-status-pending",
+                        "refund-status-needs-human-review",
+                        "refund-status-rejected",
+                        "refund-status-archived"
+                );
     }
 
     /**
@@ -79,7 +140,28 @@ class VectorJdbcRepositoryOperatorTests {
         resetTables();
         Long modelProfileId = ensureEmbeddingModelProfile();
         seedArticle(1L, "refund-status", "Refund Status", "退款状态流转说明");
+        seedArticle(2L, "refund-status-pending", "Refund Status Pending", "退款待复核状态流转说明", "pending");
+        seedArticle(
+                3L,
+                "refund-status-needs-human-review",
+                "Refund Status Needs Human Review",
+                "退款人工复核状态流转说明",
+                "needs_human_review"
+        );
+        seedArticle(4L, "refund-status-rejected", "Refund Status Rejected", "退款拒绝状态流转说明", "rejected");
+        seedArticle(
+                5L,
+                "refund-status-archived",
+                "Refund Status Archived",
+                "退款归档状态流转说明",
+                "passed",
+                "ARCHIVED"
+        );
         seedChunk(jdbcTemplate, 11L, 1L, 0, "退款完成后 T+1 日到账");
+        seedChunk(jdbcTemplate, 12L, 2L, 0, "退款待复核后 T+1 日到账");
+        seedChunk(jdbcTemplate, 13L, 3L, 0, "退款人工复核后 T+1 日到账");
+        seedChunk(jdbcTemplate, 14L, 4L, 0, "退款拒绝后 T+1 日到账");
+        seedChunk(jdbcTemplate, 15L, 5L, 0, "退款归档后 T+1 日到账");
         float[] embedding = testEmbedding();
 
         articleChunkVectorJdbcRepository.upsert(new ArticleChunkVectorRecord(
@@ -89,6 +171,46 @@ class VectorJdbcRepositoryOperatorTests {
                 0,
                 modelProfileId,
                 "hash-chunk",
+                embedding,
+                OffsetDateTime.now()
+        ));
+        articleChunkVectorJdbcRepository.upsert(new ArticleChunkVectorRecord(
+                Long.valueOf(12L),
+                Long.valueOf(2L),
+                "refund-status-pending",
+                0,
+                modelProfileId,
+                "hash-chunk-pending",
+                embedding,
+                OffsetDateTime.now()
+        ));
+        articleChunkVectorJdbcRepository.upsert(new ArticleChunkVectorRecord(
+                Long.valueOf(13L),
+                Long.valueOf(3L),
+                "refund-status-needs-human-review",
+                0,
+                modelProfileId,
+                "hash-chunk-needs-human-review",
+                embedding,
+                OffsetDateTime.now()
+        ));
+        articleChunkVectorJdbcRepository.upsert(new ArticleChunkVectorRecord(
+                Long.valueOf(14L),
+                Long.valueOf(4L),
+                "refund-status-rejected",
+                0,
+                modelProfileId,
+                "hash-chunk-rejected",
+                embedding,
+                OffsetDateTime.now()
+        ));
+        articleChunkVectorJdbcRepository.upsert(new ArticleChunkVectorRecord(
+                Long.valueOf(15L),
+                Long.valueOf(5L),
+                "refund-status-archived",
+                0,
+                modelProfileId,
+                "hash-chunk-archived",
                 embedding,
                 OffsetDateTime.now()
         ));
@@ -102,6 +224,14 @@ class VectorJdbcRepositoryOperatorTests {
         assertThat(hits.get(0).getConceptId()).isEqualTo("refund-status");
         assertThat(hits.get(0).getChunkText()).isEqualTo("退款完成后 T+1 日到账");
         assertThat(hits.get(0).getScore()).isGreaterThan(0.99D);
+        assertThat(hits)
+                .extracting(ArticleChunkVectorHit::getConceptId)
+                .doesNotContain(
+                        "refund-status-pending",
+                        "refund-status-needs-human-review",
+                        "refund-status-rejected",
+                        "refund-status-archived"
+                );
     }
 
     /**
@@ -143,6 +273,46 @@ class VectorJdbcRepositoryOperatorTests {
             String title,
             String content
     ) {
+        seedArticle(articleId, conceptId, title, content, "passed");
+    }
+
+    /**
+     * 写入指定审查状态的文章测试数据。
+     *
+     * @param articleId 文章主键
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param content 内容
+     * @param reviewStatus 审查状态
+     */
+    private void seedArticle(
+            Long articleId,
+            String conceptId,
+            String title,
+            String content,
+            String reviewStatus
+    ) {
+        seedArticle(articleId, conceptId, title, content, reviewStatus, "ACTIVE");
+    }
+
+    /**
+     * 写入指定审查状态与生命周期的文章测试数据。
+     *
+     * @param articleId 文章主键
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param content 内容
+     * @param reviewStatus 审查状态
+     * @param lifecycle 生命周期
+     */
+    private void seedArticle(
+            Long articleId,
+            String conceptId,
+            String title,
+            String content,
+            String reviewStatus,
+            String lifecycle
+    ) {
         articleJdbcRepository.upsert(
                 new ArticleRecord(
                         null,
@@ -150,7 +320,7 @@ class VectorJdbcRepositoryOperatorTests {
                         conceptId,
                         title,
                         content,
-                        "ACTIVE",
+                        lifecycle,
                         OffsetDateTime.now(),
                         Arrays.asList("refund/status.md"),
                         "{\"source\":\"vector\"}",
@@ -159,7 +329,7 @@ class VectorJdbcRepositoryOperatorTests {
                         List.<String>of(),
                         List.<String>of(),
                         "medium",
-                        "pending"
+                        reviewStatus
                 )
         );
         jdbcTemplate.update(

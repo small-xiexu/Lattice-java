@@ -143,12 +143,16 @@
         from article_chunks ac
         join articles a on a.id = ac.article_id
         cross join query
-        where ac.search_tsv @@ query.tsq
-        <foreach collection="likeTokens" item="likeToken">
-           or lower(ac.chunk_text) like #{likeToken}
-           or lower(a.title) like #{likeToken}
-           or lower(a.concept_id) like #{likeToken}
-        </foreach>
+        where (
+            ac.search_tsv @@ query.tsq
+            <foreach collection="likeTokens" item="likeToken">
+               or lower(ac.chunk_text) like #{likeToken}
+               or lower(a.title) like #{likeToken}
+               or lower(a.concept_id) like #{likeToken}
+            </foreach>
+        )
+          and a.review_status = 'passed'
+          and a.lifecycle = 'ACTIVE'
         order by score desc, a.compiled_at desc, a.article_key asc, ac.chunk_index asc
         limit #{limit}
     </select>

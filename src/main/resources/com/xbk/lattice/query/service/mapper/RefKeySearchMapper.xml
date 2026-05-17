@@ -37,13 +37,17 @@
                </foreach>
                as score
         from articles a
-        where false
-        <foreach collection="likePatterns" item="pattern">
-           or lower(a.refkey_text) like #{pattern}
-           or lower(a.concept_id) like #{pattern}
-           or lower(a.title) like #{pattern}
-           or lower(a.metadata_json::text) like #{pattern}
-        </foreach>
+        where (
+            false
+            <foreach collection="likePatterns" item="pattern">
+               or lower(a.refkey_text) like #{pattern}
+               or lower(a.concept_id) like #{pattern}
+               or lower(a.title) like #{pattern}
+               or lower(a.metadata_json::text) like #{pattern}
+            </foreach>
+        )
+          and a.review_status = 'passed'
+          and a.lifecycle = 'ACTIVE'
         order by score desc, a.compiled_at desc, a.article_key asc
         limit #{limit}
     </select>
