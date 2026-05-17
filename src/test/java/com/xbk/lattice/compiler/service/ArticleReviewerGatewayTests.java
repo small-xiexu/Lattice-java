@@ -71,10 +71,28 @@ class ArticleReviewerGatewayTests {
     }
 
     /**
-     * 验证 compile reviewer raw 调用失败时会回退到规则审查。
+     * 验证禁用 LLM reviewer 时继续使用规则审查。
      */
     @Test
-    void shouldFallbackToRuleBasedReviewerWhenRawInvocationFails() {
+    void shouldUseRuleBasedReviewerWhenReviewDisabled() {
+        ArticleReviewerGateway articleReviewerGateway = new ArticleReviewerGateway(
+                createGateway(new FailingLlmClient(), false),
+                new ReviewResultParser(),
+                createProperties(false),
+                new RuleBasedArticleReviewer()
+        );
+
+        ReviewResult reviewResult = articleReviewerGateway.review(validArticle(), validSources(), "job-1", "compile", "reviewer");
+
+        assertThat(reviewResult.isPass()).isTrue();
+        assertThat(reviewResult.getStatus()).isEqualTo(ReviewStatus.PASSED);
+    }
+
+    /**
+     * 验证启用 LLM reviewer 时 raw 调用失败会 fail-closed。
+     */
+    @Test
+    void shouldFailClosedWhenRawInvocationFailsAndReviewEnabled() {
         ArticleReviewerGateway articleReviewerGateway = new ArticleReviewerGateway(
                 createGateway(new FailingLlmClient(), true),
                 new ReviewResultParser(),
@@ -84,8 +102,26 @@ class ArticleReviewerGatewayTests {
 
         ReviewResult reviewResult = articleReviewerGateway.review(validArticle(), validSources(), "job-1", "compile", "reviewer");
 
-        assertThat(reviewResult.isPass()).isTrue();
-        assertThat(reviewResult.getStatus()).isEqualTo(ReviewStatus.PASSED);
+        assertThat(reviewResult.isPass()).isFalse();
+        assertThat(reviewResult.getStatus()).isEqualTo(ReviewStatus.TIMEOUT_FALLBACK);
+    }
+
+    /**
+     * 验证启用 LLM reviewer 时不可解析输出不会回退成规则审查通过。
+     */
+    @Test
+    void shouldFailClosedWhenRawResultCannotBeParsed() {
+        ArticleReviewerGateway articleReviewerGateway = new ArticleReviewerGateway(
+                createGateway(new StaticLlmClient("not-json"), true),
+                new ReviewResultParser(),
+                createProperties(true),
+                new RuleBasedArticleReviewer()
+        );
+
+        ReviewResult reviewResult = articleReviewerGateway.review(validArticle(), validSources(), "job-1", "compile", "reviewer");
+
+        assertThat(reviewResult.isPass()).isFalse();
+        assertThat(reviewResult.getStatus()).isEqualTo(ReviewStatus.PARSE_FAILED);
     }
 
     /**

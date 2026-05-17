@@ -132,7 +132,7 @@ public class ArticleReviewerGateway {
             return reviewResultParser.parse(envelope.getContent());
         }
         catch (RuntimeException exception) {
-            return ruleBasedArticleReviewer.review(articleContent, sourceContents);
+            return ReviewResult.timeoutFallback();
         }
     }
 

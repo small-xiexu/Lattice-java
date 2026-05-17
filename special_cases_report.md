@@ -1,6 +1,6 @@
 # Special Cases Report
 
-- 扫描时间：2026-05-17 16:03:37 +0800
+- 扫描时间：2026-05-17 18:44:25 +0800
 - 扫描范围：`src/main/java/com/xbk/lattice/query src/main/java/com/xbk/lattice/compiler src/main/java/com/xbk/lattice/article src/main/java/com/xbk/lattice/source`
 - 重点文件名：`(Fallback|Intent|Reranker|Grounding|Lookup|PostProcessor|Prompt|Rewrite)`
 - risk_type：`BLOCKER` 会导致脚本返回 1；`REVIEW` 只进入人工复核；`ALLOWLIST` 是通用解析或工程常量候选。
@@ -153,6 +153,7 @@
 | `src/main/java/com/xbk/lattice/compiler/node/IngestNode.java:222` | `IngestNode` | `\|\| SUPPORTED_DOCUMENT_FORMATS.contains(format)` | `.contains(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/IngestNode.java:223` | `IngestNode` | `\|\| DOCUMENT_PARSE_IMAGE_FORMATS.contains(format);` | `.contains(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/IngestNode.java:491` | `IngestNode` | `return "xlsx".equals(format) \|\| "xls".equals(format);` | `.equals(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/compiler/service/ArticleReviewerGateway.java:135` | `ArticleReviewerGateway` | `return ReviewResult.timeoutFallback();` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/service/CompileJobDerivedStatusResolver.java:40` | `CompileJobDerivedStatusResolver` | `if (!CompileJobStatuses.RUNNING.equalsIgnoreCase(compileJobRecord.getStatus())) {` | `.equalsIgnoreCase(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/service/CompileJobService.java:247` | `CompileJobService` | `if (!CompileJobStatuses.FAILED.equalsIgnoreCase(compileJobRecord.getStatus())) {` | `.equalsIgnoreCase(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/service/CompileJobService.java:424` | `CompileJobService` | `if (!"LLM_CALL_FAILED".equals(llmErrorCode)) {` | `.equals(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
@@ -2103,10 +2104,10 @@
 
 ## 汇总
 
-- 总命中：2091
+- 总命中：2092
 - 高风险：0
-- 中风险：1852
+- 中风险：1853
 - 低风险：239
 - BLOCKER：0
-- REVIEW：1852
+- REVIEW：1853
 - ALLOWLIST：239
