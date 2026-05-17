@@ -71,13 +71,7 @@ public class PersistArticlesNode extends AbstractCompileGraphNode {
     public Map<String, Object> execute(OverAllState overAllState) {
         CompileGraphState state = state(overAllState);
         List<ArticleReviewEnvelope> acceptedArticles = loadAcceptedArticles(state.getAcceptedArticlesRef());
-        List<ArticleReviewEnvelope> articlesToPersist = new ArrayList<ArticleReviewEnvelope>(acceptedArticles);
-        if (state.isAllowPersistNeedsHumanReview()) {
-            articlesToPersist = mergeReviewEnvelopes(
-                    articlesToPersist,
-                    loadNeedsHumanReviewArticles(state.getNeedsHumanReviewArticlesRef())
-            );
-        }
+        List<ArticleReviewEnvelope> articlesToPersist = retainPassedArticles(acceptedArticles);
         int persistedCount = articlesToPersist.isEmpty()
                 ? 0
                 : articleAtomicWriteService.persistArticlesAtomic(
@@ -94,5 +88,38 @@ public class PersistArticlesNode extends AbstractCompileGraphNode {
             state.setReviewedArticlesRef(workingSetStore().saveReviewedArticles(state.getJobId(), articlesToPersist));
         }
         return delta(state);
+    }
+
+    /**
+     * 仅保留最终审查通过的文章进入正式查询可见持久化链路。
+     *
+     * @param reviewedArticles 审查包裹集合
+     * @return 通过审查的文章集合
+     */
+    private List<ArticleReviewEnvelope> retainPassedArticles(List<ArticleReviewEnvelope> reviewedArticles) {
+        List<ArticleReviewEnvelope> passedArticles = new ArrayList<ArticleReviewEnvelope>();
+        for (ArticleReviewEnvelope reviewedArticle : reviewedArticles) {
+            if (isPassedArticle(reviewedArticle)) {
+                passedArticles.add(reviewedArticle);
+            }
+        }
+        return passedArticles;
+    }
+
+    /**
+     * 判断文章是否达到正式落库门槛。
+     *
+     * @param reviewedArticle 审查包裹对象
+     * @return 是否通过审查
+     */
+    private boolean isPassedArticle(ArticleReviewEnvelope reviewedArticle) {
+        if (reviewedArticle == null || reviewedArticle.getArticle() == null) {
+            return false;
+        }
+        String reviewStatus = reviewedArticle.getReviewStatus();
+        if (reviewStatus == null || reviewStatus.isBlank()) {
+            reviewStatus = reviewedArticle.getArticle().getReviewStatus();
+        }
+        return "passed".equalsIgnoreCase(reviewStatus == null ? "" : reviewStatus.trim());
     }
 }

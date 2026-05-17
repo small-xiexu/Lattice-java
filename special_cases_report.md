@@ -1,6 +1,6 @@
 # Special Cases Report
 
-- 扫描时间：2026-05-17 00:33:57 +0800
+- 扫描时间：2026-05-17 08:11:16 +0800
 - 扫描范围：`src/main/java/com/xbk/lattice/query src/main/java/com/xbk/lattice/compiler src/main/java/com/xbk/lattice/article src/main/java/com/xbk/lattice/source`
 - 重点文件名：`(Fallback|Intent|Reranker|Grounding|Lookup|PostProcessor|Prompt|Rewrite)`
 - risk_type：`BLOCKER` 会导致脚本返回 1；`REVIEW` 只进入人工复核；`ALLOWLIST` 是通用解析或工程常量候选。
@@ -106,6 +106,7 @@
 | `src/main/java/com/xbk/lattice/compiler/graph/node/CaptureRepoSnapshotNode.java:47` | `CaptureRepoSnapshotNode` | `String triggerEvent = "incremental".equalsIgnoreCase(state.getCompileMode())` | `.equalsIgnoreCase(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/graph/node/IngestSourcesNode.java:56` | `IngestSourcesNode` | `if ("incremental".equalsIgnoreCase(state.getCompileMode())) {` | `.equalsIgnoreCase(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/graph/node/InitializeJobNode.java:118` | `InitializeJobNode` | `log.warn("Freeze llm snapshots failed for compile job {}, continue with bootstrap fallback",` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/compiler/graph/node/PersistArticlesNode.java:123` | `PersistArticlesNode` | `return "passed".equalsIgnoreCase(reviewStatus == null ? "" : reviewStatus.trim());` | `.equalsIgnoreCase(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:167` | `AnalyzeNode` | `collectFallbackSnippets(sortedSources)` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:482` | `AnalyzeNode` | `if ("default".equals(conceptId) \|\| title.isEmpty()) {` | `.equals(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:632` | `AnalyzeNode` | `private List<String> collectFallbackSnippets(List<RawSource> sortedSources) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
@@ -2102,10 +2103,10 @@
 
 ## 汇总
 
-- 总命中：2090
+- 总命中：2091
 - 高风险：0
 - 中风险：1852
-- 低风险：238
+- 低风险：239
 - BLOCKER：0
 - REVIEW：1852
-- ALLOWLIST：238
+- ALLOWLIST：239
