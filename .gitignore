@@ -45,15 +45,15 @@ build/
 
 ### Local AI Runtime Config ###
 .claude/
+.codex/
+.omx/
 
 ### Local JS Tool Caches ###
 .npm-cache/
-.codex/npm-cache/
 .playwright-browsers/
 
 ### Local Temp Outputs ###
 tmp/
 test-results/
-.codex/run/
 .playwright-cli/
 output/
