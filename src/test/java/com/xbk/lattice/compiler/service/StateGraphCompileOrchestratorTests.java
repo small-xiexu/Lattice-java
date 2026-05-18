@@ -28,7 +28,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest(properties = {
         "spring.ai.openai.api-key=test-openai-key",
-        "spring.ai.anthropic.api-key=test-anthropic-key"
+        "spring.ai.anthropic.api-key=test-anthropic-key",
+        "lattice.llm.secret-encryption-key=test-orchestrator-compile-key!"
 })
 class StateGraphCompileOrchestratorTests {
 
@@ -297,6 +298,8 @@ class StateGraphCompileOrchestratorTests {
      * 重置测试表。
      */
     private void resetTables() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.execution_llm_snapshots RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.agent_model_bindings RESTART IDENTITY CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice.source_files CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice.synthesis_artifacts");
         jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
