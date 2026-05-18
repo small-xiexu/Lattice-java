@@ -690,6 +690,7 @@ CREATE TABLE IF NOT EXISTS compile_jobs (
     root_trace_id VARCHAR(64),
     incremental BOOLEAN NOT NULL DEFAULT FALSE,
     orchestration_mode VARCHAR(32) NOT NULL DEFAULT 'state_graph',
+    review_mode VARCHAR(32) NOT NULL DEFAULT 'LLM',
     status VARCHAR(32) NOT NULL,
     worker_id VARCHAR(128),
     last_heartbeat_at TIMESTAMPTZ,
@@ -716,6 +717,7 @@ COMMENT ON COLUMN compile_jobs.source_sync_run_id IS '触发该编译的资料�
 COMMENT ON COLUMN compile_jobs.root_trace_id IS '异步编译链路根追踪标识';
 COMMENT ON COLUMN compile_jobs.incremental IS '是否为增量编译';
 COMMENT ON COLUMN compile_jobs.orchestration_mode IS '编排模式';
+COMMENT ON COLUMN compile_jobs.review_mode IS '作业级审查模式：RULE_BASED 或 LLM';
 COMMENT ON COLUMN compile_jobs.status IS '任务状态';
 COMMENT ON COLUMN compile_jobs.worker_id IS '当前持有任务的 worker 标识';
 COMMENT ON COLUMN compile_jobs.last_heartbeat_at IS '最近一次运行心跳时间';
@@ -732,6 +734,14 @@ COMMENT ON COLUMN compile_jobs.attempt_count IS '已尝试次数';
 COMMENT ON COLUMN compile_jobs.requested_at IS '任务请求时间';
 COMMENT ON COLUMN compile_jobs.started_at IS '任务开始时间';
 COMMENT ON COLUMN compile_jobs.finished_at IS '任务结束时间';
+
+ALTER TABLE compile_jobs
+    ADD COLUMN IF NOT EXISTS review_mode VARCHAR(32) NOT NULL DEFAULT 'LLM';
+
+ALTER TABLE compile_jobs
+    ALTER COLUMN review_mode SET DEFAULT 'LLM';
+
+COMMENT ON COLUMN compile_jobs.review_mode IS '作业级审查模式：RULE_BASED 或 LLM';
 
 CREATE INDEX IF NOT EXISTS idx_compile_jobs_status_requested_at
     ON compile_jobs (status, requested_at DESC, job_id DESC);

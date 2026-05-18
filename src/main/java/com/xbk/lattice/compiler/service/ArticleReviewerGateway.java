@@ -3,10 +3,12 @@ package com.xbk.lattice.compiler.service;
 import com.xbk.lattice.article.service.ArticleMarkdownSupport;
 import com.xbk.lattice.compiler.config.LlmProperties;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
+import com.xbk.lattice.infra.persistence.CompileJobJdbcRepository;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import com.xbk.lattice.llm.service.LlmInvocationEnvelope;
 import com.xbk.lattice.query.domain.ReviewResult;
 import com.xbk.lattice.query.service.ReviewResultParser;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -30,12 +32,15 @@ public class ArticleReviewerGateway {
 
     private final RuleBasedArticleReviewer ruleBasedArticleReviewer;
 
+    private final CompileJobJdbcRepository compileJobJdbcRepository;
+
     /**
      * 创建文章审查网关。
      *
      * @param llmGateway LLM 网关
      * @param reviewResultParser 审查结果解析器
      * @param llmProperties LLM 配置
+     * @param ruleBasedArticleReviewer 规则审查器
      */
     public ArticleReviewerGateway(
             LlmGateway llmGateway,
@@ -43,10 +48,31 @@ public class ArticleReviewerGateway {
             LlmProperties llmProperties,
             RuleBasedArticleReviewer ruleBasedArticleReviewer
     ) {
+        this(llmGateway, reviewResultParser, llmProperties, ruleBasedArticleReviewer, null);
+    }
+
+    /**
+     * 创建文章审查网关。
+     *
+     * @param llmGateway LLM 网关
+     * @param reviewResultParser 审查结果解析器
+     * @param llmProperties LLM 配置
+     * @param ruleBasedArticleReviewer 规则审查器
+     * @param compileJobJdbcRepository 编译作业仓储
+     */
+    @Autowired
+    public ArticleReviewerGateway(
+            LlmGateway llmGateway,
+            ReviewResultParser reviewResultParser,
+            LlmProperties llmProperties,
+            RuleBasedArticleReviewer ruleBasedArticleReviewer,
+            CompileJobJdbcRepository compileJobJdbcRepository
+    ) {
         this.llmGateway = llmGateway;
         this.reviewResultParser = reviewResultParser;
         this.llmProperties = llmProperties;
         this.ruleBasedArticleReviewer = ruleBasedArticleReviewer;
+        this.compileJobJdbcRepository = compileJobJdbcRepository;
     }
 
     /**
@@ -86,8 +112,34 @@ public class ArticleReviewerGateway {
             String scene,
             String agentRole
     ) {
-        if (!llmProperties.isReviewEnabled()) {
+        return review(articleContent, sourceContents, scopeId, scene, agentRole, null);
+    }
+
+    /**
+     * 执行文章审查。
+     *
+     * @param articleContent 文章内容
+     * @param sourceContents 源文件正文
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @param requestedReviewMode 请求审查模式
+     * @return 审查结果
+     */
+    public ReviewResult review(
+            String articleContent,
+            String sourceContents,
+            String scopeId,
+            String scene,
+            String agentRole,
+            String requestedReviewMode
+    ) {
+        String reviewMode = resolveReviewMode(scopeId, requestedReviewMode);
+        if (!CompileExecutionRequest.isLlmReviewMode(reviewMode)) {
             return ruleBasedArticleReviewer.review(articleContent, sourceContents);
+        }
+        if (llmGateway == null) {
+            return ReviewResult.timeoutFallback();
         }
         String truncatedSources = sourceContents.length() > 12000
                 ? sourceContents.substring(0, 12000)
@@ -134,6 +186,67 @@ public class ArticleReviewerGateway {
         catch (RuntimeException exception) {
             return ReviewResult.timeoutFallback();
         }
+    }
+
+    /**
+     * 解析当前审查路由。
+     *
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @return 审查路由
+     */
+    public String resolveRoute(String scopeId, String scene, String agentRole) {
+        return resolveRoute(scopeId, scene, agentRole, null);
+    }
+
+    /**
+     * 解析当前审查路由。
+     *
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param agentRole Agent 角色
+     * @param requestedReviewMode 请求审查模式
+     * @return 审查路由
+     */
+    public String resolveRoute(String scopeId, String scene, String agentRole, String requestedReviewMode) {
+        if (!CompileExecutionRequest.isLlmReviewMode(resolveReviewMode(scopeId, requestedReviewMode))) {
+            return "rule-based";
+        }
+        if (llmGateway == null) {
+            return "llm-unavailable";
+        }
+        String effectiveScene = scene == null || scene.isBlank()
+                ? ExecutionLlmSnapshotService.COMPILE_SCENE
+                : scene;
+        String effectiveAgentRole = agentRole == null || agentRole.isBlank()
+                ? ExecutionLlmSnapshotService.ROLE_REVIEWER
+                : agentRole;
+        if (scopeId == null || scopeId.isBlank()) {
+            return llmGateway.routeResolution(effectiveScene, effectiveAgentRole).getRouteLabel();
+        }
+        return llmGateway.routeFor(scopeId, effectiveScene, effectiveAgentRole);
+    }
+
+    /**
+     * 解析当前作业的审查模式。
+     *
+     * @param scopeId 作用域标识
+     * @param requestedReviewMode 请求审查模式
+     * @return 审查模式
+     */
+    public String resolveReviewMode(String scopeId, String requestedReviewMode) {
+        if (requestedReviewMode != null && !requestedReviewMode.isBlank()) {
+            return CompileExecutionRequest.normalizeReviewMode(requestedReviewMode);
+        }
+        if (scopeId == null || scopeId.isBlank() || compileJobJdbcRepository == null) {
+            return llmProperties.isReviewEnabled()
+                    ? CompileExecutionRequest.REVIEW_MODE_LLM
+                    : CompileExecutionRequest.REVIEW_MODE_RULE_BASED;
+        }
+        return compileJobJdbcRepository.findReviewModeByJobId(scopeId)
+                .map(CompileExecutionRequest::normalizeReviewMode)
+                .orElse(CompileExecutionRequest.REVIEW_MODE_RULE_BASED);
     }
 
     /**

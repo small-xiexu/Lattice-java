@@ -35,6 +35,8 @@ public class CompileGraphState {
 
     private String orchestrationMode;
 
+    private String reviewMode;
+
     private String rawSourcesRef;
 
     private String groupedSourcesRef;

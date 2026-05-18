@@ -21,6 +21,8 @@ public class AdminCompileJobResponse {
 
     private final String orchestrationMode;
 
+    private final String reviewMode;
+
     private final String status;
 
     private final String derivedStatus;
@@ -63,6 +65,7 @@ public class AdminCompileJobResponse {
      * @param sourceNames 来源文件名列表
      * @param incremental 是否增量编译
      * @param orchestrationMode 编排模式
+     * @param reviewMode 审查模式
      * @param status 状态
      * @param derivedStatus 派生展示状态
      * @param workerId worker 标识
@@ -87,6 +90,7 @@ public class AdminCompileJobResponse {
             List<String> sourceNames,
             boolean incremental,
             String orchestrationMode,
+            String reviewMode,
             String status,
             String derivedStatus,
             String workerId,
@@ -110,6 +114,7 @@ public class AdminCompileJobResponse {
         this.sourceNames = sourceNames;
         this.incremental = incremental;
         this.orchestrationMode = orchestrationMode;
+        this.reviewMode = reviewMode;
         this.status = status;
         this.derivedStatus = derivedStatus;
         this.workerId = workerId;
@@ -172,6 +177,15 @@ public class AdminCompileJobResponse {
      */
     public String getOrchestrationMode() {
         return orchestrationMode;
+    }
+
+    /**
+     * 获取审查模式。
+     *
+     * @return 审查模式
+     */
+    public String getReviewMode() {
+        return reviewMode;
     }
 
     /**

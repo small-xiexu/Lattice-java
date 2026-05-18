@@ -1,5 +1,7 @@
 package com.xbk.lattice.infra.persistence;
 
+import com.xbk.lattice.compiler.service.CompileExecutionRequest;
+
 import java.time.OffsetDateTime;
 
 /**
@@ -24,6 +26,8 @@ public class CompileJobRecord {
     private final boolean incremental;
 
     private final String orchestrationMode;
+
+    private final String reviewMode;
 
     private final String status;
 
@@ -111,6 +115,7 @@ public class CompileJobRecord {
                 null,
                 incremental,
                 orchestrationMode,
+                null,
                 status,
                 workerId,
                 lastHeartbeatAt,
@@ -182,6 +187,88 @@ public class CompileJobRecord {
             OffsetDateTime startedAt,
             OffsetDateTime finishedAt
     ) {
+        this(
+                jobId,
+                sourceDir,
+                sourceId,
+                sourceSyncRunId,
+                rootTraceId,
+                incremental,
+                orchestrationMode,
+                null,
+                status,
+                workerId,
+                lastHeartbeatAt,
+                runningExpiresAt,
+                currentStep,
+                progressCurrent,
+                progressTotal,
+                progressMessage,
+                progressUpdatedAt,
+                errorCode,
+                persistedCount,
+                errorMessage,
+                attemptCount,
+                requestedAt,
+                startedAt,
+                finishedAt
+        );
+    }
+
+    /**
+     * 创建编译作业记录。
+     *
+     * @param jobId 作业标识
+     * @param sourceDir 源目录
+     * @param sourceId 资料源主键
+     * @param sourceSyncRunId 资料源同步运行主键
+     * @param rootTraceId 根追踪标识
+     * @param incremental 是否增量编译
+     * @param orchestrationMode 编排模式
+     * @param reviewMode 审查模式
+     * @param status 状态
+     * @param workerId worker 标识
+     * @param lastHeartbeatAt 最近心跳时间
+     * @param runningExpiresAt 运行租约到期时间
+     * @param currentStep 当前执行步骤
+     * @param progressCurrent 当前进度数量
+     * @param progressTotal 总进度数量
+     * @param progressMessage 进度提示文案
+     * @param progressUpdatedAt 最近进度更新时间
+     * @param errorCode 错误码
+     * @param persistedCount 持久化数量
+     * @param errorMessage 错误信息
+     * @param attemptCount 尝试次数
+     * @param requestedAt 提交时间
+     * @param startedAt 开始时间
+     * @param finishedAt 完成时间
+     */
+    public CompileJobRecord(
+            String jobId,
+            String sourceDir,
+            Long sourceId,
+            Long sourceSyncRunId,
+            String rootTraceId,
+            boolean incremental,
+            String orchestrationMode,
+            String reviewMode,
+            String status,
+            String workerId,
+            OffsetDateTime lastHeartbeatAt,
+            OffsetDateTime runningExpiresAt,
+            String currentStep,
+            int progressCurrent,
+            int progressTotal,
+            String progressMessage,
+            OffsetDateTime progressUpdatedAt,
+            String errorCode,
+            int persistedCount,
+            String errorMessage,
+            int attemptCount,
+            OffsetDateTime requestedAt,
+            OffsetDateTime startedAt,
+            OffsetDateTime finishedAt
+    ) {
         this.jobId = jobId;
         this.sourceDir = sourceDir;
         this.sourceId = sourceId;
@@ -189,6 +276,7 @@ public class CompileJobRecord {
         this.rootTraceId = rootTraceId;
         this.incremental = incremental;
         this.orchestrationMode = orchestrationMode;
+        this.reviewMode = CompileExecutionRequest.normalizeReviewMode(reviewMode);
         this.status = status;
         this.workerId = workerId;
         this.lastHeartbeatAt = lastHeartbeatAt;
@@ -268,6 +356,15 @@ public class CompileJobRecord {
      */
     public String getOrchestrationMode() {
         return orchestrationMode;
+    }
+
+    /**
+     * 获取审查模式。
+     *
+     * @return 审查模式
+     */
+    public String getReviewMode() {
+        return reviewMode;
     }
 
     /**

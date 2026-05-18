@@ -77,7 +77,8 @@ public class AdminCompileController {
                 compileJobRequest.getSourceDir(),
                 compileJobRequest.isIncremental(),
                 compileJobRequest.isAsync(),
-                compileJobRequest.getOrchestrationMode()
+                compileJobRequest.getOrchestrationMode(),
+                compileJobRequest.getReviewMode()
         );
         return toResponse(compileJobRecord);
     }
@@ -89,6 +90,7 @@ public class AdminCompileController {
      * @param incremental 是否增量编译
      * @param async 是否异步执行
      * @param orchestrationMode 编排模式
+     * @param reviewMode 审查模式
      * @return 编译作业响应
      * @throws IOException IO 异常
      */
@@ -97,14 +99,16 @@ public class AdminCompileController {
             @RequestParam("files") MultipartFile[] files,
             @RequestParam(defaultValue = "false") boolean incremental,
             @RequestParam(defaultValue = "true") boolean async,
-            @RequestParam(required = false) String orchestrationMode
+            @RequestParam(required = false) String orchestrationMode,
+            @RequestParam(required = false) String reviewMode
     ) throws IOException {
         Path workspaceDir = adminUploadWorkspaceService.save(files);
         CompileJobRecord compileJobRecord = compileJobService.submit(
                 workspaceDir.toString(),
                 incremental,
                 async,
-                orchestrationMode
+                orchestrationMode,
+                reviewMode
         );
         return toResponse(compileJobRecord);
     }
@@ -169,6 +173,7 @@ public class AdminCompileController {
                 adminUploadWorkspaceService.listRelativeFileNames(compileJobRecord.getSourceDir()),
                 compileJobRecord.isIncremental(),
                 compileJobRecord.getOrchestrationMode(),
+                compileJobRecord.getReviewMode(),
                 compileJobRecord.getStatus(),
                 compileJobDerivedStatusResolver.resolve(compileJobRecord),
                 compileJobRecord.getWorkerId(),

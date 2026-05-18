@@ -54,6 +54,7 @@ class CompileJobJdbcRepositoryTests {
                 .contains("progress_total")
                 .contains("progress_message")
                 .contains("progress_updated_at")
+                .contains("review_mode")
                 .contains("error_code");
     }
 
@@ -98,6 +99,7 @@ class CompileJobJdbcRepositoryTests {
         assertThat(loaded.getProgressCurrent()).isEqualTo(2);
         assertThat(loaded.getProgressTotal()).isEqualTo(6);
         assertThat(loaded.getProgressMessage()).isEqualTo("正在生成第 2/6 篇文章");
+        assertThat(loaded.getReviewMode()).isEqualTo("RULE_BASED");
         assertThat(loaded.getErrorCode()).isEqualTo("LLM_REQUEST_TIMEOUT");
         assertThat(loaded.getErrorMessage()).isEqualTo("timeout");
         assertThat(loaded.getRunningExpiresAt()).isNotNull();
@@ -140,6 +142,49 @@ class CompileJobJdbcRepositoryTests {
         assertThat(retriedRecord.getProgressMessage()).isNull();
         assertThat(retriedRecord.getRunningExpiresAt()).isNull();
         assertThat(retriedRecord.getErrorCode()).isNull();
+        assertThat(retriedRecord.getReviewMode()).isEqualTo("RULE_BASED");
+    }
+
+    /**
+     * 验证 retry 不会改变原 job 固化的审查模式。
+     */
+    @Test
+    void shouldKeepReviewModeWhenRetryingJob() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs CASCADE");
+        OffsetDateTime requestedAt = OffsetDateTime.now();
+        CompileJobRecord compileJobRecord = new CompileJobRecord(
+                "job-review-mode-retry",
+                "/tmp/source-dir",
+                null,
+                null,
+                "trace-root",
+                false,
+                "state_graph",
+                "LLM",
+                "FAILED",
+                null,
+                null,
+                null,
+                null,
+                0,
+                0,
+                null,
+                null,
+                "COMPILE_EXECUTION_FAILED",
+                0,
+                "failed",
+                1,
+                requestedAt,
+                requestedAt,
+                requestedAt
+        );
+
+        compileJobJdbcRepository.save(compileJobRecord);
+        compileJobJdbcRepository.retry("job-review-mode-retry");
+
+        CompileJobRecord retriedRecord = compileJobJdbcRepository.findByJobId("job-review-mode-retry").orElseThrow();
+        assertThat(retriedRecord.getStatus()).isEqualTo("QUEUED");
+        assertThat(retriedRecord.getReviewMode()).isEqualTo("LLM");
     }
 
     /**

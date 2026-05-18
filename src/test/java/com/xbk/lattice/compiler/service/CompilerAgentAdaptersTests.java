@@ -53,6 +53,11 @@ class CompilerAgentAdaptersTests {
 
         assertThat(agentModelRouter.routeForWriterAgent()).isEqualTo("openai");
         assertThat(agentModelRouter.routeForReviewerAgent()).isEqualTo("anthropic");
+        assertThat(agentModelRouter.routeForReviewerAgent(
+                null,
+                "compile",
+                CompileExecutionRequest.REVIEW_MODE_RULE_BASED
+        )).isEqualTo("rule-based");
         assertThat(agentModelRouter.routeForFixerAgent()).isEqualTo("openai");
     }
 
@@ -65,6 +70,23 @@ class CompilerAgentAdaptersTests {
         AgentModelRouter agentModelRouter = new AgentModelRouter(createLlmGateway("", "{}", llmProperties));
 
         assertThat(agentModelRouter.routeForReviewerAgent()).isEqualTo("rule-based");
+    }
+
+    /**
+     * 验证 job 指定 LLM 模式时，审查路由展示不受全局 review-enabled=false 阻止。
+     */
+    @Test
+    void shouldExposeLlmReviewerRouteForLlmJobWhenGlobalReviewDisabled() {
+        LlmProperties llmProperties = createProperties(false);
+        AgentModelRouter agentModelRouter = new AgentModelRouter(createLlmGateway("", "{}", llmProperties));
+
+        String reviewRoute = agentModelRouter.routeForReviewerAgent(
+                null,
+                "compile",
+                CompileExecutionRequest.REVIEW_MODE_LLM
+        );
+
+        assertThat(reviewRoute).isEqualTo("anthropic");
     }
 
     /**

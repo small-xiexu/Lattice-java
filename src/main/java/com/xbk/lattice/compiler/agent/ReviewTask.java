@@ -19,6 +19,8 @@ public class ReviewTask {
 
     private final String scene;
 
+    private final String reviewMode;
+
     /**
      * 创建 ReviewerAgent 输入任务。
      *
@@ -26,7 +28,7 @@ public class ReviewTask {
      * @param sourceContents 来源正文
      */
     public ReviewTask(ArticleRecord articleRecord, String sourceContents) {
-        this(articleRecord, sourceContents, null, null);
+        this(articleRecord, sourceContents, null, null, null);
     }
 
     /**
@@ -38,10 +40,30 @@ public class ReviewTask {
      * @param scene 场景
      */
     public ReviewTask(ArticleRecord articleRecord, String sourceContents, String scopeId, String scene) {
+        this(articleRecord, sourceContents, scopeId, scene, null);
+    }
+
+    /**
+     * 创建 ReviewerAgent 输入任务。
+     *
+     * @param articleRecord 草稿文章
+     * @param sourceContents 来源正文
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param reviewMode 审查模式
+     */
+    public ReviewTask(
+            ArticleRecord articleRecord,
+            String sourceContents,
+            String scopeId,
+            String scene,
+            String reviewMode
+    ) {
         this.articleRecord = articleRecord;
         this.sourceContents = sourceContents;
         this.scopeId = scopeId;
         this.scene = scene;
+        this.reviewMode = reviewMode;
     }
 
     /**
@@ -78,5 +100,14 @@ public class ReviewTask {
      */
     public String getScene() {
         return scene;
+    }
+
+    /**
+     * 返回审查模式。
+     *
+     * @return 审查模式
+     */
+    public String getReviewMode() {
+        return reviewMode;
     }
 }

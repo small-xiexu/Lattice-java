@@ -17,6 +17,8 @@ public class AdminCompileJobRequest {
 
     private String orchestrationMode;
 
+    private String reviewMode;
+
     /**
      * 获取源目录。
      *
@@ -87,5 +89,23 @@ public class AdminCompileJobRequest {
      */
     public void setOrchestrationMode(String orchestrationMode) {
         this.orchestrationMode = orchestrationMode;
+    }
+
+    /**
+     * 获取审查模式。
+     *
+     * @return 审查模式
+     */
+    public String getReviewMode() {
+        return reviewMode;
+    }
+
+    /**
+     * 设置审查模式。
+     *
+     * @param reviewMode 审查模式
+     */
+    public void setReviewMode(String reviewMode) {
+        this.reviewMode = reviewMode;
     }
 }

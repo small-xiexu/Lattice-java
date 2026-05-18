@@ -15,6 +15,8 @@ public class AdminCompileReviewSummaryResponse {
 
     private final String reviewAgentRole;
 
+    private final String requestedReviewMode;
+
     private final String reviewRoute;
 
     private final String reviewModeLabel;
@@ -43,6 +45,7 @@ public class AdminCompileReviewSummaryResponse {
      * @param reviewStepPresent 是否记录审查步骤
      * @param reviewStepName 审查步骤名称
      * @param reviewAgentRole 审查 Agent 角色
+     * @param requestedReviewMode 请求审查模式
      * @param reviewRoute 审查模型路由
      * @param reviewModeLabel 审查模式展示文案
      * @param acceptedCount 审查通过数量
@@ -59,6 +62,7 @@ public class AdminCompileReviewSummaryResponse {
             boolean reviewStepPresent,
             String reviewStepName,
             String reviewAgentRole,
+            String requestedReviewMode,
             String reviewRoute,
             String reviewModeLabel,
             Integer acceptedCount,
@@ -74,6 +78,7 @@ public class AdminCompileReviewSummaryResponse {
         this.reviewStepPresent = reviewStepPresent;
         this.reviewStepName = reviewStepName;
         this.reviewAgentRole = reviewAgentRole;
+        this.requestedReviewMode = requestedReviewMode;
         this.reviewRoute = reviewRoute;
         this.reviewModeLabel = reviewModeLabel;
         this.acceptedCount = acceptedCount;
@@ -112,6 +117,15 @@ public class AdminCompileReviewSummaryResponse {
      */
     public String getReviewAgentRole() {
         return reviewAgentRole;
+    }
+
+    /**
+     * 获取请求审查模式。
+     *
+     * @return 请求审查模式
+     */
+    public String getRequestedReviewMode() {
+        return requestedReviewMode;
     }
 
     /**

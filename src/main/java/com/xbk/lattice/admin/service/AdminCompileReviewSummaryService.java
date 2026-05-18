@@ -1,6 +1,7 @@
 package com.xbk.lattice.admin.service;
 
 import com.xbk.lattice.api.admin.AdminCompileReviewSummaryResponse;
+import com.xbk.lattice.compiler.service.CompileExecutionRequest;
 import com.xbk.lattice.infra.persistence.CompileJobStepJdbcRepository;
 import com.xbk.lattice.infra.persistence.CompileJobStepRecord;
 import org.springframework.stereotype.Service;
@@ -61,6 +62,7 @@ public class AdminCompileReviewSummaryService {
                 reviewStep != null,
                 reviewStep == null ? null : reviewStep.getStepName(),
                 reviewStep == null ? null : reviewStep.getAgentRole(),
+                extractReviewMode(reviewStep),
                 reviewStep == null ? null : reviewStep.getModelRoute(),
                 resolveReviewModeLabel(reviewStep),
                 acceptedCount,
@@ -88,6 +90,9 @@ public class AdminCompileReviewSummaryService {
         StringBuilder detailBuilder = new StringBuilder();
         appendPart(detailBuilder, summary.getReviewModeLabel());
         appendPart(detailBuilder, "review_articles");
+        if (summary.getRequestedReviewMode() != null && !summary.getRequestedReviewMode().isBlank()) {
+            appendPart(detailBuilder, "reviewMode=" + summary.getRequestedReviewMode());
+        }
         if (summary.getReviewRoute() != null && !summary.getReviewRoute().isBlank()) {
             appendPart(detailBuilder, "model_route=" + summary.getReviewRoute());
         }
@@ -153,6 +158,10 @@ public class AdminCompileReviewSummaryService {
         if (reviewStep == null) {
             return "未记录审查步骤";
         }
+        String requestedReviewMode = extractReviewMode(reviewStep);
+        if (CompileExecutionRequest.REVIEW_MODE_LLM.equals(requestedReviewMode)) {
+            return "LLM 审查";
+        }
         String route = normalize(reviewStep.getModelRoute());
         if (RULE_BASED_ROUTE.equalsIgnoreCase(route)) {
             return "规则审查（不是 LLM 内容审查）";
@@ -161,6 +170,23 @@ public class AdminCompileReviewSummaryService {
             return "未记录审查路由";
         }
         return "LLM 审查";
+    }
+
+    /**
+     * 从审查步骤摘要中提取请求审查模式。
+     *
+     * @param reviewStep 审查步骤
+     * @return 请求审查模式
+     */
+    private String extractReviewMode(CompileJobStepRecord reviewStep) {
+        if (reviewStep == null) {
+            return null;
+        }
+        String reviewMode = extractText(reviewStep.getSummary(), "reviewMode");
+        if (reviewMode == null) {
+            reviewMode = extractText(reviewStep.getInputSummary(), "reviewMode");
+        }
+        return reviewMode == null ? null : CompileExecutionRequest.normalizeReviewMode(reviewMode);
     }
 
     /**
@@ -256,6 +282,26 @@ public class AdminCompileReviewSummaryService {
             return null;
         }
         return Integer.valueOf(matcher.group(1));
+    }
+
+    /**
+     * 从摘要文本中提取文本字段。
+     *
+     * @param text 摘要文本
+     * @param key 字段名
+     * @return 文本字段
+     */
+    private String extractText(String text, String key) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        Pattern pattern = Pattern.compile("(?i)(?:\\b|\\\")" + Pattern.quote(key)
+                + "(?:\\b|\\\")\\s*[:=]\\s*([A-Z_\\-]+)");
+        Matcher matcher = pattern.matcher(text);
+        if (!matcher.find()) {
+            return null;
+        }
+        return matcher.group(1);
     }
 
     /**

@@ -3,11 +3,13 @@ package com.xbk.lattice.api.compiler;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.compiler.service.CompileApplicationFacade;
+import com.xbk.lattice.testsupport.ApprovedArticleReviewerTestConfiguration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -36,6 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "lattice.llm.secret-encryption-key=test-phase8-key-0123456789abcdef"
 })
 @AutoConfigureMockMvc
+@Import(ApprovedArticleReviewerTestConfiguration.class)
 class CompileControllerTests {
 
     @Autowired

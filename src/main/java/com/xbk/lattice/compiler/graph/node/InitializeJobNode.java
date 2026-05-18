@@ -7,6 +7,8 @@ import com.xbk.lattice.compiler.graph.CompileGraphConditions;
 import com.xbk.lattice.compiler.graph.CompileGraphState;
 import com.xbk.lattice.compiler.graph.CompileGraphStateMapper;
 import com.xbk.lattice.compiler.service.ArticleCompileSupport;
+import com.xbk.lattice.compiler.service.ArticleReviewerGateway;
+import com.xbk.lattice.compiler.service.CompileExecutionRequest;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -32,6 +34,8 @@ public class InitializeJobNode extends AbstractCompileGraphNode {
 
     private final ArticleCompileSupport articleCompileSupport;
 
+    private final ArticleReviewerGateway articleReviewerGateway;
+
     private final ExecutionLlmSnapshotService executionLlmSnapshotService;
 
     /**
@@ -42,6 +46,7 @@ public class InitializeJobNode extends AbstractCompileGraphNode {
      * @param compileReviewProperties 编译审查配置
      * @param compileGraphProperties 编译图配置
      * @param articleCompileSupport 文章编译支撑服务
+     * @param articleReviewerGateway 文章审查网关
      * @param executionLlmSnapshotService 运行时快照服务
      */
     public InitializeJobNode(
@@ -50,6 +55,7 @@ public class InitializeJobNode extends AbstractCompileGraphNode {
             CompileReviewProperties compileReviewProperties,
             CompileGraphProperties compileGraphProperties,
             ArticleCompileSupport articleCompileSupport,
+            ArticleReviewerGateway articleReviewerGateway,
             ExecutionLlmSnapshotService executionLlmSnapshotService
     ) {
         super(compileGraphStateMapper);
@@ -57,6 +63,7 @@ public class InitializeJobNode extends AbstractCompileGraphNode {
         this.compileReviewProperties = compileReviewProperties;
         this.compileGraphProperties = compileGraphProperties;
         this.articleCompileSupport = articleCompileSupport;
+        this.articleReviewerGateway = articleReviewerGateway;
         this.executionLlmSnapshotService = executionLlmSnapshotService;
     }
 
@@ -73,15 +80,13 @@ public class InitializeJobNode extends AbstractCompileGraphNode {
         state.setAllowPersistNeedsHumanReview(compileReviewProperties.isAllowPersistNeedsHumanReview());
         state.setHumanReviewSeverityThreshold(compileReviewProperties.getHumanReviewSeverityThreshold());
         state.setMaxFixRounds(compileReviewProperties.getMaxFixRounds());
+        state.setReviewMode(articleReviewerGateway.resolveReviewMode(state.getJobId(), state.getReviewMode()));
         freezeSnapshotsFailOpen(state);
         state.setCompileRoute(articleCompileSupport.currentCompileRoute(
                 state.getJobId(),
                 ExecutionLlmSnapshotService.COMPILE_SCENE
         ));
-        state.setReviewRoute(articleCompileSupport.currentReviewRoute(
-                state.getJobId(),
-                ExecutionLlmSnapshotService.COMPILE_SCENE
-        ));
+        state.setReviewRoute(resolveReviewRoute(state));
         state.setFixRoute(articleCompileSupport.currentFixRoute(
                 state.getJobId(),
                 ExecutionLlmSnapshotService.COMPILE_SCENE
@@ -90,6 +95,18 @@ public class InitializeJobNode extends AbstractCompileGraphNode {
         state.setSynthesisRequired(true);
         state.setSnapshotRequired(true);
         return delta(state);
+    }
+
+    private String resolveReviewRoute(CompileGraphState state) {
+        if (!CompileExecutionRequest.isLlmReviewMode(state.getReviewMode())) {
+            return "rule-based";
+        }
+        return articleReviewerGateway.resolveRoute(
+                state.getJobId(),
+                ExecutionLlmSnapshotService.COMPILE_SCENE,
+                ExecutionLlmSnapshotService.ROLE_REVIEWER,
+                state.getReviewMode()
+        );
     }
 
     private void freezeSnapshotsFailOpen(CompileGraphState state) {

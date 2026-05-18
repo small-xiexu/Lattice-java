@@ -1,11 +1,13 @@
 package com.xbk.lattice.api.admin;
 
 import com.xbk.lattice.compiler.service.CompileApplicationFacade;
+import com.xbk.lattice.testsupport.ApprovedArticleReviewerTestConfiguration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -32,6 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "lattice.query.cache.store=in-memory"
 })
 @AutoConfigureMockMvc
+@Import(ApprovedArticleReviewerTestConfiguration.class)
 class AdminOverviewControllerTests {
 
     @Autowired

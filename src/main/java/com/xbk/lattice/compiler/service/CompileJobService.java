@@ -100,7 +100,27 @@ public class CompileJobService {
             boolean async,
             String orchestrationMode
     ) {
-        return submit(sourceDir, incremental, async, orchestrationMode, null, null);
+        return submit(sourceDir, incremental, async, orchestrationMode, null);
+    }
+
+    /**
+     * 提交编译作业。
+     *
+     * @param sourceDir 源目录
+     * @param incremental 是否增量编译
+     * @param async 是否异步执行
+     * @param orchestrationMode 编排模式
+     * @param reviewMode 审查模式
+     * @return 编译作业记录
+     */
+    public CompileJobRecord submit(
+            String sourceDir,
+            boolean incremental,
+            boolean async,
+            String orchestrationMode,
+            String reviewMode
+    ) {
+        return submitInternal(sourceDir, incremental, async, orchestrationMode, null, null, reviewMode);
     }
 
     /**
@@ -122,9 +142,57 @@ public class CompileJobService {
             Long sourceId,
             Long sourceSyncRunId
     ) {
+        return submitInternal(sourceDir, incremental, async, orchestrationMode, sourceId, sourceSyncRunId, null);
+    }
+
+    /**
+     * 提交编译作业。
+     *
+     * @param sourceDir 源目录
+     * @param incremental 是否增量编译
+     * @param async 是否异步执行
+     * @param orchestrationMode 编排模式
+     * @param sourceId 资料源主键
+     * @param sourceSyncRunId 资料源同步运行主键
+     * @param reviewMode 审查模式
+     * @return 编译作业记录
+     */
+    public CompileJobRecord submit(
+            String sourceDir,
+            boolean incremental,
+            boolean async,
+            String orchestrationMode,
+            Long sourceId,
+            Long sourceSyncRunId,
+            String reviewMode
+    ) {
+        return submitInternal(sourceDir, incremental, async, orchestrationMode, sourceId, sourceSyncRunId, reviewMode);
+    }
+
+    /**
+     * 提交编译作业。
+     *
+     * @param sourceDir 源目录
+     * @param incremental 是否增量编译
+     * @param async 是否异步执行
+     * @param orchestrationMode 编排模式
+     * @param sourceId 资料源主键
+     * @param sourceSyncRunId 资料源同步运行主键
+     * @return 编译作业记录
+     */
+    private CompileJobRecord submitInternal(
+            String sourceDir,
+            boolean incremental,
+            boolean async,
+            String orchestrationMode,
+            Long sourceId,
+            Long sourceSyncRunId,
+            String reviewMode
+    ) {
         OffsetDateTime requestedAt = OffsetDateTime.now();
         Long effectiveSourceId = resolveEffectiveSourceId(sourceId);
         String rootTraceId = resolveCurrentRootTraceId();
+        String normalizedReviewMode = CompileExecutionRequest.normalizeNewJobReviewMode(reviewMode);
         CompileJobRecord compileJobRecord = new CompileJobRecord(
                 UUID.randomUUID().toString(),
                 sourceDir,
@@ -133,6 +201,7 @@ public class CompileJobService {
                 rootTraceId,
                 incremental,
                 CompileOrchestrationModes.normalize(orchestrationMode),
+                normalizedReviewMode,
                 CompileJobStatuses.QUEUED,
                 null,
                 null,
@@ -302,7 +371,8 @@ public class CompileJobService {
                     compileJobRecord.getOrchestrationMode(),
                     compileJobRecord.getSourceId(),
                     knowledgeSource == null ? null : knowledgeSource.getSourceCode(),
-                    compileJobRecord.getSourceSyncRunId()
+                    compileJobRecord.getSourceSyncRunId(),
+                    compileJobRecord.getReviewMode()
             );
             CompileResult compileResult = compileOrchestratorRegistry.execute(executionRequest);
             compileJobJdbcRepository.markSucceeded(jobId, compileResult.getPersistedCount(), OffsetDateTime.now());
@@ -364,6 +434,7 @@ public class CompileJobService {
         fields.put("sourceDir", compileJobRecord.getSourceDir());
         fields.put("incremental", compileJobRecord.isIncremental());
         fields.put("orchestrationMode", compileJobRecord.getOrchestrationMode());
+        fields.put("reviewMode", compileJobRecord.getReviewMode());
         structuredEventLogger.info("compile_submitted", fields);
     }
 
@@ -491,6 +562,7 @@ public class CompileJobService {
         fields.put("sourceDir", compileJobRecord.getSourceDir());
         fields.put("incremental", compileJobRecord.isIncremental());
         fields.put("orchestrationMode", compileJobRecord.getOrchestrationMode());
+        fields.put("reviewMode", compileJobRecord.getReviewMode());
         return fields;
     }
 

@@ -123,6 +123,7 @@ public class GraphStepLogger {
 
     private String buildSummary(String nodeId, CompileGraphState state) {
         return nodeId + " conceptCount=" + state.getConceptCount()
+                + ", reviewMode=" + state.getReviewMode()
                 + ", pendingReviewCount=" + state.getPendingReviewCount()
                 + ", acceptedCount=" + state.getAcceptedCount()
                 + ", needsHumanReviewCount=" + state.getNeedsHumanReviewCount()
@@ -133,6 +134,7 @@ public class GraphStepLogger {
 
     private String buildInputSummary(CompileGraphState state) {
         return "mode=" + state.getCompileMode()
+                + ", reviewMode=" + state.getReviewMode()
                 + ", sourceDir=" + state.getSourceDir()
                 + ", rawSourcesRef=" + state.getRawSourcesRef()
                 + ", groupedSourcesRef=" + state.getGroupedSourcesRef()
@@ -149,6 +151,7 @@ public class GraphStepLogger {
 
     private String buildOutputSummary(CompileGraphState state) {
         return "persistedIds=" + state.getPersistedArticleIds()
+                + ", reviewMode=" + state.getReviewMode()
                 + ", rawSourcesRef=" + state.getRawSourcesRef()
                 + ", groupedSourcesRef=" + state.getGroupedSourcesRef()
                 + ", sourceBatchesRef=" + state.getSourceBatchesRef()

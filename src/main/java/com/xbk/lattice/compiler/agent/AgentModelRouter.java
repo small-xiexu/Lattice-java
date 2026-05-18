@@ -1,6 +1,7 @@
 package com.xbk.lattice.compiler.agent;
 
 import com.xbk.lattice.compiler.config.LlmProperties;
+import com.xbk.lattice.compiler.service.CompileExecutionRequest;
 import com.xbk.lattice.compiler.service.LlmGateway;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
 import com.xbk.lattice.llm.service.LlmRouteResolution;
@@ -96,6 +97,21 @@ public class AgentModelRouter {
     }
 
     /**
+     * 按指定审查模式返回 ReviewerAgent 当前路由。
+     *
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param reviewMode 审查模式
+     * @return 路由标签
+     */
+    public String routeForReviewerAgent(String scopeId, String scene, String reviewMode) {
+        if (!CompileExecutionRequest.isLlmReviewMode(reviewMode)) {
+            return "rule-based";
+        }
+        return routeForReviewerAgentWithoutGlobalGate(scopeId, scene);
+    }
+
+    /**
      * 返回 FixerAgent 当前路由。
      *
      * @return 路由标签
@@ -166,6 +182,38 @@ public class AgentModelRouter {
             return normalizeModelName(llmProperties.getReviewerModel());
         }
         return normalizeModelName(llmProperties.getCompileModel());
+    }
+
+    /**
+     * 返回按 job LLM 模式强制启用时的审查路由。
+     *
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @return 审查路由标签
+     */
+    private String routeForReviewerAgentWithoutGlobalGate(String scopeId, String scene) {
+        String normalizedScene = normalizeScene(scene);
+        boolean hasScopeId = scopeId != null && !scopeId.isBlank();
+        if (executionLlmSnapshotService != null && hasScopeId) {
+            Optional<LlmRouteResolution> routeResolution = executionLlmSnapshotService.resolveRoute(
+                    resolveScopeType(normalizedScene),
+                    scopeId,
+                    normalizedScene,
+                    ExecutionLlmSnapshotService.ROLE_REVIEWER
+            );
+            if (routeResolution.isPresent()) {
+                return routeResolution.orElseThrow().getRouteLabel();
+            }
+        }
+        if (llmGateway != null) {
+            return hasScopeId
+                    ? llmGateway.reviewRoute(scopeId, normalizedScene)
+                    : llmGateway.reviewRoute();
+        }
+        if (llmProperties == null) {
+            return "fallback";
+        }
+        return normalizeModelName(llmProperties.getReviewerModel());
     }
 
     private String resolveScopeType(String scene) {

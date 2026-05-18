@@ -79,7 +79,8 @@ class AdminCompileJobControllerTests {
                         .content("{"
                                 + "\"sourceDir\":\"" + escapeJson(sourceDir.toString()) + "\","
                                 + "\"async\":true,"
-                                + "\"orchestrationMode\":\"state_graph\""
+                                + "\"orchestrationMode\":\"state_graph\","
+                                + "\"reviewMode\":\"RULE_BASED\""
                                 + "}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("QUEUED"))
@@ -87,6 +88,7 @@ class AdminCompileJobControllerTests {
                 .andExpect(jsonPath("$.progressCurrent").value(0))
                 .andExpect(jsonPath("$.progressTotal").value(0))
                 .andExpect(jsonPath("$.orchestrationMode").value("state_graph"))
+                .andExpect(jsonPath("$.reviewMode").value("RULE_BASED"))
                 .andReturn()
                 .getResponse()
                 .getContentAsString(StandardCharsets.UTF_8);
@@ -111,7 +113,10 @@ class AdminCompileJobControllerTests {
                 .andExpect(jsonPath("$.progressTotal").value(1))
                 .andExpect(jsonPath("$.progressMessage").value("编译完成"))
                 .andExpect(jsonPath("$.lastHeartbeatAt").isNotEmpty())
-                .andExpect(jsonPath("$.orchestrationMode").value("state_graph"));
+                .andExpect(jsonPath("$.orchestrationMode").value("state_graph"))
+                .andExpect(jsonPath("$.reviewMode").value("RULE_BASED"))
+                .andExpect(jsonPath("$.reviewSummary.requestedReviewMode").value("RULE_BASED"))
+                .andExpect(jsonPath("$.reviewSummary.reviewRoute").value("rule-based"));
 
         assertThat(articleJdbcRepository.findByConceptId("payment-timeout")).isPresent();
     }
@@ -131,10 +136,11 @@ class AdminCompileJobControllerTests {
         String responseBody = mockMvc.perform(post("/api/v1/admin/compile/jobs")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{"
-                                + "\"sourceDir\":\"" + escapeJson(sourceDir.toString()) + "\","
-                                + "\"async\":true,"
-                                + "\"orchestrationMode\":\"state_graph\""
-                                + "}"))
+                + "\"sourceDir\":\"" + escapeJson(sourceDir.toString()) + "\","
+                + "\"async\":true,"
+                + "\"orchestrationMode\":\"state_graph\","
+                + "\"reviewMode\":\"LLM\""
+                + "}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("QUEUED"))
                 .andReturn()
@@ -148,8 +154,44 @@ class AdminCompileJobControllerTests {
         assertThat(compileSubmittedEvent).isNotNull();
         assertThat(compileSubmittedEvent.path("status").asText()).isEqualTo("QUEUED");
         assertThat(compileSubmittedEvent.path("scene").asText()).isEqualTo("compile");
+        assertThat(compileSubmittedEvent.path("reviewMode").asText()).isEqualTo("LLM");
         assertThat(compileSubmittedEvent.path("traceId").asText()).isNotBlank();
         assertThat(compileSubmittedEvent.path("rootTraceId").asText()).isEqualTo(compileSubmittedEvent.path("traceId").asText());
+    }
+
+    /**
+     * 验证新编译作业未指定审查模式时默认固化为 LLM。
+     *
+     * @param tempDir 临时目录
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldDefaultNewCompileJobReviewModeToLlm(@TempDir Path tempDir) throws Exception {
+        resetTables();
+        Path sourceDir = prepareSourceDirectory(tempDir);
+
+        String responseBody = mockMvc.perform(post("/api/v1/admin/compile/jobs")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{"
+                                + "\"sourceDir\":\"" + escapeJson(sourceDir.toString()) + "\","
+                                + "\"async\":true,"
+                                + "\"orchestrationMode\":\"state_graph\""
+                                + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("QUEUED"))
+                .andExpect(jsonPath("$.reviewMode").value("LLM"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        String jobId = extractJsonValue(responseBody, "jobId");
+
+        String persistedReviewMode = jdbcTemplate.queryForObject(
+                "select review_mode from lattice.compile_jobs where job_id = ?",
+                String.class,
+                jobId
+        );
+
+        assertThat(persistedReviewMode).isEqualTo("LLM");
     }
 
     /**
@@ -170,7 +212,8 @@ class AdminCompileJobControllerTests {
                         .content("{"
                                 + "\"sourceDir\":\"" + escapeJson(sourceDir.toString()) + "\","
                                 + "\"async\":true,"
-                                + "\"orchestrationMode\":\"state_graph\""
+                                + "\"orchestrationMode\":\"state_graph\","
+                                + "\"reviewMode\":\"RULE_BASED\""
                                 + "}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("QUEUED"))
@@ -242,6 +285,7 @@ class AdminCompileJobControllerTests {
         mockMvc.perform(multipart("/api/v1/admin/compile/upload")
                         .file(sourceFile)
                         .param("async", "false")
+                        .param("reviewMode", "RULE_BASED")
                         .param("orchestrationMode", "state_graph"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SUCCEEDED"))
@@ -270,6 +314,7 @@ class AdminCompileJobControllerTests {
         mockMvc.perform(multipart("/api/v1/admin/compile/upload")
                         .file(sourceFile)
                         .param("async", "false")
+                        .param("reviewMode", "RULE_BASED")
                         .param("orchestrationMode", "state_graph"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SUCCEEDED"))
@@ -301,7 +346,8 @@ class AdminCompileJobControllerTests {
                         .content("{"
                                 + "\"sourceDir\":\"" + escapeJson(missingDir.toString()) + "\","
                                 + "\"async\":true,"
-                                + "\"orchestrationMode\":\"state_graph\""
+                                + "\"orchestrationMode\":\"state_graph\","
+                                + "\"reviewMode\":\"RULE_BASED\""
                                 + "}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("QUEUED"))

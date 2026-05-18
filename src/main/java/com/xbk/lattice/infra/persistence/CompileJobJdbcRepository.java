@@ -1,8 +1,14 @@
 package com.xbk.lattice.infra.persistence;
 
 import com.xbk.lattice.infra.persistence.mapper.CompileJobMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -19,13 +25,29 @@ public class CompileJobJdbcRepository {
 
     private final CompileJobMapper compileJobMapper;
 
+    private final DataSource dataSource;
+
+    private volatile boolean reviewModeColumnEnsured;
+
+    /**
+     * 创建编译作业 JDBC 仓储。
+     *
+     * @param compileJobMapper 编译作业 Mapper
+     */
+    @Autowired
+    public CompileJobJdbcRepository(CompileJobMapper compileJobMapper, DataSource dataSource) {
+        this.compileJobMapper = compileJobMapper;
+        this.dataSource = dataSource;
+        this.reviewModeColumnEnsured = false;
+    }
+
     /**
      * 创建编译作业 JDBC 仓储。
      *
      * @param compileJobMapper 编译作业 Mapper
      */
     public CompileJobJdbcRepository(CompileJobMapper compileJobMapper) {
-        this.compileJobMapper = compileJobMapper;
+        this(compileJobMapper, null);
     }
 
     /**
@@ -34,6 +56,7 @@ public class CompileJobJdbcRepository {
      * @param compileJobRecord 编译作业记录
      */
     public void save(CompileJobRecord compileJobRecord) {
+        ensureReviewModeColumn();
         compileJobMapper.upsert(compileJobRecord);
     }
 
@@ -43,6 +66,7 @@ public class CompileJobJdbcRepository {
      * @return 编译作业列表
      */
     public List<CompileJobRecord> findAll() {
+        ensureReviewModeColumn();
         return compileJobMapper.findAll();
     }
 
@@ -53,6 +77,7 @@ public class CompileJobJdbcRepository {
      * @return 最近编译作业列表
      */
     public List<CompileJobRecord> findRecent(int limit) {
+        ensureReviewModeColumn();
         return compileJobMapper.findRecent(Math.max(limit, 1));
     }
 
@@ -63,6 +88,7 @@ public class CompileJobJdbcRepository {
      * @return 最近独立编译作业列表
      */
     public List<CompileJobRecord> findRecentStandalone(int limit) {
+        ensureReviewModeColumn();
         return compileJobMapper.findRecentStandalone(Math.max(limit, 1));
     }
 
@@ -74,6 +100,7 @@ public class CompileJobJdbcRepository {
      * @return 最近独立编译作业列表
      */
     public List<CompileJobRecord> findRecentStandaloneBySourceId(Long sourceId, int limit) {
+        ensureReviewModeColumn();
         return compileJobMapper.findRecentStandaloneBySourceId(sourceId, Math.max(limit, 1));
     }
 
@@ -84,7 +111,19 @@ public class CompileJobJdbcRepository {
      * @return 编译作业
      */
     public Optional<CompileJobRecord> findByJobId(String jobId) {
+        ensureReviewModeColumn();
         return Optional.ofNullable(compileJobMapper.findByJobId(jobId));
+    }
+
+    /**
+     * 读取指定作业的审查模式。
+     *
+     * @param jobId 作业标识
+     * @return 审查模式
+     */
+    public Optional<String> findReviewModeByJobId(String jobId) {
+        ensureReviewModeColumn();
+        return Optional.ofNullable(compileJobMapper.findReviewModeByJobId(jobId));
     }
 
     /**
@@ -93,6 +132,7 @@ public class CompileJobJdbcRepository {
      * @return 最早排队中的作业
      */
     public Optional<CompileJobRecord> findNextQueued() {
+        ensureReviewModeColumn();
         return Optional.ofNullable(compileJobMapper.findNextQueued());
     }
 
@@ -106,8 +146,39 @@ public class CompileJobJdbcRepository {
      * @return 是否成功抢占
      */
     public boolean markRunning(String jobId, String workerId, OffsetDateTime startedAt, OffsetDateTime runningExpiresAt) {
+        ensureReviewModeColumn();
         int updatedRows = compileJobMapper.markRunning(jobId, workerId, startedAt, runningExpiresAt);
         return updatedRows > 0;
+    }
+
+    private void ensureReviewModeColumn() {
+        if (reviewModeColumnEnsured) {
+            return;
+        }
+        synchronized (this) {
+            if (reviewModeColumnEnsured) {
+                return;
+            }
+            if (!columnExists("lattice", "compile_jobs", "review_mode")) {
+                compileJobMapper.ensureReviewModeColumn();
+            }
+            reviewModeColumnEnsured = true;
+        }
+    }
+
+    private boolean columnExists(String schemaName, String tableName, String columnName) {
+        if (dataSource == null) {
+            return true;
+        }
+        try (Connection connection = dataSource.getConnection()) {
+            DatabaseMetaData metaData = connection.getMetaData();
+            try (ResultSet resultSet = metaData.getColumns(null, schemaName, tableName, columnName)) {
+                return resultSet.next();
+            }
+        }
+        catch (SQLException exception) {
+            throw new IllegalStateException("failed to inspect compile_jobs review_mode column", exception);
+        }
     }
 
     /**

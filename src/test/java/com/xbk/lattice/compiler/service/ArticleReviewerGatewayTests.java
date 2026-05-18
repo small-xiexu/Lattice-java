@@ -1,6 +1,7 @@
 package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.compiler.config.LlmProperties;
+import com.xbk.lattice.infra.persistence.CompileJobJdbcRepository;
 import com.xbk.lattice.llm.service.LlmCallResult;
 import com.xbk.lattice.llm.service.LlmClient;
 import com.xbk.lattice.query.domain.ReviewResult;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -86,6 +88,69 @@ class ArticleReviewerGatewayTests {
 
         assertThat(reviewResult.isPass()).isTrue();
         assertThat(reviewResult.getStatus()).isEqualTo(ReviewStatus.PASSED);
+    }
+
+    /**
+     * 验证 job LLM 模式不受全局 review-enabled=false 阻止。
+     */
+    @Test
+    void shouldUseLlmReviewerForLlmJobWhenGlobalReviewDisabled() {
+        StaticLlmClient llmClient = new StaticLlmClient("""
+                {"approved":true,"rewriteRequired":false,"riskLevel":"LOW","issues":[]}
+                """);
+        ArticleReviewerGateway articleReviewerGateway = new ArticleReviewerGateway(
+                createGateway(llmClient, false),
+                new ReviewResultParser(),
+                createProperties(false),
+                new RuleBasedArticleReviewer(),
+                new FixedReviewModeRepository(CompileExecutionRequest.REVIEW_MODE_LLM)
+        );
+
+        ReviewResult reviewResult = articleReviewerGateway.review(validArticle(), validSources(), "job-llm", "compile", "reviewer");
+
+        assertThat(reviewResult.isPass()).isTrue();
+        assertThat(reviewResult.getStatus()).isEqualTo(ReviewStatus.PASSED);
+        assertThat(llmClient.getCallCount()).isEqualTo(1);
+    }
+
+    /**
+     * 验证 job LLM 模式下网关不可用会 fail-closed。
+     */
+    @Test
+    void shouldFailClosedWhenLlmGatewayUnavailableForLlmJob() {
+        ArticleReviewerGateway articleReviewerGateway = new ArticleReviewerGateway(
+                null,
+                new ReviewResultParser(),
+                createProperties(false),
+                new RuleBasedArticleReviewer(),
+                new FixedReviewModeRepository(CompileExecutionRequest.REVIEW_MODE_LLM)
+        );
+
+        ReviewResult reviewResult = articleReviewerGateway.review(validArticle(), validSources(), "job-llm", "compile", "reviewer");
+
+        assertThat(reviewResult.isPass()).isFalse();
+        assertThat(reviewResult.getStatus()).isEqualTo(ReviewStatus.TIMEOUT_FALLBACK);
+    }
+
+    /**
+     * 验证 job RULE_BASED 模式不受全局 review-enabled=true 误开影响。
+     */
+    @Test
+    void shouldUseRuleBasedReviewerForRuleBasedJobWhenGlobalReviewEnabled() {
+        StaticLlmClient llmClient = new StaticLlmClient("not-json");
+        ArticleReviewerGateway articleReviewerGateway = new ArticleReviewerGateway(
+                createGateway(llmClient, true),
+                new ReviewResultParser(),
+                createProperties(true),
+                new RuleBasedArticleReviewer(),
+                new FixedReviewModeRepository(CompileExecutionRequest.REVIEW_MODE_RULE_BASED)
+        );
+
+        ReviewResult reviewResult = articleReviewerGateway.review(validArticle(), validSources(), "job-rule", "compile", "reviewer");
+
+        assertThat(reviewResult.isPass()).isTrue();
+        assertThat(reviewResult.getStatus()).isEqualTo(ReviewStatus.PASSED);
+        assertThat(llmClient.getCallCount()).isZero();
     }
 
     /**
@@ -281,6 +346,37 @@ class ArticleReviewerGatewayTests {
         @Override
         public void deleteByPrefix(String keyPrefix) {
             values.keySet().removeIf(key -> key.startsWith(keyPrefix));
+        }
+    }
+
+    /**
+     * 固定返回审查模式的仓储替身。
+     *
+     * @author xiexu
+     */
+    private static class FixedReviewModeRepository extends CompileJobJdbcRepository {
+
+        private final String reviewMode;
+
+        /**
+         * 创建固定审查模式仓储替身。
+         *
+         * @param reviewMode 审查模式
+         */
+        private FixedReviewModeRepository(String reviewMode) {
+            super(null);
+            this.reviewMode = reviewMode;
+        }
+
+        /**
+         * 返回固定审查模式。
+         *
+         * @param jobId 作业标识
+         * @return 审查模式
+         */
+        @Override
+        public Optional<String> findReviewModeByJobId(String jobId) {
+            return Optional.ofNullable(reviewMode);
         }
     }
 }

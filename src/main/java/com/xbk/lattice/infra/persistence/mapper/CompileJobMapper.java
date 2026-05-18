@@ -26,6 +26,13 @@ public interface CompileJobMapper {
     int upsert(@Param("record") CompileJobRecord record);
 
     /**
+     * 确保 compile_jobs 存在作业级审查模式列。
+     *
+     * @return 影响行数
+     */
+    int ensureReviewModeColumn();
+
+    /**
      * 查询全部编译作业。
      *
      * @return 编译作业列表
@@ -64,6 +71,14 @@ public interface CompileJobMapper {
      * @return 编译作业
      */
     CompileJobRecord findByJobId(@Param("jobId") String jobId);
+
+    /**
+     * 按作业标识查询审查模式。
+     *
+     * @param jobId 作业标识
+     * @return 审查模式
+     */
+    String findReviewModeByJobId(@Param("jobId") String jobId);
 
     /**
      * 查询最早排队中的作业。

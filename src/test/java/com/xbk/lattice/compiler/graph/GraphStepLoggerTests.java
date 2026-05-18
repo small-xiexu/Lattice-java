@@ -41,6 +41,7 @@ class GraphStepLoggerTests {
         state.setNeedsHumanReviewArticlesRef("job-001:needs_human_review_articles:v1");
         state.setAstExtractReportRef("job-001:ast_extract_report:v1");
         state.setReviewRoute("rule-based");
+        state.setReviewMode("RULE_BASED");
 
         StepExecutionHandle handle = graphStepLogger.beforeStep("review_articles", state, 1_000L);
         state.setAcceptedCount(1);
@@ -54,6 +55,7 @@ class GraphStepLoggerTests {
         assertThat(repository.createdRecord.getAgentRole()).isEqualTo("ReviewerAgent");
         assertThat(repository.createdRecord.getModelRoute()).isEqualTo("rule-based");
         assertThat(repository.createdRecord.getInputSummary()).contains("rawSourcesRef=job-001:raw_sources:v1");
+        assertThat(repository.createdRecord.getInputSummary()).contains("reviewMode=RULE_BASED");
         assertThat(repository.createdRecord.getInputSummary()).contains("astExtractReportRef=job-001:ast_extract_report:v1");
         assertThat(repository.succeededStepExecutionId).isEqualTo(handle.getStepExecutionId());
         assertThat(repository.succeededSequenceNo).isEqualTo(handle.getSequenceNo());

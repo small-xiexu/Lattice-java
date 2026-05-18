@@ -44,20 +44,20 @@ public class DefaultReviewerAgent implements ReviewerAgent {
     public ReviewerResult review(ReviewTask reviewTask) {
         ReviewResult reviewResult = ReviewResult.passed();
         if (articleReviewerGateway != null) {
-            String scopeId = reviewTask.getScopeId();
-            if (scopeId == null || scopeId.isBlank()) {
+            if (hasScopedReviewMode(reviewTask)) {
                 reviewResult = articleReviewerGateway.review(
                         reviewTask.getArticleRecord().getContent(),
-                        reviewTask.getSourceContents()
+                        reviewTask.getSourceContents(),
+                        reviewTask.getScopeId(),
+                        reviewTask.getScene(),
+                        ROUTE_ROLE,
+                        reviewTask.getReviewMode()
                 );
             }
             else {
                 reviewResult = articleReviewerGateway.review(
                         reviewTask.getArticleRecord().getContent(),
-                        reviewTask.getSourceContents(),
-                        scopeId,
-                        reviewTask.getScene(),
-                        ROUTE_ROLE
+                        reviewTask.getSourceContents()
                 );
             }
         }
@@ -70,9 +70,28 @@ public class DefaultReviewerAgent implements ReviewerAgent {
      * @return 路由标签
      */
     private String resolveRoute(ReviewTask reviewTask) {
+        if (articleReviewerGateway != null && hasScopedReviewMode(reviewTask)) {
+            return articleReviewerGateway.resolveRoute(
+                    reviewTask.getScopeId(),
+                    reviewTask.getScene(),
+                    ROUTE_ROLE,
+                    reviewTask.getReviewMode()
+            );
+        }
         if (agentModelRouter == null) {
             return "rule-based";
         }
+        if (reviewTask.getReviewMode() != null) {
+            return agentModelRouter.routeForReviewerAgent(
+                    reviewTask.getScopeId(),
+                    reviewTask.getScene(),
+                    reviewTask.getReviewMode()
+            );
+        }
         return agentModelRouter.routeFor(reviewTask.getScopeId(), reviewTask.getScene(), ROUTE_ROLE);
+    }
+
+    private boolean hasScopedReviewMode(ReviewTask reviewTask) {
+        return reviewTask.getReviewMode() != null || reviewTask.getScopeId() != null;
     }
 }

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.service.CompileApplicationFacade;
 import com.xbk.lattice.compiler.service.SourceIngestSupport;
 import com.xbk.lattice.compiler.domain.RawSource;
+import com.xbk.lattice.testsupport.ApprovedArticleReviewerTestConfiguration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,6 +14,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -48,6 +50,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 @AutoConfigureMockMvc
 @ExtendWith(OutputCaptureExtension.class)
+@Import(ApprovedArticleReviewerTestConfiguration.class)
 class QueryControllerTests {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

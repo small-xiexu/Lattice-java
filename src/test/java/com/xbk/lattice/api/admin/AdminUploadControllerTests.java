@@ -9,10 +9,12 @@ import com.xbk.lattice.infra.persistence.CompileJobJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.source.domain.KnowledgeSource;
 import com.xbk.lattice.source.service.SourceService;
+import com.xbk.lattice.testsupport.ApprovedArticleReviewerTestConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
@@ -43,6 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "lattice.compiler.jobs.worker-enabled=false"
 })
 @AutoConfigureMockMvc
+@Import(ApprovedArticleReviewerTestConfiguration.class)
 class AdminUploadControllerTests {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

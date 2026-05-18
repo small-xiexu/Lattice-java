@@ -13,6 +13,7 @@
             <arg column="root_trace_id" javaType="java.lang.String"/>
             <arg column="incremental" javaType="_boolean"/>
             <arg column="orchestration_mode" javaType="java.lang.String"/>
+            <arg column="review_mode" javaType="java.lang.String"/>
             <arg column="status" javaType="java.lang.String"/>
             <arg column="worker_id" javaType="java.lang.String"/>
             <arg column="last_heartbeat_at" javaType="java.time.OffsetDateTime"/>
@@ -34,7 +35,7 @@
 
     <sql id="CompileJobColumns">
         job_id, source_dir, source_id, source_sync_run_id, incremental,
-        root_trace_id, orchestration_mode, status, worker_id, last_heartbeat_at,
+        root_trace_id, orchestration_mode, review_mode, status, worker_id, last_heartbeat_at,
         running_expires_at, current_step, progress_current, progress_total,
         progress_message, progress_updated_at, error_code, persisted_count, error_message,
         attempt_count, requested_at, started_at, finished_at
@@ -43,7 +44,7 @@
     <insert id="upsert">
         insert into compile_jobs (
             job_id, source_dir, source_id, source_sync_run_id, root_trace_id, incremental,
-            orchestration_mode, status, worker_id, last_heartbeat_at, running_expires_at,
+            orchestration_mode, review_mode, status, worker_id, last_heartbeat_at, running_expires_at,
             current_step, progress_current, progress_total, progress_message, progress_updated_at,
             error_code, persisted_count, error_message,
             attempt_count, requested_at, started_at, finished_at
@@ -56,6 +57,7 @@
             #{record.rootTraceId},
             #{record.incremental},
             #{record.orchestrationMode},
+            #{record.reviewMode},
             #{record.status},
             #{record.workerId},
             #{record.lastHeartbeatAt},
@@ -80,6 +82,7 @@
             root_trace_id = excluded.root_trace_id,
             incremental = excluded.incremental,
             orchestration_mode = excluded.orchestration_mode,
+            review_mode = excluded.review_mode,
             status = excluded.status,
             worker_id = excluded.worker_id,
             last_heartbeat_at = excluded.last_heartbeat_at,
@@ -97,6 +100,13 @@
             started_at = excluded.started_at,
             finished_at = excluded.finished_at
     </insert>
+
+    <update id="ensureReviewModeColumn">
+        alter table compile_jobs
+            add column if not exists review_mode varchar(32) not null default 'LLM';
+        alter table compile_jobs
+            alter column review_mode set default 'LLM'
+    </update>
 
     <select id="findAll" resultMap="CompileJobRecordResultMap">
         select <include refid="CompileJobColumns"/>
@@ -130,6 +140,12 @@
 
     <select id="findByJobId" resultMap="CompileJobRecordResultMap">
         select <include refid="CompileJobColumns"/>
+        from compile_jobs
+        where job_id = #{jobId}
+    </select>
+
+    <select id="findReviewModeByJobId" resultType="java.lang.String">
+        select review_mode
         from compile_jobs
         where job_id = #{jobId}
     </select>
