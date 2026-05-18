@@ -1,6 +1,7 @@
 package com.xbk.lattice.compiler.prompt;
 
 import com.xbk.lattice.compiler.config.CompilerProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -24,6 +25,8 @@ public class SchemaAwarePrompts {
 
     private final CompilerProperties compilerProperties;
 
+    private final CompilerPromptProvider compilerPromptProvider;
+
     private final Map<Path, String> schemaCache = new ConcurrentHashMap<Path, String>();
 
     /**
@@ -32,7 +35,19 @@ public class SchemaAwarePrompts {
      * @param compilerProperties 编译配置
      */
     public SchemaAwarePrompts(CompilerProperties compilerProperties) {
+        this(compilerProperties, null);
+    }
+
+    /**
+     * 创建 SCHEMA 感知 Prompt 服务。
+     *
+     * @param compilerProperties 编译配置
+     * @param compilerPromptProvider Compiler Prompt 外置提供者
+     */
+    @Autowired
+    public SchemaAwarePrompts(CompilerProperties compilerProperties, CompilerPromptProvider compilerPromptProvider) {
         this.compilerProperties = compilerProperties;
+        this.compilerPromptProvider = compilerPromptProvider;
     }
 
     /**
@@ -52,7 +67,21 @@ public class SchemaAwarePrompts {
      * @return 叠加后的编译 prompt
      */
     public String getCompileArticlePrompt(Path outputDir) {
-        return appendSchemaRules(LatticePrompts.SYSTEM_COMPILE_ARTICLE, outputDir);
+        String basePrompt = compilerPromptProvider != null
+                ? compilerPromptProvider.writerPrompt()
+                : LatticePrompts.SYSTEM_COMPILE_ARTICLE;
+        return appendSchemaRules(basePrompt, outputDir);
+    }
+
+    /**
+     * 获取图片文章编译 prompt。
+     *
+     * @return 图片文章编译 prompt
+     */
+    public String getCompileImageArticlePrompt() {
+        return compilerPromptProvider != null
+                ? compilerPromptProvider.writerImagePrompt()
+                : LatticePrompts.SYSTEM_COMPILE_IMAGE_ARTICLE;
     }
 
     private String appendSchemaRules(String basePrompt, Path outputDir) {

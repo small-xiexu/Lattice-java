@@ -2,6 +2,7 @@ package com.xbk.lattice.compiler.service;
 
 import com.xbk.lattice.article.service.ArticleMarkdownSupport;
 import com.xbk.lattice.compiler.config.LlmProperties;
+import com.xbk.lattice.compiler.prompt.CompilerPromptProvider;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
 import com.xbk.lattice.infra.persistence.CompileJobJdbcRepository;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
@@ -34,6 +35,8 @@ public class ArticleReviewerGateway {
 
     private final CompileJobJdbcRepository compileJobJdbcRepository;
 
+    private final CompilerPromptProvider compilerPromptProvider;
+
     /**
      * 创建文章审查网关。
      *
@@ -48,7 +51,7 @@ public class ArticleReviewerGateway {
             LlmProperties llmProperties,
             RuleBasedArticleReviewer ruleBasedArticleReviewer
     ) {
-        this(llmGateway, reviewResultParser, llmProperties, ruleBasedArticleReviewer, null);
+        this(llmGateway, reviewResultParser, llmProperties, ruleBasedArticleReviewer, null, null);
     }
 
     /**
@@ -60,7 +63,6 @@ public class ArticleReviewerGateway {
      * @param ruleBasedArticleReviewer 规则审查器
      * @param compileJobJdbcRepository 编译作业仓储
      */
-    @Autowired
     public ArticleReviewerGateway(
             LlmGateway llmGateway,
             ReviewResultParser reviewResultParser,
@@ -68,11 +70,34 @@ public class ArticleReviewerGateway {
             RuleBasedArticleReviewer ruleBasedArticleReviewer,
             CompileJobJdbcRepository compileJobJdbcRepository
     ) {
+        this(llmGateway, reviewResultParser, llmProperties, ruleBasedArticleReviewer, compileJobJdbcRepository, null);
+    }
+
+    /**
+     * 创建文章审查网关。
+     *
+     * @param llmGateway LLM 网关
+     * @param reviewResultParser 审查结果解析器
+     * @param llmProperties LLM 配置
+     * @param ruleBasedArticleReviewer 规则审查器
+     * @param compileJobJdbcRepository 编译作业仓储
+     * @param compilerPromptProvider Compiler Prompt 外置提供者
+     */
+    @Autowired
+    public ArticleReviewerGateway(
+            LlmGateway llmGateway,
+            ReviewResultParser reviewResultParser,
+            LlmProperties llmProperties,
+            RuleBasedArticleReviewer ruleBasedArticleReviewer,
+            CompileJobJdbcRepository compileJobJdbcRepository,
+            CompilerPromptProvider compilerPromptProvider
+    ) {
         this.llmGateway = llmGateway;
         this.reviewResultParser = reviewResultParser;
         this.llmProperties = llmProperties;
         this.ruleBasedArticleReviewer = ruleBasedArticleReviewer;
         this.compileJobJdbcRepository = compileJobJdbcRepository;
+        this.compilerPromptProvider = compilerPromptProvider;
     }
 
     /**
@@ -257,9 +282,13 @@ public class ArticleReviewerGateway {
      */
     private String resolveReviewSystemPrompt(String articleContent) {
         if (isImageDominantArticle(articleContent)) {
-            return LatticePrompts.SYSTEM_REVIEW_IMAGE_ARTICLE;
+            return compilerPromptProvider != null
+                    ? compilerPromptProvider.reviewerImagePrompt()
+                    : LatticePrompts.SYSTEM_REVIEW_IMAGE_ARTICLE;
         }
-        return LatticePrompts.SYSTEM_REVIEW;
+        return compilerPromptProvider != null
+                ? compilerPromptProvider.reviewerPrompt()
+                : LatticePrompts.SYSTEM_REVIEW;
     }
 
     /**

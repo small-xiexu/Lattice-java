@@ -18,6 +18,7 @@ import com.xbk.lattice.compiler.config.CompilerProperties;
 import com.xbk.lattice.compiler.graph.ArticleReviewEnvelope;
 import com.xbk.lattice.compiler.domain.MergedConcept;
 import com.xbk.lattice.compiler.node.CompileArticleNode;
+import com.xbk.lattice.compiler.prompt.CompilerPromptProvider;
 import com.xbk.lattice.compiler.prompt.SchemaAwarePrompts;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
@@ -75,7 +76,8 @@ public class ArticleCompileSupport {
             SourceFileJdbcRepository sourceFileJdbcRepository,
             LlmProperties llmProperties,
             ExecutionLlmSnapshotService executionLlmSnapshotService,
-            ObjectProvider<CompileJobLeaseManager> compileJobLeaseManagerProvider
+            ObjectProvider<CompileJobLeaseManager> compileJobLeaseManagerProvider,
+            CompilerPromptProvider compilerPromptProvider
     ) {
         this(
                 compilerProperties,
@@ -84,7 +86,8 @@ public class ArticleCompileSupport {
                 reviewFixService,
                 sourceFileJdbcRepository,
                 new AgentModelRouter(executionLlmSnapshotService, llmProperties),
-                compileJobLeaseManagerProvider.getIfAvailable()
+                compileJobLeaseManagerProvider.getIfAvailable(),
+                compilerPromptProvider
         );
     }
 
@@ -111,6 +114,7 @@ public class ArticleCompileSupport {
                 reviewFixService,
                 sourceFileJdbcRepository,
                 new AgentModelRouter(llmGateway),
+                null,
                 null
         );
     }
@@ -122,7 +126,8 @@ public class ArticleCompileSupport {
             ReviewFixService reviewFixService,
             SourceFileJdbcRepository sourceFileJdbcRepository,
             AgentModelRouter agentModelRouter,
-            CompileJobLeaseManager compileJobLeaseManager
+            CompileJobLeaseManager compileJobLeaseManager,
+            CompilerPromptProvider compilerPromptProvider
     ) {
         this.compileArticleNode = new CompileArticleNode(
                 llmGateway,
@@ -130,7 +135,7 @@ public class ArticleCompileSupport {
                 new DocumentSectionSelector(),
                 articleReviewerGateway,
                 reviewFixService,
-                new SchemaAwarePrompts(compilerProperties)
+                new SchemaAwarePrompts(compilerProperties, compilerPromptProvider)
         );
         this.agentModelRouter = agentModelRouter;
         this.writerAgent = new DefaultWriterAgent(this.compileArticleNode, this.agentModelRouter);

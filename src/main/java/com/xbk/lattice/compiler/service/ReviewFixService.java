@@ -1,7 +1,9 @@
 package com.xbk.lattice.compiler.service;
 
+import com.xbk.lattice.compiler.prompt.CompilerPromptProvider;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
 import com.xbk.lattice.query.domain.ReviewIssue;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -24,13 +26,27 @@ public class ReviewFixService {
 
     private final LlmGateway llmGateway;
 
+    private final CompilerPromptProvider compilerPromptProvider;
+
     /**
      * 创建审查修复服务。
      *
      * @param llmGateway LLM 网关
      */
     public ReviewFixService(LlmGateway llmGateway) {
+        this(llmGateway, null);
+    }
+
+    /**
+     * 创建审查修复服务。
+     *
+     * @param llmGateway LLM 网关
+     * @param compilerPromptProvider Compiler Prompt 外置提供者
+     */
+    @Autowired
+    public ReviewFixService(LlmGateway llmGateway, CompilerPromptProvider compilerPromptProvider) {
         this.llmGateway = llmGateway;
+        this.compilerPromptProvider = compilerPromptProvider;
     }
 
     /**
@@ -79,12 +95,15 @@ public class ReviewFixService {
                     源文件参考:
                     %s
                     """.formatted(issueList, articleContent, truncatedSources);
+            String systemPrompt = compilerPromptProvider != null
+                    ? compilerPromptProvider.fixerPrompt()
+                    : LatticePrompts.SYSTEM_REVIEW_FIX;
             return scopeId == null || scopeId.isBlank()
                     ? llmGateway.generateText(
                             COMPILE_SCENE,
                             FIXER_ROLE,
                             "review-fix",
-                            LatticePrompts.SYSTEM_REVIEW_FIX,
+                            systemPrompt,
                             userPrompt
                     )
                     : llmGateway.generateTextWithScope(
@@ -92,7 +111,7 @@ public class ReviewFixService {
                             scene,
                             agentRole,
                             "review-fix",
-                            LatticePrompts.SYSTEM_REVIEW_FIX,
+                            systemPrompt,
                             userPrompt
                     );
         }

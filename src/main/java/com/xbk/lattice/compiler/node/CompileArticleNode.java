@@ -344,7 +344,9 @@ public class CompileArticleNode {
      */
     private String resolveCompileSystemPrompt(MergedConcept mergedConcept, Path sourceDir) {
         if (isImageDominantConcept(mergedConcept)) {
-            return LatticePrompts.SYSTEM_COMPILE_IMAGE_ARTICLE;
+            return schemaAwarePrompts != null
+                    ? schemaAwarePrompts.getCompileImageArticlePrompt()
+                    : LatticePrompts.SYSTEM_COMPILE_IMAGE_ARTICLE;
         }
         return schemaAwarePrompts == null
                 ? LatticePrompts.SYSTEM_COMPILE_ARTICLE
