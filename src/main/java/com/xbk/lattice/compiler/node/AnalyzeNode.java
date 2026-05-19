@@ -43,6 +43,8 @@ public class AnalyzeNode {
 
     private final DocumentTopicConceptExtractor documentTopicConceptExtractor;
 
+    private final StructuredTableWriterGatePolicy structuredTableWriterGatePolicy;
+
     /**
      * 创建分析节点。
      */
@@ -99,6 +101,7 @@ public class AnalyzeNode {
         this.llmGateway = llmGateway;
         this.schemaAwarePrompts = schemaAwarePrompts;
         this.documentTopicConceptExtractor = new DocumentTopicConceptExtractor(documentTopics);
+        this.structuredTableWriterGatePolicy = new StructuredTableWriterGatePolicy();
     }
 
     /**
@@ -144,6 +147,13 @@ public class AnalyzeNode {
             List<AnalyzedConcept> structuredConcepts = analyzeStructuredConcepts(sortedSources, sourcePaths);
             if (!structuredConcepts.isEmpty()) {
                 analyzedConcepts.addAll(structuredConcepts);
+                continue;
+            }
+
+            List<AnalyzedConcept> structuredTableOverviewConcepts =
+                    structuredTableWriterGatePolicy.buildOverviewConcepts(sortedSources);
+            if (!structuredTableOverviewConcepts.isEmpty()) {
+                analyzedConcepts.addAll(structuredTableOverviewConcepts);
                 continue;
             }
 
