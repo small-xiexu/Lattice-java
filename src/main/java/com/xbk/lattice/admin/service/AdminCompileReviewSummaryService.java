@@ -87,20 +87,16 @@ public class AdminCompileReviewSummaryService {
         if (summary == null || !summary.isReviewStepPresent()) {
             return null;
         }
-        StringBuilder detailBuilder = new StringBuilder();
-        appendPart(detailBuilder, summary.getReviewModeLabel());
-        appendPart(detailBuilder, "review_articles");
-        if (summary.getRequestedReviewMode() != null && !summary.getRequestedReviewMode().isBlank()) {
-            appendPart(detailBuilder, "reviewMode=" + summary.getRequestedReviewMode());
+        if (hasPositiveCount(summary.getNeedsHumanReviewCount())) {
+            return "质量检查后需要人工确认";
         }
-        if (summary.getReviewRoute() != null && !summary.getReviewRoute().isBlank()) {
-            appendPart(detailBuilder, "model_route=" + summary.getReviewRoute());
+        if (summary.isFixStepPresent()) {
+            return "已根据检查结果修正内容";
         }
-        appendPart(detailBuilder, "acceptedCount=" + displayCount(summary.getAcceptedCount()));
-        appendPart(detailBuilder, "pendingReviewCount=" + displayCount(summary.getPendingReviewCount()));
-        appendPart(detailBuilder, "needsHumanReviewCount=" + displayCount(summary.getNeedsHumanReviewCount()));
-        appendPart(detailBuilder, summary.getFixDisplayMessage());
-        return detailBuilder.length() == 0 ? null : detailBuilder.toString();
+        if (hasNoReviewIssue(summary)) {
+            return "未发现需要修复的问题";
+        }
+        return "质量检查已完成";
     }
 
     /**
@@ -305,32 +301,6 @@ public class AdminCompileReviewSummaryService {
     }
 
     /**
-     * 追加展示片段。
-     *
-     * @param detailBuilder 展示文案构建器
-     * @param part 片段
-     */
-    private void appendPart(StringBuilder detailBuilder, String part) {
-        if (part == null || part.isBlank()) {
-            return;
-        }
-        if (detailBuilder.length() > 0) {
-            detailBuilder.append(" · ");
-        }
-        detailBuilder.append(part);
-    }
-
-    /**
-     * 格式化计数值。
-     *
-     * @param value 计数值
-     * @return 展示值
-     */
-    private String displayCount(Integer value) {
-        return value == null ? "未记录" : String.valueOf(value);
-    }
-
-    /**
      * 规范化字符串。
      *
      * @param value 原始字符串
@@ -341,5 +311,28 @@ public class AdminCompileReviewSummaryService {
             return null;
         }
         return value.trim();
+    }
+
+    /**
+     * 判断计数是否为正数。
+     *
+     * @param value 计数值
+     * @return 是否为正数
+     */
+    private boolean hasPositiveCount(Integer value) {
+        return value != null && value.intValue() > 0;
+    }
+
+    /**
+     * 判断审查结果是否没有待处理问题。
+     *
+     * @param summary 审查摘要
+     * @return 是否没有待处理问题
+     */
+    private boolean hasNoReviewIssue(AdminCompileReviewSummaryResponse summary) {
+        boolean reviewCountsRecorded = summary.getPendingReviewCount() != null || summary.getNeedsHumanReviewCount() != null;
+        return reviewCountsRecorded
+                && !hasPositiveCount(summary.getPendingReviewCount())
+                && !hasPositiveCount(summary.getNeedsHumanReviewCount());
     }
 }

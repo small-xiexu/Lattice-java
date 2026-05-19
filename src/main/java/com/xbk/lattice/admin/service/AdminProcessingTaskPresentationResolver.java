@@ -647,7 +647,7 @@ public class AdminProcessingTaskPresentationResolver {
             return "正在刷新向量索引";
         }
         if (AdminProcessingTaskStep.GENERATE_SYNTHESIS_ARTIFACTS.getCode().equals(normalizedStep)) {
-            return "正在生成综合产物";
+            return "正在整理知识库概览";
         }
         if (AdminProcessingTaskStep.CAPTURE_REPO_SNAPSHOT.getCode().equals(normalizedStep)
                 || AdminProcessingTaskStep.FINALIZE_JOB.getCode().equals(normalizedStep)) {

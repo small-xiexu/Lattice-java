@@ -35,8 +35,78 @@ class AdminCompileReviewSummaryServiceTests {
         assertThat(response.getRequestedReviewMode()).isEqualTo("LLM");
         assertThat(response.getReviewRoute()).isEqualTo("anthropic");
         assertThat(response.getReviewModeLabel()).isEqualTo("LLM 审查");
-        assertThat(detail).contains("reviewMode=LLM");
-        assertThat(detail).contains("model_route=anthropic");
+        assertThat(detail).isEqualTo("未发现需要修复的问题");
+        assertThat(detail).doesNotContain("review_articles");
+        assertThat(detail).doesNotContain("reviewMode");
+        assertThat(detail).doesNotContain("model_route");
+        assertThat(detail).doesNotContain("acceptedCount");
+        assertThat(detail).doesNotContain("pendingReviewCount");
+        assertThat(detail).doesNotContain("needsHumanReviewCount");
+    }
+
+    /**
+     * 验证默认步骤详情保留用户文案而不是内部审计字段。
+     */
+    @Test
+    void shouldBuildHumanReadableStepDetailForReviewOutcomes() {
+        AdminCompileReviewSummaryService summaryService = new AdminCompileReviewSummaryService(
+                new StubCompileJobStepJdbcRepository(List.of(reviewStep()))
+        );
+        AdminCompileReviewSummaryResponse needsHumanReviewSummary = new AdminCompileReviewSummaryResponse(
+                true,
+                "review_articles",
+                "ReviewerAgent",
+                "LLM",
+                "anthropic",
+                "LLM 审查",
+                Integer.valueOf(0),
+                Integer.valueOf(0),
+                Integer.valueOf(1),
+                false,
+                null,
+                Integer.valueOf(0),
+                null,
+                "未触发自动修复：无 fixable issue",
+                null
+        );
+        AdminCompileReviewSummaryResponse fixedSummary = new AdminCompileReviewSummaryResponse(
+                true,
+                "review_articles",
+                "ReviewerAgent",
+                "LLM",
+                "anthropic",
+                "LLM 审查",
+                Integer.valueOf(1),
+                Integer.valueOf(0),
+                Integer.valueOf(0),
+                true,
+                "fix_review_issues",
+                Integer.valueOf(1),
+                "openai",
+                "已触发自动修复",
+                null
+        );
+        AdminCompileReviewSummaryResponse completedSummary = new AdminCompileReviewSummaryResponse(
+                true,
+                "review_articles",
+                "ReviewerAgent",
+                "LLM",
+                "anthropic",
+                "LLM 审查",
+                null,
+                null,
+                null,
+                false,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        assertThat(summaryService.buildStepDetail(needsHumanReviewSummary)).isEqualTo("质量检查后需要人工确认");
+        assertThat(summaryService.buildStepDetail(fixedSummary)).isEqualTo("已根据检查结果修正内容");
+        assertThat(summaryService.buildStepDetail(completedSummary)).isEqualTo("质量检查已完成");
     }
 
     private CompileJobStepRecord reviewStep() {

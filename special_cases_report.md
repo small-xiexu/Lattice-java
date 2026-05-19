@@ -1,6 +1,6 @@
 # Special Cases Report
 
-- 扫描时间：2026-05-18 17:07:30 +0800
+- 扫描时间：2026-05-19 14:54:39 +0800
 - 扫描范围：`src/main/java/com/xbk/lattice/query src/main/java/com/xbk/lattice/compiler src/main/java/com/xbk/lattice/article src/main/java/com/xbk/lattice/source`
 - 重点文件名：`(Fallback|Intent|Reranker|Grounding|Lookup|PostProcessor|Prompt|Rewrite)`
 - risk_type：`BLOCKER` 会导致脚本返回 1；`REVIEW` 只进入人工复核；`ALLOWLIST` 是通用解析或工程常量候选。
@@ -110,10 +110,10 @@
 | `src/main/java/com/xbk/lattice/compiler/graph/node/InitializeJobNode.java:102` | `InitializeJobNode` | `return "rule-based";` | `固定答案 return` | ALLOWLIST | `固定字符串属于工程枚举/provider/状态/格式解析返回值，不按固定答案阻断` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/graph/node/InitializeJobNode.java:135` | `InitializeJobNode` | `log.warn("Freeze llm snapshots failed for compile job {}, continue with bootstrap fallback",` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/graph/node/PersistArticlesNode.java:123` | `PersistArticlesNode` | `return "passed".equalsIgnoreCase(reviewStatus == null ? "" : reviewStatus.trim());` | `.equalsIgnoreCase(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
-| `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:167` | `AnalyzeNode` | `collectFallbackSnippets(sortedSources)` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
-| `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:482` | `AnalyzeNode` | `if ("default".equals(conceptId) \|\| title.isEmpty()) {` | `.equals(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
-| `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:632` | `AnalyzeNode` | `private List<String> collectFallbackSnippets(List<RawSource> sortedSources) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
-| `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:654` | `AnalyzeNode` | `return "default";` | `固定答案 return` | ALLOWLIST | `固定字符串属于工程枚举/provider/状态/格式解析返回值，不按固定答案阻断` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:177` | `AnalyzeNode` | `collectFallbackSnippets(sortedSources)` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:492` | `AnalyzeNode` | `if ("default".equals(conceptId) \|\| title.isEmpty()) {` | `.equals(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
+| `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:642` | `AnalyzeNode` | `private List<String> collectFallbackSnippets(List<RawSource> sortedSources) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:664` | `AnalyzeNode` | `return "default";` | `固定答案 return` | ALLOWLIST | `固定字符串属于工程枚举/provider/状态/格式解析返回值，不按固定答案阻断` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/CompileArticleNode.java:169` | `CompileArticleNode` | `markdownContent = buildFallbackMarkdown(mergedConcept, summary, referentialKeywords);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/CompileArticleNode.java:459` | `CompileArticleNode` | `private String buildFallbackMarkdown(MergedConcept mergedConcept, String summary, List<String> referentialKeywords) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/CrossGroupMergeNode.java:91` | `CrossGroupMergeNode` | `return "default";` | `固定答案 return` | ALLOWLIST | `固定字符串属于工程枚举/provider/状态/格式解析返回值，不按固定答案阻断` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
@@ -156,6 +156,8 @@
 | `src/main/java/com/xbk/lattice/compiler/node/IngestNode.java:222` | `IngestNode` | `\|\| SUPPORTED_DOCUMENT_FORMATS.contains(format)` | `.contains(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/IngestNode.java:223` | `IngestNode` | `\|\| DOCUMENT_PARSE_IMAGE_FORMATS.contains(format);` | `.contains(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/IngestNode.java:491` | `IngestNode` | `return "xlsx".equals(format) \|\| "xls".equals(format);` | `.equals(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/compiler/node/StructuredTableWriterGatePolicy.java:74` | `StructuredTableWriterGatePolicy` | `if (!STRUCTURED_TABLES_CONTENT_TYPE.equals(structuredContentNode.path("contentType").asText())) {` | `.equals(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/compiler/node/StructuredTableWriterGatePolicy.java:349` | `StructuredTableWriterGatePolicy` | `return "table";` | `固定答案 return` | ALLOWLIST | `固定字符串属于工程枚举/provider/状态/格式解析返回值，不按固定答案阻断` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/prompt/CompilerPromptProvider.java:168` | `CompilerPromptProvider` | `if (resolved.contains("{{")) {` | `.contains(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
 | `src/main/java/com/xbk/lattice/compiler/service/ArticleReviewerGateway.java:167` | `ArticleReviewerGateway` | `return ReviewResult.timeoutFallback();` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/service/ArticleReviewerGateway.java:212` | `ArticleReviewerGateway` | `return ReviewResult.timeoutFallback();` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
@@ -164,9 +166,10 @@
 | `src/main/java/com/xbk/lattice/compiler/service/CompileExecutionRequest.java:101` | `CompileExecutionRequest` | `if (REVIEW_MODE_LLM.equals(normalizedReviewMode)) {` | `.equals(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
 | `src/main/java/com/xbk/lattice/compiler/service/CompileExecutionRequest.java:127` | `CompileExecutionRequest` | `return REVIEW_MODE_LLM.equals(normalizeReviewMode(reviewMode));` | `.equals(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
 | `src/main/java/com/xbk/lattice/compiler/service/CompileJobDerivedStatusResolver.java:40` | `CompileJobDerivedStatusResolver` | `if (!CompileJobStatuses.RUNNING.equalsIgnoreCase(compileJobRecord.getStatus())) {` | `.equalsIgnoreCase(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
-| `src/main/java/com/xbk/lattice/compiler/service/CompileJobService.java:316` | `CompileJobService` | `if (!CompileJobStatuses.FAILED.equalsIgnoreCase(compileJobRecord.getStatus())) {` | `.equalsIgnoreCase(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
-| `src/main/java/com/xbk/lattice/compiler/service/CompileJobService.java:495` | `CompileJobService` | `if (!"LLM_CALL_FAILED".equals(llmErrorCode)) {` | `.equals(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
-| `src/main/java/com/xbk/lattice/compiler/service/CompileJobService.java:518` | `CompileJobService` | `if (!"LLM_CALL_FAILED".equals(llmErrorCode)) {` | `.equals(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
+| `src/main/java/com/xbk/lattice/compiler/service/CompileJobService.java:277` | `CompileJobService` | `.filter(sourceCode -> !DEFAULT_SOURCE_CODE.equals(sourceCode))` | `.equals(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
+| `src/main/java/com/xbk/lattice/compiler/service/CompileJobService.java:382` | `CompileJobService` | `if (!CompileJobStatuses.FAILED.equalsIgnoreCase(compileJobRecord.getStatus())) {` | `.equalsIgnoreCase(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/compiler/service/CompileJobService.java:561` | `CompileJobService` | `if (!"LLM_CALL_FAILED".equals(llmErrorCode)) {` | `.equals(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
+| `src/main/java/com/xbk/lattice/compiler/service/CompileJobService.java:584` | `CompileJobService` | `if (!"LLM_CALL_FAILED".equals(llmErrorCode)) {` | `.equals(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
 | `src/main/java/com/xbk/lattice/compiler/service/DocumentSectionSelector.java:113` | `DocumentSectionSelector` | `if (lowercaseSection.contains(conceptTerm.toLowerCase(Locale.ROOT))) {` | `.contains(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
 | `src/main/java/com/xbk/lattice/compiler/service/DocumentSectionSelector.java:155` | `DocumentSectionSelector` | `if (item.getHeading().equalsIgnoreCase(normalizeHeading(heading))) {` | `.equalsIgnoreCase(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
 | `src/main/java/com/xbk/lattice/compiler/service/DocumentSectionSelector.java:184` | `DocumentSectionSelector` | `if (markdownMatcher.matches()) {` | `.matches(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
@@ -2113,10 +2116,10 @@
 
 ## 汇总
 
-- 总命中：2101
+- 总命中：2104
 - 高风险：0
-- 中风险：1859
-- 低风险：242
+- 中风险：1860
+- 低风险：244
 - BLOCKER：0
-- REVIEW：1859
-- ALLOWLIST：242
+- REVIEW：1860
+- ALLOWLIST：244
