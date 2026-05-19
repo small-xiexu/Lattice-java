@@ -127,6 +127,35 @@ public class CompileJobJdbcRepository {
     }
 
     /**
+     * 查询同一提交目标已有的活动编译作业。
+     *
+     * @param sourceSyncRunId 资料源同步运行主键
+     * @param sourceDir 源目录
+     * @param sourceId 资料源主键
+     * @param allowSourceIdOnly 是否允许仅按资料源主键匹配
+     * @return 活动编译作业
+     */
+    public Optional<CompileJobRecord> findActiveBySubmissionTarget(
+            Long sourceSyncRunId,
+            String sourceDir,
+            Long sourceId,
+            boolean allowSourceIdOnly
+    ) {
+        ensureReviewModeColumn();
+        boolean hasSubmissionTarget = sourceSyncRunId != null || sourceDir != null || (allowSourceIdOnly && sourceId != null);
+        if (!hasSubmissionTarget) {
+            return Optional.empty();
+        }
+        CompileJobRecord compileJobRecord = compileJobMapper.findActiveBySubmissionTarget(
+                sourceSyncRunId,
+                sourceDir,
+                sourceId,
+                allowSourceIdOnly
+        );
+        return Optional.ofNullable(compileJobRecord);
+    }
+
+    /**
      * 查询最早排队中的作业。
      *
      * @return 最早排队中的作业

@@ -150,6 +150,46 @@
         where job_id = #{jobId}
     </select>
 
+    <select id="findActiveBySubmissionTarget" resultMap="CompileJobRecordResultMap">
+        select <include refid="CompileJobColumns"/>
+        from compile_jobs
+        where status in ('QUEUED', 'RUNNING')
+          and
+          <trim prefix="(" suffix=")" prefixOverrides="or">
+            <if test="sourceSyncRunId != null">
+              or source_sync_run_id = #{sourceSyncRunId}
+            </if>
+            <if test="sourceDir != null">
+              or source_dir = #{sourceDir}
+            </if>
+            <if test="sourceId != null and sourceDir != null">
+              or (source_id = #{sourceId} and source_dir = #{sourceDir})
+            </if>
+            <if test="allowSourceIdOnly and sourceId != null">
+              or source_id = #{sourceId}
+            </if>
+          </trim>
+        order by
+          case
+            <if test="sourceSyncRunId != null">
+              when source_sync_run_id = #{sourceSyncRunId} then 1
+            </if>
+            <if test="sourceDir != null">
+              when source_dir = #{sourceDir} then 2
+            </if>
+            <if test="sourceId != null and sourceDir != null">
+              when source_id = #{sourceId} and source_dir = #{sourceDir} then 3
+            </if>
+            <if test="allowSourceIdOnly and sourceId != null">
+              when source_id = #{sourceId} then 4
+            </if>
+            else 5
+          end,
+          requested_at asc,
+          job_id asc
+        limit 1
+    </select>
+
     <select id="findNextQueued" resultMap="CompileJobRecordResultMap">
         select <include refid="CompileJobColumns"/>
         from compile_jobs

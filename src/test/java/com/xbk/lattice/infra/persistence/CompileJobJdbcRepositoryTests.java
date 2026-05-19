@@ -188,6 +188,137 @@ class CompileJobJdbcRepositoryTests {
     }
 
     /**
+     * 验证活动任务按 source_sync_run_id 优先幂等命中。
+     */
+    @Test
+    void shouldFindActiveJobBySourceSyncRunId() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs CASCADE");
+        Long sourceSyncRunId = insertSourceSyncRun(null, "sync-run-active");
+        CompileJobRecord activeJob = buildCompileJobRecord(
+                "job-active-sync",
+                "/tmp/source-a",
+                null,
+                sourceSyncRunId,
+                "RUNNING"
+        );
+        compileJobJdbcRepository.save(activeJob);
+
+        CompileJobRecord foundJob = compileJobJdbcRepository.findActiveBySubmissionTarget(
+                sourceSyncRunId,
+                "/tmp/source-b",
+                null,
+                true
+        ).orElseThrow();
+
+        assertThat(foundJob.getJobId()).isEqualTo("job-active-sync");
+    }
+
+    /**
+     * 验证活动任务按归一源目录幂等命中。
+     */
+    @Test
+    void shouldFindActiveJobBySourceDir() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs CASCADE");
+        CompileJobRecord activeJob = buildCompileJobRecord(
+                "job-active-source-dir",
+                "/tmp/source-dir-active",
+                null,
+                null,
+                "QUEUED"
+        );
+        compileJobJdbcRepository.save(activeJob);
+
+        CompileJobRecord foundJob = compileJobJdbcRepository.findActiveBySubmissionTarget(
+                null,
+                "/tmp/source-dir-active",
+                null,
+                false
+        ).orElseThrow();
+
+        assertThat(foundJob.getJobId()).isEqualTo("job-active-source-dir");
+    }
+
+    /**
+     * 验证 default-source 不会仅凭 sourceId 锁住所有直接编译任务。
+     */
+    @Test
+    void shouldAvoidDefaultSourceGlobalMutex() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs CASCADE");
+        CompileJobRecord activeJob = buildCompileJobRecord(
+                "job-default-source-a",
+                "/tmp/default-source-a",
+                null,
+                null,
+                "QUEUED"
+        );
+        compileJobJdbcRepository.save(activeJob);
+
+        assertThat(compileJobJdbcRepository.findActiveBySubmissionTarget(
+                null,
+                "/tmp/default-source-b",
+                null,
+                false
+        )).isEmpty();
+    }
+
+    /**
+     * 验证托管资料源允许仅凭 sourceId 命中活动任务。
+     */
+    @Test
+    void shouldFindManagedSourceActiveJobBySourceIdWhenAllowed() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs CASCADE");
+        Long sourceId = insertKnowledgeSource("managed-source-id-only");
+        CompileJobRecord activeJob = buildCompileJobRecord(
+                "job-managed-source",
+                "/tmp/managed-source-a",
+                sourceId,
+                null,
+                "RUNNING"
+        );
+        compileJobJdbcRepository.save(activeJob);
+
+        CompileJobRecord foundJob = compileJobJdbcRepository.findActiveBySubmissionTarget(
+                null,
+                "/tmp/managed-source-b",
+                sourceId,
+                true
+        ).orElseThrow();
+
+        assertThat(foundJob.getJobId()).isEqualTo("job-managed-source");
+    }
+
+    /**
+     * 验证已完成或失败任务不会阻止后续重新提交。
+     */
+    @Test
+    void shouldIgnoreTerminalJobsWhenFindingActiveSubmissionTarget() {
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_jobs CASCADE");
+        Long sourceId = insertKnowledgeSource("managed-source-terminal");
+        Long sourceSyncRunId = insertSourceSyncRun(sourceId, "sync-run-terminal");
+        compileJobJdbcRepository.save(buildCompileJobRecord(
+                "job-terminal-succeeded",
+                "/tmp/source-terminal",
+                sourceId,
+                sourceSyncRunId,
+                "SUCCEEDED"
+        ));
+        compileJobJdbcRepository.save(buildCompileJobRecord(
+                "job-terminal-failed",
+                "/tmp/source-terminal",
+                sourceId,
+                sourceSyncRunId,
+                "FAILED"
+        ));
+
+        assertThat(compileJobJdbcRepository.findActiveBySubmissionTarget(
+                sourceSyncRunId,
+                "/tmp/source-terminal",
+                sourceId,
+                true
+        )).isEmpty();
+    }
+
+    /**
      * 验证运行中的任务可刷新步骤级进度快照。
      */
     @Test
@@ -282,6 +413,99 @@ class CompileJobJdbcRepositoryTests {
                 requestedAt,
                 null,
                 null
+        );
+    }
+
+    /**
+     * 构造指定目标和状态的编译作业记录。
+     *
+     * @param jobId 作业标识
+     * @param sourceDir 源目录
+     * @param sourceId 资料源主键
+     * @param sourceSyncRunId 同步运行主键
+     * @param status 状态
+     * @return 编译作业记录
+     */
+    private CompileJobRecord buildCompileJobRecord(
+            String jobId,
+            String sourceDir,
+            Long sourceId,
+            Long sourceSyncRunId,
+            String status
+    ) {
+        OffsetDateTime requestedAt = OffsetDateTime.now();
+        return new CompileJobRecord(
+                jobId,
+                sourceDir,
+                sourceId,
+                sourceSyncRunId,
+                "trace-root",
+                false,
+                "state_graph",
+                "LLM",
+                status,
+                null,
+                null,
+                null,
+                null,
+                0,
+                0,
+                null,
+                null,
+                null,
+                0,
+                null,
+                0,
+                requestedAt,
+                null,
+                null
+        );
+    }
+
+    /**
+     * 插入测试资料源。
+     *
+     * @param sourceCode 资料源编码
+     * @return 资料源主键
+     */
+    private Long insertKnowledgeSource(String sourceCode) {
+        return jdbcTemplate.queryForObject(
+                """
+                        insert into lattice.knowledge_sources (
+                            source_code, name, source_type, content_profile,
+                            status, visibility, default_sync_mode, config_json, metadata_json
+                        )
+                        values (?, ?, 'UPLOAD', 'DOCUMENT', 'ACTIVE', 'NORMAL', 'FULL', '{}'::jsonb, '{}'::jsonb)
+                        on conflict (source_code) do update
+                        set name = excluded.name
+                        returning id
+                        """,
+                Long.class,
+                sourceCode,
+                sourceCode
+        );
+    }
+
+    /**
+     * 插入测试同步运行。
+     *
+     * @param sourceId 资料源主键
+     * @param manifestHash manifest 哈希
+     * @return 同步运行主键
+     */
+    private Long insertSourceSyncRun(Long sourceId, String manifestHash) {
+        return jdbcTemplate.queryForObject(
+                """
+                        insert into lattice.source_sync_runs (
+                            source_id, source_type, manifest_hash, trigger_type,
+                            resolver_mode, status, evidence_json
+                        )
+                        values (?, 'UPLOAD', ?, 'MANUAL', 'RULE_ONLY', 'RUNNING', '{}'::jsonb)
+                        returning id
+                        """,
+                Long.class,
+                sourceId,
+                manifestHash
         );
     }
 }

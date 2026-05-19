@@ -191,11 +191,21 @@ public class CompileJobService {
     ) {
         OffsetDateTime requestedAt = OffsetDateTime.now();
         Long effectiveSourceId = resolveEffectiveSourceId(sourceId);
+        String normalizedSourceDir = normalizeSourceDir(sourceDir);
+        Optional<CompileJobRecord> activeJob = findActiveSubmissionJob(
+                sourceSyncRunId,
+                normalizedSourceDir,
+                sourceId,
+                effectiveSourceId
+        );
+        if (activeJob.isPresent()) {
+            return activeJob.orElseThrow();
+        }
         String rootTraceId = resolveCurrentRootTraceId();
         String normalizedReviewMode = CompileExecutionRequest.normalizeNewJobReviewMode(reviewMode);
         CompileJobRecord compileJobRecord = new CompileJobRecord(
                 UUID.randomUUID().toString(),
-                sourceDir,
+                normalizedSourceDir,
                 effectiveSourceId,
                 sourceSyncRunId,
                 rootTraceId,
@@ -225,6 +235,62 @@ public class CompileJobService {
             return getRequiredJob(compileJobRecord.getJobId());
         }
         return executeJob(compileJobRecord.getJobId());
+    }
+
+    /**
+     * 查询同一提交目标是否已有活动中的编译作业。
+     *
+     * @param sourceSyncRunId 资料源同步运行主键
+     * @param normalizedSourceDir 归一后的源目录
+     * @param requestedSourceId 请求传入的资料源主键
+     * @param effectiveSourceId 实际使用的资料源主键
+     * @return 活动中的编译作业
+     */
+    private Optional<CompileJobRecord> findActiveSubmissionJob(
+            Long sourceSyncRunId,
+            String normalizedSourceDir,
+            Long requestedSourceId,
+            Long effectiveSourceId
+    ) {
+        boolean sourceIdOnlyMatchAllowed = shouldAllowSourceIdOnlyMatch(requestedSourceId, effectiveSourceId);
+        return compileJobJdbcRepository.findActiveBySubmissionTarget(
+                sourceSyncRunId,
+                normalizedSourceDir,
+                effectiveSourceId,
+                sourceIdOnlyMatchAllowed
+        );
+    }
+
+    /**
+     * 判断是否允许仅通过资料源主键匹配活动作业。
+     *
+     * @param requestedSourceId 请求传入的资料源主键
+     * @param effectiveSourceId 实际使用的资料源主键
+     * @return 是否允许资料源主键独立匹配
+     */
+    private boolean shouldAllowSourceIdOnlyMatch(Long requestedSourceId, Long effectiveSourceId) {
+        if (requestedSourceId == null || effectiveSourceId == null) {
+            return false;
+        }
+        return knowledgeSourceJdbcRepository.findById(effectiveSourceId)
+                .map(KnowledgeSource::getSourceCode)
+                .filter(sourceCode -> !DEFAULT_SOURCE_CODE.equals(sourceCode))
+                .isPresent();
+    }
+
+    /**
+     * 归一源目录用于编译任务幂等匹配。
+     *
+     * @param sourceDir 源目录
+     * @return 归一后的源目录
+     */
+    private String normalizeSourceDir(String sourceDir) {
+        String trimmedSourceDir = trimToNull(sourceDir);
+        if (trimmedSourceDir == null) {
+            return sourceDir;
+        }
+        Path normalizedPath = Path.of(trimmedSourceDir).toAbsolutePath().normalize();
+        return normalizedPath.toString();
     }
 
     /**
