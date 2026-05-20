@@ -140,6 +140,12 @@
         limit #{limit}
     </select>
 
+    <select id="countByStatus" resultType="int">
+        select count(*)
+        from compile_article_review_queue
+        where review_status = #{status}
+    </select>
+
     <select id="findById" resultMap="CompileArticleReviewQueueRecordResultMap">
         select <include refid="CompileArticleReviewQueueColumns"/>
         from compile_article_review_queue

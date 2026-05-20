@@ -62,6 +62,20 @@ public class CompileArticleReviewQueueJdbcRepository {
     }
 
     /**
+     * 按状态统计队列记录数量。
+     *
+     * @param status 队列状态
+     * @return 队列记录数量
+     */
+    public int countByStatus(String status) {
+        ensureTable();
+        if (status == null || status.isBlank()) {
+            return 0;
+        }
+        return compileArticleReviewQueueMapper.countByStatus(status.trim().toLowerCase());
+    }
+
+    /**
      * 按主键查询队列记录。
      *
      * @param id 队列主键

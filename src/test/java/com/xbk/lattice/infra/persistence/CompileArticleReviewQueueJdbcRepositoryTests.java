@@ -59,6 +59,7 @@ class CompileArticleReviewQueueJdbcRepositoryTests {
         CompileArticleReviewQueueRecord queueRecord = queueRecord("job-queue-published", "concept-published");
 
         compileArticleReviewQueueJdbcRepository.upsertPending(queueRecord);
+        assertThat(compileArticleReviewQueueJdbcRepository.countByStatus("needs_human_review")).isEqualTo(1);
         CompileArticleReviewQueueRecord pendingRecord = compileArticleReviewQueueJdbcRepository
                 .list("needs_human_review", 10)
                 .get(0);
@@ -78,6 +79,7 @@ class CompileArticleReviewQueueJdbcRepositoryTests {
         assertThat(publishedRecord.getReviewedBy()).isEqualTo("reviewer");
         assertThat(publishedRecord.getReviewComment()).isEqualTo("确认发布");
         assertThat(publishedRecord.getPublishedArticleKey()).isEqualTo(pendingRecord.getArticleKey());
+        assertThat(compileArticleReviewQueueJdbcRepository.countByStatus("needs_human_review")).isZero();
     }
 
     /**

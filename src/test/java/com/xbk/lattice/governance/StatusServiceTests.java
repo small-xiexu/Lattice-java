@@ -4,6 +4,7 @@ import com.xbk.lattice.api.query.QueryResponse;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.AnswerFeedbackJdbcRepository;
+import com.xbk.lattice.infra.persistence.CompileArticleReviewQueueJdbcRepository;
 import com.xbk.lattice.infra.persistence.ContributionJdbcRepository;
 import com.xbk.lattice.infra.persistence.ContributionRecord;
 import com.xbk.lattice.infra.persistence.PendingQueryRecord;
@@ -53,7 +54,8 @@ class StatusServiceTests {
                         pending("query-1"),
                         pending("query-2")
                 )),
-                new FixedAnswerFeedbackJdbcRepository(3)
+                new FixedAnswerFeedbackJdbcRepository(3),
+                new FixedCompileArticleReviewQueueJdbcRepository(4)
         );
 
         StatusSnapshot snapshot = statusService.snapshot();
@@ -63,6 +65,7 @@ class StatusServiceTests {
         assertThat(snapshot.getContributionCount()).isEqualTo(2);
         assertThat(snapshot.getPendingQueryCount()).isEqualTo(2);
         assertThat(snapshot.getReviewPendingArticleCount()).isEqualTo(1);
+        assertThat(snapshot.getHumanReviewDraftPendingCount()).isEqualTo(4);
         assertThat(snapshot.getHighRiskArticleCount()).isEqualTo(1);
         assertThat(snapshot.getHotspotPendingVerificationCount()).isEqualTo(1);
         assertThat(snapshot.getUserReportedAnswerCount()).isEqualTo(1);
@@ -237,6 +240,24 @@ class StatusServiceTests {
         @Override
         public int countByStatus(String status) {
             if (AnswerFeedbackService.STATUS_PENDING.equalsIgnoreCase(status)) {
+                return pendingCount;
+            }
+            return 0;
+        }
+    }
+
+    private static class FixedCompileArticleReviewQueueJdbcRepository extends CompileArticleReviewQueueJdbcRepository {
+
+        private final int pendingCount;
+
+        private FixedCompileArticleReviewQueueJdbcRepository(int pendingCount) {
+            super(null);
+            this.pendingCount = pendingCount;
+        }
+
+        @Override
+        public int countByStatus(String status) {
+            if ("needs_human_review".equalsIgnoreCase(status)) {
                 return pendingCount;
             }
             return 0;

@@ -66,6 +66,7 @@ class AdminOverviewControllerTests {
         mockMvc.perform(get("/api/v1/admin/overview"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status.articleCount").value(1))
+                .andExpect(jsonPath("$.status.humanReviewDraftPendingCount").value(1))
                 .andExpect(jsonPath("$.status.pendingQueryCount").value(1))
                 .andExpect(jsonPath("$.quality.totalArticles").value(1))
                 .andExpect(jsonPath("$.pending.count").value(1))
@@ -97,6 +98,19 @@ class AdminOverviewControllerTests {
                 StandardCharsets.UTF_8
         );
         compileApplicationFacade.compile(tempDir, false, null);
+        jdbcTemplate.update(
+                """
+                        insert into lattice.compile_article_review_queue (
+                            job_id, concept_id, article_key, title, content, compiled_at,
+                            review_status, metadata_json, review_issues_json, source_paths
+                        )
+                        values (
+                            'job-dashboard-summary', 'manual-draft', 'manual-draft',
+                            'Manual Draft', '# Manual Draft', CURRENT_TIMESTAMP,
+                            'needs_human_review', '{}'::jsonb, '[]'::jsonb, ARRAY[]::text[]
+                        )
+                        """
+        );
     }
 
     /**
@@ -105,6 +119,7 @@ class AdminOverviewControllerTests {
     private void resetTables() {
         jdbcTemplate.execute("TRUNCATE TABLE lattice.pending_queries");
         jdbcTemplate.execute("TRUNCATE TABLE lattice.contributions");
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_article_review_queue");
         jdbcTemplate.execute("TRUNCATE TABLE lattice.source_files CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE lattice.articles CASCADE");
     }

@@ -22,6 +22,8 @@ public class StatusSnapshot {
 
     private final int reviewPendingArticleCount;
 
+    private final int humanReviewDraftPendingCount;
+
     private final int highRiskArticleCount;
 
     private final int hotspotPendingVerificationCount;
@@ -46,7 +48,7 @@ public class StatusSnapshot {
             int pendingQueryCount,
             int reviewPendingArticleCount
     ) {
-        this(articleCount, sourceFileCount, contributionCount, pendingQueryCount, reviewPendingArticleCount, 0, 0, 0, 0);
+        this(articleCount, sourceFileCount, contributionCount, pendingQueryCount, reviewPendingArticleCount, 0, 0, 0, 0, 0);
     }
 
     /**
@@ -77,6 +79,7 @@ public class StatusSnapshot {
                 contributionCount,
                 pendingQueryCount,
                 reviewPendingArticleCount,
+                0,
                 highRiskArticleCount,
                 hotspotPendingVerificationCount,
                 userReportedAnswerCount,
@@ -92,6 +95,7 @@ public class StatusSnapshot {
      * @param contributionCount contribution 数量
      * @param pendingQueryCount pending 数量
      * @param reviewPendingArticleCount 待人工处理文章数量
+     * @param humanReviewDraftPendingCount 待人工确认编译草稿数量
      * @param highRiskArticleCount 高风险文章数量
      * @param hotspotPendingVerificationCount 热点待抽检数量
      * @param userReportedAnswerCount 用户反馈风险数量
@@ -104,6 +108,7 @@ public class StatusSnapshot {
             @JsonProperty("contributionCount") int contributionCount,
             @JsonProperty("pendingQueryCount") int pendingQueryCount,
             @JsonProperty("reviewPendingArticleCount") int reviewPendingArticleCount,
+            @JsonProperty("humanReviewDraftPendingCount") int humanReviewDraftPendingCount,
             @JsonProperty("highRiskArticleCount") int highRiskArticleCount,
             @JsonProperty("hotspotPendingVerificationCount") int hotspotPendingVerificationCount,
             @JsonProperty("userReportedAnswerCount") int userReportedAnswerCount,
@@ -114,6 +119,7 @@ public class StatusSnapshot {
         this.contributionCount = contributionCount;
         this.pendingQueryCount = pendingQueryCount;
         this.reviewPendingArticleCount = reviewPendingArticleCount;
+        this.humanReviewDraftPendingCount = humanReviewDraftPendingCount;
         this.highRiskArticleCount = highRiskArticleCount;
         this.hotspotPendingVerificationCount = hotspotPendingVerificationCount;
         this.userReportedAnswerCount = userReportedAnswerCount;
@@ -163,6 +169,15 @@ public class StatusSnapshot {
      */
     public int getReviewPendingArticleCount() {
         return reviewPendingArticleCount;
+    }
+
+    /**
+     * 获取待人工确认编译草稿数量。
+     *
+     * @return 待人工确认编译草稿数量
+     */
+    public int getHumanReviewDraftPendingCount() {
+        return humanReviewDraftPendingCount;
     }
 
     /**

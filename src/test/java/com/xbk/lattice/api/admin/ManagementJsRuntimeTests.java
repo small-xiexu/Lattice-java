@@ -523,6 +523,7 @@ class ManagementJsRuntimeTests {
                         contributionCount: 0,
                         pendingQueryCount: 0,
                         reviewPendingArticleCount: 1,
+                        humanReviewDraftPendingCount: 2,
                         highRiskArticleCount: 2,
                         hotspotPendingVerificationCount: 1,
                         userReportedAnswerCount: 1,
@@ -532,6 +533,10 @@ class ManagementJsRuntimeTests {
                 knowledgeUi.renderSummary(sandbox.__LATTICE_ADMIN_TEST_STATE__.overview, {});
                 assert(summaryElements["summary-cards"].innerHTML.includes("需复核内容"),
                     "summary cards should expose manual review count");
+                assert(summaryElements["summary-cards"].innerHTML.includes("待人工确认草稿"),
+                    "summary cards should expose compile review queue pending draft count");
+                assert(summaryElements["summary-cards"].innerHTML.includes("编译审查后等待人工发布的草稿"),
+                    "summary card should distinguish unpublished compile review drafts");
                 assert(summaryElements["summary-cards"].innerHTML.includes("高风险内容"),
                     "summary cards should expose high risk count");
                 assert(summaryElements["summary-cards"].innerHTML.includes("复核状态筛选"),
@@ -539,8 +544,14 @@ class ManagementJsRuntimeTests {
                 assert(summaryElements["summary-cards"].innerHTML.includes("结果反馈待处理"),
                     "summary cards should expose answer feedback pending count");
                 const helpState = knowledgeUi.deriveKnowledgeHelpState();
-                assert(helpState.description.includes("复核状态筛选"),
-                    "help state should guide to article review status filter instead of all-article review");
+                assert(helpState.description.includes("待人工确认"),
+                    "help state should guide to compile review queue before article review backlog");
+                assert(helpState.actions[0].action === "knowledge-runs",
+                    "help state should route compile review queue backlog to current processing tasks");
+                sandbox.__LATTICE_ADMIN_TEST_STATE__.overview.status.humanReviewDraftPendingCount = 0;
+                const articleReviewHelpState = knowledgeUi.deriveKnowledgeHelpState();
+                assert(articleReviewHelpState.description.includes("复核状态筛选"),
+                    "help state should guide to article review status filter after compile drafts are cleared");
                 sandbox.__LATTICE_ADMIN_TEST_STATE__.overview.status.reviewPendingArticleCount = 0;
                 const feedbackHelpState = knowledgeUi.deriveKnowledgeHelpState();
                 assert(feedbackHelpState.actions[0].action === "knowledge-feedback",

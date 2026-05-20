@@ -3,6 +3,7 @@ package com.xbk.lattice.governance;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.AnswerFeedbackJdbcRepository;
+import com.xbk.lattice.infra.persistence.CompileArticleReviewQueueJdbcRepository;
 import com.xbk.lattice.infra.persistence.ContributionJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.query.service.PendingQueryManager;
@@ -31,6 +32,8 @@ public class StatusService {
 
     private final AnswerFeedbackJdbcRepository answerFeedbackJdbcRepository;
 
+    private final CompileArticleReviewQueueJdbcRepository compileArticleReviewQueueJdbcRepository;
+
     /**
      * 创建状态服务。
      *
@@ -45,7 +48,7 @@ public class StatusService {
             ContributionJdbcRepository contributionJdbcRepository,
             PendingQueryManager pendingQueryManager
     ) {
-        this(articleJdbcRepository, sourceFileJdbcRepository, contributionJdbcRepository, pendingQueryManager, null);
+        this(articleJdbcRepository, sourceFileJdbcRepository, contributionJdbcRepository, pendingQueryManager, null, null);
     }
 
     /**
@@ -57,7 +60,6 @@ public class StatusService {
      * @param pendingQueryManager pending 查询管理器
      * @param answerFeedbackJdbcRepository 答案反馈仓储
      */
-    @Autowired
     public StatusService(
             ArticleJdbcRepository articleJdbcRepository,
             SourceFileJdbcRepository sourceFileJdbcRepository,
@@ -65,11 +67,41 @@ public class StatusService {
             PendingQueryManager pendingQueryManager,
             AnswerFeedbackJdbcRepository answerFeedbackJdbcRepository
     ) {
+        this(
+                articleJdbcRepository,
+                sourceFileJdbcRepository,
+                contributionJdbcRepository,
+                pendingQueryManager,
+                answerFeedbackJdbcRepository,
+                null
+        );
+    }
+
+    /**
+     * 创建状态服务。
+     *
+     * @param articleJdbcRepository 文章仓储
+     * @param sourceFileJdbcRepository 源文件仓储
+     * @param contributionJdbcRepository contribution 仓储
+     * @param pendingQueryManager pending 查询管理器
+     * @param answerFeedbackJdbcRepository 答案反馈仓储
+     * @param compileArticleReviewQueueJdbcRepository 编译人工确认队列仓储
+     */
+    @Autowired
+    public StatusService(
+            ArticleJdbcRepository articleJdbcRepository,
+            SourceFileJdbcRepository sourceFileJdbcRepository,
+            ContributionJdbcRepository contributionJdbcRepository,
+            PendingQueryManager pendingQueryManager,
+            AnswerFeedbackJdbcRepository answerFeedbackJdbcRepository,
+            CompileArticleReviewQueueJdbcRepository compileArticleReviewQueueJdbcRepository
+    ) {
         this.articleJdbcRepository = articleJdbcRepository;
         this.sourceFileJdbcRepository = sourceFileJdbcRepository;
         this.contributionJdbcRepository = contributionJdbcRepository;
         this.pendingQueryManager = pendingQueryManager;
         this.answerFeedbackJdbcRepository = answerFeedbackJdbcRepository;
+        this.compileArticleReviewQueueJdbcRepository = compileArticleReviewQueueJdbcRepository;
     }
 
     /**
@@ -103,6 +135,7 @@ public class StatusService {
                 contributionJdbcRepository.findAll().size(),
                 pendingQueryManager.listPendingQueries().size(),
                 reviewPendingArticleCount,
+                compileArticleReviewQueueJdbcRepository == null ? 0 : compileArticleReviewQueueJdbcRepository.countByStatus("needs_human_review"),
                 highRiskArticleCount,
                 hotspotPendingVerificationCount,
                 userReportedAnswerCount,

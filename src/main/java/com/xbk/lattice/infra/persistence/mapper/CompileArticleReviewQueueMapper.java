@@ -53,6 +53,14 @@ public interface CompileArticleReviewQueueMapper {
     List<CompileArticleReviewQueueRecord> findRecent(@Param("limit") int limit);
 
     /**
+     * 按状态统计队列记录数量。
+     *
+     * @param status 队列状态
+     * @return 队列记录数量
+     */
+    int countByStatus(@Param("status") String status);
+
+    /**
      * 按主键查询队列记录。
      *
      * @param id 队列主键
