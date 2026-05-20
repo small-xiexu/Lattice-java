@@ -1,6 +1,6 @@
 # 项目质量打磨进度与踩坑台账
 
-更新时间：2026-05-18（compile review prompt externalization pre-commit 质量复核通过后更新）
+更新时间：2026-05-20（compile review 人工确认后入库链路提交后更新）
 
 本台账记录质量打磨、Query/SWIP eval、baseline 修复与多 agent 协作的当前状态。后续推进前先读本文件；阶段结论变化后必须回写。
 
@@ -20,13 +20,14 @@
 - compile review LLM reviewer 小流量复验：在测试库 `ai-rag-knowledge-test` 通过运行时环境变量 `LATTICE_LLM_REVIEW_ENABLED=true` 临时启用，writer = `compile.writer.baseline-gpt-5-5-chat`，reviewer = `compile.reviewer.baseline-gpt-5-5-chat`（非 rule-based），LLM approved → passed → persist 全链路完整，后台可观测性正常。验证后已恢复默认关闭，主库未触碰。详见 `compile_review_llm_reviewer_small_flow_reverification_report.md`。
 - compile review 默认 LLM 模式：代码实现已完成（agentA），新 job 默认 reviewMode 改为 `LLM`。运行时验证已完成（agentD）：默认不传 reviewMode 的真实 compile job 走 LLM reviewer（route=anthropic，非 rule-based），LLM non-pass 不入库，显式 RULE_BASED 仍走 rule-based 且可入库。入口闭环审计已完成（agentB）：用户可触发 compile 入口全部收敛到 StateGraph 的 Writer→Reviewer→Fixer→Reviewer→Persist gate 闭环。详见 `compile_review_default_llm_mode_fix_result_report.md`、`compile_review_default_llm_mode_runtime_verification_report.md`、`compile_review_entrypoint_loop_coverage_analysis_report.md`。
 - compile review prompt externalization：Writer / Reviewer / Fixer system prompt 已从 `LatticePrompts.java` 硬编码常量外置到 `src/main/resources/prompts/compiler/*.md`，由新增 `CompilerPromptProvider` @Service 统一加载，支持 `{{shared-grounding-rules}}` 占位符替换。期间修复两轮回归：SchemaAwarePrompts 多构造器 DI 注入失败、shared rules 占位符未生效导致 prompt 文件内联重复。pre-commit 质量复核已通过：redline BLOCKER=0，mvn test=824/0/0，未发现业务硬编码/case 特判/eval 污染。详见 `compile_review_prompt_externalization_pre_commit_quality_report.md`、`compile_review_prompt_externalization_final_runtime_gate_report.md`。
+- compile review 人工确认后入库链路：`needs_human_review` 编译草稿持久化到 `compile_article_review_queue`，后台 API 支持 list/detail/approve/reject，approve 后以 `review_status=passed` + `lifecycle=ACTIVE` 写入 articles/chunks/vector index，reject 后不入库。前端"待人工确认"入口可用。pre-commit 复核通过：redline BLOCKER=0，mvn test=844/0/0。已分两个提交：`8fe7001`（publish flow）+ `b453627`（admin API）。详见 `compile_human_review_queue_pre_commit_quality_report.md`。
 
 ## 当前 Gate
 
 | 项 | 当前状态 | 说明 |
 |---|---|---|
-| redline | `BLOCKER=0` | prompt externalization pre-commit 复核后：`BLOCKER=0 / REVIEW=1859 / ALLOWLIST=242`。REVIEW +1 来自新增 `CompilerPromptProvider` 类名匹配，无业务特判。最终以 pre-commit 复核结果为准。 |
-| mvn test | `824/0/0` 通过 | 全量 mvn test 从 825 调整为 824（prompt externalization 新增 13 个 CompilerPromptProviderTests，部分旧测试 fixture 随常量引用精简）。测试库已隔离到 `ai-rag-knowledge-test`。 |
+| redline | `BLOCKER=0` | 人工确认队列提交后：`BLOCKER=0 / REVIEW=1863 / ALLOWLIST=244`。REVIEW +4、ALLOWLIST +2 来自新增 `*HumanReview*` 和 `*ReviewQueue*` 类名匹配和前端 JS，无业务特判。 |
+| mvn test | `844/0/0` 通过 | 全量 mvn test 从 824 增至 844（新增 20 个 human review queue 相关测试）。测试库已隔离到 `ai-rag-knowledge-test`。 |
 | main baseline | 阶段 gate 已通过 | `final_query_baseline_gate_report.md` 为 `9/10` 且 gate 通过；`phase12_final_clean_rebuild_gate_report.md` 为 `8/10` 且 6 项 gate 通过。 |
 | SWIP strict eval | 稳定区间 `15-17/23` | focus snippet patch 副作用复核三轮：16/23、17/23、15/23；BANK-SETTLEMENT-001 三轮稳定 PASS；保护 case 三轮稳定 PASS。详见 `swip_focus_snippet_patch_side_effect_review_report.md`。 |
 | 当前数据库状态 | SWIP clean 库 | 据 RRF/QFE 报告：`source_files=2`、`articles=4`，只含 SWIP 两份 docx；不能在该库跑主 baseline。 |
@@ -38,6 +39,7 @@
 | compile review LLM reviewer 小流量复验 | 测试库全链路通过 | 测试库 `ai-rag-knowledge-test` 临时启用：writer/reviewer route 均非 rule-based，JSON 可解析，approved→passed→persist 完整，后台可观测性正常。验证后已恢复默认关闭，主库未触碰。详见 `compile_review_llm_reviewer_small_flow_reverification_report.md`。 |
 | compile review 默认 LLM 模式 | 代码实现 + runtime 验证通过 | agentA 实现：新 job 默认 reviewMode=`LLM`，显式 `RULE_BASED` 仍可用。agentD runtime 验证通过：默认不传 reviewMode 走 LLM reviewer（route=anthropic），LLM non-pass 不入库，显式 RULE_BASED 仍走 rule-based 且可入库，未被测试 approved reviewer 掩盖，未触碰主库。agentB 入口闭环审计通过：用户 compile 入口全部收敛到 StateGraph。redline BLOCKER=0，mvn test=825/0/0。详见 `compile_review_default_llm_mode_fix_result_report.md`、`compile_review_default_llm_mode_runtime_verification_report.md`、`compile_review_entrypoint_loop_coverage_analysis_report.md`。 |
 | compile review prompt externalization | 代码实现 + runtime gate + pre-commit 复核通过 | agentA 实现：6 个 prompt 文件 + `CompilerPromptProvider` + DI 接入。agentD 两轮 runtime 验证（发现并修复 DI 注入失败 + shared rules 占位符未生效），最终 runtime gate 通过。agentD pre-commit 复核通过：redline BLOCKER=0，mvn test=824/0/0，无业务硬编码/case 特判/eval 污染。详见 `compile_review_prompt_externalization_pre_commit_quality_report.md`、`compile_review_prompt_externalization_final_runtime_gate_report.md`。 |
+| compile review 人工确认后入库 | 代码实现 + runtime 验证 + pre-commit 复核通过 + 已提交 | agentA 实现：后端 publish flow + 后台 list/detail/approve/reject API + 前端入口。agentD runtime 验证通过：后端全链路、approve 向量刷新、前端主流程。agentD pre-commit 复核通过：redline BLOCKER=0，mvn test=844/0/0，无主链误改。已提交（`8fe7001` + `b453627`）。详见 `compile_human_review_queue_pre_commit_quality_report.md`。 |
 
 ## 多 Agent 当前职责
 
@@ -45,8 +47,8 @@
 |---|---|---|---|
 | agentA | 单一代码修复执行者 | answer grounding + focus snippet patch 均已完成，副作用复核通过；待提交 | 是，但同一轮只能有一个 agentA 改主链 |
 | agentB | 治理/链路分析 | 已产出 compile review 治理分析；只读判断 rule-based 不等于 LLM 内容审查 | 否 |
-| agentC | 项目进度台账与文档治理 | 已完成 prompt externalization 台账更新与报告清理 | 否，除文档/报告 |
-| agentD | 验证/测试 | 负责 redline、`mvn test`、baseline、业务 eval 验证报告；已完成 compile review 全链路验证（observability + persist gate + query visibility + fail-closed + 小流量复验 + 默认 LLM 模式 + prompt externalization）；下一步配合提交 | 否，除验证报告 |
+| agentC | 项目进度台账与文档治理 | 已完成人工确认队列提交后台账更新与报告清理 | 否，除文档/报告 |
+| agentD | 验证/测试 | 负责 redline、`mvn test`、baseline、业务 eval 验证报告；已完成 compile review 全链路验证（observability + persist gate + query visibility + fail-closed + 小流量复验 + 默认 LLM 模式 + prompt externalization + 人工确认队列）；下一步配合状态摘要接入 + SWIP 双文档重建验收 | 否，除验证报告 |
 
 ## 已验证结论
 
@@ -81,6 +83,8 @@
 - prompt externalization 期间修复两轮回归：SchemaAwarePrompts 多构造器无 `@Autowired` 导致 Spring DI 失败（1 行修复）；4 个 role prompt 文件 shared grounding rules 内联重复而非常量引用 `{{shared-grounding-rules}}` 占位符（4 文件替换 + 测试补强）。
 - prompt 文件红线扫描通过：6 个 prompt 文件中 `expected` 关键词命中均为通用证据约束语境，无业务特判。
 - pre-commit 质量复核通过：redline BLOCKER=0，mvn test=824/0/0，未发现业务硬编码/case 特判/eval 污染，建议提交。
+- compile review 人工确认后入库链路已完成并提交：`needs_human_review` 编译草稿持久化到 `compile_article_review_queue`，后台 API list/detail/approve/reject 完整，approve 以 `review_status=passed` + `lifecycle=ACTIVE` 写入正式表并重建 chunk/vector，reject 不入库。前端"待人工确认"入口已联通。pre-commit 复核通过：redline BLOCKER=0，mvn test=844/0/0。
+- 已知非阻断遗留问题：（1）状态摘要未接 `compile_article_review_queue`，人工确认队列计数暂不反映在 Dashboard 摘要；（2）草稿正文 frontmatter 在队列详情中可见，后续可考虑隐藏；（3）`reviewRoute`/`reviewerModel` 展示可能不准确（取第一条 job step 路由而非 review step）；（4）审查/修复轮次展示仍待做。
 
 ## 踩坑记录
 
@@ -110,6 +114,9 @@
 | prompt 外置后存量 Java 常量与外部文件双轨并存 | `LatticePrompts.java` 常量未删除，`ArticleReviewerGateway` 和 `ReviewFixService` 在 null-provider fallback 路径中仍引用旧常量 | 这是有意保留的向后兼容兜底——provider 为 null 时回退到旧常量（测试/手工构造路径） | 当前属于安全兜底，不构成双轨风险。后续若彻底删除旧常量，必须确保所有构造路径都传入 provider。 |
 | prompt 外置后 shared rules 占位符未生效 | 初始外置时 4 个 role prompt 文件（writer/reviewer 各 text+image）直接内联了 shared grounding rules 全文，未使用 `{{shared-grounding-rules}}` 占位符 | shared-grounding-rules.md 成为死配置；内联重复导致 prompt 维护分散 | shared rules 修复：4 个文件内联替换为 `{{shared-grounding-rules}}`，测试补强断言占位符已解析且无未解析 `{{`。后续外置任何含共享片段的 prompt，必须验证占位符替换机制已生效。 |
 | Spring 多构造器无 `@Autowired` 导致 BeanCreationException | `SchemaAwarePrompts` 新增双参数构造器后，两个构造器均无 `@Autowired`，Spring 无法确定 DI 使用哪个构造器 | 多构造器 Bean 必须显式标注 DI 入口 | 新增构造器时，若类已有其他构造器，必须加 `@Autowired` 标注 DI 目标构造器。 |
+| 人工确认 approve 后向量索引未刷新 | approve 后 article 写入 articles 表但 `article_chunks` 未重建、向量索引未刷新，导致 query 无法召回 | 人工 approve 路径与 StateGraph persist 路径在 chunk/vector 重建逻辑上不共享代码路径，approve 侧缺失全量 chunk+vector 刷新 | approve 路径已补全 chunk 重建 + `SearchEngineMaintainer.refreshVectorIndex`。后续任何新增"绕开 StateGraph 写入 articles"的路径，必须同步验证 chunk/vector 重建。 |
+| `compile_article_review_queue` 不区分 compile job | 多次 compile 产生的 `needs_human_review` 草稿混在同一队列，无 jobId 过滤 | 当前接受这种简化——人工确认场景本身就是低频率、逐条处理的 | 后续若需要按 job 维度管理人工确认，需给 `compile_article_review_queue` 增加 `job_id` 字段并支持筛选。 |
+| 前端编译进度卡片语义与轮次展示仍有缺口 | 前端进度卡片展示的步骤数、审查轮次、fix 轮次仍不完全反映 StateGraph 实际执行轮数 | 后端步骤和轮次信息已写入 job steps，前端尚未完全接入 | 不阻断当前提交。后续状态摘要和轮次展示迭代时统一接入。 |
 
 ## 当前禁止事项
 
@@ -145,7 +152,13 @@
 16. （后续）Fixer→Re-reviewer loop runtime 验证：当前未触发 fixable issue 路径；后续设计专门测试 case 或降低 Reviewer fixable 阈值后验证。
 17. （后续）legacy direct compile 封存审计：`CompilePipelineService` / `IncrementalCompileService` 中旧式 direct compile 路径需做最小可达性防护。
 18. （已完成）prompt 文件化：Writer/Reviewer/Fixer prompt 已从 `LatticePrompts.java` 外置到 `src/main/resources/prompts/compiler/*.md`，pre-commit 复核通过。详见 `compile_review_prompt_externalization_pre_commit_quality_report.md`。
-19. （当前）提交 prompt externalization 代码 + 最终锚点报告。
+19. （已完成）prompt externalization 代码 + 锚点报告已提交（576531f）。
+20. （已完成）compile review 人工确认后入库链路已完成并提交（8fe7001 + b453627）。详见 `compile_human_review_queue_pre_commit_quality_report.md`。
+21. （当前）状态摘要接入人工确认队列：Dashboard 摘要展示 `compile_article_review_queue` 待处理计数。
+22. （后续）SWIP 两文档重建验收：验证 clean rebuild 全链路在人工确认队列就位后的正确性。
+23. （后续）审查/修复轮次展示：前端进度卡片接入 StateGraph 实际执行轮数。
+24. （后续）LLM approved 正向 canary 观察。
+25. （后续）Fixer→Re-reviewer loop runtime 验证。
 
 ## 更新规则
 
