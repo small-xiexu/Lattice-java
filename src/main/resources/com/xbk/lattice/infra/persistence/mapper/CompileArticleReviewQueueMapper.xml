@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.CompileArticleReviewQueueMapper">
+
+    <resultMap id="CompileArticleReviewQueueRecordResultMap" type="com.xbk.lattice.infra.persistence.CompileArticleReviewQueueRecord">
+        <constructor>
+            <arg column="id" javaType="_long"/>
+            <arg column="job_id" javaType="java.lang.String"/>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="source_code" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="article_key" javaType="java.lang.String"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="content" javaType="java.lang.String"/>
+            <arg column="lifecycle" javaType="java.lang.String"/>
+            <arg column="compiled_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="source_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="review_status" javaType="java.lang.String"/>
+            <arg column="review_route" javaType="java.lang.String"/>
+            <arg column="reviewer_model" javaType="java.lang.String"/>
+            <arg column="review_issues_json" javaType="java.lang.String"/>
+            <arg column="fix_attempt_count" javaType="_int"/>
+            <arg column="max_fix_rounds" javaType="_int"/>
+            <arg column="created_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="updated_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="reviewed_by" javaType="java.lang.String"/>
+            <arg column="reviewed_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="review_comment" javaType="java.lang.String"/>
+            <arg column="published_article_key" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="CompileArticleReviewQueueColumns">
+        id, job_id, source_id, source_code, concept_id, article_key, title, content,
+        lifecycle, compiled_at, source_paths, metadata_json::text as metadata_json,
+        review_status, review_route, reviewer_model, review_issues_json::text as review_issues_json,
+        fix_attempt_count, max_fix_rounds, created_at, updated_at, reviewed_by,
+        reviewed_at, review_comment, published_article_key
+    </sql>
+
+    <update id="ensureTable">
+        create table if not exists compile_article_review_queue (
+            id bigserial primary key,
+            job_id varchar(64) not null,
+            source_id bigint,
+            source_code varchar(128),
+            concept_id varchar(128) not null,
+            article_key varchar(256) not null,
+            title varchar(255) not null,
+            content text not null,
+            lifecycle varchar(32) not null default 'ACTIVE',
+            compiled_at timestamptz not null,
+            source_paths text[] not null default array[]::text[],
+            metadata_json jsonb not null default '{}'::jsonb,
+            review_status varchar(32) not null default 'needs_human_review',
+            review_route varchar(128),
+            reviewer_model varchar(256),
+            review_issues_json jsonb not null default '[]'::jsonb,
+            fix_attempt_count integer not null default 0,
+            max_fix_rounds integer not null default 0,
+            created_at timestamptz not null default current_timestamp,
+            updated_at timestamptz not null default current_timestamp,
+            reviewed_by varchar(128),
+            reviewed_at timestamptz,
+            review_comment text,
+            published_article_key varchar(256)
+        );
+        create unique index if not exists uk_compile_article_review_queue_job_concept
+            on compile_article_review_queue (job_id, concept_id);
+        create index if not exists idx_compile_article_review_queue_status_created_at
+            on compile_article_review_queue (review_status, created_at desc, id desc);
+        create index if not exists idx_compile_article_review_queue_job_id
+            on compile_article_review_queue (job_id);
+        create index if not exists idx_compile_article_review_queue_source_id
+            on compile_article_review_queue (source_id);
+        create index if not exists idx_compile_article_review_queue_article_key
+            on compile_article_review_queue (article_key)
+    </update>
+
+    <insert id="upsertPending">
+        insert into compile_article_review_queue (
+            job_id, source_id, source_code, concept_id, article_key, title, content,
+            lifecycle, compiled_at, source_paths, metadata_json, review_status,
+            review_route, reviewer_model, review_issues_json, fix_attempt_count, max_fix_rounds
+        )
+        values (
+            #{record.jobId},
+            #{record.sourceId},
+            #{record.sourceCode},
+            #{record.conceptId},
+            #{record.articleKey},
+            #{record.title},
+            #{record.content},
+            #{record.lifecycle},
+            #{record.compiledAt},
+            #{record.sourcePaths,typeHandler=com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler},
+            #{record.metadataJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            'needs_human_review',
+            #{record.reviewRoute},
+            #{record.reviewerModel},
+            #{record.reviewIssuesJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{record.fixAttemptCount},
+            #{record.maxFixRounds}
+        )
+        on conflict (job_id, concept_id) do update
+        set source_id = excluded.source_id,
+            source_code = excluded.source_code,
+            article_key = excluded.article_key,
+            title = excluded.title,
+            content = excluded.content,
+            lifecycle = excluded.lifecycle,
+            compiled_at = excluded.compiled_at,
+            source_paths = excluded.source_paths,
+            metadata_json = excluded.metadata_json,
+            review_route = excluded.review_route,
+            reviewer_model = excluded.reviewer_model,
+            review_issues_json = excluded.review_issues_json,
+            fix_attempt_count = excluded.fix_attempt_count,
+            max_fix_rounds = excluded.max_fix_rounds,
+            updated_at = CURRENT_TIMESTAMP
+        where compile_article_review_queue.review_status = 'needs_human_review'
+    </insert>
+
+    <select id="findByStatus" resultMap="CompileArticleReviewQueueRecordResultMap">
+        select <include refid="CompileArticleReviewQueueColumns"/>
+        from compile_article_review_queue
+        where review_status = #{status}
+        order by created_at desc, id desc
+        limit #{limit}
+    </select>
+
+    <select id="findRecent" resultMap="CompileArticleReviewQueueRecordResultMap">
+        select <include refid="CompileArticleReviewQueueColumns"/>
+        from compile_article_review_queue
+        order by created_at desc, id desc
+        limit #{limit}
+    </select>
+
+    <select id="findById" resultMap="CompileArticleReviewQueueRecordResultMap">
+        select <include refid="CompileArticleReviewQueueColumns"/>
+        from compile_article_review_queue
+        where id = #{id}
+    </select>
+
+    <update id="markPublished">
+        update compile_article_review_queue
+        set review_status = 'published',
+            reviewed_by = #{reviewedBy},
+            reviewed_at = #{reviewedAt},
+            review_comment = #{reviewComment},
+            published_article_key = #{publishedArticleKey},
+            updated_at = CURRENT_TIMESTAMP
+        where id = #{id}
+          and review_status = 'needs_human_review'
+    </update>
+
+    <update id="markRejected">
+        update compile_article_review_queue
+        set review_status = 'rejected',
+            reviewed_by = #{reviewedBy},
+            reviewed_at = #{reviewedAt},
+            review_comment = #{reviewComment},
+            updated_at = CURRENT_TIMESTAMP
+        where id = #{id}
+          and review_status = 'needs_human_review'
+    </update>
+</mapper>

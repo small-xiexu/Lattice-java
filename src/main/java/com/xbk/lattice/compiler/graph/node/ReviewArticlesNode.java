@@ -8,8 +8,11 @@ import com.xbk.lattice.compiler.graph.CompileWorkingSetStore;
 import com.xbk.lattice.compiler.graph.ReviewDecisionPolicy;
 import com.xbk.lattice.compiler.graph.ReviewPartition;
 import com.xbk.lattice.compiler.service.ArticleCompileSupport;
+import com.xbk.lattice.compiler.service.CompileArticleReviewQueueService;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -30,6 +33,31 @@ public class ReviewArticlesNode extends AbstractCompileGraphNode {
 
     private final ReviewDecisionPolicy reviewDecisionPolicy;
 
+    private final CompileArticleReviewQueueService compileArticleReviewQueueService;
+
+    /**
+     * 创建审查文章节点。
+     *
+     * @param compileGraphStateMapper 编译图状态映射器
+     * @param compileWorkingSetStore 编译工作集存储
+     * @param articleCompileSupport 文章编译支撑服务
+     * @param reviewDecisionPolicy 审查决策策略
+     * @param compileArticleReviewQueueServiceProvider 编译人工确认队列服务提供器
+     */
+    @Autowired
+    public ReviewArticlesNode(
+            CompileGraphStateMapper compileGraphStateMapper,
+            CompileWorkingSetStore compileWorkingSetStore,
+            ArticleCompileSupport articleCompileSupport,
+            ReviewDecisionPolicy reviewDecisionPolicy,
+            ObjectProvider<CompileArticleReviewQueueService> compileArticleReviewQueueServiceProvider
+    ) {
+        super(compileGraphStateMapper, compileWorkingSetStore);
+        this.articleCompileSupport = articleCompileSupport;
+        this.reviewDecisionPolicy = reviewDecisionPolicy;
+        this.compileArticleReviewQueueService = compileArticleReviewQueueServiceProvider.getIfAvailable();
+    }
+
     /**
      * 创建审查文章节点。
      *
@@ -47,6 +75,7 @@ public class ReviewArticlesNode extends AbstractCompileGraphNode {
         super(compileGraphStateMapper, compileWorkingSetStore);
         this.articleCompileSupport = articleCompileSupport;
         this.reviewDecisionPolicy = reviewDecisionPolicy;
+        this.compileArticleReviewQueueService = null;
     }
 
     /**
@@ -93,6 +122,30 @@ public class ReviewArticlesNode extends AbstractCompileGraphNode {
         state.setPendingReviewCount(reviewPartition.getFixable().size());
         state.setAcceptedCount(acceptedArticles.size());
         state.setNeedsHumanReviewCount(needsHumanReviewArticles.size());
+        enqueueNeedsHumanReviewDrafts(state, reviewPartition.getNeedsHumanReview());
         return delta(state);
+    }
+
+    /**
+     * 将本轮最终进入人工复核分区的草稿写入持久化队列。
+     *
+     * @param state 编译图状态
+     * @param currentNeedsHumanReviewArticles 本轮待人工复核文章
+     */
+    private void enqueueNeedsHumanReviewDrafts(
+            CompileGraphState state,
+            List<ArticleReviewEnvelope> currentNeedsHumanReviewArticles
+    ) {
+        if (compileArticleReviewQueueService == null || currentNeedsHumanReviewArticles.isEmpty()) {
+            return;
+        }
+        compileArticleReviewQueueService.enqueue(
+                state.getJobId(),
+                state.getSourceId(),
+                state.getSourceCode(),
+                currentNeedsHumanReviewArticles,
+                state.getFixAttemptCount(),
+                state.getMaxFixRounds()
+        );
     }
 }

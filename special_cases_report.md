@@ -1,6 +1,6 @@
 # Special Cases Report
 
-- 扫描时间：2026-05-19 14:54:39 +0800
+- 扫描时间：2026-05-20 12:46:28 +0800
 - 扫描范围：`src/main/java/com/xbk/lattice/query src/main/java/com/xbk/lattice/compiler src/main/java/com/xbk/lattice/article src/main/java/com/xbk/lattice/source`
 - 重点文件名：`(Fallback|Intent|Reranker|Grounding|Lookup|PostProcessor|Prompt|Rewrite)`
 - risk_type：`BLOCKER` 会导致脚本返回 1；`REVIEW` 只进入人工复核；`ALLOWLIST` 是通用解析或工程常量候选。
@@ -163,6 +163,9 @@
 | `src/main/java/com/xbk/lattice/compiler/service/ArticleReviewerGateway.java:212` | `ArticleReviewerGateway` | `return ReviewResult.timeoutFallback();` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/service/ArticleReviewerGateway.java:239` | `ArticleReviewerGateway` | `return "rule-based";` | `固定答案 return` | REVIEW | `固定字符串命中但未确认是回答模板，进入人工复核` | 中 | 固定答案 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/service/ArticleReviewerGateway.java:242` | `ArticleReviewerGateway` | `return "llm-unavailable";` | `固定答案 return` | REVIEW | `固定字符串命中但未确认是回答模板，进入人工复核` | 中 | 固定答案 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/compiler/service/CompileArticleReviewQueueService.java:140` | `CompileArticleReviewQueueService` | `return "[]";` | `固定答案 return` | REVIEW | `固定字符串命中但未确认是回答模板，进入人工复核` | 中 | 固定答案 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/compiler/service/CompileArticleReviewQueueService.java:158` | `CompileArticleReviewQueueService` | `private String safeJson(String value, String fallback) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/compiler/service/CompileArticleReviewQueueService.java:160` | `CompileArticleReviewQueueService` | `return fallback;` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/service/CompileExecutionRequest.java:101` | `CompileExecutionRequest` | `if (REVIEW_MODE_LLM.equals(normalizedReviewMode)) {` | `.equals(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
 | `src/main/java/com/xbk/lattice/compiler/service/CompileExecutionRequest.java:127` | `CompileExecutionRequest` | `return REVIEW_MODE_LLM.equals(normalizeReviewMode(reviewMode));` | `.equals(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
 | `src/main/java/com/xbk/lattice/compiler/service/CompileJobDerivedStatusResolver.java:40` | `CompileJobDerivedStatusResolver` | `if (!CompileJobStatuses.RUNNING.equalsIgnoreCase(compileJobRecord.getStatus())) {` | `.equalsIgnoreCase(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
@@ -2116,10 +2119,10 @@
 
 ## 汇总
 
-- 总命中：2104
+- 总命中：2107
 - 高风险：0
-- 中风险：1860
+- 中风险：1863
 - 低风险：244
 - BLOCKER：0
-- REVIEW：1860
+- REVIEW：1863
 - ALLOWLIST：244

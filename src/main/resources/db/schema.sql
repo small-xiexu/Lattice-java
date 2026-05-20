@@ -626,6 +626,74 @@ CREATE INDEX IF NOT EXISTS idx_article_review_audits_article_key_reviewed_at
 CREATE INDEX IF NOT EXISTS idx_article_review_audits_concept_source_reviewed_at
     ON article_review_audits (concept_id, source_id, reviewed_at DESC, id DESC);
 
+CREATE TABLE IF NOT EXISTS compile_article_review_queue (
+    id BIGSERIAL PRIMARY KEY,
+    job_id VARCHAR(64) NOT NULL,
+    source_id BIGINT,
+    source_code VARCHAR(128),
+    concept_id VARCHAR(128) NOT NULL,
+    article_key VARCHAR(256) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    lifecycle VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    compiled_at TIMESTAMPTZ NOT NULL,
+    source_paths TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    metadata_json JSONB NOT NULL DEFAULT '{}'::JSONB,
+    review_status VARCHAR(32) NOT NULL DEFAULT 'needs_human_review',
+    review_route VARCHAR(128),
+    reviewer_model VARCHAR(256),
+    review_issues_json JSONB NOT NULL DEFAULT '[]'::JSONB,
+    fix_attempt_count INTEGER NOT NULL DEFAULT 0,
+    max_fix_rounds INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    reviewed_by VARCHAR(128),
+    reviewed_at TIMESTAMPTZ,
+    review_comment TEXT,
+    published_article_key VARCHAR(256)
+);
+
+COMMENT ON TABLE compile_article_review_queue IS '编译 needs_human_review 草稿人工确认队列表';
+COMMENT ON COLUMN compile_article_review_queue.id IS '人工确认队列主键 ID';
+COMMENT ON COLUMN compile_article_review_queue.job_id IS '产生草稿的编译作业标识';
+COMMENT ON COLUMN compile_article_review_queue.source_id IS '所属资料源主键 ID';
+COMMENT ON COLUMN compile_article_review_queue.source_code IS '所属资料源编码';
+COMMENT ON COLUMN compile_article_review_queue.concept_id IS '草稿概念标识';
+COMMENT ON COLUMN compile_article_review_queue.article_key IS '草稿预期文章唯一键';
+COMMENT ON COLUMN compile_article_review_queue.title IS '草稿标题';
+COMMENT ON COLUMN compile_article_review_queue.content IS '草稿 Markdown 正文';
+COMMENT ON COLUMN compile_article_review_queue.lifecycle IS '发布后的文章生命周期';
+COMMENT ON COLUMN compile_article_review_queue.compiled_at IS '草稿编译时间';
+COMMENT ON COLUMN compile_article_review_queue.source_paths IS '草稿引用的来源路径数组';
+COMMENT ON COLUMN compile_article_review_queue.metadata_json IS '草稿扩展元数据 JSON';
+COMMENT ON COLUMN compile_article_review_queue.review_status IS '人工确认队列状态';
+COMMENT ON COLUMN compile_article_review_queue.review_route IS '最后一轮 Reviewer 路由';
+COMMENT ON COLUMN compile_article_review_queue.reviewer_model IS '最后一轮 Reviewer 模型或路由快照';
+COMMENT ON COLUMN compile_article_review_queue.review_issues_json IS '最后一轮审查问题 JSON';
+COMMENT ON COLUMN compile_article_review_queue.fix_attempt_count IS '已执行自动修复轮数';
+COMMENT ON COLUMN compile_article_review_queue.max_fix_rounds IS '最大自动修复轮数';
+COMMENT ON COLUMN compile_article_review_queue.created_at IS '队列记录创建时间';
+COMMENT ON COLUMN compile_article_review_queue.updated_at IS '队列记录更新时间';
+COMMENT ON COLUMN compile_article_review_queue.reviewed_by IS '人工确认人';
+COMMENT ON COLUMN compile_article_review_queue.reviewed_at IS '人工确认时间';
+COMMENT ON COLUMN compile_article_review_queue.review_comment IS '人工确认意见';
+COMMENT ON COLUMN compile_article_review_queue.published_article_key IS '发布后的正式文章唯一键';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_compile_article_review_queue_job_concept
+    ON compile_article_review_queue (job_id, concept_id);
+
+CREATE INDEX IF NOT EXISTS idx_compile_article_review_queue_status_created_at
+    ON compile_article_review_queue (review_status, created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_compile_article_review_queue_job_id
+    ON compile_article_review_queue (job_id);
+
+CREATE INDEX IF NOT EXISTS idx_compile_article_review_queue_source_id
+    ON compile_article_review_queue (source_id);
+
+CREATE INDEX IF NOT EXISTS idx_compile_article_review_queue_article_key
+    ON compile_article_review_queue (article_key);
+
 CREATE OR REPLACE FUNCTION capture_article_snapshot()
 RETURNS TRIGGER AS $$
 BEGIN
