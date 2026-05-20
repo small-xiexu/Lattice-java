@@ -280,6 +280,41 @@
                         <section class="panel">
                             <div class="panel-title-row">
                                 <div>
+                                    <h2>待人工确认</h2>
+                                    <p>Reviewer 判定需要人工确认的草稿会在这里处理；确认后进入正式知识库，驳回后不会入库。</p>
+                                </div>
+                                <div class="processing-refresh-actions">
+                                    <button id="refresh-review-queue" class="ghost-btn" type="button">刷新待确认</button>
+                                </div>
+                            </div>
+                            <div id="review-queue-status" class="review-queue-status top-gap" aria-live="polite">正在加载待确认草稿</div>
+                            <div class="review-queue-layout top-gap">
+                                <div class="list-panel">
+                                    <div class="list-header">
+                                        <h3>待确认草稿</h3>
+                                        <span id="review-queue-count" class="pill">0</span>
+                                    </div>
+                                    <div id="review-queue-list" class="review-queue-list top-gap"></div>
+                                </div>
+                                <div class="detail-panel">
+                                    <div class="detail-header">
+                                        <div>
+                                            <h3 id="review-queue-detail-title">请选择一条草稿</h3>
+                                            <p id="review-queue-detail-meta" class="muted"></p>
+                                        </div>
+                                    </div>
+                                    <div id="review-queue-detail" class="review-queue-detail detail-stack top-gap">
+                                        <div class="detail-focus-card">
+                                            <p class="item-summary">从左侧选择一条待确认草稿后，可查看正文、来源和 Reviewer 判定原因。</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="panel">
+                            <div class="panel-title-row">
+                                <div>
                                     <h2>资料源与文件</h2>
                                     <p>左侧查看资料源列表，右侧查看处理历史、文件解析方式和最近一次状态，便于排查 OCR、扫描 PDF 或 Git / 目录同步问题。</p>
                                 </div>
@@ -649,5 +684,6 @@
 <script src="/admin/admin-tabs.js?v=20260502-tabs-scroll-2"></script>
 <script src="/admin/admin-common.js?v=20260508-common-1"></script>
 <script type="module" src="/admin/management.js?v=20260508-module-1"></script>
+<script src="/admin/compile-review-queue.js?v=20260520-human-review-1"></script>
 </body>
 </html>

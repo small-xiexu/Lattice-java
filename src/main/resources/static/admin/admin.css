@@ -2691,6 +2691,106 @@ button.list-item {
             radial-gradient(circle at top right, rgba(255, 197, 107, 0.08), transparent 34%);
 }
 
+.review-queue-layout {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.35fr);
+    gap: 16px;
+    align-items: start;
+}
+
+.review-queue-status {
+    padding: 10px 12px;
+    border: 1px solid rgba(143, 190, 255, 0.12);
+    border-radius: 12px;
+    color: var(--muted);
+    background: rgba(8, 15, 29, 0.48);
+    font-size: 13px;
+}
+
+.review-queue-status[data-tone="success"] {
+    border-color: rgba(65, 214, 147, 0.2);
+    color: #b8f2d7;
+}
+
+.review-queue-status[data-tone="warning"] {
+    border-color: rgba(255, 197, 107, 0.22);
+    color: #ffdba0;
+}
+
+.review-queue-status[data-tone="danger"] {
+    border-color: rgba(255, 119, 119, 0.22);
+    color: #ffb6b6;
+}
+
+.review-queue-list,
+.review-issue-list {
+    display: grid;
+    gap: 10px;
+}
+
+.review-queue-item,
+.review-queue-empty,
+.review-issue-card {
+    display: grid;
+    gap: 9px;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid rgba(143, 190, 255, 0.1);
+    border-radius: 14px;
+    background: rgba(8, 15, 29, 0.6);
+    color: inherit;
+    text-align: left;
+}
+
+.review-queue-item {
+    cursor: pointer;
+}
+
+.review-queue-item:hover,
+.review-queue-item.active {
+    border-color: rgba(121, 210, 255, 0.28);
+    background: rgba(18, 35, 60, 0.72);
+}
+
+.review-queue-item h4 {
+    margin: 0;
+    color: #f3f7ff;
+    font-size: 14px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.review-queue-detail {
+    min-width: 0;
+}
+
+.review-queue-content {
+    max-height: 360px;
+    overflow: auto;
+}
+
+.review-queue-actions {
+    border-top: 1px solid rgba(143, 190, 255, 0.1);
+    padding-top: 12px;
+}
+
+.review-queue-technical .advanced-toggle-body {
+    display: grid;
+    gap: 12px;
+}
+
+.review-queue-tech-title {
+    margin: 4px 0 0;
+    color: var(--muted-strong);
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.danger-action {
+    border-color: rgba(255, 119, 119, 0.24);
+    color: #ffb6b6;
+}
+
 .article-review-panel[hidden] {
     display: none;
 }
@@ -5989,6 +6089,12 @@ input[type="file"]::file-selector-button:hover {
 
     .run-runtime-badge {
         min-width: 0;
+    }
+}
+
+@media (max-width: 980px) {
+    .review-queue-layout {
+        grid-template-columns: 1fr;
     }
 }
 
