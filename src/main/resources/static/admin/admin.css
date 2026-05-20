@@ -1000,6 +1000,46 @@ a {
     background: linear-gradient(180deg, rgba(74, 32, 39, 0.9), rgba(20, 17, 28, 0.92));
 }
 
+.summary-card-stack {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: 12px;
+}
+
+.summary-primary-grid,
+.summary-secondary-grid {
+    display: grid;
+    gap: 12px;
+}
+
+.summary-primary-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.summary-secondary-grid {
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    margin-top: 10px;
+}
+
+.summary-secondary-panel {
+    padding: 10px;
+    border: 1px solid rgba(143, 190, 255, 0.12);
+    border-radius: 16px;
+    background: rgba(10, 18, 34, 0.32);
+}
+
+.summary-secondary-panel > summary {
+    cursor: pointer;
+    color: var(--muted-strong);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.summary-secondary-grid .metric-card {
+    min-height: 94px;
+    padding: 10px 12px;
+}
+
 .entry-card {
     display: grid;
     gap: 12px;
@@ -4586,6 +4626,11 @@ body::after {
 
 .metric-card.danger {
     background: linear-gradient(180deg, rgba(252, 239, 237, 0.98), rgba(248, 233, 230, 0.98));
+}
+
+.summary-secondary-panel {
+    border: 1px solid rgba(76, 89, 75, 0.12);
+    background: rgba(255, 252, 247, 0.76);
 }
 
 .entry-card {

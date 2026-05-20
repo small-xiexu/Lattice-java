@@ -49,7 +49,7 @@
     }
 
     async function loadReviewQueue() {
-        setLocalStatus("正在加载待确认草稿", "info");
+        setLocalStatus("正在加载待人工确认草稿", "info");
         try {
             const response = await fetchJson("/api/v1/admin/compile/review-queue?status=needs_human_review");
             state.items = Array.isArray(response && response.items) ? response.items : [];
@@ -69,7 +69,7 @@
                 return;
             }
             renderEmptyDetail();
-            setLocalStatus(state.items.length === 0 ? "当前没有待人工确认草稿" : "待确认草稿已加载", "success");
+            setLocalStatus(state.items.length === 0 ? "当前没有待人工确认草稿" : "待人工确认草稿已加载", "success");
         }
         catch (error) {
             renderReviewQueueList(0);
@@ -124,7 +124,7 @@
     async function approveSelectedReviewQueueItem() {
         const detail = state.detail;
         if (!detail) {
-            setLocalStatus("请先选择一条待确认草稿", "warning");
+            setLocalStatus("请先选择一条待人工确认草稿", "warning");
             return;
         }
         const confirmed = window.confirm("确认后文章将进入正式知识库并参与检索。");
@@ -142,7 +142,7 @@
     async function rejectSelectedReviewQueueItem() {
         const detail = state.detail;
         if (!detail) {
-            setLocalStatus("请先选择一条待确认草稿", "warning");
+            setLocalStatus("请先选择一条待人工确认草稿", "warning");
             return;
         }
         const confirmed = window.confirm("驳回后该草稿不会进入正式知识库。");
@@ -220,7 +220,7 @@
                     + "<span class='pill'>" + escapeHtml(formatDateTime(item.updatedAt || item.createdAt)) + "</span>"
                     + "</div>"
                     + "<h4>" + escapeHtml(item.title || "未命名草稿") + "</h4>"
-                    + "<p class='item-summary'>Reviewer 判定需要人工确认</p>"
+                    + "<p class='item-summary'>质量检查需要人工确认</p>"
                     + "<div class='tag-list'>"
                     + renderSourcePathPills(item.sourcePaths, 2)
                     + "</div>"
@@ -266,7 +266,7 @@
                 + "<div class='tag-list'>" + renderSourcePathPills(detail.sourcePaths, 20) + "</div>"
                 + "</section>"
                 + "<section class='detail-section'>"
-                + "<h4>Reviewer 判定</h4>"
+                + "<h4>待人工确认说明</h4>"
                 + renderReviewIssues(detail.reviewIssuesJson)
                 + "</section>"
                 + "<section class='detail-section'>"
@@ -302,7 +302,7 @@
         }
         if (container) {
             container.innerHTML = "<div class='detail-focus-card'>"
-                    + "<p class='item-summary'>从左侧选择一条待确认草稿后，可查看正文、来源和 Reviewer 判定原因。</p>"
+                    + "<p class='item-summary'>从左侧选择一条待人工确认草稿后，可查看正文、来源和待人工确认说明。</p>"
                     + "</div>";
         }
     }
@@ -311,7 +311,7 @@
         const issues = parseJsonValue(reviewIssuesJson);
         if (!Array.isArray(issues) || issues.length === 0) {
             return "<div class='review-queue-empty'>"
-                    + "<p class='item-summary'>Reviewer 判定需要人工确认，但未返回结构化问题详情。</p>"
+                    + "<p class='item-summary'>质量检查需要人工确认，但未返回结构化问题详情。</p>"
                     + "</div>";
         }
         return "<div class='review-issue-list'>"
@@ -383,7 +383,7 @@
 
     function buildDetailMeta(detail) {
         const parts = [];
-        parts.push("Reviewer 判定需要人工确认");
+        parts.push("质量检查需要人工确认");
         if (detail.updatedAt || detail.createdAt) {
             parts.push("更新时间：" + formatDateTime(detail.updatedAt || detail.createdAt));
         }
@@ -459,5 +459,16 @@
 
     function getErrorMessage(error) {
         return error && error.message ? error.message : String(error || "未知错误");
+    }
+
+    if (typeof globalThis !== "undefined" && globalThis.__LATTICE_ADMIN_TEST__) {
+        globalThis.__LATTICE_ADMIN_TEST__.compileReviewQueue = {
+            state: state,
+            renderEmptyDetail: renderEmptyDetail,
+            renderReviewQueueDetail: renderReviewQueueDetail,
+            renderReviewQueueList: renderReviewQueueList,
+            renderReviewIssues: renderReviewIssues,
+            buildDetailMeta: buildDetailMeta
+        };
     }
 })();

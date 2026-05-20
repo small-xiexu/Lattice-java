@@ -21,6 +21,56 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ManagementJsRuntimeTests {
 
     /**
+     * 验证待人工确认空态文案不再暴露 Reviewer 表述。
+     *
+     * @throws Exception 读取文件异常
+     */
+    @Test
+    void shouldUseHumanReadableQualityCheckCopyInReviewQueuePlaceholder() throws Exception {
+        String userDir = System.getProperty("user.dir");
+        Path indexHtmlPath = Path.of(userDir, "src/main/resources/static/admin/index.html");
+        assertThat(Files.exists(indexHtmlPath)).isTrue();
+
+        String html = Files.readString(indexHtmlPath, StandardCharsets.UTF_8);
+        assertThat(html).contains("待人工确认说明");
+        assertThat(html).doesNotContain("Reviewer 判定原因");
+        assertThat(html).doesNotContain("质量检查给出的原因");
+    }
+
+    /**
+     * 验证 compile-review-queue.js 的真实运行时渲染路径不再输出 Reviewer 文案。
+     *
+     * @param tempDir 临时目录
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldRenderHumanReadableQualityCheckCopyFromCompileReviewQueueRuntime(@TempDir Path tempDir) throws Exception {
+        String userDir = System.getProperty("user.dir");
+        Path adminCommonJsPath = Path.of(userDir, "src/main/resources/static/admin/admin-common.js");
+        Path compileReviewQueueJsPath = Path.of(userDir, "src/main/resources/static/admin/compile-review-queue.js");
+        assertThat(Files.exists(adminCommonJsPath)).isTrue();
+        assertThat(Files.exists(compileReviewQueueJsPath)).isTrue();
+
+        Path harnessScriptPath = tempDir.resolve("compile-review-queue-runtime-test.js");
+        Files.writeString(harnessScriptPath, buildCompileReviewQueueHarnessScript(), StandardCharsets.UTF_8);
+
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "node",
+                harnessScriptPath.toString(),
+                adminCommonJsPath.toString(),
+                compileReviewQueueJsPath.toString()
+        );
+        processBuilder.redirectErrorStream(true);
+        Process process = processBuilder.start();
+        String output = readProcessOutput(process);
+        int exitCode = process.waitFor();
+        assertThat(exitCode)
+                .as(output)
+                .isZero();
+        assertThat(output).contains("compile-review-queue-runtime-tests:ok");
+    }
+
+    /**
      * 验证运行态回退、疑似卡住提示、稳定错误文案与重新同步入口都会按预期工作。
      *
      * @param tempDir 临时目录
@@ -140,6 +190,8 @@ class ManagementJsRuntimeTests {
                 assert(articleUi, "missing __LATTICE_ADMIN_TEST__.article export");
                 assert(typeof sourceUi.focusSourceRunDetail === "function",
                     "missing focusSourceRunDetail export");
+                assert(typeof runs.selectRecentRunBoardItems === "function",
+                    "missing selectRecentRunBoardItems export");
 
                 const fallbackRun = { status: "RUNNING", currentStepLabel: "写入知识库", progressText: "等待下一步刷新" };
                 assert(runs.resolveRunDisplayStatus(fallbackRun) === "RUNNING",
@@ -309,7 +361,7 @@ class ManagementJsRuntimeTests {
                     status: "FAILED",
                     displayStatus: "FAILED",
                     displayStatusLabel: "失败",
-                    nextStepHint: "检查原因摘要后重新同步资料源",
+                    nextStepHint: "检查处理提示后重新同步资料源",
                     reasonSummary: "编译执行过程中出现异常",
                     actions: [{
                         actionKey: "RESYNC_SOURCE",
@@ -321,7 +373,7 @@ class ManagementJsRuntimeTests {
                     }]
                 }, {
                     label: "处理失败",
-                    nextStep: "检查原因摘要后重新同步资料源",
+                    nextStep: "检查处理提示后重新同步资料源",
                     tone: "danger"
                 });
                 assert(structuredActionMarkup.includes("data-resync-source='99'"),
@@ -353,6 +405,54 @@ class ManagementJsRuntimeTests {
                     "promoted completion run should render as a spotlight card");
                 assert(!promotedRunMarkup.includes("当前阶段"),
                     "promoted completion run should hide duplicated stage highlight");
+                const olderSucceededRun = Object.assign({}, succeededRun, {
+                    title: "较早完成任务.md",
+                    updatedAt: "2026-05-01T15:08:00+08:00",
+                    requestedAt: "2026-05-01T15:00:00+08:00"
+                });
+                const latestSucceededRun = Object.assign({}, succeededRun, {
+                    title: "最新完成任务.md",
+                    updatedAt: "2026-05-02T15:08:00+08:00",
+                    requestedAt: "2026-05-02T15:00:00+08:00"
+                });
+                const selectedCompletionItems = runs.selectRecentRunBoardItems([olderSucceededRun, latestSucceededRun]);
+                assert(selectedCompletionItems.length === 1,
+                    "run board should show only the latest completion when there is no active task");
+                assert(selectedCompletionItems[0].title === "最新完成任务.md",
+                    "run board should keep the newest completion notice only");
+                const operationalNoteMarkup = runs.renderRecentRunBoardItem({
+                    status: "RUNNING",
+                    displayStatus: "RUNNING",
+                    sourceType: "UPLOAD",
+                    title: "正在处理的资料.md",
+                    progressText: "正在整理资料",
+                    operationalNote: "请等待本轮处理完成后再提问",
+                    requestedAt: "2026-05-02T16:08:00+08:00"
+                });
+                assert(operationalNoteMarkup.includes("请等待本轮处理完成后再提问"),
+                    "operational note should still render useful action copy");
+                assert(!operationalNoteMarkup.includes("任务线索"),
+                    "operational note should not expose the old task-clue label");
+                const waitConfirmSnapshot = runs.buildRunRuntimeSnapshot({
+                    status: "WAIT_CONFIRM",
+                    displayStatus: "WAIT_CONFIRM",
+                    progressText: "等待人工确认",
+                    reasonSummary: "需要选择这批资料的归并方式"
+                });
+                assert(waitConfirmSnapshot.includes("处理提示"),
+                    "runtime snapshot should use user-facing processing hint label");
+                assert(!waitConfirmSnapshot.includes("原因摘要"),
+                    "runtime snapshot should not expose engineering-style reason summary label");
+                const waitConfirmMarkup = runs.renderRecentRunBoardItem({
+                    status: "WAIT_CONFIRM",
+                    displayStatus: "WAIT_CONFIRM",
+                    title: "待确认资料.md",
+                    reasonSummary: "需要选择这批资料的归并方式"
+                });
+                assert(waitConfirmMarkup.includes("待人工确认"),
+                    "wait-confirm status should render the unified human-confirmation label");
+                assert(!waitConfirmMarkup.includes(">待确认<"),
+                    "wait-confirm status should not render the old short confirmation label");
 
                 const failedRun = {
                     status: "FAILED",
@@ -531,18 +631,32 @@ class ManagementJsRuntimeTests {
                     }
                 };
                 knowledgeUi.renderSummary(sandbox.__LATTICE_ADMIN_TEST_STATE__.overview, {});
-                assert(summaryElements["summary-cards"].innerHTML.includes("需复核内容"),
-                    "summary cards should expose manual review count");
+                assert(summaryElements["summary-cards"].innerHTML.includes("summary-primary-grid"),
+                    "summary cards should render primary metric section");
+                assert(summaryElements["summary-cards"].innerHTML.includes("summary-secondary-panel"),
+                    "summary cards should fold lower-priority governance metrics");
                 assert(summaryElements["summary-cards"].innerHTML.includes("待人工确认草稿"),
                     "summary cards should expose compile review queue pending draft count");
-                assert(summaryElements["summary-cards"].innerHTML.includes("编译审查后等待人工发布的草稿"),
+                assert(summaryElements["summary-cards"].innerHTML.includes("质量检查需要人工确认的草稿"),
                     "summary card should distinguish unpublished compile review drafts");
+                assert(summaryElements["summary-cards"].innerHTML.includes("答案反馈待处理"),
+                    "summary cards should expose answer feedback pending count with user-facing copy");
+                assert(summaryElements["summary-cards"].innerHTML.includes("已确认修正"),
+                    "summary cards should rename feedback contribution to confirmed fixes");
+                assert(summaryElements["summary-cards"].innerHTML.includes("待分析提问"),
+                    "summary cards should rename pending query backlog");
+                assert(summaryElements["summary-cards"].innerHTML.includes("已入库待复核"),
+                    "summary cards should keep article review backlog as a secondary governance metric");
                 assert(summaryElements["summary-cards"].innerHTML.includes("高风险内容"),
                     "summary cards should expose high risk count");
                 assert(summaryElements["summary-cards"].innerHTML.includes("复核状态筛选"),
                     "summary card should guide to review status filter");
-                assert(summaryElements["summary-cards"].innerHTML.includes("结果反馈待处理"),
-                    "summary cards should expose answer feedback pending count");
+                assert(!summaryElements["summary-cards"].innerHTML.includes("反馈沉淀"),
+                    "summary cards should avoid old engineering-style contribution copy");
+                assert(!summaryElements["summary-cards"].innerHTML.includes("待处理反馈"),
+                    "summary cards should avoid ambiguous pending feedback copy");
+                assert(!summaryElements["summary-cards"].innerHTML.includes("结果反馈待处理"),
+                    "summary cards should use clearer answer feedback copy");
                 const helpState = knowledgeUi.deriveKnowledgeHelpState();
                 assert(helpState.description.includes("待人工确认"),
                     "help state should guide to compile review queue before article review backlog");
@@ -741,6 +855,126 @@ class ManagementJsRuntimeTests {
                     "clicking source run rows should focus the detail panel");
 
                 console.log("management-js-runtime-tests:ok");
+                """;
+    }
+
+    /**
+     * 构造 compile review queue runtime 专用 Node 测试脚本。
+     *
+     * @return 测试脚本文本
+     */
+    private String buildCompileReviewQueueHarnessScript() {
+        return """
+                const fs = require("fs");
+                const vm = require("vm");
+
+                const commonSource = fs.readFileSync(process.argv[2], "utf8");
+                const queueSource = fs.readFileSync(process.argv[3], "utf8");
+
+                const elements = {};
+
+                function createElement() {
+                    return {
+                        textContent: "",
+                        innerHTML: "",
+                        hidden: false,
+                        disabled: false,
+                        className: "",
+                        dataset: {},
+                        addEventListener: function () {},
+                        querySelectorAll: function () { return []; },
+                        classList: {
+                            toggle: function () {},
+                            add: function () {},
+                            remove: function () {}
+                        }
+                    };
+                }
+
+                function getElement(id) {
+                    if (!elements[id]) {
+                        elements[id] = createElement();
+                    }
+                    return elements[id];
+                }
+
+                const sandbox = {
+                    console: console,
+                    window: {
+                        AdminCommon: {},
+                        confirm: function () { return true; },
+                        prompt: function () { return "admin"; }
+                    },
+                    document: {
+                        addEventListener: function () {},
+                        getElementById: function (id) {
+                            return getElement(id);
+                        },
+                        querySelectorAll: function () { return []; }
+                    },
+                    globalThis: null,
+                    __LATTICE_ADMIN_TEST__: {}
+                };
+
+                sandbox.window.document = sandbox.document;
+                sandbox.globalThis = sandbox;
+
+                vm.runInNewContext(commonSource, sandbox, { filename: "admin-common.js" });
+                vm.runInNewContext(queueSource, sandbox, { filename: "compile-review-queue.js" });
+
+                const queueUi = sandbox.__LATTICE_ADMIN_TEST__.compileReviewQueue;
+
+                function assert(condition, message) {
+                    if (!condition) {
+                        throw new Error(message);
+                    }
+                }
+
+                assert(queueUi, "missing __LATTICE_ADMIN_TEST__.compileReviewQueue export");
+
+                queueUi.renderEmptyDetail();
+                assert(elements["review-queue-detail"].innerHTML.includes("待人工确认说明"),
+                    "empty detail should render human-review wording");
+                assert(!elements["review-queue-detail"].innerHTML.includes("Reviewer 判定原因"),
+                    "empty detail should not render reviewer wording");
+
+                queueUi.state.items = [{
+                    id: "draft-1",
+                    title: "草稿一",
+                    sourcePaths: ["docs/a.md"],
+                    fixAttemptCount: 1,
+                    maxFixRounds: 2,
+                    updatedAt: "2026-05-20T16:00:00+08:00"
+                }];
+                queueUi.renderReviewQueueList(1);
+                assert(elements["review-queue-list"].innerHTML.includes("质量检查需要人工确认"),
+                    "list item should render quality-check wording");
+                assert(!elements["review-queue-list"].innerHTML.includes("Reviewer 判定需要人工确认"),
+                    "list item should not render reviewer wording");
+
+                queueUi.renderReviewQueueDetail({
+                    id: "draft-1",
+                    title: "草稿一",
+                    content: "正文",
+                    sourcePaths: ["docs/a.md"],
+                    reviewIssuesJson: "[]",
+                    fixAttemptCount: 1,
+                    maxFixRounds: 2,
+                    updatedAt: "2026-05-20T16:00:00+08:00"
+                });
+                assert(elements["review-queue-detail"].innerHTML.includes("待人工确认说明"),
+                    "detail section should render human-review heading");
+                assert(elements["review-queue-detail"].innerHTML.includes("质量检查需要人工确认，但未返回结构化问题详情。"),
+                    "detail fallback should render quality-check copy");
+                assert(!elements["review-queue-detail"].innerHTML.includes("Reviewer"),
+                    "detail runtime should not render reviewer wording");
+
+                assert(queueUi.buildDetailMeta({
+                    updatedAt: "2026-05-20T16:00:00+08:00"
+                }).includes("质量检查需要人工确认"),
+                    "detail meta should render quality-check copy");
+
+                console.log("compile-review-queue-runtime-tests:ok");
                 """;
     }
 
