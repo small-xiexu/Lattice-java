@@ -43,9 +43,20 @@ public class CompileArticleNode {
 
     private static final Pattern REFERENTIAL_PATTERN = Pattern.compile("[A-Za-z0-9_-]+=[A-Za-z0-9._-]+|\\b\\d{3,5}\\b");
 
+    private static final Pattern ARTICLE_SOURCE_REF_PATTERN =
+            Pattern.compile("\\[→\\s*([^\\],\\n]+)(?:,\\s*([^\\]\\n]+))?\\]");
+
+    private static final Pattern ARTICLE_HEADING_PATTERN = Pattern.compile("(?m)^#{1,6}\\s+(.+?)\\s*$");
+
     private static final String COMPILE_SCENE = "compile";
 
     private static final String WRITER_ROLE = "writer";
+
+    private static final int WRITER_SOURCE_SNIPPET_MAX_CHARS = 4000;
+
+    private static final int REVIEW_SOURCE_PAYLOAD_MAX_CHARS = 9000;
+
+    private static final int REVIEW_SOURCE_PER_SOURCE_MAX_CHARS = 4000;
 
     private final LlmGateway llmGateway;
 
@@ -199,7 +210,7 @@ public class CompileArticleNode {
         ArticleRecord draftArticle = compileDraft(mergedConcept, sourceDir);
         String markdownContent = draftArticle.getContent();
         String reviewStatus = "pending";
-        String sourceContents = buildSourceContents(draftArticle.getSourcePaths(), draftArticle.getSourceId());
+        String sourceContents = buildReviewSourceContents(mergedConcept, draftArticle);
         if (articleReviewerGateway != null && articleReviewerGateway.isEnabled()) {
             ReviewResult reviewResult = articleReviewerGateway.review(markdownContent, sourceContents);
             if (reviewResult.isPass()) {
@@ -258,6 +269,37 @@ public class CompileArticleNode {
             builder.append("=== End ===");
         }
         return builder.toString();
+    }
+
+    /**
+     * 为 Reviewer/Fixer 构建相关片段优先的来源正文。
+     *
+     * @param articleRecord 草稿文章
+     * @return 来源正文片段
+     */
+    public String buildReviewSourceContents(ArticleRecord articleRecord) {
+        List<String> sourcePaths = safeList(articleRecord == null ? null : articleRecord.getSourcePaths());
+        Long sourceId = articleRecord == null ? null : articleRecord.getSourceId();
+        List<String> conceptTerms = buildArticleTerms(articleRecord);
+        List<String> sourceRefs = extractArticleSourceRefs(articleRecord);
+        return buildRelevantSourceContents(sourcePaths, sourceId, conceptTerms, sourceRefs, REVIEW_SOURCE_PAYLOAD_MAX_CHARS);
+    }
+
+    /**
+     * 为 Reviewer/Fixer 构建相关片段优先的来源正文。
+     *
+     * @param mergedConcept 合并概念
+     * @param articleRecord 草稿文章
+     * @return 来源正文片段
+     */
+    public String buildReviewSourceContents(MergedConcept mergedConcept, ArticleRecord articleRecord) {
+        List<String> sourcePaths = mergedConcept == null
+                ? safeList(articleRecord == null ? null : articleRecord.getSourcePaths())
+                : safeList(mergedConcept.getSourcePaths());
+        Long sourceId = articleRecord == null ? null : articleRecord.getSourceId();
+        List<String> conceptTerms = buildReviewConceptTerms(mergedConcept, articleRecord);
+        List<String> sourceRefs = buildReviewSourceRefs(mergedConcept, articleRecord);
+        return buildRelevantSourceContents(sourcePaths, sourceId, conceptTerms, sourceRefs, REVIEW_SOURCE_PAYLOAD_MAX_CHARS);
     }
 
     /**
@@ -609,7 +651,7 @@ public class CompileArticleNode {
         if (!selectedBySourceRef.isBlank()) {
             return selectedBySourceRef;
         }
-        return documentSectionSelector.select(content, buildConceptTerms(mergedConcept), 4000);
+        return documentSectionSelector.select(content, buildConceptTerms(mergedConcept), WRITER_SOURCE_SNIPPET_MAX_CHARS);
     }
 
     /**
@@ -621,36 +663,370 @@ public class CompileArticleNode {
      * @return 命中的章节拼接结果；未命中时返回空字符串
      */
     private String selectContentBySourceRefs(String content, MergedConcept mergedConcept, String sourcePath) {
+        return selectContentBySourceRefs(content, collectSourceRefs(mergedConcept), sourcePath);
+    }
+
+    /**
+     * 按 sourceRef 读取与指定来源路径最相关的 Markdown 章节。
+     *
+     * @param content 源文件正文
+     * @param sourceRefs 来源引用
+     * @param sourcePath 来源路径
+     * @return 命中的章节拼接结果；未命中时返回空字符串
+     */
+    private String selectContentBySourceRefs(String content, List<String> sourceRefs, String sourcePath) {
         List<String> matchedSections = new ArrayList<String>();
-        for (ConceptSection section : mergedConcept.getSections()) {
-            for (String sourceRef : section.getSourceRefs()) {
-                if (sourceRef == null || sourceRef.isBlank()) {
-                    continue;
-                }
-                String normalizedSourceRef = sourceRef.trim();
-                if (!normalizedSourceRef.startsWith(sourcePath + "#")) {
-                    continue;
-                }
-                int anchorIndex = normalizedSourceRef.indexOf('#');
-                if (anchorIndex < 0 || anchorIndex + 1 >= normalizedSourceRef.length()) {
-                    continue;
-                }
-                String anchor = normalizedSourceRef.substring(anchorIndex + 1).trim();
-                if (anchor.isEmpty() || anchor.toLowerCase(Locale.ROOT).startsWith("page ")) {
-                    continue;
-                }
-                DocumentSectionSelector.DocumentSection documentSection =
-                        documentSectionSelector.readSection(content, anchor);
-                if (documentSection.getContent() == null || documentSection.getContent().isBlank()) {
-                    continue;
-                }
-                matchedSections.add(documentSection.getContent().trim());
+        for (String sourceRef : sourceRefs) {
+            if (sourceRef == null || sourceRef.isBlank()) {
+                continue;
             }
+            String normalizedSourceRef = sourceRef.trim();
+            if (!normalizedSourceRef.startsWith(sourcePath + "#")) {
+                continue;
+            }
+            int anchorIndex = normalizedSourceRef.indexOf('#');
+            if (anchorIndex < 0 || anchorIndex + 1 >= normalizedSourceRef.length()) {
+                continue;
+            }
+            String anchor = normalizedSourceRef.substring(anchorIndex + 1).trim();
+            if (anchor.isEmpty() || anchor.toLowerCase(Locale.ROOT).startsWith("page ")) {
+                continue;
+            }
+            DocumentSectionSelector.DocumentSection documentSection =
+                    documentSectionSelector.readSection(content, anchor);
+            if (documentSection.getContent() == null || documentSection.getContent().isBlank()) {
+                continue;
+            }
+            matchedSections.add(documentSection.getContent().trim());
         }
         if (matchedSections.isEmpty()) {
             return "";
         }
         return String.join("\n\n", matchedSections);
+    }
+
+    /**
+     * 构建相关片段优先的来源正文。
+     *
+     * @param sourcePaths 来源路径列表
+     * @param sourceId 资料源主键
+     * @param conceptTerms 概念关键词
+     * @param sourceRefs 来源引用
+     * @param maxPayloadChars 最大 payload 字符数
+     * @return 来源正文片段
+     */
+    private String buildRelevantSourceContents(
+            List<String> sourcePaths,
+            Long sourceId,
+            List<String> conceptTerms,
+            List<String> sourceRefs,
+            int maxPayloadChars
+    ) {
+        List<SourceContentCandidate> candidates = resolveSourceContentCandidates(sourcePaths, sourceId);
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < candidates.size(); index++) {
+            SourceContentCandidate candidate = candidates.get(index);
+            int remainingSources = candidates.size() - index;
+            int contentBudget = calculateSourceContentBudget(builder.length(), remainingSources, maxPayloadChars);
+            if (contentBudget <= 0) {
+                break;
+            }
+            String selectedContent = selectBoundedRelevantContent(
+                    candidate.getContent(),
+                    conceptTerms,
+                    sourceRefs,
+                    candidate.getSourcePath(),
+                    contentBudget
+            );
+            if (!appendBoundedSourceBlock(builder, candidate.getSourcePath(), selectedContent, maxPayloadChars)) {
+                break;
+            }
+        }
+        return builder.toString();
+    }
+
+    /**
+     * 查询来源内容候选。
+     *
+     * @param sourcePaths 来源路径列表
+     * @param sourceId 资料源主键
+     * @return 来源内容候选
+     */
+    private List<SourceContentCandidate> resolveSourceContentCandidates(List<String> sourcePaths, Long sourceId) {
+        List<SourceContentCandidate> candidates = new ArrayList<SourceContentCandidate>();
+        for (String sourcePath : safeList(sourcePaths)) {
+            Optional<SourceFileRecord> sourceFileRecord = sourceId == null
+                    ? sourceFileJdbcRepository.findByPath(sourcePath)
+                    : sourceFileJdbcRepository.findBySourceIdAndRelativePath(sourceId, sourcePath);
+            if (sourceFileRecord.isEmpty()) {
+                sourceFileRecord = sourceFileJdbcRepository.findByPath(sourcePath);
+            }
+            if (sourceFileRecord.isEmpty()) {
+                continue;
+            }
+            candidates.add(new SourceContentCandidate(sourcePath, sourceFileRecord.orElseThrow().getContentText()));
+        }
+        return candidates;
+    }
+
+    /**
+     * 计算单个来源在剩余 payload 中的内容预算。
+     *
+     * @param currentLength 当前 payload 长度
+     * @param remainingSources 剩余来源数
+     * @param maxPayloadChars 最大 payload 字符数
+     * @return 内容预算
+     */
+    private int calculateSourceContentBudget(int currentLength, int remainingSources, int maxPayloadChars) {
+        int remainingPayload = maxPayloadChars - currentLength;
+        if (remainingPayload <= 0 || remainingSources <= 0) {
+            return 0;
+        }
+        int sharedBudget = remainingPayload / remainingSources;
+        return Math.min(REVIEW_SOURCE_PER_SOURCE_MAX_CHARS, sharedBudget);
+    }
+
+    /**
+     * 选择有界相关来源片段。
+     *
+     * @param content 源文件正文
+     * @param conceptTerms 概念关键词
+     * @param sourceRefs 来源引用
+     * @param sourcePath 来源路径
+     * @param maxChars 最大字符数
+     * @return 来源片段
+     */
+    private String selectBoundedRelevantContent(
+            String content,
+            List<String> conceptTerms,
+            List<String> sourceRefs,
+            String sourcePath,
+            int maxChars
+    ) {
+        String selectedBySourceRef = selectContentBySourceRefs(content, sourceRefs, sourcePath);
+        if (!selectedBySourceRef.isBlank()) {
+            return boundText(selectedBySourceRef, maxChars);
+        }
+        String selectedByTerms = documentSectionSelector.select(content, conceptTerms, maxChars);
+        return boundText(selectedByTerms, maxChars);
+    }
+
+    /**
+     * 追加受总预算约束的来源块。
+     *
+     * @param builder payload 构建器
+     * @param sourcePath 来源路径
+     * @param selectedContent 已选来源片段
+     * @param maxPayloadChars 最大 payload 字符数
+     * @return 是否成功追加
+     */
+    private boolean appendBoundedSourceBlock(
+            StringBuilder builder,
+            String sourcePath,
+            String selectedContent,
+            int maxPayloadChars
+    ) {
+        String separator = builder.length() > 0 ? "\n\n" : "";
+        String header = "=== Source: " + sourcePath + " ===\n";
+        String footer = "\n=== End ===";
+        int reservedLength = separator.length() + header.length() + footer.length();
+        int remainingContentChars = maxPayloadChars - builder.length() - reservedLength;
+        if (remainingContentChars <= 0) {
+            return false;
+        }
+        String boundedContent = boundText(selectedContent, remainingContentChars);
+        builder.append(separator);
+        builder.append(header);
+        builder.append(boundedContent);
+        builder.append(footer);
+        return true;
+    }
+
+    /**
+     * 截断文本到指定长度。
+     *
+     * @param text 原始文本
+     * @param maxChars 最大字符数
+     * @return 有界文本
+     */
+    private String boundText(String text, int maxChars) {
+        if (text == null || maxChars <= 0) {
+            return "";
+        }
+        if (text.length() <= maxChars) {
+            return text;
+        }
+        return text.substring(0, maxChars).trim();
+    }
+
+    /**
+     * 构建审查来源引用集合。
+     *
+     * @param mergedConcept 合并概念
+     * @param articleRecord 草稿文章
+     * @return 来源引用集合
+     */
+    private List<String> buildReviewSourceRefs(MergedConcept mergedConcept, ArticleRecord articleRecord) {
+        LinkedHashSet<String> sourceRefs = new LinkedHashSet<String>();
+        sourceRefs.addAll(collectSourceRefs(mergedConcept));
+        sourceRefs.addAll(extractArticleSourceRefs(articleRecord));
+        return new ArrayList<String>(sourceRefs);
+    }
+
+    /**
+     * 收集概念章节来源引用。
+     *
+     * @param mergedConcept 合并概念
+     * @return 来源引用集合
+     */
+    private List<String> collectSourceRefs(MergedConcept mergedConcept) {
+        LinkedHashSet<String> sourceRefs = new LinkedHashSet<String>();
+        if (mergedConcept == null || mergedConcept.getSections() == null) {
+            return new ArrayList<String>(sourceRefs);
+        }
+        for (ConceptSection section : mergedConcept.getSections()) {
+            for (String sourceRef : safeList(section.getSourceRefs())) {
+                if (sourceRef == null || sourceRef.isBlank()) {
+                    continue;
+                }
+                sourceRefs.add(sourceRef.trim());
+            }
+        }
+        return new ArrayList<String>(sourceRefs);
+    }
+
+    /**
+     * 从文章正文引用中抽取来源引用。
+     *
+     * @param articleRecord 草稿文章
+     * @return 来源引用集合
+     */
+    private List<String> extractArticleSourceRefs(ArticleRecord articleRecord) {
+        LinkedHashSet<String> sourceRefs = new LinkedHashSet<String>();
+        if (articleRecord == null || articleRecord.getContent() == null || articleRecord.getContent().isBlank()) {
+            return new ArrayList<String>(sourceRefs);
+        }
+        Matcher matcher = ARTICLE_SOURCE_REF_PATTERN.matcher(articleRecord.getContent());
+        while (matcher.find()) {
+            String sourcePath = matcher.group(1).trim();
+            String section = matcher.group(2);
+            if (section == null || section.isBlank()) {
+                sourceRefs.add(sourcePath);
+                continue;
+            }
+            sourceRefs.add(sourcePath + "#" + section.trim());
+        }
+        return new ArrayList<String>(sourceRefs);
+    }
+
+    /**
+     * 构建审查关键词集合。
+     *
+     * @param mergedConcept 合并概念
+     * @param articleRecord 草稿文章
+     * @return 审查关键词集合
+     */
+    private List<String> buildReviewConceptTerms(MergedConcept mergedConcept, ArticleRecord articleRecord) {
+        LinkedHashSet<String> conceptTerms = new LinkedHashSet<String>();
+        if (mergedConcept != null) {
+            conceptTerms.addAll(buildConceptTerms(mergedConcept));
+        }
+        conceptTerms.addAll(buildArticleTerms(articleRecord));
+        return new ArrayList<String>(conceptTerms);
+    }
+
+    /**
+     * 从文章记录构建通用审查关键词。
+     *
+     * @param articleRecord 草稿文章
+     * @return 审查关键词集合
+     */
+    private List<String> buildArticleTerms(ArticleRecord articleRecord) {
+        LinkedHashSet<String> conceptTerms = new LinkedHashSet<String>();
+        if (articleRecord == null) {
+            return new ArrayList<String>(conceptTerms);
+        }
+        addTextIfPresent(conceptTerms, articleRecord.getTitle());
+        if (articleRecord.getConceptId() != null) {
+            addTextIfPresent(conceptTerms, articleRecord.getConceptId().replace('-', ' '));
+        }
+        addTextIfPresent(conceptTerms, articleRecord.getSummary());
+        for (String keyword : safeList(articleRecord.getReferentialKeywords())) {
+            addTextIfPresent(conceptTerms, keyword);
+        }
+        if (articleRecord.getContent() != null) {
+            Matcher matcher = ARTICLE_HEADING_PATTERN.matcher(articleRecord.getContent());
+            while (matcher.find()) {
+                addTextIfPresent(conceptTerms, matcher.group(1));
+            }
+        }
+        return new ArrayList<String>(conceptTerms);
+    }
+
+    /**
+     * 向集合追加非空文本。
+     *
+     * @param values 文本集合
+     * @param value 候选文本
+     */
+    private void addTextIfPresent(LinkedHashSet<String> values, String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        values.add(value.trim());
+    }
+
+    /**
+     * 返回非空列表。
+     *
+     * @param values 原始列表
+     * @return 非空列表
+     */
+    private List<String> safeList(List<String> values) {
+        return values == null ? List.of() : values;
+    }
+
+    /**
+     * 来源内容候选。
+     *
+     * 职责：承载已定位的 source path 与源文件正文
+     *
+     * @author xiexu
+     */
+    private static final class SourceContentCandidate {
+
+        private final String sourcePath;
+
+        private final String content;
+
+        /**
+         * 创建来源内容候选。
+         *
+         * @param sourcePath 来源路径
+         * @param content 源文件正文
+         */
+        private SourceContentCandidate(String sourcePath, String content) {
+            this.sourcePath = sourcePath;
+            this.content = content;
+        }
+
+        /**
+         * 获取来源路径。
+         *
+         * @return 来源路径
+         */
+        private String getSourcePath() {
+            return sourcePath;
+        }
+
+        /**
+         * 获取源文件正文。
+         *
+         * @return 源文件正文
+         */
+        private String getContent() {
+            return content;
+        }
     }
 
     /**

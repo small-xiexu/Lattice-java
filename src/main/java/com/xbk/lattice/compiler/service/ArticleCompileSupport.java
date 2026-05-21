@@ -278,10 +278,7 @@ public class ArticleCompileSupport {
                     total,
                     buildReviewProgressMessage(index + 1, total, draftArticle)
             );
-            String sourceContents = compileArticleNode.buildSourceContents(
-                    draftArticle.getSourcePaths(),
-                    draftArticle.getSourceId()
-            );
+            String sourceContents = compileArticleNode.buildReviewSourceContents(draftArticle);
             long startedAtNanos = System.nanoTime();
             ReviewerResult reviewerResult = reviewerAgent.review(new ReviewTask(
                     draftArticle,
@@ -358,10 +355,7 @@ public class ArticleCompileSupport {
                 fixedArticles.add(reviewEnvelope);
                 continue;
             }
-            String sourceContents = compileArticleNode.buildSourceContents(
-                    reviewEnvelope.getArticle().getSourcePaths(),
-                    reviewEnvelope.getArticle().getSourceId()
-            );
+            String sourceContents = compileArticleNode.buildReviewSourceContents(reviewEnvelope.getArticle());
             long startedAtNanos = System.nanoTime();
             FixerResult fixerResult = fixerAgent.fix(new FixTask(
                     reviewEnvelope.getArticle(),

@@ -229,6 +229,144 @@ class CompileArticleReviewFlowTests {
     }
 
     /**
+     * 验证审查与修复阶段接收 sourceRef 相关片段，而不是完整来源全文前缀。
+     */
+    @Test
+    void shouldPassRelevantSourcePayloadToReviewerAndFixer() {
+        FakeSourceFileJdbcRepository sourceFileJdbcRepository = new FakeSourceFileJdbcRepository();
+        sourceFileJdbcRepository.putRecord(new SourceFileRecord(
+                "docs/compile.md",
+                "compile",
+                "md",
+                12000L,
+                buildLongCompileSource(),
+                "{}",
+                false,
+                "docs/compile.md"
+        ));
+        StubArticleReviewerGateway reviewerGateway = new StubArticleReviewerGateway(
+                ReviewResult.issuesFound(List.of(new ReviewIssue("HIGH", "MISSING_REF", "缺少 reviewer payload"))),
+                true
+        );
+        StubReviewFixService reviewFixService = new StubReviewFixService("""
+                ---
+                title: "Compile Runtime Gate"
+                summary: "desc"
+                referential_keywords: ["reviewer-route"]
+                sources: ["docs/compile.md"]
+                depends_on: []
+                related: []
+                confidence: medium
+                review_status: pending
+                ---
+
+                # Compile Runtime Gate
+                """
+        );
+        CompileArticleNode compileArticleNode = new CompileArticleNode(
+                createLlmGateway("""
+                        ---
+                        title: "Compile Runtime Gate"
+                        summary: "desc"
+                        referential_keywords: ["reviewer-route"]
+                        sources: ["docs/compile.md"]
+                        depends_on: []
+                        related: []
+                        confidence: medium
+                        compiled_at: "2026-04-16T11:00:00+08:00"
+                        review_status: pending
+                        ---
+
+                        # Compile Runtime Gate
+                        """, "{}"),
+                sourceFileJdbcRepository,
+                new DocumentSectionSelector(),
+                reviewerGateway,
+                reviewFixService
+        );
+
+        compileArticleNode.compile(new MergedConcept(
+                "compile-runtime-gate",
+                "Compile Runtime Gate",
+                "desc",
+                List.of("docs/compile.md"),
+                List.of("reviewer-route"),
+                List.of(new ConceptSection(
+                        "Runtime Gate",
+                        List.of("reviewer-route = openai", "fixer-route = openai"),
+                        List.of("docs/compile.md#Runtime Gate")
+                ))
+        ));
+
+        assertThat(reviewerGateway.getLastSourceContents()).contains("## Runtime Gate");
+        assertThat(reviewerGateway.getLastSourceContents()).contains("reviewer-route = openai");
+        assertThat(reviewerGateway.getLastSourceContents()).doesNotContain("NOISE-LINE-80");
+        assertThat(reviewerGateway.getLastSourceContents()).doesNotContain("UNRELATED-MARKER");
+        assertThat(reviewFixService.getLastSourceContents()).contains("## Runtime Gate");
+        assertThat(reviewFixService.getLastSourceContents()).contains("fixer-route = openai");
+        assertThat(reviewFixService.getLastSourceContents()).doesNotContain("NOISE-LINE-80");
+        assertThat(reviewFixService.getLastSourceContents()).doesNotContain("UNRELATED-MARKER");
+    }
+
+    /**
+     * 验证图编排审查入口可从文章引用中恢复 sourceRef 并构建相关片段。
+     */
+    @Test
+    void shouldBuildReviewPayloadFromArticleSourceRefs() {
+        FakeSourceFileJdbcRepository sourceFileJdbcRepository = new FakeSourceFileJdbcRepository();
+        sourceFileJdbcRepository.putRecord(new SourceFileRecord(
+                "docs/review.md",
+                "review",
+                "md",
+                12000L,
+                buildLongReviewSource(),
+                "{}",
+                false,
+                "docs/review.md"
+        ));
+        CompileArticleNode compileArticleNode = new CompileArticleNode(
+                null,
+                sourceFileJdbcRepository,
+                new DocumentSectionSelector(),
+                null,
+                null
+        );
+        ArticleRecord articleRecord = new ArticleRecord(
+                "review-payload",
+                "Review Payload",
+                """
+                        ---
+                        title: "Review Payload"
+                        summary: "desc"
+                        sources: ["docs/review.md"]
+                        review_status: pending
+                        ---
+
+                        # Review Payload
+
+                        需要核验相关片段。[→ docs/review.md, Relevant Section]
+                        """,
+                "ACTIVE",
+                java.time.OffsetDateTime.now(),
+                List.of("docs/review.md"),
+                "{}",
+                "desc",
+                List.of("payload-marker"),
+                List.of(),
+                List.of(),
+                "medium",
+                "pending"
+        );
+
+        String sourceContents = compileArticleNode.buildReviewSourceContents(articleRecord);
+
+        assertThat(sourceContents).contains("## Relevant Section");
+        assertThat(sourceContents).contains("payload-marker = selected");
+        assertThat(sourceContents).doesNotContain("NOISE-LINE-80");
+        assertThat(sourceContents).doesNotContain("UNRELATED-MARKER");
+    }
+
+    /**
      * 创建测试用概念。
      *
      * @return 合并概念
@@ -246,6 +384,52 @@ class CompileArticleReviewFlowTests {
                         Arrays.asList("payment/analyze.json#timeout-rules")
                 ))
         );
+    }
+
+    /**
+     * 构建长来源正文。
+     *
+     * @return 长来源正文
+     */
+    private String buildLongCompileSource() {
+        return """
+                # Prelude
+                %s
+                ## Runtime Gate
+                reviewer-route = openai
+                fixer-route = openai
+                ## Unrelated Section
+                UNRELATED-MARKER
+                """.formatted(buildNoiseLines());
+    }
+
+    /**
+     * 构建长审查来源正文。
+     *
+     * @return 长审查来源正文
+     */
+    private String buildLongReviewSource() {
+        return """
+                # Intro
+                %s
+                ## Relevant Section
+                payload-marker = selected
+                ## Tail
+                UNRELATED-MARKER
+                """.formatted(buildNoiseLines());
+    }
+
+    /**
+     * 构建干扰行。
+     *
+     * @return 干扰行文本
+     */
+    private String buildNoiseLines() {
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < 120; index++) {
+            builder.append("NOISE-LINE-").append(index).append(": unrelated prefix").append("\n");
+        }
+        return builder.toString();
     }
 
     /**
@@ -377,6 +561,15 @@ class CompileArticleReviewFlowTests {
             );
         }
 
+        /**
+         * 写入测试源文件记录。
+         *
+         * @param sourceFileRecord 源文件记录
+         */
+        private void putRecord(SourceFileRecord sourceFileRecord) {
+            records.put(sourceFileRecord.getFilePath(), sourceFileRecord);
+        }
+
         @Override
         public Optional<SourceFileRecord> findByPath(String filePath) {
             return Optional.ofNullable(records.get(filePath));
@@ -394,6 +587,8 @@ class CompileArticleReviewFlowTests {
 
         private final boolean enabled;
 
+        private String lastSourceContents;
+
         private StubArticleReviewerGateway(ReviewResult reviewResult, boolean enabled) {
             super(null, null, new LlmProperties(), new RuleBasedArticleReviewer());
             this.reviewResult = reviewResult;
@@ -407,7 +602,17 @@ class CompileArticleReviewFlowTests {
 
         @Override
         public ReviewResult review(String articleContent, String sourceContents) {
+            this.lastSourceContents = sourceContents;
             return reviewResult;
+        }
+
+        /**
+         * 获取最近一次审查来源正文。
+         *
+         * @return 来源正文
+         */
+        private String getLastSourceContents() {
+            return lastSourceContents;
         }
     }
 
@@ -420,6 +625,8 @@ class CompileArticleReviewFlowTests {
 
         private final String fixedContent;
 
+        private String lastSourceContents;
+
         private StubReviewFixService(String fixedContent) {
             super(null);
             this.fixedContent = fixedContent;
@@ -427,7 +634,17 @@ class CompileArticleReviewFlowTests {
 
         @Override
         public String applyFix(String articleContent, List<ReviewIssue> reviewIssues, String sourceContents) {
+            this.lastSourceContents = sourceContents;
             return fixedContent;
+        }
+
+        /**
+         * 获取最近一次修复来源正文。
+         *
+         * @return 来源正文
+         */
+        private String getLastSourceContents() {
+            return lastSourceContents;
         }
     }
 }

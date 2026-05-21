@@ -1,6 +1,6 @@
 # Special Cases Report
 
-- 扫描时间：2026-05-21 11:17:13 +0800
+- 扫描时间：2026-05-21 13:49:02 +0800
 - 扫描范围：`src/main/java/com/xbk/lattice/query src/main/java/com/xbk/lattice/compiler src/main/java/com/xbk/lattice/article src/main/java/com/xbk/lattice/source`
 - 重点文件名：`(Fallback|Intent|Reranker|Grounding|Lookup|PostProcessor|Prompt|Rewrite)`
 - risk_type：`BLOCKER` 会导致脚本返回 1；`REVIEW` 只进入人工复核；`ALLOWLIST` 是通用解析或工程常量候选。
@@ -114,8 +114,8 @@
 | `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:495` | `AnalyzeNode` | `if ("default".equals(conceptId) \|\| title.isEmpty()) {` | `.equals(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:645` | `AnalyzeNode` | `private List<String> collectFallbackSnippets(List<RawSource> sortedSources) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:667` | `AnalyzeNode` | `return "default";` | `固定答案 return` | ALLOWLIST | `固定字符串属于工程枚举/provider/状态/格式解析返回值，不按固定答案阻断` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
-| `src/main/java/com/xbk/lattice/compiler/node/CompileArticleNode.java:169` | `CompileArticleNode` | `markdownContent = buildFallbackMarkdown(mergedConcept, summary, referentialKeywords);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
-| `src/main/java/com/xbk/lattice/compiler/node/CompileArticleNode.java:459` | `CompileArticleNode` | `private String buildFallbackMarkdown(MergedConcept mergedConcept, String summary, List<String> referentialKeywords) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/compiler/node/CompileArticleNode.java:180` | `CompileArticleNode` | `markdownContent = buildFallbackMarkdown(mergedConcept, summary, referentialKeywords);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/compiler/node/CompileArticleNode.java:501` | `CompileArticleNode` | `private String buildFallbackMarkdown(MergedConcept mergedConcept, String summary, List<String> referentialKeywords) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/CrossGroupMergeNode.java:91` | `CrossGroupMergeNode` | `return "default";` | `固定答案 return` | ALLOWLIST | `固定字符串属于工程枚举/provider/状态/格式解析返回值，不按固定答案阻断` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/CrossGroupMergeNode.java:108` | `CrossGroupMergeNode` | `return buildFallbackTitle(conceptId);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/CrossGroupMergeNode.java:260` | `CrossGroupMergeNode` | `private String buildFallbackTitle(String conceptId) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
