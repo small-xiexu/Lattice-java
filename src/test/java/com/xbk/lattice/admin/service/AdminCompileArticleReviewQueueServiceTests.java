@@ -119,14 +119,52 @@ class AdminCompileArticleReviewQueueServiceTests {
     }
 
     /**
-     * 验证正式文章键已存在时，发布会明确拒绝而不是覆盖。
+     * 验证正式文章键已存在时，approve 会按幂等成功收口，不再报错。
      */
     @Test
-    void shouldRejectApproveWhenArticleKeyAlreadyExists() {
+    void shouldTreatApproveAsIdempotentWhenArticleKeyAlreadyExists() {
         FakeCompileArticleReviewQueueJdbcRepository queueRepository =
                 new FakeCompileArticleReviewQueueJdbcRepository(queueRecord(3L, "needs_human_review"));
         FakeMutableArticleJdbcRepository articleJdbcRepository = new FakeMutableArticleJdbcRepository();
         articleJdbcRepository.upsert(article("source-alpha--concept-alpha", 7L, "concept-alpha", "passed"));
+        RecordingArticlePersistSupport articlePersistSupport = new RecordingArticlePersistSupport(articleJdbcRepository);
+        FakeArticleReviewAuditJdbcRepository auditJdbcRepository = new FakeArticleReviewAuditJdbcRepository();
+        AdminCompileArticleReviewQueueService service = service(
+                queueRepository,
+                articleJdbcRepository,
+                articlePersistSupport,
+                auditJdbcRepository,
+                new FakeSourceFileJdbcRepository(List.of())
+        );
+
+        CompileArticleReviewQueueActionResult result = service.approve(
+                3L,
+                new CompileArticleReviewQueueActionRequest("reviewer-c", "冲突", "needs_human_review")
+        );
+
+        CompileArticleReviewQueueRecord updatedQueueRecord = queueRepository.findById(3L).orElseThrow();
+        assertThat(result.getPreviousReviewStatus()).isEqualTo("needs_human_review");
+        assertThat(result.getAuditId()).isEqualTo(1L);
+        assertThat(updatedQueueRecord.getReviewStatus()).isEqualTo("published");
+        assertThat(updatedQueueRecord.getPublishedArticleKey()).isEqualTo("source-alpha--concept-alpha");
+        assertThat(articlePersistSupport.getPersistedArticles()).isEmpty();
+        assertThat(articlePersistSupport.getRebuiltArticles()).isEmpty();
+        assertThat(articlePersistSupport.getVectorIndexedArticles()).isEmpty();
+        assertThat(auditJdbcRepository.getSavedRecords()).hasSize(1);
+        assertThat(auditJdbcRepository.getSavedRecords().get(0).getAction())
+                .isEqualTo("compile_review_queue_approve");
+        assertThat(articleJdbcRepository.findAll()).hasSize(1);
+    }
+
+    /**
+     * 验证非 article_key 类型的正式文章冲突仍会继续报错，不会被误吞。
+     */
+    @Test
+    void shouldStillRejectApproveWhenSourceConceptConflictExists() {
+        FakeCompileArticleReviewQueueJdbcRepository queueRepository =
+                new FakeCompileArticleReviewQueueJdbcRepository(queueRecord(4L, "needs_human_review"));
+        FakeMutableArticleJdbcRepository articleJdbcRepository = new FakeMutableArticleJdbcRepository();
+        articleJdbcRepository.upsert(article("source-alpha--different-key", 7L, "concept-alpha", "passed"));
         RecordingArticlePersistSupport articlePersistSupport = new RecordingArticlePersistSupport(articleJdbcRepository);
         AdminCompileArticleReviewQueueService service = service(
                 queueRepository,
@@ -137,12 +175,12 @@ class AdminCompileArticleReviewQueueServiceTests {
         );
 
         assertThatThrownBy(() -> service.approve(
-                3L,
-                new CompileArticleReviewQueueActionRequest("reviewer-c", "冲突", "needs_human_review")
+                4L,
+                new CompileArticleReviewQueueActionRequest("reviewer-d", "冲突", "needs_human_review")
         )).isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("article already exists");
+                .hasMessageContaining("article already exists for source and concept");
 
-        assertThat(queueRepository.findById(3L).orElseThrow().getReviewStatus()).isEqualTo("needs_human_review");
+        assertThat(queueRepository.findById(4L).orElseThrow().getReviewStatus()).isEqualTo("needs_human_review");
         assertThat(articlePersistSupport.getPersistedArticles()).isEmpty();
     }
 

@@ -191,7 +191,11 @@ public class AdminCompileArticleReviewQueueService {
             return new CompileArticleReviewQueueActionResult(queueRecord, STATUS_PUBLISHED, 0L);
         }
         assertPending(queueRecord, request);
-        assertNoArticleConflict(queueRecord);
+        ArticleRecord existingArticleRecord = findExistingArticleByKey(queueRecord);
+        if (existingArticleRecord != null) {
+            return approveAlreadyPublishedArticle(queueRecord, request, existingArticleRecord);
+        }
+        assertNoSourceConceptConflict(queueRecord);
         OffsetDateTime reviewedAt = OffsetDateTime.now();
         ArticleRecord articleRecord = toApprovedArticle(queueRecord, reviewedAt);
         ArticleReviewEnvelope reviewEnvelope = approvedEnvelope(articleRecord);
@@ -225,6 +229,47 @@ public class AdminCompileArticleReviewQueueService {
         }
         scheduleVectorRefreshAfterPublication(articleRecord.getArticleKey(), reviewedArticles);
         CompileArticleReviewQueueRecord updatedQueueRecord = requireQueueRecord(id);
+        return new CompileArticleReviewQueueActionResult(
+                updatedQueueRecord,
+                STATUS_NEEDS_HUMAN_REVIEW,
+                savedAudit.getId()
+        );
+    }
+
+    /**
+     * 对已存在 article_key 的草稿执行幂等 approve 收口。
+     *
+     * @param queueRecord 队列记录
+     * @param request 动作请求
+     * @param existingArticleRecord 已存在正式文章
+     * @return 动作结果
+     */
+    private CompileArticleReviewQueueActionResult approveAlreadyPublishedArticle(
+            CompileArticleReviewQueueRecord queueRecord,
+            CompileArticleReviewQueueActionRequest request,
+            ArticleRecord existingArticleRecord
+    ) {
+        OffsetDateTime reviewedAt = OffsetDateTime.now();
+        ArticleReviewAuditRecord savedAudit = saveAudit(
+                existingArticleRecord,
+                AUDIT_ACTION_APPROVE,
+                STATUS_NEEDS_HUMAN_REVIEW,
+                REVIEW_STATUS_PASSED,
+                request,
+                reviewedAt,
+                buildAuditMetadata(queueRecord)
+        );
+        boolean updated = compileArticleReviewQueueJdbcRepository.markPublished(
+                queueRecord.getId(),
+                normalizeText(request == null ? null : request.getReviewedBy()),
+                reviewedAt,
+                normalizeText(request == null ? null : request.getComment()),
+                existingArticleRecord.getArticleKey()
+        );
+        if (!updated) {
+            throw new IllegalStateException("compile review queue status changed: id=" + queueRecord.getId());
+        }
+        CompileArticleReviewQueueRecord updatedQueueRecord = requireQueueRecord(queueRecord.getId());
         return new CompileArticleReviewQueueActionResult(
                 updatedQueueRecord,
                 STATUS_NEEDS_HUMAN_REVIEW,
@@ -382,10 +427,22 @@ public class AdminCompileArticleReviewQueueService {
         }
     }
 
-    private void assertNoArticleConflict(CompileArticleReviewQueueRecord queueRecord) {
-        if (articleJdbcRepository.findByArticleKey(queueRecord.getArticleKey()).isPresent()) {
-            throw new IllegalStateException("article already exists: " + queueRecord.getArticleKey());
-        }
+    /**
+     * 按 article_key 查询已存在正式文章。
+     *
+     * @param queueRecord 队列记录
+     * @return 已存在正式文章；不存在返回 null
+     */
+    private ArticleRecord findExistingArticleByKey(CompileArticleReviewQueueRecord queueRecord) {
+        return articleJdbcRepository.findByArticleKey(queueRecord.getArticleKey()).orElse(null);
+    }
+
+    /**
+     * 校验 sourceId + conceptId 层面的正式文章冲突。
+     *
+     * @param queueRecord 队列记录
+     */
+    private void assertNoSourceConceptConflict(CompileArticleReviewQueueRecord queueRecord) {
         Long sourceId = queueRecord.getSourceId();
         if (sourceId == null) {
             return;
