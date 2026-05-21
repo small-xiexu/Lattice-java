@@ -151,6 +151,96 @@ class CompileArticleReviewQueueJdbcRepositoryTests {
         assertThat(summary.hasAnyOutcome()).isTrue();
     }
 
+    /**
+     * 验证跨 job 相同 article_key 的 needs_human_review 草稿只保留一条（覆盖旧草稿）。
+     */
+    @Test
+    void shouldDeduplicatePendingDraftAcrossJobs() {
+        compileArticleReviewQueueJdbcRepository.list(null, 1);
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_article_review_queue RESTART IDENTITY");
+
+        // 第一次入队：job-1 + concept-dedup
+        compileArticleReviewQueueJdbcRepository.upsertPending(queueRecord("job-1", "concept-dedup"));
+        assertThat(compileArticleReviewQueueJdbcRepository.countByStatus("needs_human_review")).isEqualTo(1);
+
+        // 第二次入队：job-2 + 同一 concept（article_key 相同），应覆盖，不新增
+        compileArticleReviewQueueJdbcRepository.upsertPending(queueRecord("job-2", "concept-dedup"));
+        assertThat(compileArticleReviewQueueJdbcRepository.countByStatus("needs_human_review")).isEqualTo(1);
+
+        // 验证保留的是最新 job_id
+        CompileArticleReviewQueueRecord record = compileArticleReviewQueueJdbcRepository
+                .list("needs_human_review", 10).get(0);
+        assertThat(record.getJobId()).isEqualTo("job-2");
+        assertThat(record.getArticleKey()).isEqualTo("source-queue--concept-dedup");
+    }
+
+    /**
+     * 验证已 published 的记录不影响新 needs_human_review 入队（二者可共存）。
+     */
+    @Test
+    void shouldAllowNewPendingDraftAfterPublished() {
+        compileArticleReviewQueueJdbcRepository.list(null, 1);
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_article_review_queue RESTART IDENTITY");
+
+        // 入队并发布
+        compileArticleReviewQueueJdbcRepository.upsertPending(queueRecord("job-pub-1", "concept-coexist"));
+        CompileArticleReviewQueueRecord pendingRecord = compileArticleReviewQueueJdbcRepository
+                .list("needs_human_review", 10).get(0);
+        compileArticleReviewQueueJdbcRepository.markPublished(
+                pendingRecord.getId(), "reviewer",
+                OffsetDateTime.parse("2026-05-20T09:00:00+08:00"),
+                "确认", pendingRecord.getArticleKey()
+        );
+
+        // 再次入队同一 article_key，应新增（因为之前的已 published）
+        compileArticleReviewQueueJdbcRepository.upsertPending(queueRecord("job-pub-2", "concept-coexist"));
+        assertThat(compileArticleReviewQueueJdbcRepository.countByStatus("needs_human_review")).isEqualTo(1);
+        CompileArticleReviewQueueRecord secondPendingRecord = compileArticleReviewQueueJdbcRepository
+                .list("needs_human_review", 10).get(0);
+        compileArticleReviewQueueJdbcRepository.markPublished(
+                secondPendingRecord.getId(),
+                "reviewer-2",
+                OffsetDateTime.parse("2026-05-20T10:00:00+08:00"),
+                "再次确认",
+                secondPendingRecord.getArticleKey()
+        );
+        assertThat(compileArticleReviewQueueJdbcRepository.countByStatus("needs_human_review")).isZero();
+        assertThat(compileArticleReviewQueueJdbcRepository.countByStatus("published")).isEqualTo(2);
+    }
+
+    /**
+     * 验证已 rejected 的记录不影响新 needs_human_review 入队（二者可共存）。
+     */
+    @Test
+    void shouldAllowNewPendingDraftAfterRejected() {
+        compileArticleReviewQueueJdbcRepository.list(null, 1);
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_article_review_queue RESTART IDENTITY");
+
+        // 入队并驳回
+        compileArticleReviewQueueJdbcRepository.upsertPending(queueRecord("job-rej-1", "concept-rej-coexist"));
+        CompileArticleReviewQueueRecord pendingRecord = compileArticleReviewQueueJdbcRepository
+                .list("needs_human_review", 10).get(0);
+        compileArticleReviewQueueJdbcRepository.markRejected(
+                pendingRecord.getId(), "reviewer",
+                OffsetDateTime.parse("2026-05-20T09:00:00+08:00"),
+                "拒绝"
+        );
+
+        // 再次入队同一 article_key，应新增（因为之前的已 rejected）
+        compileArticleReviewQueueJdbcRepository.upsertPending(queueRecord("job-rej-2", "concept-rej-coexist"));
+        assertThat(compileArticleReviewQueueJdbcRepository.countByStatus("needs_human_review")).isEqualTo(1);
+        CompileArticleReviewQueueRecord secondPendingRecord = compileArticleReviewQueueJdbcRepository
+                .list("needs_human_review", 10).get(0);
+        compileArticleReviewQueueJdbcRepository.markRejected(
+                secondPendingRecord.getId(),
+                "reviewer-2",
+                OffsetDateTime.parse("2026-05-20T10:00:00+08:00"),
+                "再次拒绝"
+        );
+        assertThat(compileArticleReviewQueueJdbcRepository.countByStatus("needs_human_review")).isZero();
+        assertThat(compileArticleReviewQueueJdbcRepository.countByStatus("rejected")).isEqualTo(2);
+    }
+
     private CompileArticleReviewQueueRecord queueRecord(String jobId, String conceptId) {
         return new CompileArticleReviewQueueRecord(
                 0L,

@@ -679,7 +679,11 @@ COMMENT ON COLUMN compile_article_review_queue.reviewed_at IS '人工确认时�
 COMMENT ON COLUMN compile_article_review_queue.review_comment IS '人工确认意见';
 COMMENT ON COLUMN compile_article_review_queue.published_article_key IS '发布后的正式文章唯一键';
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_compile_article_review_queue_job_concept
+-- 去重约束：同一 article_key 只允许一条 needs_human_review 待确认记录
+CREATE UNIQUE INDEX IF NOT EXISTS uk_compile_article_review_queue_article_pending
+    ON compile_article_review_queue (article_key) WHERE review_status = 'needs_human_review';
+
+CREATE INDEX IF NOT EXISTS idx_compile_article_review_queue_job_concept
     ON compile_article_review_queue (job_id, concept_id);
 
 CREATE INDEX IF NOT EXISTS idx_compile_article_review_queue_status_created_at

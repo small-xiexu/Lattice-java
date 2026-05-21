@@ -69,7 +69,9 @@
             review_comment text,
             published_article_key varchar(256)
         );
-        create unique index if not exists uk_compile_article_review_queue_job_concept
+        create unique index if not exists uk_compile_article_review_queue_article_pending
+            on compile_article_review_queue (article_key) where review_status = 'needs_human_review';
+        create index if not exists idx_compile_article_review_queue_job_concept
             on compile_article_review_queue (job_id, concept_id);
         create index if not exists idx_compile_article_review_queue_status_created_at
             on compile_article_review_queue (review_status, created_at desc, id desc);
@@ -106,10 +108,11 @@
             #{record.fixAttemptCount},
             #{record.maxFixRounds}
         )
-        on conflict (job_id, concept_id) do update
-        set source_id = excluded.source_id,
+        on conflict (article_key) where review_status = 'needs_human_review' do update
+        set job_id = excluded.job_id,
+            source_id = excluded.source_id,
             source_code = excluded.source_code,
-            article_key = excluded.article_key,
+            concept_id = excluded.concept_id,
             title = excluded.title,
             content = excluded.content,
             lifecycle = excluded.lifecycle,
@@ -122,7 +125,6 @@
             fix_attempt_count = excluded.fix_attempt_count,
             max_fix_rounds = excluded.max_fix_rounds,
             updated_at = CURRENT_TIMESTAMP
-        where compile_article_review_queue.review_status = 'needs_human_review'
     </insert>
 
     <select id="findByStatus" resultMap="CompileArticleReviewQueueRecordResultMap">
