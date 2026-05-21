@@ -1,6 +1,6 @@
 # Special Cases Report
 
-- 扫描时间：2026-05-21 13:49:02 +0800
+- 扫描时间：2026-05-22 00:18:41 +0800
 - 扫描范围：`src/main/java/com/xbk/lattice/query src/main/java/com/xbk/lattice/compiler src/main/java/com/xbk/lattice/article src/main/java/com/xbk/lattice/source`
 - 重点文件名：`(Fallback|Intent|Reranker|Grounding|Lookup|PostProcessor|Prompt|Rewrite)`
 - risk_type：`BLOCKER` 会导致脚本返回 1；`REVIEW` 只进入人工复核；`ALLOWLIST` 是通用解析或工程常量候选。
@@ -114,8 +114,8 @@
 | `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:495` | `AnalyzeNode` | `if ("default".equals(conceptId) \|\| title.isEmpty()) {` | `.equals(` | REVIEW | `编译链路命中，默认进入人工复核或配置迁移候选` | 中 | 编译补丁 | 迁移到 compiler/config | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:645` | `AnalyzeNode` | `private List<String> collectFallbackSnippets(List<RawSource> sortedSources) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/AnalyzeNode.java:667` | `AnalyzeNode` | `return "default";` | `固定答案 return` | ALLOWLIST | `固定字符串属于工程枚举/provider/状态/格式解析返回值，不按固定答案阻断` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
-| `src/main/java/com/xbk/lattice/compiler/node/CompileArticleNode.java:180` | `CompileArticleNode` | `markdownContent = buildFallbackMarkdown(mergedConcept, summary, referentialKeywords);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
-| `src/main/java/com/xbk/lattice/compiler/node/CompileArticleNode.java:501` | `CompileArticleNode` | `private String buildFallbackMarkdown(MergedConcept mergedConcept, String summary, List<String> referentialKeywords) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/compiler/node/CompileArticleNode.java:184` | `CompileArticleNode` | `markdownContent = buildFallbackMarkdown(mergedConcept, summary, referentialKeywords);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/compiler/node/CompileArticleNode.java:514` | `CompileArticleNode` | `private String buildFallbackMarkdown(MergedConcept mergedConcept, String summary, List<String> referentialKeywords) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/CrossGroupMergeNode.java:91` | `CrossGroupMergeNode` | `return "default";` | `固定答案 return` | ALLOWLIST | `固定字符串属于工程枚举/provider/状态/格式解析返回值，不按固定答案阻断` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/CrossGroupMergeNode.java:108` | `CrossGroupMergeNode` | `return buildFallbackTitle(conceptId);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/compiler/node/CrossGroupMergeNode.java:260` | `CrossGroupMergeNode` | `private String buildFallbackTitle(String conceptId) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
@@ -1990,6 +1990,55 @@
 | `src/main/java/com/xbk/lattice/query/service/RrfFusionService.java:433` | `RrfFusionService` | `\|\| channels.contains(RetrievalStrategyResolver.CHANNEL_CHUNK_VECTOR);` | `.contains(` | REVIEW | `命中疑似红线模式，需要人工复核` | 中 | 术语特判 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/query/service/SearchCapabilityServiceConfiguration.java:26` | `SearchCapabilityServiceConfiguration` | `public SearchCapabilityService fallbackSearchCapabilityService() {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/query/service/SearchCapabilityServiceConfiguration.java:27` | `SearchCapabilityServiceConfiguration` | `log.warn("SearchCapabilityService implementation missing, fallback to disabled capability detection");` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:29` | `StringRedisKeyValueStore` | `private final Map<String, LocalFallbackValue> interruptedFallbackValues =` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:30` | `StringRedisKeyValueStore` | `new ConcurrentHashMap<String, LocalFallbackValue>();` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:52` | `StringRedisKeyValueStore` | `interruptedFallbackValues.remove(key);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:55` | `StringRedisKeyValueStore` | `return getLocalFallbackValue(key);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:61` | `StringRedisKeyValueStore` | `String fallbackValue = getLocalFallbackValue(key);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:62` | `StringRedisKeyValueStore` | `if (fallbackValue == null) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:65` | `StringRedisKeyValueStore` | `log.warn("Redis get interrupted, fallback to local value. key: {}", key, exception);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:66` | `StringRedisKeyValueStore` | `return fallbackValue;` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:81` | `StringRedisKeyValueStore` | `interruptedFallbackValues.remove(key);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:87` | `StringRedisKeyValueStore` | `interruptedFallbackValues.put(key, buildLocalFallbackValue(value, ttl));` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:88` | `StringRedisKeyValueStore` | `log.warn("Redis set interrupted, degrade to local fallback. key: {}", key, exception);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:105` | `StringRedisKeyValueStore` | `return getLocalFallbackTtlSeconds(key);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:111` | `StringRedisKeyValueStore` | `Long fallbackTtlSeconds = getLocalFallbackTtlSeconds(key);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:112` | `StringRedisKeyValueStore` | `if (fallbackTtlSeconds == null) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:115` | `StringRedisKeyValueStore` | `log.warn("Redis expire lookup interrupted, fallback to local TTL. key: {}", key, exception);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:116` | `StringRedisKeyValueStore` | `return fallbackTtlSeconds;` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:130` | `StringRedisKeyValueStore` | `deleteLocalFallbackByPrefix(keyPrefix);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:142` | `StringRedisKeyValueStore` | `log.warn("Redis deleteByPrefix interrupted, local fallback cleared only. keyPrefix: {}", keyPrefix, exception);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:161` | `StringRedisKeyValueStore` | `if (className.contains("interrupted")) {` | `.contains(` | ALLOWLIST | `路径、URL、文件格式、数字、Markdown、JSON、表格或工程标识等通用解析候选` | 低 | allowlist candidate | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:165` | `StringRedisKeyValueStore` | `if (message != null && message.toLowerCase(Locale.ROOT).contains("redis command interrupted")) {` | `.contains(` | REVIEW | `命中疑似红线模式，需要人工复核` | 中 | 术语特判 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:174` | `StringRedisKeyValueStore` | `* 构建本地 fallback 值。` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:178` | `StringRedisKeyValueStore` | `* @return fallback 值` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:180` | `StringRedisKeyValueStore` | `private LocalFallbackValue buildLocalFallbackValue(String value, Duration ttl) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:182` | `StringRedisKeyValueStore` | `return new LocalFallbackValue(value, null);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:185` | `StringRedisKeyValueStore` | `return new LocalFallbackValue(value, expireAt);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:189` | `StringRedisKeyValueStore` | `* 读取未过期的本地 fallback 值。` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:192` | `StringRedisKeyValueStore` | `* @return fallback 值` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:194` | `StringRedisKeyValueStore` | `private String getLocalFallbackValue(String key) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:195` | `StringRedisKeyValueStore` | `LocalFallbackValue fallbackValue = interruptedFallbackValues.get(key);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:196` | `StringRedisKeyValueStore` | `if (fallbackValue == null) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:199` | `StringRedisKeyValueStore` | `if (fallbackValue.isExpired()) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:200` | `StringRedisKeyValueStore` | `interruptedFallbackValues.remove(key);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:203` | `StringRedisKeyValueStore` | `return fallbackValue.getValue();` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:207` | `StringRedisKeyValueStore` | `* 读取本地 fallback 的剩余 TTL 秒数。` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:212` | `StringRedisKeyValueStore` | `private Long getLocalFallbackTtlSeconds(String key) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:213` | `StringRedisKeyValueStore` | `LocalFallbackValue fallbackValue = interruptedFallbackValues.get(key);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:214` | `StringRedisKeyValueStore` | `if (fallbackValue == null) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:217` | `StringRedisKeyValueStore` | `if (fallbackValue.isExpired()) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:218` | `StringRedisKeyValueStore` | `interruptedFallbackValues.remove(key);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:221` | `StringRedisKeyValueStore` | `return fallbackValue.remainingSeconds();` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:225` | `StringRedisKeyValueStore` | `* 按前缀清理本地 fallback。` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:229` | `StringRedisKeyValueStore` | `private void deleteLocalFallbackByPrefix(String keyPrefix) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:230` | `StringRedisKeyValueStore` | `for (String key : Set.copyOf(interruptedFallbackValues.keySet())) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:232` | `StringRedisKeyValueStore` | `interruptedFallbackValues.remove(key);` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:238` | `StringRedisKeyValueStore` | `* 中断场景下的本地 fallback 值。` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:244` | `StringRedisKeyValueStore` | `private static final class LocalFallbackValue {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:251` | `StringRedisKeyValueStore` | `* 创建本地 fallback 值。` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:256` | `StringRedisKeyValueStore` | `private LocalFallbackValue(String value, Instant expireAt) {` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
+| `src/main/java/com/xbk/lattice/query/service/StringRedisKeyValueStore.java:271` | `StringRedisKeyValueStore` | `* 判断 fallback 是否过期。` | `兜底` | REVIEW | `fallback 变量名、参数名、注释或说明类命中，最多进入人工复核` | 中 | 固定兜底 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/query/service/StructuredRetrievalTopKQualityService.java:89` | `StructuredRetrievalTopKQualityService` | `if (target.matches(topKHit)) {` | `.matches(` | REVIEW | `命中疑似红线模式，需要人工复核` | 中 | 术语特判 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/query/service/StructuredRetrievalTopKTarget.java:99` | `StructuredRetrievalTopKTarget` | `if (!isBlank(articleKey) && !articleKey.equals(queryArticleHit.getArticleKey())) {` | `.equals(` | REVIEW | `命中疑似红线模式，需要人工复核` | 中 | 术语特判 | 保留但需人工确认 | 是 |
 | `src/main/java/com/xbk/lattice/query/service/StructuredRetrievalTopKTarget.java:102` | `StructuredRetrievalTopKTarget` | `if (!isBlank(conceptId) && !conceptId.equals(queryArticleHit.getConceptId())) {` | `.equals(` | REVIEW | `命中疑似红线模式，需要人工复核` | 中 | 术语特判 | 保留但需人工确认 | 是 |
@@ -2119,10 +2168,10 @@
 
 ## 汇总
 
-- 总命中：2107
+- 总命中：2156
 - 高风险：0
-- 中风险：1863
-- 低风险：244
+- 中风险：1911
+- 低风险：245
 - BLOCKER：0
-- REVIEW：1863
-- ALLOWLIST：244
+- REVIEW：1911
+- ALLOWLIST：245
