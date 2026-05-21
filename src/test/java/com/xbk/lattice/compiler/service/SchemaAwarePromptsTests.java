@@ -239,6 +239,110 @@ class SchemaAwarePromptsTests {
         assertThat(llmClient.getLastUserPrompt()).doesNotContain("## 4. 其他章节");
     }
 
+    /**
+     * 验证 Writer prompt 会对结构化章节和多来源正文统一执行总量预算控制。
+     */
+    @Test
+    void compileArticleNodeShouldApplyBoundedWriterPayloadBudget() {
+        PromptCapturingLlmClient llmClient = new PromptCapturingLlmClient("""
+                ---
+                title: "Runtime Overview"
+                summary: "desc"
+                referential_keywords: []
+                sources: ["docs/source-a.md", "docs/source-b.md", "docs/source-c.md"]
+                depends_on: []
+                related: []
+                confidence: medium
+                compiled_at: "2026-04-16T11:00:00+08:00"
+                review_status: pending
+                ---
+
+                # Runtime Overview
+                """);
+        FixedSourceFileJdbcRepository sourceFileJdbcRepository = new FixedSourceFileJdbcRepository(new SourceFileRecord(
+                "docs/source-a.md",
+                "summary",
+                "md",
+                700L,
+                buildWriterBudgetSource("A"),
+                "{}",
+                false,
+                "docs/source-a.md"
+        ));
+        sourceFileJdbcRepository.put(new SourceFileRecord(
+                "docs/source-b.md",
+                "summary",
+                "md",
+                700L,
+                buildWriterBudgetSource("B"),
+                "{}",
+                false,
+                "docs/source-b.md"
+        ));
+        sourceFileJdbcRepository.put(new SourceFileRecord(
+                "docs/source-c.md",
+                "summary",
+                "md",
+                700L,
+                buildWriterBudgetSource("C"),
+                "{}",
+                false,
+                "docs/source-c.md"
+        ));
+        CompileArticleNode compileArticleNode = new CompileArticleNode(
+                new LlmGateway(
+                        llmClient,
+                        llmClient,
+                        new NoopRedisKeyValueStore(),
+                        createLlmProperties()
+                ),
+                sourceFileJdbcRepository,
+                new DocumentSectionSelector(),
+                null,
+                null,
+                new SchemaAwarePrompts(new CompilerProperties())
+        );
+
+        compileArticleNode.compile(new MergedConcept(
+                "runtime-overview",
+                "Runtime Overview",
+                "desc",
+                List.of("docs/source-a.md", "docs/source-b.md", "docs/source-c.md"),
+                List.of("topic-a", "topic-b", "topic-c"),
+                List.of(
+                        new com.xbk.lattice.compiler.domain.ConceptSection(
+                                "Structured Section A",
+                                List.of(repeat("STRUCTURED-A ", 350)),
+                                List.of("docs/source-a.md#Runtime A")
+                        ),
+                        new com.xbk.lattice.compiler.domain.ConceptSection(
+                                "Structured Section B",
+                                List.of(repeat("STRUCTURED-B ", 350)),
+                                List.of("docs/source-b.md#Runtime B")
+                        ),
+                        new com.xbk.lattice.compiler.domain.ConceptSection(
+                                "Structured Section C",
+                                List.of(repeat("STRUCTURED-C ", 350)),
+                                List.of("docs/source-c.md#Runtime C")
+                        )
+                )
+        ), null);
+
+        String userPrompt = llmClient.getLastUserPrompt();
+        assertThat(userPrompt).contains("Structured concept sections (highest priority evidence):");
+        assertThat(userPrompt).contains("=== Section: Structured Section A ===");
+        assertThat(userPrompt).contains("=== Source: docs/source-a.md ===");
+        assertThat(userPrompt).contains("=== Source: docs/source-b.md ===");
+        assertThat(userPrompt).contains("=== Source: docs/source-c.md ===");
+        assertThat(userPrompt).contains("## Runtime A");
+        assertThat(userPrompt).contains("## Runtime B");
+        assertThat(userPrompt).contains("## Runtime C");
+        assertThat(userPrompt).doesNotContain("UNRELATED-A");
+        assertThat(userPrompt).doesNotContain("UNRELATED-B");
+        assertThat(userPrompt).doesNotContain("UNRELATED-C");
+        assertThat(userPrompt.length()).isLessThan(14000);
+    }
+
     private LlmProperties createLlmProperties() {
         LlmProperties llmProperties = new LlmProperties();
         llmProperties.setCompileModel("openai");
@@ -304,6 +408,10 @@ class SchemaAwarePromptsTests {
         public Optional<SourceFileRecord> findByPath(String filePath) {
             return Optional.ofNullable(records.get(filePath));
         }
+
+        private void put(SourceFileRecord record) {
+            this.records.put(record.getFilePath(), record);
+        }
     }
 
     private static class NoopRedisKeyValueStore implements RedisKeyValueStore {
@@ -326,6 +434,34 @@ class SchemaAwarePromptsTests {
         @Override
         public void deleteByPrefix(String keyPrefix) {
         }
+    }
+
+    private String buildWriterBudgetSource(String suffix) {
+        return """
+                # Prelude %s
+                %s
+                ## Runtime %s
+                topic-%s = selected
+                %s
+                ## Unrelated %s
+                UNRELATED-%s
+                """.formatted(
+                suffix,
+                repeat("NOISE-" + suffix + " ", 300),
+                suffix,
+                suffix.toLowerCase(),
+                repeat("DETAIL-" + suffix + " ", 260),
+                suffix,
+                suffix
+        );
+    }
+
+    private String repeat(String value, int times) {
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < times; index++) {
+            builder.append(value);
+        }
+        return builder.toString();
     }
 
 }

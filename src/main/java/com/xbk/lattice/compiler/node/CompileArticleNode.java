@@ -52,7 +52,11 @@ public class CompileArticleNode {
 
     private static final String WRITER_ROLE = "writer";
 
-    private static final int WRITER_SOURCE_SNIPPET_MAX_CHARS = 4000;
+    private static final int WRITER_TOTAL_PAYLOAD_MAX_CHARS = 12000;
+
+    private static final int WRITER_STRUCTURED_SECTIONS_MAX_CHARS = 4000;
+
+    private static final int WRITER_SOURCE_SNIPPET_MAX_CHARS = 3000;
 
     private static final int REVIEW_SOURCE_PAYLOAD_MAX_CHARS = 9000;
 
@@ -282,7 +286,14 @@ public class CompileArticleNode {
         Long sourceId = articleRecord == null ? null : articleRecord.getSourceId();
         List<String> conceptTerms = buildArticleTerms(articleRecord);
         List<String> sourceRefs = extractArticleSourceRefs(articleRecord);
-        return buildRelevantSourceContents(sourcePaths, sourceId, conceptTerms, sourceRefs, REVIEW_SOURCE_PAYLOAD_MAX_CHARS);
+        return buildRelevantSourceContents(
+                sourcePaths,
+                sourceId,
+                conceptTerms,
+                sourceRefs,
+                REVIEW_SOURCE_PAYLOAD_MAX_CHARS,
+                REVIEW_SOURCE_PER_SOURCE_MAX_CHARS
+        );
     }
 
     /**
@@ -299,7 +310,14 @@ public class CompileArticleNode {
         Long sourceId = articleRecord == null ? null : articleRecord.getSourceId();
         List<String> conceptTerms = buildReviewConceptTerms(mergedConcept, articleRecord);
         List<String> sourceRefs = buildReviewSourceRefs(mergedConcept, articleRecord);
-        return buildRelevantSourceContents(sourcePaths, sourceId, conceptTerms, sourceRefs, REVIEW_SOURCE_PAYLOAD_MAX_CHARS);
+        return buildRelevantSourceContents(
+                sourcePaths,
+                sourceId,
+                conceptTerms,
+                sourceRefs,
+                REVIEW_SOURCE_PAYLOAD_MAX_CHARS,
+                REVIEW_SOURCE_PER_SOURCE_MAX_CHARS
+        );
     }
 
     /**
@@ -407,26 +425,21 @@ public class CompileArticleNode {
         promptBuilder.append("Compile a knowledge article about: \"").append(mergedConcept.getTitle()).append("\"").append("\n\n");
         promptBuilder.append("Description: ").append(summary).append("\n\n");
         promptBuilder.append("Concept ID: ").append(mergedConcept.getConceptId()).append("\n\n");
-        appendStructuredSections(promptBuilder, mergedConcept);
-        promptBuilder.append("Relevant source content:").append("\n");
-        for (String sourcePath : mergedConcept.getSourcePaths()) {
-            Optional<SourceFileRecord> sourceFileRecord = sourceId == null
-                    ? sourceFileJdbcRepository.findByPath(sourcePath)
-                    : sourceFileJdbcRepository.findBySourceIdAndRelativePath(sourceId, sourcePath);
-            if (sourceFileRecord.isEmpty()) {
-                sourceFileRecord = sourceFileJdbcRepository.findByPath(sourcePath);
-            }
-            if (sourceFileRecord.isEmpty()) {
-                continue;
-            }
-            String selectedContent = selectRelevantContent(
-                    sourceFileRecord.orElseThrow().getContentText(),
-                    mergedConcept,
-                    sourcePath
-            );
-            promptBuilder.append("=== Source: ").append(sourcePath).append(" ===").append("\n");
-            promptBuilder.append(selectedContent).append("\n");
-            promptBuilder.append("=== End ===").append("\n\n");
+        String structuredSectionsPayload = buildStructuredSectionsPayload(
+                mergedConcept,
+                WRITER_STRUCTURED_SECTIONS_MAX_CHARS
+        );
+        if (!structuredSectionsPayload.isBlank()) {
+            promptBuilder.append(structuredSectionsPayload).append("\n");
+        }
+        int remainingSourceBudget = Math.max(
+                WRITER_TOTAL_PAYLOAD_MAX_CHARS - structuredSectionsPayload.length(),
+                0
+        );
+        String relevantSourcePayload = buildWriterSourceContents(mergedConcept, sourceId, remainingSourceBudget);
+        if (!relevantSourcePayload.isBlank()) {
+            promptBuilder.append("Relevant source content:").append("\n");
+            promptBuilder.append(relevantSourcePayload);
         }
         return promptBuilder.toString().trim();
     }
@@ -561,21 +574,22 @@ public class CompileArticleNode {
      * @param promptBuilder 提示词构建器
      * @param mergedConcept 合并概念
      */
-    private void appendStructuredSections(StringBuilder promptBuilder, MergedConcept mergedConcept) {
-        if (mergedConcept.getSections() == null || mergedConcept.getSections().isEmpty()) {
-            return;
+    private String buildStructuredSectionsPayload(MergedConcept mergedConcept, int maxChars) {
+        if (mergedConcept.getSections() == null || mergedConcept.getSections().isEmpty() || maxChars <= 0) {
+            return "";
         }
-        promptBuilder.append("Structured concept sections (highest priority evidence):").append("\n");
+        StringBuilder payloadBuilder = new StringBuilder();
+        String header = "Structured concept sections (highest priority evidence):\n";
+        if (header.length() >= maxChars) {
+            return boundText(header, maxChars);
+        }
+        payloadBuilder.append(header);
         for (ConceptSection section : mergedConcept.getSections()) {
-            promptBuilder.append("=== Section: ").append(section.getHeading()).append(" ===").append("\n");
-            for (String contentLine : section.getContentLines()) {
-                promptBuilder.append(contentLine).append("\n");
+            if (!appendBoundedStructuredSection(payloadBuilder, section, maxChars)) {
+                break;
             }
-            if (!section.getSourceRefs().isEmpty()) {
-                promptBuilder.append("Sources: ").append(String.join(", ", section.getSourceRefs())).append("\n");
-            }
-            promptBuilder.append("=== End Section ===").append("\n\n");
         }
+        return payloadBuilder.toString().trim();
     }
 
     /**
@@ -638,20 +652,234 @@ public class CompileArticleNode {
         return conceptTerms;
     }
 
+    private String buildRelevantSourceContents(
+            List<String> sourcePaths,
+            Long sourceId,
+            List<String> conceptTerms,
+            List<String> sourceRefs,
+            int maxPayloadChars,
+            int perSourceMaxChars
+    ) {
+        List<SourceContentCandidate> candidates = resolveSourceContentCandidates(sourcePaths, sourceId);
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < candidates.size(); index++) {
+            SourceContentCandidate candidate = candidates.get(index);
+            int remainingSources = candidates.size() - index;
+            int contentBudget = calculateSourceContentBudget(
+                    builder.length(),
+                    remainingSources,
+                    maxPayloadChars,
+                    perSourceMaxChars
+            );
+            if (contentBudget <= 0) {
+                break;
+            }
+            String selectedContent = selectBoundedRelevantContent(
+                    candidate.getContent(),
+                    conceptTerms,
+                    sourceRefs,
+                    candidate.getSourcePath(),
+                    contentBudget
+            );
+            if (!appendBoundedSourceBlock(builder, candidate.getSourcePath(), selectedContent, maxPayloadChars)) {
+                break;
+            }
+        }
+        return builder.toString();
+    }
+
     /**
-     * 为当前概念选择更贴近 sourceRef 的正文片段。
+     * 查询来源内容候选。
+     *
+     * @param sourcePaths 来源路径列表
+     * @param sourceId 资料源主键
+     * @return 来源内容候选
+     */
+    private List<SourceContentCandidate> resolveSourceContentCandidates(List<String> sourcePaths, Long sourceId) {
+        List<SourceContentCandidate> candidates = new ArrayList<SourceContentCandidate>();
+        for (String sourcePath : safeList(sourcePaths)) {
+            Optional<SourceFileRecord> sourceFileRecord = sourceId == null
+                    ? sourceFileJdbcRepository.findByPath(sourcePath)
+                    : sourceFileJdbcRepository.findBySourceIdAndRelativePath(sourceId, sourcePath);
+            if (sourceFileRecord.isEmpty()) {
+                sourceFileRecord = sourceFileJdbcRepository.findByPath(sourcePath);
+            }
+            if (sourceFileRecord.isEmpty()) {
+                continue;
+            }
+            candidates.add(new SourceContentCandidate(sourcePath, sourceFileRecord.orElseThrow().getContentText()));
+        }
+        return candidates;
+    }
+
+    /**
+     * 计算单个来源在剩余 payload 中的内容预算。
+     *
+     * @param currentLength 当前 payload 长度
+     * @param remainingSources 剩余来源数
+     * @param maxPayloadChars 最大 payload 字符数
+     * @return 内容预算
+     */
+    private int calculateSourceContentBudget(int currentLength, int remainingSources, int maxPayloadChars) {
+        return calculateSourceContentBudget(
+                currentLength,
+                remainingSources,
+                maxPayloadChars,
+                REVIEW_SOURCE_PER_SOURCE_MAX_CHARS
+        );
+    }
+
+    /**
+     * 计算单个来源在剩余 payload 中的内容预算。
+     *
+     * @param currentLength 当前 payload 长度
+     * @param remainingSources 剩余来源数
+     * @param maxPayloadChars 最大 payload 字符数
+     * @param perSourceMaxChars 单个来源最大字符数
+     * @return 内容预算
+     */
+    private int calculateSourceContentBudget(
+            int currentLength,
+            int remainingSources,
+            int maxPayloadChars,
+            int perSourceMaxChars
+    ) {
+        int remainingPayload = maxPayloadChars - currentLength;
+        if (remainingPayload <= 0 || remainingSources <= 0) {
+            return 0;
+        }
+        int sharedBudget = remainingPayload / remainingSources;
+        return Math.min(perSourceMaxChars, sharedBudget);
+    }
+
+    /**
+     * 选择有界相关来源片段。
      *
      * @param content 源文件正文
-     * @param mergedConcept 合并概念
+     * @param conceptTerms 概念关键词
+     * @param sourceRefs 来源引用
      * @param sourcePath 来源路径
-     * @return 相关正文片段
+     * @param maxChars 最大字符数
+     * @return 来源片段
      */
-    private String selectRelevantContent(String content, MergedConcept mergedConcept, String sourcePath) {
-        String selectedBySourceRef = selectContentBySourceRefs(content, mergedConcept, sourcePath);
+    private String selectBoundedRelevantContent(
+            String content,
+            List<String> conceptTerms,
+            List<String> sourceRefs,
+            String sourcePath,
+            int maxChars
+    ) {
+        String selectedBySourceRef = selectContentBySourceRefs(content, sourceRefs, sourcePath);
         if (!selectedBySourceRef.isBlank()) {
-            return selectedBySourceRef;
+            return boundText(selectedBySourceRef, maxChars);
         }
-        return documentSectionSelector.select(content, buildConceptTerms(mergedConcept), WRITER_SOURCE_SNIPPET_MAX_CHARS);
+        String selectedByTerms = documentSectionSelector.select(content, conceptTerms, maxChars);
+        return boundText(selectedByTerms, maxChars);
+    }
+
+    /**
+     * 为 Writer 构建带总量预算的相关来源正文。
+     *
+     * @param mergedConcept 合并概念
+     * @param sourceId 资料源主键
+     * @param maxPayloadChars 最大 payload 字符数
+     * @return 来源正文片段
+     */
+    private String buildWriterSourceContents(MergedConcept mergedConcept, Long sourceId, int maxPayloadChars) {
+        return buildRelevantSourceContents(
+                mergedConcept.getSourcePaths(),
+                sourceId,
+                buildConceptTerms(mergedConcept),
+                collectSourceRefs(mergedConcept),
+                maxPayloadChars,
+                WRITER_SOURCE_SNIPPET_MAX_CHARS
+        );
+    }
+
+    /**
+     * 追加受总预算约束的来源块。
+     *
+     * @param builder payload 构建器
+     * @param sourcePath 来源路径
+     * @param selectedContent 已选来源片段
+     * @param maxPayloadChars 最大 payload 字符数
+     * @return 是否成功追加
+     */
+    private boolean appendBoundedSourceBlock(
+            StringBuilder builder,
+            String sourcePath,
+            String selectedContent,
+            int maxPayloadChars
+    ) {
+        String separator = builder.length() > 0 ? "\n\n" : "";
+        String header = "=== Source: " + sourcePath + " ===\n";
+        String footer = "\n=== End ===";
+        int reservedLength = separator.length() + header.length() + footer.length();
+        int remainingContentChars = maxPayloadChars - builder.length() - reservedLength;
+        if (remainingContentChars <= 0) {
+            return false;
+        }
+        String boundedContent = boundText(selectedContent, remainingContentChars);
+        builder.append(separator);
+        builder.append(header);
+        builder.append(boundedContent);
+        builder.append(footer);
+        return true;
+    }
+
+    /**
+     * 截断文本到指定长度。
+     *
+     * @param text 原始文本
+     * @param maxChars 最大字符数
+     * @return 有界文本
+     */
+    private String boundText(String text, int maxChars) {
+        if (text == null || maxChars <= 0) {
+            return "";
+        }
+        if (text.length() <= maxChars) {
+            return text;
+        }
+        return text.substring(0, maxChars).trim();
+    }
+
+    /**
+     * 追加受总预算约束的结构化章节块。
+     *
+     * @param builder payload 构建器
+     * @param section 结构化章节
+     * @param maxPayloadChars 最大 payload 字符数
+     * @return 是否成功追加
+     */
+    private boolean appendBoundedStructuredSection(
+            StringBuilder builder,
+            ConceptSection section,
+            int maxPayloadChars
+    ) {
+        String separator = builder.length() > 0 ? "\n" : "";
+        String header = "=== Section: " + section.getHeading() + " ===\n";
+        String sourcesLine = section.getSourceRefs().isEmpty()
+                ? ""
+                : "Sources: " + String.join(", ", section.getSourceRefs()) + "\n";
+        String footer = "=== End Section ===\n\n";
+        int reservedLength = separator.length() + header.length() + sourcesLine.length() + footer.length();
+        int remainingContentChars = maxPayloadChars - builder.length() - reservedLength;
+        if (remainingContentChars <= 0) {
+            return false;
+        }
+        String sectionContent = boundText(String.join("\n", safeList(section.getContentLines())), remainingContentChars);
+        if (sectionContent.isBlank()) {
+            return false;
+        }
+        builder.append(separator);
+        builder.append(header);
+        builder.append(sectionContent).append("\n");
+        if (!sourcesLine.isBlank()) {
+            builder.append(sourcesLine);
+        }
+        builder.append(footer);
+        return true;
     }
 
     /**
@@ -703,160 +931,6 @@ public class CompileArticleNode {
             return "";
         }
         return String.join("\n\n", matchedSections);
-    }
-
-    /**
-     * 构建相关片段优先的来源正文。
-     *
-     * @param sourcePaths 来源路径列表
-     * @param sourceId 资料源主键
-     * @param conceptTerms 概念关键词
-     * @param sourceRefs 来源引用
-     * @param maxPayloadChars 最大 payload 字符数
-     * @return 来源正文片段
-     */
-    private String buildRelevantSourceContents(
-            List<String> sourcePaths,
-            Long sourceId,
-            List<String> conceptTerms,
-            List<String> sourceRefs,
-            int maxPayloadChars
-    ) {
-        List<SourceContentCandidate> candidates = resolveSourceContentCandidates(sourcePaths, sourceId);
-        StringBuilder builder = new StringBuilder();
-        for (int index = 0; index < candidates.size(); index++) {
-            SourceContentCandidate candidate = candidates.get(index);
-            int remainingSources = candidates.size() - index;
-            int contentBudget = calculateSourceContentBudget(builder.length(), remainingSources, maxPayloadChars);
-            if (contentBudget <= 0) {
-                break;
-            }
-            String selectedContent = selectBoundedRelevantContent(
-                    candidate.getContent(),
-                    conceptTerms,
-                    sourceRefs,
-                    candidate.getSourcePath(),
-                    contentBudget
-            );
-            if (!appendBoundedSourceBlock(builder, candidate.getSourcePath(), selectedContent, maxPayloadChars)) {
-                break;
-            }
-        }
-        return builder.toString();
-    }
-
-    /**
-     * 查询来源内容候选。
-     *
-     * @param sourcePaths 来源路径列表
-     * @param sourceId 资料源主键
-     * @return 来源内容候选
-     */
-    private List<SourceContentCandidate> resolveSourceContentCandidates(List<String> sourcePaths, Long sourceId) {
-        List<SourceContentCandidate> candidates = new ArrayList<SourceContentCandidate>();
-        for (String sourcePath : safeList(sourcePaths)) {
-            Optional<SourceFileRecord> sourceFileRecord = sourceId == null
-                    ? sourceFileJdbcRepository.findByPath(sourcePath)
-                    : sourceFileJdbcRepository.findBySourceIdAndRelativePath(sourceId, sourcePath);
-            if (sourceFileRecord.isEmpty()) {
-                sourceFileRecord = sourceFileJdbcRepository.findByPath(sourcePath);
-            }
-            if (sourceFileRecord.isEmpty()) {
-                continue;
-            }
-            candidates.add(new SourceContentCandidate(sourcePath, sourceFileRecord.orElseThrow().getContentText()));
-        }
-        return candidates;
-    }
-
-    /**
-     * 计算单个来源在剩余 payload 中的内容预算。
-     *
-     * @param currentLength 当前 payload 长度
-     * @param remainingSources 剩余来源数
-     * @param maxPayloadChars 最大 payload 字符数
-     * @return 内容预算
-     */
-    private int calculateSourceContentBudget(int currentLength, int remainingSources, int maxPayloadChars) {
-        int remainingPayload = maxPayloadChars - currentLength;
-        if (remainingPayload <= 0 || remainingSources <= 0) {
-            return 0;
-        }
-        int sharedBudget = remainingPayload / remainingSources;
-        return Math.min(REVIEW_SOURCE_PER_SOURCE_MAX_CHARS, sharedBudget);
-    }
-
-    /**
-     * 选择有界相关来源片段。
-     *
-     * @param content 源文件正文
-     * @param conceptTerms 概念关键词
-     * @param sourceRefs 来源引用
-     * @param sourcePath 来源路径
-     * @param maxChars 最大字符数
-     * @return 来源片段
-     */
-    private String selectBoundedRelevantContent(
-            String content,
-            List<String> conceptTerms,
-            List<String> sourceRefs,
-            String sourcePath,
-            int maxChars
-    ) {
-        String selectedBySourceRef = selectContentBySourceRefs(content, sourceRefs, sourcePath);
-        if (!selectedBySourceRef.isBlank()) {
-            return boundText(selectedBySourceRef, maxChars);
-        }
-        String selectedByTerms = documentSectionSelector.select(content, conceptTerms, maxChars);
-        return boundText(selectedByTerms, maxChars);
-    }
-
-    /**
-     * 追加受总预算约束的来源块。
-     *
-     * @param builder payload 构建器
-     * @param sourcePath 来源路径
-     * @param selectedContent 已选来源片段
-     * @param maxPayloadChars 最大 payload 字符数
-     * @return 是否成功追加
-     */
-    private boolean appendBoundedSourceBlock(
-            StringBuilder builder,
-            String sourcePath,
-            String selectedContent,
-            int maxPayloadChars
-    ) {
-        String separator = builder.length() > 0 ? "\n\n" : "";
-        String header = "=== Source: " + sourcePath + " ===\n";
-        String footer = "\n=== End ===";
-        int reservedLength = separator.length() + header.length() + footer.length();
-        int remainingContentChars = maxPayloadChars - builder.length() - reservedLength;
-        if (remainingContentChars <= 0) {
-            return false;
-        }
-        String boundedContent = boundText(selectedContent, remainingContentChars);
-        builder.append(separator);
-        builder.append(header);
-        builder.append(boundedContent);
-        builder.append(footer);
-        return true;
-    }
-
-    /**
-     * 截断文本到指定长度。
-     *
-     * @param text 原始文本
-     * @param maxChars 最大字符数
-     * @return 有界文本
-     */
-    private String boundText(String text, int maxChars) {
-        if (text == null || maxChars <= 0) {
-            return "";
-        }
-        if (text.length() <= maxChars) {
-            return text;
-        }
-        return text.substring(0, maxChars).trim();
     }
 
     /**
