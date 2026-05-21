@@ -45,6 +45,8 @@ public class AnalyzeNode {
 
     private final StructuredTableWriterGatePolicy structuredTableWriterGatePolicy;
 
+    private final DocumentTopicWriterGatePolicy documentTopicWriterGatePolicy;
+
     /**
      * 创建分析节点。
      */
@@ -102,6 +104,7 @@ public class AnalyzeNode {
         this.schemaAwarePrompts = schemaAwarePrompts;
         this.documentTopicConceptExtractor = new DocumentTopicConceptExtractor(documentTopics);
         this.structuredTableWriterGatePolicy = new StructuredTableWriterGatePolicy();
+        this.documentTopicWriterGatePolicy = new DocumentTopicWriterGatePolicy();
     }
 
     /**
@@ -159,7 +162,7 @@ public class AnalyzeNode {
 
             List<AnalyzedConcept> topicAnalyzedConcepts = documentTopicConceptExtractor.extract(groupKey, sortedSources);
             if (!topicAnalyzedConcepts.isEmpty()) {
-                analyzedConcepts.addAll(topicAnalyzedConcepts);
+                analyzedConcepts.addAll(documentTopicWriterGatePolicy.rewrite(sortedSources, topicAnalyzedConcepts));
                 continue;
             }
 

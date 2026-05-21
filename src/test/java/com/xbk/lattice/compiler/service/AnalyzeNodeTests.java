@@ -411,6 +411,34 @@ class AnalyzeNodeTests {
     }
 
     /**
+     * 验证过多专题的长文档会被收敛为单个 overview concept，避免过度进入 Writer。
+     */
+    @Test
+    void shouldCollapseOverFragmentedDocumentTopicsIntoOverviewConcept() {
+        AnalyzeNode analyzeNode = new AnalyzeNode(null, null, createDocumentTopicCompilerProperties());
+        String content = buildOverFragmentedStructuredDocument();
+        List<SourceBatch> sourceBatches = Arrays.asList(
+                new SourceBatch("batch-1", "ops-handbook", Arrays.asList(
+                        RawSource.text("docs/test/ops-handbook.pdf", content, "pdf", content.length())
+                ))
+        );
+
+        List<AnalyzedConcept> analyzedConcepts = analyzeNode.analyze("ops-handbook", sourceBatches);
+
+        assertThat(analyzedConcepts).hasSize(1);
+        assertThat(analyzedConcepts.get(0).getConceptId()).isEqualTo("document-overview-docs-test-ops-handbook");
+        assertThat(analyzedConcepts.get(0).getTitle()).isEqualTo("Document Overview - ops-handbook");
+        assertThat(analyzedConcepts.get(0).getSourcePaths()).containsExactly("docs/test/ops-handbook.pdf");
+        assertThat(analyzedConcepts.get(0).getSnippets()).contains(
+                "Source path: docs/test/ops-handbook.pdf",
+                "Topic count: 10",
+                "Route: collapse over-fragmented document topics into one overview concept"
+        );
+        assertThat(String.join("\n", analyzedConcepts.get(0).getSnippets()))
+                .contains("Representative topics:");
+    }
+
+    /**
      * 构建测试用专题拆分配置。
      *
      * @return 编译配置
@@ -447,6 +475,24 @@ class AnalyzeNodeTests {
         appendTopic(builder, 2, "Storage Layout", "Describe table_alpha, table_beta and identifier mapping.");
         appendTopic(builder, 3, "Runtime Refresh", "Describe runtime_refresh_token and refresh window handling.");
         appendTopic(builder, 4, "Acceptance Flow", "Describe verification batches and acceptance checkpoints.");
+        return builder.toString();
+    }
+
+    /**
+     * 构建过度专题化的长文档样本。
+     *
+     * @return 长文档样本
+     */
+    private String buildOverFragmentedStructuredDocument() {
+        StringBuilder builder = new StringBuilder();
+        for (int index = 1; index <= 10; index++) {
+            appendTopic(
+                    builder,
+                    index,
+                    "Topic " + index,
+                    "Describe operational checklist item " + index + " and its evidence chain."
+            );
+        }
         return builder.toString();
     }
 
