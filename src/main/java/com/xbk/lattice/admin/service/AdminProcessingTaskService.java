@@ -194,7 +194,10 @@ public class AdminProcessingTaskService {
                 runDetail.getCompileErrorCode(),
                 runDetail.getMessage(),
                 runDetail.getErrorMessage(),
-                runDetail.getSourceId()
+                runDetail.getSourceId(),
+                runDetail.getPendingHumanReviewCount(),
+                runDetail.getPublishedCount(),
+                runDetail.getRejectedCount()
         );
         AdminCompileReviewSummaryResponse compileReviewSummary = adminCompileReviewSummaryService.resolve(runDetail.getCompileJobId());
         List<AdminProcessingTaskStepResponse> progressSteps = enrichReviewStepDetail(
@@ -243,6 +246,9 @@ public class AdminProcessingTaskService {
                 presentation.getNoticeTone(),
                 presentation.getCompletionNotice(),
                 compileReviewSummary,
+                runDetail.getPendingHumanReviewCount(),
+                runDetail.getPublishedCount(),
+                runDetail.getRejectedCount(),
                 runDetail.getEvidenceJson(),
                 runDetail.getRequestedAt(),
                 runDetail.getUpdatedAt(),
@@ -328,6 +334,9 @@ public class AdminProcessingTaskService {
                 presentation.getNoticeTone(),
                 presentation.getCompletionNotice(),
                 compileReviewSummary,
+                0,
+                0,
+                0,
                 null,
                 formatTime(compileJobRecord.getRequestedAt()),
                 formatTime(updatedAt),
@@ -385,7 +394,7 @@ public class AdminProcessingTaskService {
         int failedCount = 0;
         for (AdminProcessingTaskItemResponse item : items) {
             String displayStatus = resolveDisplayStatus(item);
-            if (AdminProcessingTaskDisplayStatus.WAIT_CONFIRM.matches(displayStatus)) {
+            if (shouldCountAsWaiting(item, displayStatus)) {
                 waitingCount++;
             }
             else if (AdminProcessingTaskDisplayStatus.isSucceeded(displayStatus)) {
@@ -407,6 +416,20 @@ public class AdminProcessingTaskService {
                 buildSummaryCards(runningCount, waitingCount, 0, succeededCount, failedCount),
                 buildHelpState(statusSnapshot, runningCount, waitingCount, 0, succeededCount, failedCount)
         );
+    }
+
+    /**
+     * 判断任务是否应计入待确认汇总。
+     *
+     * @param item 任务条目
+     * @param displayStatus 展示状态
+     * @return 是否计入待确认汇总
+     */
+    private boolean shouldCountAsWaiting(AdminProcessingTaskItemResponse item, String displayStatus) {
+        if (item != null && item.getPendingHumanReviewCount() > 0) {
+            return true;
+        }
+        return AdminProcessingTaskDisplayStatus.WAIT_CONFIRM.matches(displayStatus);
     }
 
     /**
@@ -436,13 +459,13 @@ public class AdminProcessingTaskService {
         cards.add(new AdminProcessingTaskSummaryCardResponse(
                 "待确认",
                 waitingCount,
-                waitingCount > 0 ? "请打开下方任务查看后端给出的确认动作" : "当前没有需要人工确认的任务",
+                waitingCount > 0 ? "请打开下方任务处理人工确认" : "当前没有需要人工确认的任务",
                 waitingCount > 0 ? "warning" : "success"
         ));
         cards.add(new AdminProcessingTaskSummaryCardResponse(
                 "已完成",
                 succeededCount,
-                succeededCount > 0 ? "最近已经成功处理并写入知识库" : "最近还没有成功完成的任务",
+                succeededCount > 0 ? "最近已有资料任务处理结束" : "最近还没有处理完成的任务",
                 succeededCount > 0 ? "success" : ""
         ));
         cards.add(new AdminProcessingTaskSummaryCardResponse(

@@ -110,6 +110,47 @@ class CompileArticleReviewQueueJdbcRepositoryTests {
         assertThat(rejectedRecord.getPublishedArticleKey()).isNull();
     }
 
+    /**
+     * 验证可按编译作业标识聚合待确认、已发布与已驳回数量。
+     */
+    @Test
+    void shouldSummarizePublishOutcomeByJobId() {
+        compileArticleReviewQueueJdbcRepository.list(null, 1);
+        jdbcTemplate.execute("TRUNCATE TABLE lattice.compile_article_review_queue RESTART IDENTITY");
+        compileArticleReviewQueueJdbcRepository.upsertPending(queueRecord("job-outcome", "concept-pending"));
+        compileArticleReviewQueueJdbcRepository.upsertPending(queueRecord("job-outcome", "concept-published"));
+        compileArticleReviewQueueJdbcRepository.upsertPending(queueRecord("job-outcome", "concept-rejected"));
+
+        List<CompileArticleReviewQueueRecord> pendingRecords = compileArticleReviewQueueJdbcRepository
+                .list("needs_human_review", 10);
+        for (CompileArticleReviewQueueRecord pendingRecord : pendingRecords) {
+            if ("concept-published".equals(pendingRecord.getConceptId())) {
+                compileArticleReviewQueueJdbcRepository.markPublished(
+                        pendingRecord.getId(),
+                        "reviewer-a",
+                        OffsetDateTime.parse("2026-05-20T09:00:00+08:00"),
+                        "确认发布",
+                        pendingRecord.getArticleKey()
+                );
+            }
+            if ("concept-rejected".equals(pendingRecord.getConceptId())) {
+                compileArticleReviewQueueJdbcRepository.markRejected(
+                        pendingRecord.getId(),
+                        "reviewer-b",
+                        OffsetDateTime.parse("2026-05-20T09:00:00+08:00"),
+                        "拒绝发布"
+                );
+            }
+        }
+
+        CompileArticleReviewQueueJdbcRepository.PublishOutcomeSummary summary =
+                compileArticleReviewQueueJdbcRepository.summarizeByJobId("job-outcome");
+        assertThat(summary.getPendingHumanReviewCount()).isEqualTo(1);
+        assertThat(summary.getPublishedCount()).isEqualTo(1);
+        assertThat(summary.getRejectedCount()).isEqualTo(1);
+        assertThat(summary.hasAnyOutcome()).isTrue();
+    }
+
     private CompileArticleReviewQueueRecord queueRecord(String jobId, String conceptId) {
         return new CompileArticleReviewQueueRecord(
                 0L,

@@ -146,6 +146,15 @@
         where review_status = #{status}
     </select>
 
+    <select id="summarizeByJobId" resultType="map">
+        select
+            coalesce(sum(case when review_status = 'needs_human_review' then 1 else 0 end), 0) as pending_human_review_count,
+            coalesce(sum(case when review_status = 'published' then 1 else 0 end), 0) as published_count,
+            coalesce(sum(case when review_status = 'rejected' then 1 else 0 end), 0) as rejected_count
+        from compile_article_review_queue
+        where job_id = #{jobId}
+    </select>
+
     <select id="findById" resultMap="CompileArticleReviewQueueRecordResultMap">
         select <include refid="CompileArticleReviewQueueColumns"/>
         from compile_article_review_queue

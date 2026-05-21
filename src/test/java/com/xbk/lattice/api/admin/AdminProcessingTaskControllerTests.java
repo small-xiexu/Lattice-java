@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.compiler.config.CompileJobProperties;
 import com.xbk.lattice.compiler.service.CompileJobLeaseManager;
 import com.xbk.lattice.compiler.service.CompileJobService;
+import com.xbk.lattice.infra.persistence.CompileArticleReviewQueueJdbcRepository;
+import com.xbk.lattice.infra.persistence.CompileArticleReviewQueueRecord;
 import com.xbk.lattice.infra.persistence.CompileJobJdbcRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -58,6 +60,9 @@ class AdminProcessingTaskControllerTests {
 
     @Autowired
     private CompileJobJdbcRepository compileJobJdbcRepository;
+
+    @Autowired
+    private CompileArticleReviewQueueJdbcRepository compileArticleReviewQueueJdbcRepository;
 
     @Autowired
     private CompileJobLeaseManager compileJobLeaseManager;
@@ -192,6 +197,63 @@ class AdminProcessingTaskControllerTests {
         assertThat(standaloneTask.path("progressSteps").get(2).path("detail").asText()).doesNotContain("细分状态");
         assertThat(rootNode.path("summary").path("helpState").path("title").asText()).isNotBlank();
         assertThat(rootNode.path("summary").path("cards").isArray()).isTrue();
+    }
+
+    /**
+     * 验证待人工确认草稿会把 source-run / processing-tasks 展示为待人工确认，而不是已写入知识库。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldExposePendingHumanReviewPublishSemanticsInProcessingTasks() throws Exception {
+        resetTables();
+        MockMultipartFile sourceFile = new MockMultipartFile(
+                "files",
+                "payments/publish-semantics.md",
+                MediaType.TEXT_PLAIN_VALUE,
+                """
+                        # Publish Semantics
+
+                        pending review queue
+                        """.getBytes(StandardCharsets.UTF_8)
+        );
+
+        String uploadResponseBody = mockMvc.perform(multipart("/api/v1/admin/uploads").file(sourceFile))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        Long runId = readLong(uploadResponseBody, "runId");
+        Long sourceId = readLong(uploadResponseBody, "sourceId");
+        String linkedCompileJobId = readText(uploadResponseBody, "compileJobId");
+        markJobSucceeded(linkedCompileJobId);
+        compileArticleReviewQueueJdbcRepository.upsertPending(queueRecord(
+                linkedCompileJobId,
+                sourceId,
+                "concept-publish-semantics",
+                "source-publish-semantics--concept-publish-semantics"
+        ));
+
+        String responseBody = mockMvc.perform(get("/api/v1/admin/processing-tasks?limit=10"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        JsonNode rootNode = OBJECT_MAPPER.readTree(responseBody);
+
+        JsonNode sourceSyncTask = findTaskByType(rootNode.path("items"), "SOURCE_SYNC");
+        assertThat(sourceSyncTask).isNotNull();
+        assertThat(sourceSyncTask.path("runId").asLong()).isEqualTo(runId.longValue());
+        assertThat(sourceSyncTask.path("displayStatus").asText()).isEqualTo("SUCCEEDED");
+        assertThat(sourceSyncTask.path("displayStatusLabel").asText()).isEqualTo("待人工确认");
+        assertThat(sourceSyncTask.path("completionNotice").asText()).isEqualTo("草稿尚未入库，需人工确认后才能发布");
+        assertThat(sourceSyncTask.path("reasonSummary").asText()).isEqualTo("质量检查已完成，等待人工确认后决定是否入库");
+        assertThat(sourceSyncTask.path("pendingHumanReviewCount").asInt()).isEqualTo(1);
+        assertThat(sourceSyncTask.path("publishedCount").asInt()).isZero();
+        assertThat(sourceSyncTask.path("rejectedCount").asInt()).isZero();
+        assertThat(sourceSyncTask.path("requiresManualAction").asBoolean()).isTrue();
+        assertThat(rootNode.path("summary").path("waitingCount").asInt()).isEqualTo(1);
+        assertThat(rootNode.path("summary").path("succeededCount").asInt()).isZero();
     }
 
     /**
@@ -486,6 +548,75 @@ class AdminProcessingTaskControllerTests {
                 requestedAt,
                 updatedAt,
                 updatedAt
+        );
+    }
+
+    /**
+     * 将编译作业标记为成功完成。
+     *
+     * @param jobId 作业标识
+     */
+    private void markJobSucceeded(String jobId) {
+        OffsetDateTime startedAt = OffsetDateTime.now().minusMinutes(1);
+        OffsetDateTime runningExpiresAt = startedAt.plusSeconds(compileJobProperties.getLeaseDurationSeconds());
+        compileJobJdbcRepository.markRunning(
+                jobId,
+                compileJobProperties.getWorkerId(),
+                startedAt,
+                runningExpiresAt
+        );
+        compileJobJdbcRepository.markSucceeded(jobId, 0, OffsetDateTime.now());
+    }
+
+    /**
+     * 构造待人工确认队列记录。
+     *
+     * @param jobId 编译作业标识
+     * @param sourceId 资料源标识
+     * @param conceptId 概念标识
+     * @param articleKey 文章键
+     * @return 队列记录
+     */
+    private CompileArticleReviewQueueRecord queueRecord(
+            String jobId,
+            Long sourceId,
+            String conceptId,
+            String articleKey
+    ) {
+        return new CompileArticleReviewQueueRecord(
+                0L,
+                jobId,
+                sourceId,
+                "payments",
+                conceptId,
+                articleKey,
+                "Publish Semantics Draft",
+                """
+                        ---
+                        title: "Publish Semantics Draft"
+                        summary: "Generic summary"
+                        sources: ["payments/publish-semantics.md"]
+                        review_status: needs_human_review
+                        ---
+
+                        # Publish Semantics Draft
+                        """,
+                "ACTIVE",
+                OffsetDateTime.parse("2026-05-20T08:00:00+08:00"),
+                java.util.List.of("payments/publish-semantics.md"),
+                "{}",
+                "needs_human_review",
+                "llm",
+                "llm",
+                "[{\"severity\":\"HIGH\",\"category\":\"GROUNDING\",\"description\":\"缺少来源\"}]",
+                1,
+                1,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
         );
     }
 

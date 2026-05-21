@@ -33,6 +33,7 @@ class ManagementJsRuntimeTests {
 
         String html = Files.readString(indexHtmlPath, StandardCharsets.UTF_8);
         assertThat(html).contains("待人工确认说明");
+        assertThat(html).doesNotContain("value=\"needs_human_review\"");
         assertThat(html).doesNotContain("Reviewer 判定原因");
         assertThat(html).doesNotContain("质量检查给出的原因");
     }
@@ -453,6 +454,23 @@ class ManagementJsRuntimeTests {
                     "wait-confirm status should render the unified human-confirmation label");
                 assert(!waitConfirmMarkup.includes(">待确认<"),
                     "wait-confirm status should not render the old short confirmation label");
+                const publishReviewMarkup = runs.renderRecentRunBoardItem({
+                    taskType: "SOURCE_SYNC",
+                    status: "SUCCEEDED",
+                    displayStatus: "SUCCEEDED",
+                    displayStatusLabel: "待人工确认",
+                    requiresManualAction: true,
+                    sourceType: "UPLOAD",
+                    syncAction: "UPDATE",
+                    title: "待人工确认任务",
+                    reasonSummary: "质量检查已完成，等待人工确认后决定是否入库",
+                    pendingHumanReviewCount: 2,
+                    requestedAt: "2026-05-02T16:08:00+08:00"
+                });
+                assert(publishReviewMarkup.includes("待人工确认草稿"),
+                    "task card should distinguish draft count from top-level task count");
+                assert(publishReviewMarkup.includes("2 篇"),
+                    "task card should render pending draft count");
 
                 const failedRun = {
                     status: "FAILED",
@@ -657,6 +675,25 @@ class ManagementJsRuntimeTests {
                     "summary cards should avoid ambiguous pending feedback copy");
                 assert(!summaryElements["summary-cards"].innerHTML.includes("结果反馈待处理"),
                     "summary cards should use clearer answer feedback copy");
+                const recentRunOverview = { innerHTML: "", dataset: {} };
+                summaryElements["recent-run-overview"] = recentRunOverview;
+                runs.renderRecentRunOverview({
+                    cards: [{
+                        label: "待确认",
+                        value: 1,
+                        note: "仍有任务等待人工处理",
+                        tone: "warning"
+                    }, {
+                        label: "已完成",
+                        value: 3,
+                        note: "最近已有资料任务处理结束",
+                        tone: "success"
+                    }]
+                });
+                assert(recentRunOverview.innerHTML.includes("待人工确认任务"),
+                    "processing-task overview should express waiting count as task count");
+                assert(!recentRunOverview.innerHTML.includes(">待确认<"),
+                    "processing-task overview should not keep the old short waiting label");
                 const helpState = knowledgeUi.deriveKnowledgeHelpState();
                 assert(helpState.description.includes("待人工确认"),
                     "help state should guide to compile review queue before article review backlog");

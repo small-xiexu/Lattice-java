@@ -13,6 +13,7 @@ import com.xbk.lattice.compiler.service.CompileJobService;
 import com.xbk.lattice.compiler.service.CompileJobDerivedStatusResolver;
 import com.xbk.lattice.compiler.service.CompileJobStatuses;
 import com.xbk.lattice.compiler.service.CompileOrchestrationModes;
+import com.xbk.lattice.infra.persistence.CompileArticleReviewQueueJdbcRepository;
 import com.xbk.lattice.infra.persistence.CompileJobRecord;
 import com.xbk.lattice.source.domain.BundleSummary;
 import com.xbk.lattice.source.domain.KnowledgeSource;
@@ -62,6 +63,8 @@ abstract class SourceUploadWorkflowSupport {
     protected SourceSnapshotJdbcRepository sourceSnapshotJdbcRepository;
 
     protected AdminProcessingTaskPresentationResolver presentationResolver;
+
+    protected CompileArticleReviewQueueJdbcRepository compileArticleReviewQueueJdbcRepository;
 
     protected SourceSyncRun createInitialRun(
             BundleFeatureExtractor.UploadBundleSnapshot bundleSnapshot,
@@ -396,7 +399,10 @@ abstract class SourceUploadWorkflowSupport {
         String compileLastHeartbeatAt = compileJobRecord == null ? null : formatTime(compileJobRecord.getLastHeartbeatAt());
         String compileRunningExpiresAt = compileJobRecord == null ? null : formatTime(compileJobRecord.getRunningExpiresAt());
         String compileErrorCode = compileJobRecord == null ? null : compileJobRecord.getErrorCode();
-        String message = evidenceNode.path("message").asText(defaultMessage(run));
+        CompileArticleReviewQueueJdbcRepository.PublishOutcomeSummary publishOutcomeSummary = summarizePublishOutcome(
+                run.getCompileJobId()
+        );
+        String evidenceMessage = evidenceNode.path("message").asText(defaultMessage(run));
         String displayStatus = presentationResolver.resolveDisplayStatus(
                 compileDerivedStatus,
                 compileJobStatus,
@@ -410,11 +416,17 @@ abstract class SourceUploadWorkflowSupport {
                 compileProgressTotal,
                 compileProgressMessage,
                 compileErrorCode,
-                message,
+                evidenceMessage,
                 run.getErrorMessage(),
-                run.getSourceId()
+                run.getSourceId(),
+                publishOutcomeSummary.getPendingHumanReviewCount(),
+                publishOutcomeSummary.getPublishedCount(),
+                publishOutcomeSummary.getRejectedCount()
         );
         List<AdminProcessingTaskActionResponse> actions = buildSourceSyncActions(run, displayStatus);
+        String message = publishOutcomeSummary.hasAnyOutcome()
+                ? presentation.getCompletionNotice()
+                : evidenceMessage;
         return new SourceSyncRunDetail(
                 run.getId(),
                 run.getSourceId(),
@@ -453,12 +465,28 @@ abstract class SourceUploadWorkflowSupport {
                 presentation.isRequiresManualAction(),
                 presentation.getNoticeTone(),
                 presentation.getCompletionNotice(),
+                publishOutcomeSummary.getPendingHumanReviewCount(),
+                publishOutcomeSummary.getPublishedCount(),
+                publishOutcomeSummary.getRejectedCount(),
                 run.getEvidenceJson(),
                 formatTime(run.getRequestedAt()),
                 formatTime(run.getUpdatedAt()),
                 formatTime(run.getStartedAt()),
                 formatTime(run.getFinishedAt())
         );
+    }
+
+    /**
+     * 按编译作业标识汇总人工确认发布结果。
+     *
+     * @param compileJobId 编译作业标识
+     * @return 发布结果汇总
+     */
+    protected CompileArticleReviewQueueJdbcRepository.PublishOutcomeSummary summarizePublishOutcome(String compileJobId) {
+        if (compileArticleReviewQueueJdbcRepository == null || compileJobId == null || compileJobId.isBlank()) {
+            return CompileArticleReviewQueueJdbcRepository.PublishOutcomeSummary.empty();
+        }
+        return compileArticleReviewQueueJdbcRepository.summarizeByJobId(compileJobId);
     }
     protected List<AdminProcessingTaskActionResponse> buildSourceSyncActions(SourceSyncRun run, String displayStatus) {
         List<AdminProcessingTaskActionResponse> actions = new ArrayList<AdminProcessingTaskActionResponse>();

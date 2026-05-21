@@ -48,6 +48,56 @@ public class AdminProcessingTaskPresentationResolver {
             String errorMessage,
             Long sourceId
     ) {
+        return resolve(
+                taskType,
+                displayStatus,
+                currentStep,
+                progressCurrent,
+                progressTotal,
+                progressMessage,
+                errorCode,
+                message,
+                errorMessage,
+                sourceId,
+                0,
+                0,
+                0
+        );
+    }
+
+    /**
+     * 解析统一任务展示结果。
+     *
+     * @param taskType 任务类型
+     * @param displayStatus 展示状态
+     * @param currentStep 当前步骤
+     * @param progressCurrent 当前进度
+     * @param progressTotal 总进度
+     * @param progressMessage 进度提示
+     * @param errorCode 错误码
+     * @param message 提示信息
+     * @param errorMessage 错误信息
+     * @param sourceId 资料源标识
+     * @param pendingHumanReviewCount 待人工确认数量
+     * @param publishedCount 已发布数量
+     * @param rejectedCount 已驳回数量
+     * @return 展示结果
+     */
+    public AdminProcessingTaskPresentation resolve(
+            String taskType,
+            String displayStatus,
+            String currentStep,
+            Integer progressCurrent,
+            Integer progressTotal,
+            String progressMessage,
+            String errorCode,
+            String message,
+            String errorMessage,
+            Long sourceId,
+            int pendingHumanReviewCount,
+            int publishedCount,
+            int rejectedCount
+    ) {
         String normalizedDisplayStatus = normalizeStatus(displayStatus);
         String currentStepLabel = resolveCurrentStepLabel(taskType, normalizedDisplayStatus, currentStep);
         String nextStepHint = resolveNextStepHint(taskType, normalizedDisplayStatus, sourceId);
@@ -85,9 +135,35 @@ public class AdminProcessingTaskPresentationResolver {
                 reasonSummary,
                 taskType
         );
+        String displayStatusLabel = getStatusLabel(normalizedDisplayStatus);
+        PublishOutcomePresentation publishOutcomePresentation = resolvePublishOutcomePresentation(
+                taskType,
+                normalizedDisplayStatus,
+                pendingHumanReviewCount,
+                publishedCount,
+                rejectedCount
+        );
+        if (publishOutcomePresentation != null) {
+            displayStatusLabel = publishOutcomePresentation.displayStatusLabel;
+            currentStepLabel = publishOutcomePresentation.currentStepLabel;
+            nextStepHint = publishOutcomePresentation.nextStepHint;
+            progressText = publishOutcomePresentation.progressText;
+            reasonSummary = publishOutcomePresentation.reasonSummary;
+            operationalNote = buildOperationalNoteFromStatusLabel(
+                    displayStatusLabel,
+                    currentStepLabel,
+                    nextStepHint,
+                    errorCode
+            );
+            displayTone = publishOutcomePresentation.displayTone;
+            processingActive = false;
+            requiresManualAction = publishOutcomePresentation.requiresManualAction;
+            noticeTone = publishOutcomePresentation.noticeTone;
+            completionNotice = publishOutcomePresentation.completionNotice;
+        }
         return new AdminProcessingTaskPresentation(
                 normalizedDisplayStatus,
-                getStatusLabel(normalizedDisplayStatus),
+                displayStatusLabel,
                 currentStepLabel,
                 nextStepHint,
                 progressText,
@@ -200,6 +276,132 @@ public class AdminProcessingTaskPresentationResolver {
     public String resolveNoticeTone(String displayStatus) {
         AdminProcessingTaskDisplayStatus status = AdminProcessingTaskDisplayStatus.fromCode(displayStatus);
         return status == null ? "success" : status.getNoticeTone();
+    }
+
+    /**
+     * 解析人工确认发布的展示态覆盖。
+     *
+     * @param taskType 任务类型
+     * @param displayStatus 展示状态
+     * @param pendingHumanReviewCount 待人工确认数量
+     * @param publishedCount 已发布数量
+     * @param rejectedCount 已驳回数量
+     * @return 覆盖结果；无需覆盖时返回 null
+     */
+    private PublishOutcomePresentation resolvePublishOutcomePresentation(
+            String taskType,
+            String displayStatus,
+            int pendingHumanReviewCount,
+            int publishedCount,
+            int rejectedCount
+    ) {
+        int safePendingHumanReviewCount = Math.max(pendingHumanReviewCount, 0);
+        int safePublishedCount = Math.max(publishedCount, 0);
+        int safeRejectedCount = Math.max(rejectedCount, 0);
+        if (!AdminProcessingTaskDisplayStatus.isSucceeded(displayStatus)) {
+            return null;
+        }
+        int total = safePendingHumanReviewCount + safePublishedCount + safeRejectedCount;
+        if (total <= 0) {
+            return null;
+        }
+        if (safePendingHumanReviewCount > 0 && safePublishedCount == 0 && safeRejectedCount == 0) {
+            return new PublishOutcomePresentation(
+                    "待人工确认",
+                    "等待人工确认",
+                    "去待人工确认处理",
+                    "待人工确认 " + safePendingHumanReviewCount + " 篇",
+                    "质量检查已完成，等待人工确认后决定是否入库",
+                    "warning",
+                    true,
+                    "warning",
+                    "草稿尚未入库，需人工确认后才能发布"
+            );
+        }
+        if (safePendingHumanReviewCount > 0 && safePublishedCount > 0) {
+            return new PublishOutcomePresentation(
+                    "待人工确认",
+                    "等待剩余草稿确认",
+                    "去待人工确认处理",
+                    "已入库 " + safePublishedCount + " 篇 · 待确认 " + safePendingHumanReviewCount + " 篇",
+                    "已入库 " + safePublishedCount + " 篇，仍有 " + safePendingHumanReviewCount + " 篇待人工确认",
+                    "warning",
+                    true,
+                    "warning",
+                    "部分内容已入库，其余仍待人工确认"
+            );
+        }
+        if (safePendingHumanReviewCount == 0 && safePublishedCount > 0 && safeRejectedCount > 0) {
+            return new PublishOutcomePresentation(
+                    "已处理",
+                    "人工确认已结束",
+                    "查看已入库内容",
+                    "已入库 " + safePublishedCount + " 篇 · 已驳回 " + safeRejectedCount + " 篇",
+                    "已入库 " + safePublishedCount + " 篇，已驳回 " + safeRejectedCount + " 篇",
+                    "warning",
+                    false,
+                    "warning",
+                    "本次草稿已处理完成，但只有部分内容进入知识库"
+            );
+        }
+        if (safePendingHumanReviewCount == 0 && safePublishedCount > 0 && safeRejectedCount == 0) {
+            return new PublishOutcomePresentation(
+                    "已完成",
+                    "写入知识库",
+                    "可以查看已入库内容或继续问答",
+                    "已入库 " + safePublishedCount + " 篇",
+                    "资料已正式发布到知识库",
+                    "success",
+                    false,
+                    "success",
+                    "资料已正式发布到知识库"
+            );
+        }
+        if (safePendingHumanReviewCount == 0 && safePublishedCount == 0 && safeRejectedCount > 0) {
+            return new PublishOutcomePresentation(
+                    "未入库",
+                    "人工确认已结束",
+                    "查看处理记录",
+                    "已驳回 " + safeRejectedCount + " 篇",
+                    "本次草稿已全部驳回，未进入正式知识库",
+                    "warning",
+                    false,
+                    "warning",
+                    "本次草稿已全部驳回，未进入正式知识库"
+            );
+        }
+        return null;
+    }
+
+    /**
+     * 构建带展示状态文案的任务线索。
+     *
+     * @param statusLabel 展示状态文案
+     * @param currentStepLabel 当前步骤文案
+     * @param nextStepHint 下一步提示
+     * @param errorCode 错误码
+     * @return 任务线索文案
+     */
+    private String buildOperationalNoteFromStatusLabel(
+            String statusLabel,
+            String currentStepLabel,
+            String nextStepHint,
+            String errorCode
+    ) {
+        List<String> parts = new ArrayList<String>();
+        if (statusLabel != null && !statusLabel.isBlank()) {
+            parts.add("运行态：" + statusLabel);
+        }
+        if (currentStepLabel != null && !currentStepLabel.isBlank()) {
+            parts.add("当前步骤：" + currentStepLabel);
+        }
+        if (nextStepHint != null && !nextStepHint.isBlank()) {
+            parts.add("下一步：" + nextStepHint);
+        }
+        if (errorCode != null && !errorCode.isBlank()) {
+            parts.add("错误码：" + normalizeStatus(errorCode));
+        }
+        return parts.isEmpty() ? "系统正在继续处理当前任务。" : String.join(" · ", parts);
     }
 
     /**
@@ -419,20 +621,12 @@ public class AdminProcessingTaskPresentationResolver {
             String nextStepHint,
             String errorCode
     ) {
-        List<String> parts = new ArrayList<String>();
-        if (displayStatus != null) {
-            parts.add("运行态：" + getStatusLabel(displayStatus));
-        }
-        if (currentStepLabel != null && !currentStepLabel.isBlank()) {
-            parts.add("当前步骤：" + currentStepLabel);
-        }
-        if (nextStepHint != null && !nextStepHint.isBlank()) {
-            parts.add("下一步：" + nextStepHint);
-        }
-        if (errorCode != null && !errorCode.isBlank()) {
-            parts.add("错误码：" + normalizeStatus(errorCode));
-        }
-        return parts.isEmpty() ? "系统正在继续处理当前任务。" : String.join(" · ", parts);
+        return buildOperationalNoteFromStatusLabel(
+                displayStatus == null ? null : getStatusLabel(displayStatus),
+                currentStepLabel,
+                nextStepHint,
+                errorCode
+        );
     }
 
     /**
@@ -686,5 +880,68 @@ public class AdminProcessingTaskPresentationResolver {
             return "当前资料源已有运行中的同步任务，请等待完成后再试。";
         }
         return normalizedErrorCode == null ? "任务执行失败。" : "任务执行失败，错误码：" + normalizedErrorCode;
+    }
+
+    /**
+     * 人工确认发布语义覆盖结果。
+     *
+     * 职责：承载基于 publish outcome 推导出的展示标签、下一步与完成提示
+     *
+     * @author xiexu
+     */
+    private static final class PublishOutcomePresentation {
+
+        private final String displayStatusLabel;
+
+        private final String currentStepLabel;
+
+        private final String nextStepHint;
+
+        private final String progressText;
+
+        private final String reasonSummary;
+
+        private final String displayTone;
+
+        private final boolean requiresManualAction;
+
+        private final String noticeTone;
+
+        private final String completionNotice;
+
+        /**
+         * 创建人工确认发布语义覆盖结果。
+         *
+         * @param displayStatusLabel 展示状态文案
+         * @param currentStepLabel 当前步骤文案
+         * @param nextStepHint 下一步提示
+         * @param progressText 当前进度文案
+         * @param reasonSummary 原因摘要
+         * @param displayTone 展示色调
+         * @param requiresManualAction 是否需要人工处理
+         * @param noticeTone 通知语气
+         * @param completionNotice 完成提示
+         */
+        private PublishOutcomePresentation(
+                String displayStatusLabel,
+                String currentStepLabel,
+                String nextStepHint,
+                String progressText,
+                String reasonSummary,
+                String displayTone,
+                boolean requiresManualAction,
+                String noticeTone,
+                String completionNotice
+        ) {
+            this.displayStatusLabel = displayStatusLabel;
+            this.currentStepLabel = currentStepLabel;
+            this.nextStepHint = nextStepHint;
+            this.progressText = progressText;
+            this.reasonSummary = reasonSummary;
+            this.displayTone = displayTone;
+            this.requiresManualAction = requiresManualAction;
+            this.noticeTone = noticeTone;
+            this.completionNotice = completionNotice;
+        }
     }
 }

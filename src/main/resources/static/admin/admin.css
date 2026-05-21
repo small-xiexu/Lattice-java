@@ -2740,26 +2740,29 @@ button.list-item {
 
 .review-queue-status {
     padding: 10px 12px;
-    border: 1px solid rgba(143, 190, 255, 0.12);
+    border: 1px solid rgba(76, 89, 75, 0.12);
     border-radius: 12px;
-    color: var(--muted);
-    background: rgba(8, 15, 29, 0.48);
+    color: var(--primary-strong);
+    background: rgba(255, 252, 247, 0.92);
     font-size: 13px;
 }
 
 .review-queue-status[data-tone="success"] {
-    border-color: rgba(65, 214, 147, 0.2);
-    color: #b8f2d7;
+    border-color: rgba(79, 140, 100, 0.22);
+    color: #24533d;
+    background: rgba(239, 247, 243, 0.98);
 }
 
 .review-queue-status[data-tone="warning"] {
-    border-color: rgba(255, 197, 107, 0.22);
-    color: #ffdba0;
+    border-color: rgba(214, 154, 79, 0.24);
+    color: #7a5220;
+    background: rgba(252, 244, 236, 0.98);
 }
 
 .review-queue-status[data-tone="danger"] {
-    border-color: rgba(255, 119, 119, 0.22);
-    color: #ffb6b6;
+    border-color: rgba(196, 97, 97, 0.24);
+    color: #8c3636;
+    background: rgba(252, 239, 237, 0.98);
 }
 
 .review-queue-list,
@@ -2775,11 +2778,12 @@ button.list-item {
     gap: 9px;
     width: 100%;
     padding: 12px;
-    border: 1px solid rgba(143, 190, 255, 0.1);
+    border: 1px solid rgba(76, 89, 75, 0.12);
     border-radius: 14px;
-    background: rgba(8, 15, 29, 0.6);
-    color: inherit;
+    background: rgba(255, 252, 247, 0.98);
+    color: var(--primary-strong);
     text-align: left;
+    box-shadow: 0 6px 16px rgba(39, 51, 40, 0.06);
 }
 
 .review-queue-item {
@@ -2788,13 +2792,14 @@ button.list-item {
 
 .review-queue-item:hover,
 .review-queue-item.active {
-    border-color: rgba(121, 210, 255, 0.28);
-    background: rgba(18, 35, 60, 0.72);
+    border-color: rgba(97, 150, 123, 0.34);
+    background: rgba(248, 244, 236, 1);
+    box-shadow: 0 0 0 1px rgba(97, 150, 123, 0.15), 0 12px 24px rgba(39, 51, 40, 0.08);
 }
 
 .review-queue-item h4 {
     margin: 0;
-    color: #f3f7ff;
+    color: var(--primary-strong);
     font-size: 14px;
     line-height: 1.35;
     overflow-wrap: anywhere;
@@ -2804,13 +2809,26 @@ button.list-item {
     min-width: 0;
 }
 
+.review-queue-detail .detail-focus-card,
+.review-queue-detail .detail-section {
+    border-color: rgba(76, 89, 75, 0.12);
+    background: rgba(255, 252, 247, 0.98);
+    box-shadow: 0 8px 20px rgba(39, 51, 40, 0.05);
+}
+
+.review-queue-detail .detail-section-copy,
+.review-queue-detail .item-caption,
+.review-queue-detail .muted {
+    color: var(--muted-strong);
+}
+
 .review-queue-content {
     max-height: 360px;
     overflow: auto;
 }
 
 .review-queue-actions {
-    border-top: 1px solid rgba(143, 190, 255, 0.1);
+    border-top: 1px solid rgba(76, 89, 75, 0.12);
     padding-top: 12px;
 }
 

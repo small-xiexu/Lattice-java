@@ -87,6 +87,12 @@ public class SourceSyncRunDetail {
 
     private final String completionNotice;
 
+    private final int pendingHumanReviewCount;
+
+    private final int publishedCount;
+
+    private final int rejectedCount;
+
     private final String evidenceJson;
 
     private final String requestedAt;
@@ -187,6 +193,151 @@ public class SourceSyncRunDetail {
             String startedAt,
             String finishedAt
     ) {
+        this(
+                runId,
+                sourceId,
+                sourceName,
+                sourceType,
+                status,
+                resolverMode,
+                resolverDecision,
+                syncAction,
+                matchedSourceId,
+                compileJobId,
+                compileJobStatus,
+                compileDerivedStatus,
+                compileCurrentStep,
+                compileProgressCurrent,
+                compileProgressTotal,
+                compileProgressMessage,
+                compileLastHeartbeatAt,
+                compileRunningExpiresAt,
+                compileErrorCode,
+                manifestHash,
+                message,
+                errorMessage,
+                sourceNames,
+                actions,
+                displayStatus,
+                displayStatusLabel,
+                currentStepLabel,
+                nextStepHint,
+                progressText,
+                reasonSummary,
+                operationalNote,
+                progressSteps,
+                displayTone,
+                processingActive,
+                requiresManualAction,
+                noticeTone,
+                completionNotice,
+                0,
+                0,
+                0,
+                evidenceJson,
+                requestedAt,
+                updatedAt,
+                startedAt,
+                finishedAt
+        );
+    }
+
+    /**
+     * 创建同步运行详情。
+     *
+     * @param runId 运行主键
+     * @param sourceId 资料源主键
+     * @param sourceName 资料源名称
+     * @param sourceType 资料源类型
+     * @param status 运行状态
+     * @param resolverMode 识别模式
+     * @param resolverDecision 识别决策
+     * @param syncAction 同步动作
+     * @param matchedSourceId 命中的资料源主键
+     * @param compileJobId 编译作业主键
+     * @param compileJobStatus 编译作业状态
+     * @param compileDerivedStatus 编译作业派生状态
+     * @param compileCurrentStep 编译当前步骤
+     * @param compileProgressCurrent 编译当前进度
+     * @param compileProgressTotal 编译总进度
+     * @param compileProgressMessage 编译进度提示
+     * @param compileLastHeartbeatAt 编译最近心跳时间
+     * @param compileRunningExpiresAt 编译租约到期时间
+     * @param compileErrorCode 编译错误码
+     * @param manifestHash manifest 哈希
+     * @param message 提示信息
+     * @param errorMessage 错误信息
+     * @param sourceNames 来源文件名
+     * @param actions 可用动作
+     * @param displayStatus 展示状态
+     * @param displayStatusLabel 展示状态文案
+     * @param currentStepLabel 当前步骤文案
+     * @param nextStepHint 下一步提示
+     * @param progressText 当前进度文案
+     * @param reasonSummary 原因摘要
+     * @param operationalNote 任务线索
+     * @param progressSteps 完整步骤链
+     * @param displayTone 展示色调
+     * @param processingActive 是否仍需轮询
+     * @param requiresManualAction 是否需要人工处理
+     * @param noticeTone 通知语气
+     * @param completionNotice 完成提示
+     * @param pendingHumanReviewCount 待人工确认数量
+     * @param publishedCount 已发布数量
+     * @param rejectedCount 已驳回数量
+     * @param evidenceJson 证据 JSON
+     * @param requestedAt 请求时间
+     * @param updatedAt 更新时间
+     * @param startedAt 开始时间
+     * @param finishedAt 结束时间
+     */
+    public SourceSyncRunDetail(
+            Long runId,
+            Long sourceId,
+            String sourceName,
+            String sourceType,
+            String status,
+            String resolverMode,
+            String resolverDecision,
+            String syncAction,
+            Long matchedSourceId,
+            String compileJobId,
+            String compileJobStatus,
+            String compileDerivedStatus,
+            String compileCurrentStep,
+            Integer compileProgressCurrent,
+            Integer compileProgressTotal,
+            String compileProgressMessage,
+            String compileLastHeartbeatAt,
+            String compileRunningExpiresAt,
+            String compileErrorCode,
+            String manifestHash,
+            String message,
+            String errorMessage,
+            List<String> sourceNames,
+            List<com.xbk.lattice.api.admin.AdminProcessingTaskActionResponse> actions,
+            String displayStatus,
+            String displayStatusLabel,
+            String currentStepLabel,
+            String nextStepHint,
+            String progressText,
+            String reasonSummary,
+            String operationalNote,
+            List<AdminProcessingTaskStepResponse> progressSteps,
+            String displayTone,
+            boolean processingActive,
+            boolean requiresManualAction,
+            String noticeTone,
+            String completionNotice,
+            int pendingHumanReviewCount,
+            int publishedCount,
+            int rejectedCount,
+            String evidenceJson,
+            String requestedAt,
+            String updatedAt,
+            String startedAt,
+            String finishedAt
+    ) {
         this.runId = runId;
         this.sourceId = sourceId;
         this.sourceName = sourceName;
@@ -224,6 +375,9 @@ public class SourceSyncRunDetail {
         this.requiresManualAction = requiresManualAction;
         this.noticeTone = noticeTone;
         this.completionNotice = completionNotice;
+        this.pendingHumanReviewCount = pendingHumanReviewCount;
+        this.publishedCount = publishedCount;
+        this.rejectedCount = rejectedCount;
         this.evidenceJson = evidenceJson;
         this.requestedAt = requestedAt;
         this.updatedAt = updatedAt;
@@ -377,6 +531,18 @@ public class SourceSyncRunDetail {
 
     public String getCompletionNotice() {
         return completionNotice;
+    }
+
+    public int getPendingHumanReviewCount() {
+        return pendingHumanReviewCount;
+    }
+
+    public int getPublishedCount() {
+        return publishedCount;
+    }
+
+    public int getRejectedCount() {
+        return rejectedCount;
     }
 
     public String getEvidenceJson() {

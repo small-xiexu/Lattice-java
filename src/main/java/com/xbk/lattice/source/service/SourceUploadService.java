@@ -11,6 +11,7 @@ import com.xbk.lattice.compiler.service.CompileJobService;
 import com.xbk.lattice.compiler.service.CompileJobDerivedStatusResolver;
 import com.xbk.lattice.compiler.service.CompileJobStatuses;
 import com.xbk.lattice.compiler.service.CompileOrchestrationModes;
+import com.xbk.lattice.infra.persistence.CompileArticleReviewQueueJdbcRepository;
 import com.xbk.lattice.infra.persistence.CompileJobRecord;
 import com.xbk.lattice.source.domain.BundleSummary;
 import com.xbk.lattice.source.domain.KnowledgeSource;
@@ -52,6 +53,7 @@ public class SourceUploadService extends SourceUploadWorkflowSupport {
      * @param compileJobDerivedStatusResolver 编译作业派生状态解析器
      * @param sourceSnapshotJdbcRepository 资料源快照仓储
      * @param presentationResolver 当前处理任务展示解析器
+     * @param compileArticleReviewQueueJdbcRepository 编译人工确认队列仓储
      */
     public SourceUploadService(
             BundleFeatureExtractor bundleFeatureExtractor,
@@ -61,7 +63,8 @@ public class SourceUploadService extends SourceUploadWorkflowSupport {
             CompileJobService compileJobService,
             CompileJobDerivedStatusResolver compileJobDerivedStatusResolver,
             SourceSnapshotJdbcRepository sourceSnapshotJdbcRepository,
-            AdminProcessingTaskPresentationResolver presentationResolver
+            AdminProcessingTaskPresentationResolver presentationResolver,
+            CompileArticleReviewQueueJdbcRepository compileArticleReviewQueueJdbcRepository
     ) {
         this.bundleFeatureExtractor = bundleFeatureExtractor;
         this.sourceDecisionPolicy = sourceDecisionPolicy;
@@ -71,6 +74,7 @@ public class SourceUploadService extends SourceUploadWorkflowSupport {
         this.compileJobDerivedStatusResolver = compileJobDerivedStatusResolver;
         this.sourceSnapshotJdbcRepository = sourceSnapshotJdbcRepository;
         this.presentationResolver = presentationResolver;
+        this.compileArticleReviewQueueJdbcRepository = compileArticleReviewQueueJdbcRepository;
     }
     /**
      * 接收新的上传资料包。

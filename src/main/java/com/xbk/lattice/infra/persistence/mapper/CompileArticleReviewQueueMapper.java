@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Param;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 编译文章人工确认队列 Mapper
@@ -59,6 +60,14 @@ public interface CompileArticleReviewQueueMapper {
      * @return 队列记录数量
      */
     int countByStatus(@Param("status") String status);
+
+    /**
+     * 按编译作业标识汇总人工确认发布结果。
+     *
+     * @param jobId 编译作业标识
+     * @return 汇总结果
+     */
+    Map<String, Object> summarizeByJobId(@Param("jobId") String jobId);
 
     /**
      * 按主键查询队列记录。

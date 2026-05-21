@@ -5,6 +5,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -73,6 +74,28 @@ public class CompileArticleReviewQueueJdbcRepository {
             return 0;
         }
         return compileArticleReviewQueueMapper.countByStatus(status.trim().toLowerCase());
+    }
+
+    /**
+     * 按编译作业标识汇总人工确认发布结果。
+     *
+     * @param jobId 编译作业标识
+     * @return 发布结果汇总
+     */
+    public PublishOutcomeSummary summarizeByJobId(String jobId) {
+        ensureTable();
+        if (jobId == null || jobId.isBlank()) {
+            return PublishOutcomeSummary.empty();
+        }
+        Map<String, Object> row = compileArticleReviewQueueMapper.summarizeByJobId(jobId.trim());
+        if (row == null || row.isEmpty()) {
+            return PublishOutcomeSummary.empty();
+        }
+        return new PublishOutcomeSummary(
+                toInt(row.get("pending_human_review_count")),
+                toInt(row.get("published_count")),
+                toInt(row.get("rejected_count"))
+        );
     }
 
     /**
@@ -200,5 +223,99 @@ public class CompileArticleReviewQueueJdbcRepository {
             return fallback;
         }
         return value;
+    }
+
+    /**
+     * 将聚合结果中的数值转换为 int。
+     *
+     * @param value 原始值
+     * @return 数值结果
+     */
+    private int toInt(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value == null) {
+            return 0;
+        }
+        return Integer.parseInt(String.valueOf(value));
+    }
+
+    /**
+     * 编译作业人工确认发布结果汇总。
+     *
+     * 职责：承载按 compile jobId 聚合后的 pending / published / rejected 计数
+     *
+     * @author xiexu
+     */
+    public static final class PublishOutcomeSummary {
+
+        private final int pendingHumanReviewCount;
+
+        private final int publishedCount;
+
+        private final int rejectedCount;
+
+        /**
+         * 创建发布结果汇总。
+         *
+         * @param pendingHumanReviewCount 待人工确认数量
+         * @param publishedCount 已发布数量
+         * @param rejectedCount 已驳回数量
+         */
+        public PublishOutcomeSummary(
+                int pendingHumanReviewCount,
+                int publishedCount,
+                int rejectedCount
+        ) {
+            this.pendingHumanReviewCount = pendingHumanReviewCount;
+            this.publishedCount = publishedCount;
+            this.rejectedCount = rejectedCount;
+        }
+
+        /**
+         * 创建空汇总。
+         *
+         * @return 空汇总
+         */
+        public static PublishOutcomeSummary empty() {
+            return new PublishOutcomeSummary(0, 0, 0);
+        }
+
+        /**
+         * 获取待人工确认数量。
+         *
+         * @return 待人工确认数量
+         */
+        public int getPendingHumanReviewCount() {
+            return pendingHumanReviewCount;
+        }
+
+        /**
+         * 获取已发布数量。
+         *
+         * @return 已发布数量
+         */
+        public int getPublishedCount() {
+            return publishedCount;
+        }
+
+        /**
+         * 获取已驳回数量。
+         *
+         * @return 已驳回数量
+         */
+        public int getRejectedCount() {
+            return rejectedCount;
+        }
+
+        /**
+         * 判断是否存在人工确认发布结果。
+         *
+         * @return 是否存在人工确认发布结果
+         */
+        public boolean hasAnyOutcome() {
+            return pendingHumanReviewCount > 0 || publishedCount > 0 || rejectedCount > 0;
+        }
     }
 }
