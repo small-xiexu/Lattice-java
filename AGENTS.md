@@ -9,6 +9,8 @@
 - 项目级 `maven-settings.xml`：仅在排查全局镜像、网络或仓库污染问题时临时创建；问题确认后应删除
 - 当前状态补充：由于全局 `alimaven` 握手不稳定，`.codex/maven-settings.xml` 已临时恢复用于开发验证；如全局镜像恢复正常，可再删除
 - 临时缓存目录：`.m2/`、`.m2-central/` 仅用于一次性验证，不是项目必需目录，可直接删除
+- 数据库建表策略：项目不再使用 Flyway；首次启动、DDL 变化或需要清库时，显式执行 `./scripts/reset-lattice-schema.sh`（DDL 以 `src/main/resources/db/schema.sql` 为准）
+- 本地开发启动入口：联调页面与静态资源时优先使用 `./scripts/run-local-dev.sh`（可选 `--reset-schema`，固定 `local-dev` + `lattice` schema + 默认 `18082`）
 - PostgreSQL 默认依赖：使用现有 Docker 容器 `vector_db`（`0.0.0.0:5432->5432`），默认数据库为 `ai-rag-knowledge`
 - Redis 默认依赖：使用现有 Docker 容器 `redis`（`0.0.0.0:6379->6379`）
 - 日常开发、测试、回归默认直接复用上述现有容器；除非用户明确要求，不要自行 `docker compose up` 新的 PostgreSQL / Redis 实例，避免端口冲突和环境漂移
@@ -29,6 +31,8 @@
 
 - Git 分支策略：后续一切开发、修复、联调与验收默认直接在 `main` 分支进行；除非用户明确要求，否则不要新建任何功能分支、修复分支或临时分支
 - 重构策略：后续一切开发默认按新项目进行重构，不需要兼容老逻辑、保留旧行为，也不需要提供旧数据迁移、历史脚本兼容或平滑升级方案；只有在用户明确提出兼容要求时，才额外评估并设计兼容方案
+- Deep Research 绑定策略：运行期默认按 fail-closed 执行；启动期校验与临时降级开关的具体使用方式，以项目启动配置清单为准
+- 向量治理入口：向量开关/模型配置与索引重建统一走 `/api/v1/admin/vector/{config,status,rebuild}`（实现参考 `src/main/java/com/xbk/lattice/api/admin/AdminVectorIndexController.java`），不要在业务代码中硬编码向量参数
 - Query/检索/回答逻辑治理红线：打磨查询质量时，**零容忍** 任何面向特定业务域、特定文档、特定文件名、特定术语、特定问题样式、特定样例字符串的硬编码分支、白名单、关键词特判、答案模板或兜底文案；一经发现必须删除，不允许以“临时止血”“回归样例保护”“只在测试里复现”之类理由保留在主链实现中。只能保留最小通用文本结构规则（如引用格式、路径/URL/数字/表格等基础解析）、通用证据排序规则与通用提示词约束。若效果不佳，优先回到编译抽取、结构化证据、检索排序与通用提示词层修正，不要在 query 主链里为某份资料“教答案”。
 - 当前运行、验收与回归入口以 [`docs/项目启动配置清单.md`](/Users/sxie/xbk/Lattice-java/docs/%E9%A1%B9%E7%9B%AE%E5%90%AF%E5%8A%A8%E9%85%8D%E7%BD%AE%E6%B8%85%E5%8D%95.md)、[`README.md`](/Users/sxie/xbk/Lattice-java/README.md) 与 [`docs/项目全流程真实验收手册.md`](/Users/sxie/xbk/Lattice-java/docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md) 为准
 - `B5-B9` 阶段历史文档、Graph 完整设计台账、专题技术方案与一次性回归附录均已退场，不再作为当前推进入口
