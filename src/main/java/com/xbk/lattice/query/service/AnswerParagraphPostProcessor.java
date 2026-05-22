@@ -42,6 +42,9 @@ final class AnswerParagraphPostProcessor {
         if (support.looksLikeComparisonQuestion(question) || support.looksLikeFlowQuestion(question)) {
             return answerMarkdown;
         }
+        if (shouldKeepExpandedMultiPointAnswer(question, answerMarkdown)) {
+            return answerMarkdown;
+        }
         String[] rawParagraphs = answerMarkdown.split("\\n\\s*\\n", -1);
         if (rawParagraphs.length <= 1) {
             return answerMarkdown;
@@ -102,6 +105,58 @@ final class AnswerParagraphPostProcessor {
             return answerMarkdown;
         }
         return compactAnswer;
+    }
+
+    /**
+     * 判断多焦点问题的答案是否应保留展开形态，而不是继续压缩。
+     *
+     * @param question 用户问题
+     * @param answerMarkdown 当前答案
+     * @return 应保留展开形态返回 true
+     */
+    private boolean shouldKeepExpandedMultiPointAnswer(String question, String answerMarkdown) {
+        if (question == null || question.isBlank() || answerMarkdown == null || answerMarkdown.isBlank()) {
+            return false;
+        }
+        List<String> focusTokens = support.extractStructuredFactFocusTokens(question);
+        if (focusTokens.size() < 2) {
+            return false;
+        }
+        if (!support.querySemanticRules.containsAnyMultiFocusSeparator(question)
+                && !support.looksLikeEnumerationQuestion(question)) {
+            return false;
+        }
+        String normalizedAnswer = lowerCase(support.stripEmbeddedCitationLiterals(answerMarkdown));
+        int matchedFocusTokenCount = 0;
+        for (String focusToken : focusTokens) {
+            String normalizedFocusToken = lowerCase(focusToken);
+            if (!normalizedFocusToken.isBlank() && normalizedAnswer.contains(normalizedFocusToken)) {
+                matchedFocusTokenCount++;
+            }
+        }
+        if (matchedFocusTokenCount < 2) {
+            return false;
+        }
+        return countMarkdownListItems(answerMarkdown) >= 2
+                || countStructuredKeyValueLines(answerMarkdown) >= 2
+                || answerMarkdown.contains("\n\n");
+    }
+
+    /**
+     * 统计答案中的结构化键值行数量。
+     *
+     * @param answerMarkdown 答案 Markdown
+     * @return 键值行数量
+     */
+    private int countStructuredKeyValueLines(String answerMarkdown) {
+        int structuredLineCount = 0;
+        for (String rawLine : answerMarkdown.split("\\R")) {
+            String normalizedLine = lowerCase(support.stripEmbeddedCitationLiterals(rawLine));
+            if (looksLikeKeyValueAnswerLine(normalizedLine)) {
+                structuredLineCount++;
+            }
+        }
+        return structuredLineCount;
     }
 
     /**

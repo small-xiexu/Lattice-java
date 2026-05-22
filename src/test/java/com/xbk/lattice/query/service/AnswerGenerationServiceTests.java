@@ -1066,6 +1066,39 @@ class AnswerGenerationServiceTests {
     }
 
     /**
+     * 验证多焦点查值题的系统提示会要求逐项展开，且后处理不会把已展开答案压成一句总述。
+     *
+     * @throws Exception 反射构造异常
+     */
+    @Test
+    void shouldKeepExpandedMultiPointStructuredAnswerForFocusedQuestion() throws Exception {
+        RecordingLlmClient recordingLlmClient = new RecordingLlmClient("""
+                {
+                  "answerMarkdown":"- `orderStatus`：订单状态，取值 PENDING/PAID/CLOSED [→ order-api-fields.xlsx]\\n- `retryCount`：支付重试次数 [→ order-api-fields.xlsx]",
+                  "answerOutcome":"SUCCESS",
+                  "answerCacheable":true
+                }
+                """);
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService(
+                createGatewayFixture(recordingLlmClient).getLlmGateway()
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.generatePayload(
+                "Order API 里 orderStatus、retryCount 分别是什么？",
+                buildGenericFieldDefinitionEvidence()
+        );
+
+        assertThat(recordingLlmClient.getLastSystemPrompt()).contains("如果问题显式点名了多个并列焦点");
+        assertThat(recordingLlmClient.getLastSystemPrompt()).contains("不要把多个焦点压缩成一句总述");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("`orderStatus`：类型 `string`");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("订单状态，取值 PENDING/PAID/CLOSED");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("`retryCount`：类型 `int`");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("支付重试次数");
+        assertThat(answerPayload.getAnswerMarkdown()).contains("\n- `retryCount`");
+        assertThat(answerPayload.getAnswerOutcome()).isEqualTo(AnswerOutcome.SUCCESS);
+    }
+
+    /**
      * 验证稳定结构化答案会写入 L1 prompt cache，并在下一次请求复用缓存。
      *
      * @throws Exception 反射构造异常
