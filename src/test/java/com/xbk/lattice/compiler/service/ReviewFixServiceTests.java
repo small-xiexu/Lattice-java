@@ -47,6 +47,30 @@ class ReviewFixServiceTests {
     }
 
     /**
+     * 验证 review-fix 会对文章正文和来源正文分别执行预算截断，避免 Fixer 输入无界膨胀。
+     */
+    @Test
+    void shouldBoundReviewFixArticleAndSourcePayload() {
+        RecordingLlmGateway llmGateway = new RecordingLlmGateway();
+        ReviewFixService reviewFixService = new ReviewFixService(llmGateway);
+        String longArticle = "# 原文\n" + "article-content ".repeat(800);
+        String longSources = "payment/source.md => " + "source-content ".repeat(900);
+
+        reviewFixService.applyFix(
+                longArticle,
+                List.of(new ReviewIssue("missing_referential", "HIGH", "缺少重试次数来源")),
+                longSources
+        );
+
+        assertThat(llmGateway.lastUserPrompt).contains("审查员发现的问题");
+        assertThat(llmGateway.lastUserPrompt).contains("原始文章:");
+        assertThat(llmGateway.lastUserPrompt).contains("源文件参考:");
+        assertThat(llmGateway.lastUserPrompt.length()).isLessThan(14000);
+        assertThat(llmGateway.lastUserPrompt).doesNotContain("source-content ".repeat(600));
+        assertThat(llmGateway.lastUserPrompt).doesNotContain("article-content ".repeat(500));
+    }
+
+    /**
      * 记录参数的网关替身。
      *
      * 职责：验证 ReviewFixService 实际走的是哪个文本生成入口
@@ -64,6 +88,8 @@ class ReviewFixServiceTests {
         private String lastPurpose;
 
         private String lastSystemPrompt;
+
+        private String lastUserPrompt;
 
         private RecordingLlmGateway() {
             super(
@@ -87,6 +113,7 @@ class ReviewFixServiceTests {
             lastAgentRole = agentRole;
             lastPurpose = purpose;
             lastSystemPrompt = systemPrompt;
+            lastUserPrompt = userPrompt;
             return "fixed-markdown";
         }
     }

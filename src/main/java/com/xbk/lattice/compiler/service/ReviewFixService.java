@@ -24,6 +24,10 @@ public class ReviewFixService {
 
     private static final String FIXER_ROLE = "fixer";
 
+    private static final int FIXER_ARTICLE_MAX_CHARS = 6000;
+
+    private static final int FIXER_SOURCE_MAX_CHARS = 7000;
+
     private final LlmGateway llmGateway;
 
     private final CompilerPromptProvider compilerPromptProvider;
@@ -81,9 +85,8 @@ public class ReviewFixService {
             String agentRole
     ) {
         String issueList = buildIssueList(reviewIssues);
-        String truncatedSources = sourceContents.length() > 10000
-                ? sourceContents.substring(0, 10000)
-                : sourceContents;
+        String boundedArticleContent = boundText(articleContent, FIXER_ARTICLE_MAX_CHARS);
+        String boundedSources = boundText(sourceContents, FIXER_SOURCE_MAX_CHARS);
         try {
             String userPrompt = """
                     审查员发现的问题:
@@ -94,7 +97,7 @@ public class ReviewFixService {
 
                     源文件参考:
                     %s
-                    """.formatted(issueList, articleContent, truncatedSources);
+                    """.formatted(issueList, boundedArticleContent, boundedSources);
             String systemPrompt = compilerPromptProvider != null
                     ? compilerPromptProvider.fixerPrompt()
                     : LatticePrompts.SYSTEM_REVIEW_FIX;
@@ -118,6 +121,23 @@ public class ReviewFixService {
         catch (RuntimeException ex) {
             return null;
         }
+    }
+
+    /**
+     * 截断文本到指定长度。
+     *
+     * @param text 原始文本
+     * @param maxChars 最大字符数
+     * @return 有界文本
+     */
+    private String boundText(String text, int maxChars) {
+        if (text == null || text.isBlank() || maxChars <= 0) {
+            return "";
+        }
+        if (text.length() <= maxChars) {
+            return text;
+        }
+        return text.substring(0, maxChars).trim();
     }
 
     /**
