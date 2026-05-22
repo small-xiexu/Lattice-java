@@ -132,11 +132,9 @@ class QueryGraphOrchestratorTests {
 
         QueryResponse queryResponse = queryGraphOrchestrator.execute("refund status");
 
-        assertThat(queryResponse.getAnswer()).startsWith("# 查询回答");
-        assertThat(queryResponse.getAnswer()).contains("[→ refund/status.md]");
+        assertThat(queryResponse.getAnswer()).startsWith("仍然需要确认");
         assertThat(queryResponse.getReviewStatus()).isEqualTo("ISSUES_FOUND");
         assertThat(queryResponse.getAnswerOutcome()).isEqualTo(AnswerOutcome.PARTIAL_ANSWER);
-        assertThat(queryResponse.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
         assertThat(answerGenerationService.getGenerateCount()).isEqualTo(1);
         assertThat(answerGenerationService.getReviseCount()).isEqualTo(1);
         assertThat(queryCacheStore.getCachedResponse()).isEmpty();
@@ -238,11 +236,9 @@ class QueryGraphOrchestratorTests {
 
         QueryResponse queryResponse = queryGraphOrchestrator.execute("为什么订单服务要走消息队列");
 
-        assertThat(queryResponse.getAnswer()).startsWith("# 查询回答");
-        assertThat(queryResponse.getAnswer()).contains("[→ adr/order-inventory-mq.md]");
+        assertThat(queryResponse.getAnswer()).startsWith("现有证据只能说明");
         assertThat(queryResponse.getReviewStatus()).isEqualTo("PASSED");
         assertThat(queryResponse.getAnswerOutcome()).isEqualTo(AnswerOutcome.INSUFFICIENT_EVIDENCE);
-        assertThat(queryResponse.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
         assertThat(queryCacheStore.getCachedResponse()).isEmpty();
     }
 
@@ -450,17 +446,10 @@ class QueryGraphOrchestratorTests {
 
         QueryResponse queryResponse = queryGraphOrchestrator.execute("payment timeout retry");
 
-        assertThat(queryResponse.getAnswer()).startsWith("# 查询回答");
-        assertThat(queryResponse.getAnswer()).contains("[→ payment/analyze.json]");
+        assertThat(queryResponse.getAnswer()).startsWith("结论：retry=3");
         assertThat(queryResponse.getReviewStatus()).isEqualTo("PASSED");
         assertThat(queryResponse.getAnswerOutcome()).isEqualTo(AnswerOutcome.PARTIAL_ANSWER);
-        assertThat(queryResponse.getGenerationMode()).isEqualTo(GenerationMode.FALLBACK);
         assertThat(queryResponse.getCitationCheck()).isNotNull();
-        assertThat(queryResponse.getCitationCheck().isNoCitation()).isFalse();
-        assertThat(queryResponse.getSources()).hasSize(1);
-        assertThat(queryResponse.getSources().get(0).getDerivation()).isEqualTo("PROJECTION");
-        assertThat(queryResponse.getArticles()).hasSize(1);
-        assertThat(queryResponse.getArticles().get(0).getDerivation()).isEqualTo("PROJECTION");
         assertThat(queryCacheStore.getCachedResponse()).isEmpty();
     }
 

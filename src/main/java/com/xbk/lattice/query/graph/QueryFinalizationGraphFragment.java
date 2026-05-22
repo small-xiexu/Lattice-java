@@ -259,7 +259,7 @@ public class QueryFinalizationGraphFragment {
     }
 
     /**
-     * 当最终答案已没有任何 citation 时，强制回落到确定性 fallback，并重新生成 projection/citation 报告。
+     * 当最终答案无 citation 且答案并非通过正常合成路径产生时，回落到确定性 fallback。
      *
      * @param state 当前图状态
      * @param report 原始 citation 报告
@@ -303,15 +303,24 @@ public class QueryFinalizationGraphFragment {
     /**
      * 判断当前 citation 质量是否应直接降级为 deterministic fallback。
      *
+     * 仅当答案并非通过正常合成路径产生（即 generationMode 非 LLM 也非 RULE_BASED）且
+     * citation repair 已耗尽时，才允许因 noCitation 或无可验证引用而触发 terminal fallback。
+     * 当答案已通过 LLM 合成或规则拼装从证据中产生时，repair 剥离引用标记不意味着
+     * 答案正文无效，应保留 repair 后的答案继续进入 persist/finalize。
+     *
      * @param state 当前图状态
      * @param report 当前 citation 报告
      * @return 需要降级返回 true
      */
-    private boolean shouldFallbackToDeterministicAnswer(QueryGraphState state, CitationCheckReport report) {
+    boolean shouldFallbackToDeterministicAnswer(QueryGraphState state, CitationCheckReport report) {
         if (report == null || answerGenerationService == null) {
             return false;
         }
         if (state.getCitationRepairAttemptCount() < CITATION_CHECK_OPTIONS.getMaxRepairRounds()) {
+            return false;
+        }
+        GenerationMode mode = readGenerationMode(state.getGenerationMode());
+        if (mode == GenerationMode.LLM || mode == GenerationMode.RULE_BASED) {
             return false;
         }
         if (report.isNoCitation()) {
