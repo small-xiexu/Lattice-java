@@ -24,11 +24,11 @@ final class CompileJobProgressMessageFormatter {
     static String format(String action, int current, int total, String targetLabel) {
         StringBuilder builder = new StringBuilder();
         builder.append(action)
-                .append("（")
+                .append("第 ")
                 .append(current)
-                .append("/")
+                .append(" / ")
                 .append(total)
-                .append("）");
+                .append(" 篇文章");
         if (targetLabel == null || targetLabel.isBlank()) {
             return builder.toString();
         }

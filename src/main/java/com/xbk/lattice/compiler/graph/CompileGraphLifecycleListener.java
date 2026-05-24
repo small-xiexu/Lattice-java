@@ -282,7 +282,27 @@ public class CompileGraphLifecycleListener implements GraphLifecycleListener {
         if (compileJobLeaseManager == null || jobId == null || jobId.isBlank()) {
             return;
         }
-        compileJobLeaseManager.touchCurrentStep(jobId, nodeId, "正在执行节点：" + nodeId);
+        compileJobLeaseManager.touchCurrentStep(jobId, nodeId, resolveNodeLabel(nodeId));
+    }
+
+    private String resolveNodeLabel(String nodeId) {
+        if (nodeId == null) {
+            return "正在执行节点";
+        }
+        switch (nodeId) {
+            case "compile_new_articles": return "正在生成文章草稿";
+            case "review_articles": return "正在检查内容质量";
+            case "fix_review_issues": return "正在根据检查结果修正内容";
+            case "persist_articles": return "正在写入知识库";
+            case "refresh_vector_index":
+            case "rebuild_article_vectors":
+            case "rebuild_source_vectors": return "正在刷新向量索引";
+            case "rebuild_article_chunks": return "正在重建知识切片";
+            case "generate_synthesis_artifacts": return "正在整理知识库概览";
+            case "capture_repo_snapshot": return "正在生成资料快照";
+            case "finalize_job": return "正在完成入库";
+            default: return "正在执行节点：" + nodeId;
+        }
     }
 
     private void logStructuredStepEvent(

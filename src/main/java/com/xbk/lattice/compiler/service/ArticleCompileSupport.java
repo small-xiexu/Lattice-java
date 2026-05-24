@@ -196,19 +196,20 @@ public class ArticleCompileSupport {
         int total = mergedConcepts.size();
         for (int index = 0; index < mergedConcepts.size(); index++) {
             MergedConcept mergedConcept = mergedConcepts.get(index);
+            String runningProgressMessage = buildCompileDraftProgressMessage(index + 1, total, mergedConcept);
             touchProgress(
                     scopeId,
                     "compile_new_articles",
                     index + 1,
                     total,
-                    buildCompileDraftProgressMessage(index + 1, total, mergedConcept)
+                    runningProgressMessage
             );
             touchProgress(
                     scopeId,
                     "compile_new_articles",
                     index + 1,
                     total,
-                    "正在调用 Writer 生成草稿：" + mergedConcept.getConceptId()
+                    runningProgressMessage
             );
             long startedAtNanos = System.nanoTime();
             WriterResult writerResult = writerAgent.write(new WriterTask(
@@ -234,7 +235,7 @@ public class ArticleCompileSupport {
                     "compile_new_articles",
                     index + 1,
                     total,
-                    "Writer 草稿生成完成：" + mergedConcept.getConceptId()
+                    buildCompileDraftCompletedProgressMessage(index + 1, total, mergedConcept)
             );
             ArticleRecord writerArticleRecord = writerResult.getArticleRecord();
             if (writerArticleRecord != null) {
@@ -422,7 +423,24 @@ public class ArticleCompileSupport {
      */
     private String buildCompileDraftProgressMessage(int current, int total, MergedConcept mergedConcept) {
         return CompileJobProgressMessageFormatter.format(
-                "正在生成文章",
+                "正在生成",
+                current,
+                total,
+                resolveMergedConceptLabel(mergedConcept)
+        );
+    }
+
+    /**
+     * 构建编译新文章完成后的进度提示文案。
+     *
+     * @param current 当前进度
+     * @param total 总进度
+     * @param mergedConcept 当前概念
+     * @return 进度提示文案
+     */
+    private String buildCompileDraftCompletedProgressMessage(int current, int total, MergedConcept mergedConcept) {
+        return CompileJobProgressMessageFormatter.format(
+                "已生成",
                 current,
                 total,
                 resolveMergedConceptLabel(mergedConcept)
@@ -439,7 +457,7 @@ public class ArticleCompileSupport {
      */
     private String buildReviewProgressMessage(int current, int total, ArticleRecord draftArticle) {
         return CompileJobProgressMessageFormatter.format(
-                "正在审查文章",
+                "正在检查",
                 current,
                 total,
                 resolveArticleLabel(draftArticle)
@@ -456,7 +474,7 @@ public class ArticleCompileSupport {
      */
     private String buildFixProgressMessage(int current, int total, ArticleReviewEnvelope reviewEnvelope) {
         return CompileJobProgressMessageFormatter.format(
-                "正在修复文章",
+                "正在修正",
                 current,
                 total,
                 resolveReviewEnvelopeLabel(reviewEnvelope)

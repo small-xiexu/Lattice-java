@@ -44,7 +44,8 @@ public class AdminLlmModelTestController {
                 request.getConnectionId(),
                 request.getModelName(),
                 request.getModelKind(),
-                request.getExpectedDimensions()
+                request.getExpectedDimensions(),
+                request.getTimeoutSeconds()
         );
         return new AdminLlmModelTestResponse(
                 result.isSuccess(),
@@ -76,6 +77,8 @@ public class AdminLlmModelTestController {
         private String modelKind;
 
         private Integer expectedDimensions;
+
+        private Integer timeoutSeconds;
     }
 
     /**

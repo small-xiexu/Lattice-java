@@ -87,6 +87,7 @@ public class LlmModelProbeService {
      * @param modelName 模型名称
      * @param modelKind 模型类型
      * @param expectedDimensions 期望维度
+     * @param timeoutSeconds 超时秒数
      * @return 探测结果
      */
     public ProbeResult probe(
@@ -94,7 +95,8 @@ public class LlmModelProbeService {
             Long connectionId,
             String modelName,
             String modelKind,
-            Integer expectedDimensions
+            Integer expectedDimensions,
+            Integer timeoutSeconds
     ) {
         String effectiveProviderType = "openai";
         String effectiveModelKind = normalizeModelKind(modelKind);
@@ -105,7 +107,8 @@ public class LlmModelProbeService {
                     connectionId,
                     modelName,
                     modelKind,
-                    expectedDimensions
+                    expectedDimensions,
+                    timeoutSeconds
             );
             effectiveProviderType = resolvedConfig.providerType;
             effectiveModelKind = resolvedConfig.modelKind;
@@ -149,6 +152,7 @@ public class LlmModelProbeService {
      * @param modelName 模型名称
      * @param modelKind 模型类型
      * @param expectedDimensions 期望维度
+     * @param timeoutSeconds 超时秒数
      * @return 最终探测配置
      */
     private ResolvedModelConfig resolveModel(
@@ -156,7 +160,8 @@ public class LlmModelProbeService {
             Long connectionId,
             String modelName,
             String modelKind,
-            Integer expectedDimensions
+            Integer expectedDimensions,
+            Integer timeoutSeconds
     ) {
         Optional<LlmModelProfile> existingModel = modelId == null
                 ? Optional.empty()
@@ -175,6 +180,9 @@ public class LlmModelProbeService {
         Integer resolvedExpectedDimensions = expectedDimensions != null
                 ? expectedDimensions
                 : existingModel.map(LlmModelProfile::getExpectedDimensions).orElse(null);
+        Integer resolvedTimeoutSeconds = timeoutSeconds != null
+                ? timeoutSeconds
+                : existingModel.map(LlmModelProfile::getTimeoutSeconds).orElse(null);
         if (resolvedConnectionId == null) {
             throw new IllegalArgumentException("请先选择所属连接");
         }
@@ -201,7 +209,7 @@ public class LlmModelProbeService {
                 resolvedExpectedDimensions,
                 existingModel.map(LlmModelProfile::getTemperature).orElse(null),
                 existingModel.map(LlmModelProfile::getMaxTokens).orElse(null),
-                existingModel.map(LlmModelProfile::getTimeoutSeconds).orElse(null),
+                resolvedTimeoutSeconds,
                 existingModel.map(LlmModelProfile::getExtraOptionsJson).orElse(null)
         );
     }

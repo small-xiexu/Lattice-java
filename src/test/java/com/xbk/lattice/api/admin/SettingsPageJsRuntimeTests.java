@@ -25,10 +25,14 @@ class SettingsPageJsRuntimeTests {
         String userDir = System.getProperty("user.dir");
         Path adminCommonJsPath = Path.of(userDir, "src/main/resources/static/admin/admin-common.js");
         Path adminModuleDir = Path.of(userDir, "src/main/resources/static/admin/modules");
+        Path settingsHtmlPath = Path.of(userDir, "src/main/resources/static/admin/settings.html");
         Path settingsPageJsPath = Path.of(userDir, "src/main/resources/static/admin/settings-page.js");
         assertThat(Files.exists(adminCommonJsPath)).isTrue();
         assertThat(Files.exists(adminModuleDir)).isTrue();
+        assertThat(Files.exists(settingsHtmlPath)).isTrue();
         assertThat(Files.exists(settingsPageJsPath)).isTrue();
+        assertThat(Files.readString(settingsHtmlPath, StandardCharsets.UTF_8))
+                .contains("llm-model-timeout-seconds");
 
         Path harnessScriptPath = tempDir.resolve("settings-page-js-runtime-test.js");
         Files.writeString(harnessScriptPath, buildHarnessScript(), StandardCharsets.UTF_8);

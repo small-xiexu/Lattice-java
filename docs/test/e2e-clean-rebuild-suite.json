@@ -1,0 +1,679 @@
+{
+  "suiteId": "e2e-clean-rebuild-query-regression",
+  "version": "2026-05-23",
+  "description": "干净数据库全链路 E2E Query 验收套件。基于 full_rebuild_e2e_validation_asset_design_report.md 第 3 节设计的 12 个 case，覆盖 6 份知识源（D1-D6）的 ANSWER/ABSTAIN/结构化/多跳/拒答全部行为维度。供 scripts/run-query-regression.mjs 直接读取执行。",
+  "coverageDimensions": [
+    "长文档事实提取",
+    "架构边界与职责",
+    "配置精确查值",
+    "运行态状态说明",
+    "结构化行定位",
+    "结构化聚合统计",
+    "多跳综合推理",
+    "踩坑经验提取",
+    "配置错误诊断",
+    "无命中拒答保护"
+  ],
+  "replayArtifacts": [
+    "query_results.jsonl",
+    "query_summary.tsv",
+    "query_metrics.json",
+    "query_replay_manifest.json"
+  ],
+  "defaults": {
+    "timeoutMs": 120000,
+    "minSourceCount": 1,
+    "minCitationCoverage": 0.6
+  },
+  "gates": {
+    "minCasePassRate": 0.8,
+    "maxHttpFailureRate": 0.0,
+    "maxTimeoutRate": 0.05,
+    "maxFallbackRate": 0.4,
+    "minLlmSuccessRate": 0.4,
+    "minAverageCitationCoverage": 0.6
+  },
+  "cases": [
+    {
+      "id": "E2E-001",
+      "category": "长文档列举",
+      "question": "当前项目的质量打磨阶段有哪些禁止事项？请至少列出 5 条。",
+      "forceSimple": true,
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": [
+          "SUCCESS",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SUCCESS"
+        ],
+        "requireQueryId": true,
+        "minSourceCount": 1,
+        "minCitationCoverage": 0.6,
+        "retrievalTargets": [
+          "docs/quality-progress-and-lessons.md"
+        ],
+        "requiredAnswerTerms": [
+          "禁止事项",
+          "主链",
+          "agent",
+          "SWIP",
+          "特判",
+          "baseline"
+        ],
+        "requiredSourceTerms": [
+          "quality-progress-and-lessons"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "不准多个 agent 同时改主链",
+          "不准在 SWIP clean 库上跑主 baseline",
+          "不准继续调题集来追 pass",
+          "不准写 SWIP/文档/case 特判",
+          "不准跳过 redline/mvn test/baseline 归因",
+          "不准把 rule-based review 描述成 LLM 内容审查"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/quality-progress-and-lessons.md",
+            "quoteHint": "当前禁止事项章节，列出禁止事项清单"
+          }
+        ],
+        "mustNotClaim": [
+          "把\"当前禁止事项\"之外的规则当作禁止事项列出"
+        ],
+        "humanJudgement": {
+          "passRule": "禁止事项必须来自台账的\"当前禁止事项\"章节，事项内容和数量与源文一致；至少覆盖 5 条。"
+        }
+      }
+    },
+    {
+      "id": "E2E-002",
+      "category": "架构边界",
+      "question": "卡券三期迁移方案中，dpfm-api-service 的职责是什么？它和 dpfm-callback-service 的边界在哪里？",
+      "forceSimple": true,
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": [
+          "SUCCESS",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SUCCESS"
+        ],
+        "requireQueryId": true,
+        "minSourceCount": 1,
+        "minCitationCoverage": 0.6,
+        "retrievalTargets": [
+          "docs/卡券三期-迁移方案.md"
+        ],
+        "requiredAnswerTerms": [
+          "dpfm-api-service",
+          "dpfm-callback-service",
+          "MQ",
+          "消费者"
+        ],
+        "requiredSourceTerms": [
+          "卡券三期-迁移方案"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "dpfm-api-service 负责 API 接收、持久化、MQ 发送",
+          "dpfm-api-service 不消费自己发出的 MQ",
+          "SRKIT/SVC 相关 MQ 消费者统一落在 dpfm-callback-service",
+          "dpfm-consumer-service 保留原有消费职责"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/卡券三期-迁移方案.md",
+            "quoteHint": "MQ 消费者归属（强约束）与 dpfm-api-service 职责说明"
+          }
+        ],
+        "mustNotClaim": [
+          "dpfm-api-service 消费自己发出的 MQ",
+          "dpfm-consumer-service 新增 SRKIT/SVC 消费者"
+        ],
+        "humanJudgement": {
+          "passRule": "至少覆盖 api-service 职责、callback-service 归属、consumer-service 保留职责三类要点。"
+        }
+      }
+    },
+    {
+      "id": "E2E-003",
+      "category": "配置查值",
+      "question": "本地开发环境默认使用什么 PostgreSQL 容器名、端口、数据库名？Redis 呢？",
+      "forceSimple": true,
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": [
+          "SUCCESS",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SUCCESS"
+        ],
+        "requireQueryId": true,
+        "minSourceCount": 1,
+        "minCitationCoverage": 0.6,
+        "retrievalTargets": [
+          "docs/项目启动配置清单.md"
+        ],
+        "requiredAnswerTerms": [
+          "vector_db",
+          "5432",
+          "ai-rag-knowledge",
+          "redis",
+          "6379"
+        ],
+        "requiredSourceTerms": [
+          "项目启动配置清单"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "PostgreSQL 容器名: vector_db",
+          "PostgreSQL 端口: 5432",
+          "数据库名: ai-rag-knowledge",
+          "Redis 容器名: redis",
+          "Redis 端口: 6379"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/项目启动配置清单.md",
+            "quoteHint": "PostgreSQL、Redis、本地容器、端口、数据库名配置说明"
+          }
+        ],
+        "mustNotClaim": [
+          "默认数据库为 ai-rag-knowledge-test",
+          "要求默认启动新的 PostgreSQL 或 Redis 容器",
+          "把测试库配置当成本地开发默认配置"
+        ],
+        "humanJudgement": {
+          "passRule": "5 个配置值全部正确且区分开发默认库与测试隔离库；端口、容器、数据库名至少覆盖 PostgreSQL 与 Redis。"
+        }
+      }
+    },
+    {
+      "id": "E2E-004",
+      "category": "配置查值",
+      "question": "项目启动需要配置几个 LLM 连接、几个模型、几条 Agent 绑定？请列出 compile 场景的三个角色。",
+      "forceSimple": true,
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": [
+          "SUCCESS",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SUCCESS"
+        ],
+        "requireQueryId": true,
+        "minSourceCount": 1,
+        "minCitationCoverage": 0.6,
+        "retrievalTargets": [
+          "docs/模型绑定配置参考.md"
+        ],
+        "requiredAnswerTerms": [
+          "compile",
+          "writer",
+          "reviewer",
+          "fixer",
+          "绑定"
+        ],
+        "requiredSourceTerms": [
+          "模型绑定配置参考"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "连接数: 2（Chat + Embedding）",
+          "模型数: 2（Chat 模型 + Embedding 模型）",
+          "绑定数: 10",
+          "compile 场景角色: writer, reviewer, fixer"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/模型绑定配置参考.md",
+            "quoteHint": "配置数量（2 连接 + 2 模型 + 10 绑定）及 compile 三角色"
+          }
+        ],
+        "mustNotClaim": [
+          "绑定数为 7（漏了 deep_research）"
+        ],
+        "humanJudgement": {
+          "passRule": "2/2/10 数量和 compile 三角色均正确；不得遗漏 deep_research 的 4 条绑定。"
+        }
+      }
+    },
+    {
+      "id": "E2E-005",
+      "category": "运行态说明",
+      "question": "当前 OCR / 文档识别功能是否可用？图片和扫描 PDF 能识别吗？",
+      "forceSimple": true,
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": [
+          "SUCCESS"
+        ],
+        "generationModeAny": [
+          "LLM",
+          "RULE_BASED"
+        ],
+        "modelExecutionStatusAny": [
+          "SUCCESS",
+          "SKIPPED"
+        ],
+        "requireQueryId": true,
+        "minSourceCount": 1,
+        "minCitationCoverage": 0.6,
+        "retrievalTargets": [
+          "docs/文档识别与OCR运行态说明.md"
+        ],
+        "requiredAnswerTerms": [
+          "OCR",
+          "文档识别",
+          "Provider",
+          "配置"
+        ],
+        "requiredSourceTerms": [
+          "文档识别与OCR运行态说明"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "OCR 可用性取决于 Provider 连接配置是否已配置并启用",
+          "图片或扫描 PDF 的识别是否可用取决于 OCR Provider 状态",
+          "答案应基于运行态说明文档，而非架构设计文档"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/文档识别与OCR运行态说明.md",
+            "quoteHint": "OCR Provider 连接配置、文件类型识别路径"
+          }
+        ],
+        "mustNotClaim": [
+          "在无运行态证据时声称 OCR 已可用",
+          "把架构中支持 PDF 解析等同于 OCR 已上线"
+        ],
+        "humanJudgement": {
+          "passRule": "回答需基于知识库运行态文档说明 OCR/文档识别状态；不得无证据断言可用。"
+        }
+      }
+    },
+    {
+      "id": "E2E-006",
+      "category": "Excel 行定位",
+      "question": "scenario_id=100912 这一行的 case_num、场景名称、备注分别是什么？注意不要把 scenario_id 当 case_num。",
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": [
+          "SUCCESS"
+        ],
+        "generationModeAny": [
+          "RULE_BASED",
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SKIPPED",
+          "SUCCESS"
+        ],
+        "minSourceCount": 1,
+        "retrievalTargets": [
+          "docs/scenarios.xlsx"
+        ],
+        "requiredAnswerTerms": [
+          "100912",
+          "case_num",
+          "scenario_id"
+        ],
+        "requiredSourceTerms": [
+          "scenarios.xlsx"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "定位 scenario_id=100912 对应的唯一行",
+          "返回该行 case_num 字段值",
+          "返回该行场景名称字段值",
+          "返回该行备注字段值",
+          "不把 scenario_id 当作 case_num"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/scenarios.xlsx",
+            "quoteHint": "scenario_id=100912 所在行"
+          }
+        ],
+        "mustNotClaim": [
+          "case_num 等于 100912，除非表格原始行确实如此",
+          "使用其他 scenario_id 或其他行的值"
+        ],
+        "humanJudgement": {
+          "passRule": "三个字段值必须来自同一行，字段名和值对应正确；不得把 scenario_id 当 case_num。"
+        }
+      }
+    },
+    {
+      "id": "E2E-007",
+      "category": "Excel 聚合统计",
+      "question": "按 category 统计 scenarios.xlsx 中场景用例各有多少条？",
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": [
+          "SUCCESS",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "RULE_BASED",
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SKIPPED",
+          "SUCCESS"
+        ],
+        "minSourceCount": 1,
+        "retrievalTargets": [
+          "docs/scenarios.xlsx"
+        ],
+        "requiredAnswerTerms": [
+          "category",
+          "统计"
+        ],
+        "requiredSourceTerms": [
+          "scenarios.xlsx"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "按 category 列分组统计",
+          "列出每个 category 及其数量",
+          "数量之和等于参与统计的总行数"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/scenarios.xlsx",
+            "quoteHint": "category 列及所有数据行"
+          }
+        ],
+        "mustNotClaim": [
+          "只列部分 category 却声称完整",
+          "用非 category 字段分组",
+          "数量凭模型估算而非统计得出"
+        ],
+        "humanJudgement": {
+          "passRule": "分组字段必须是 category；所有 category 都应出现；数量不能凭模型估算。"
+        }
+      }
+    },
+    {
+      "id": "E2E-008",
+      "category": "多跳综合推理",
+      "question": "综合说明卡券迁移方案中 FC、DPFM、入口防腐层和 MQ 消费者边界之间的关系，以及这些边界为什么能降低上游改造成本。",
+      "forceSimple": true,
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": [
+          "SUCCESS",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SUCCESS"
+        ],
+        "requireQueryId": true,
+        "minSourceCount": 1,
+        "minCitationCoverage": 0.5,
+        "minCitationMarkerCount": 1,
+        "retrievalTargets": [
+          "docs/卡券三期-迁移方案.md"
+        ],
+        "requiredAnswerTerms": [
+          "FC",
+          "DPFM",
+          "MQ",
+          "防腐层",
+          "上游"
+        ],
+        "requiredSourceTerms": [
+          "卡券三期-迁移方案"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "FC 是迁移前/旧链路中的履约中台或旧接口契约来源",
+          "DPFM 新链路入口通过入口防腐层保持 API path、参数与 FC 兼容",
+          "上游只需切换调用地址，降低改造成本",
+          "SRKIT/SVC MQ 消费者统一落在 dpfm-callback-service",
+          "dpfm-api-service 只做 API 接收、持久化、MQ 发送"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/卡券三期-迁移方案.md",
+            "quoteHint": "入口防腐层、上游感知最小化、MQ 消费者归属三组约束"
+          }
+        ],
+        "mustNotClaim": [
+          "DPFM 可以改变对外接口契约",
+          "dpfm-api-service 消费自己发出的 MQ"
+        ],
+        "humanJudgement": {
+          "passRule": "必须综合 FC/DPFM/入口防腐层/MQ 边界四类关系，并解释降低上游改造成本的依据；至少 1 个可核验证据锚点支撑核心结论。"
+        }
+      }
+    },
+    {
+      "id": "E2E-009",
+      "category": "踩坑经验提取",
+      "question": "质量打磨台账中记录的\"多 agent 同时改主链会导致不可归因\"这条踩坑结论是什么？后续规则是什么？",
+      "forceSimple": true,
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": [
+          "SUCCESS",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SUCCESS"
+        ],
+        "requireQueryId": true,
+        "minSourceCount": 1,
+        "minCitationCoverage": 0.6,
+        "retrievalTargets": [
+          "docs/quality-progress-and-lessons.md"
+        ],
+        "requiredAnswerTerms": [
+          "agent",
+          "主链",
+          "不可归因",
+          "变量"
+        ],
+        "requiredSourceTerms": [
+          "quality-progress-and-lessons"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "表现：多 agent 同时改主链时 eval 波动无法定位",
+          "结论：每轮只允许一个代码主变量",
+          "后续规则：同一轮最多一个 agent 改 src/main/java/**；其他 agent 只读或写报告"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/quality-progress-and-lessons.md",
+            "quoteHint": "踩坑记录中\"多 agent 同时改主链\"条目"
+          }
+        ],
+        "mustNotClaim": [
+          "允许多 agent 同时改主链"
+        ],
+        "humanJudgement": {
+          "passRule": "表现、结论、后续规则三者齐全且与台账一致。"
+        }
+      }
+    },
+    {
+      "id": "E2E-010",
+      "category": "配置错误诊断",
+      "question": "模型绑定配置中，embedding 模型漏配 `expectedDimensions` 会导致什么问题？",
+      "forceSimple": true,
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": [
+          "SUCCESS",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SUCCESS"
+        ],
+        "requireQueryId": true,
+        "minSourceCount": 1,
+        "minCitationCoverage": 0.6,
+        "retrievalTargets": [
+          "docs/模型绑定配置参考.md"
+        ],
+        "requiredAnswerTerms": [
+          "expectedDimensions",
+          "维度",
+          "embedding",
+          "2000"
+        ],
+        "requiredSourceTerms": [
+          "模型绑定配置参考"
+        ],
+        "answerability": "ANSWERABLE",
+        "expectedPoints": [
+          "向量维度默认 2048，与 pgvector 索引不匹配",
+          "当前基线是 2000 维，必须显式设置 expectedDimensions"
+        ],
+        "expectedEvidence": [
+          {
+            "source": "docs/模型绑定配置参考.md",
+            "quoteHint": "常见漏配/错配表：embedding 模型没设 expectedDimensions"
+          }
+        ],
+        "mustNotClaim": [
+          "不设 expectedDimensions 也能正常工作"
+        ],
+        "humanJudgement": {
+          "passRule": "说明默认 2048 vs 基线 2000 的维度不匹配问题；必须提及 expectedDimensions 显式配置的必要性。"
+        }
+      }
+    },
+    {
+      "id": "E2E-011",
+      "category": "无命中拒答",
+      "question": "请查询 xbk_nonexistent_config_key_20260522 的取值和负责人。",
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": [
+          "NO_RELEVANT_KNOWLEDGE",
+          "INSUFFICIENT_EVIDENCE",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "RULE_BASED",
+          "FALLBACK",
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SKIPPED",
+          "FAILED",
+          "DEGRADED",
+          "SUCCESS"
+        ],
+        "minSourceCount": 0,
+        "minCitationCoverage": 0,
+        "requiredAnswerTerms": [
+          "没有",
+          "证据",
+          "无法"
+        ],
+        "forbiddenAnswerTerms": [
+          "取值为",
+          "负责人是"
+        ],
+        "answerability": "UNANSWERABLE",
+        "expectedPoints": [
+          "明确当前知识库没有该配置项的证据",
+          "不编造取值",
+          "不编造负责人"
+        ],
+        "expectedEvidence": [],
+        "mustNotClaim": [
+          "该配置项存在且值为 X",
+          "负责人是 X"
+        ],
+        "humanJudgement": {
+          "passRule": "应拒答或说明证据不足；如给出具体取值或负责人则失败，即使格式看起来完整。"
+        }
+      }
+    },
+    {
+      "id": "E2E-012",
+      "category": "无命中拒答",
+      "question": "什么是量子计算中的量子纠缠？请详细说明。",
+      "expect": {
+        "httpStatus": 200,
+        "answerOutcomeAny": [
+          "NO_RELEVANT_KNOWLEDGE",
+          "INSUFFICIENT_EVIDENCE",
+          "PARTIAL_ANSWER"
+        ],
+        "generationModeAny": [
+          "RULE_BASED",
+          "FALLBACK",
+          "LLM"
+        ],
+        "modelExecutionStatusAny": [
+          "SKIPPED",
+          "FAILED",
+          "DEGRADED",
+          "SUCCESS"
+        ],
+        "minSourceCount": 0,
+        "minCitationCoverage": 0,
+        "requiredAnswerTerms": [
+          "没有",
+          "无法",
+          "知识库",
+          "证据"
+        ],
+        "forbiddenAnswerTerms": [
+          "量子比特",
+          "叠加态",
+          "Bell",
+          "EPR",
+          "波函数坍缩"
+        ],
+        "answerability": "UNANSWERABLE",
+        "expectedPoints": [
+          "明确当前知识库不包含量子计算相关内容",
+          "不基于模型内部知识回答",
+          "说明无法基于给定证据回答"
+        ],
+        "expectedEvidence": [],
+        "mustNotClaim": [
+          "量子纠缠是……",
+          "根据量子力学……"
+        ],
+        "humanJudgement": {
+          "passRule": "拒答且不泄露模型内部知识；不得出现量子纠缠的具体解释或科普内容。"
+        }
+      }
+    }
+  ]
+}

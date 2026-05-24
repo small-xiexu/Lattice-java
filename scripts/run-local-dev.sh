@@ -63,4 +63,6 @@ echo "  port       : ${SERVER_PORT}"
 echo "  redis      : ${LATTICE_REDIS_HOST}:${LATTICE_REDIS_PORT}"
 
 cd "$ROOT_DIR"
-exec mvn -q -s .codex/maven-settings.xml spring-boot:run -Dspring-boot.run.profiles=local-dev
+exec mvn -q -s .codex/maven-settings.xml spring-boot:run \
+  -Dspring-boot.run.profiles=local-dev \
+  -Dspring.devtools.restart.enabled=false

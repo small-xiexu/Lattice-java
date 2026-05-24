@@ -55,8 +55,6 @@
             </header>
 
             <main class="workspace-main">
-                <section id="page-notice" class="page-notice" hidden aria-live="polite"></section>
-
                 <div class="tab-shell" data-tab-group="knowledge-console" data-tab-query-key="tab">
                     <section class="panel">
                         <div class="panel-title-row">
@@ -85,7 +83,7 @@
                                 <div id="knowledge-help-card" class="help-state-card" data-help-tone="info">
                                     <p class="help-card-eyebrow">现在该怎么做</p>
                                     <h3 class="help-card-title">正在整理知识库状态</h3>
-                                    <p class="help-card-description">页面会根据资料、当前处理任务和已入库内容，告诉你下一步应该去资料导入、当前处理任务还是知识问答。</p>
+                                    <p class="help-card-description">页面会根据资料、导入进度和已入库内容，告诉你下一步应该去资料导入、导入进度还是知识问答。</p>
                                 </div>
 
                                 <div class="hero-metric" aria-live="polite">
@@ -106,7 +104,7 @@
                     <section class="panel tab-nav-panel workbench-tab-nav-panel">
                         <div class="sub-tabs workbench-sub-tabs" role="tablist" aria-label="工作台二级标签">
                             <button id="knowledge-tab-upload" class="tab-btn active" type="button" role="tab" aria-selected="true" data-tab-trigger="knowledge-upload" data-tab-scroll="true">资料导入</button>
-                            <button id="knowledge-tab-runs" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="knowledge-runs" data-tab-scroll="true">当前处理任务</button>
+                            <button id="knowledge-tab-runs" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="knowledge-runs" data-tab-scroll="true">导入进度</button>
                             <button id="knowledge-tab-articles" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="knowledge-articles" data-tab-scroll="true">已入库内容</button>
                             <button id="knowledge-tab-feedback" class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-trigger="knowledge-feedback" data-tab-scroll="true">结果反馈</button>
                         </div>
@@ -266,11 +264,11 @@
                         <section class="panel">
                             <div class="panel-title-row">
                                 <div>
-                                    <h2>当前处理任务</h2>
-                                    <p>这里优先展示正在处理、失败或待人工确认的任务；普通成功记录会收成轻量提示，完整历史放在对应资料源里查看。</p>
+                                    <h2>导入进度</h2>
+                                    <p>这里优先展示正在处理、失败或待人工确认的资料。想确认“现在卡在哪、下一步做什么”，先看这里。</p>
                                 </div>
                                 <div class="processing-refresh-actions">
-                                    <button id="refresh-jobs" class="ghost-btn" type="button">刷新记录</button>
+                                    <button id="refresh-jobs" class="ghost-btn" type="button">刷新进度</button>
                                 </div>
                             </div>
                             <div id="recent-run-overview" class="metric-grid compact top-gap"></div>
@@ -294,6 +292,7 @@
                                         <h3>待人工确认草稿</h3>
                                         <span id="review-queue-count" class="pill">0</span>
                                     </div>
+                                    <div id="review-queue-filter-bar" class="review-queue-filter-bar top-gap"></div>
                                     <div id="review-queue-list" class="review-queue-list top-gap"></div>
                                 </div>
                                 <div class="detail-panel">
@@ -312,19 +311,56 @@
                             </div>
                         </section>
 
-                        <section class="panel">
-                            <div class="panel-title-row">
-                                <div>
-                                    <h2>资料源与文件</h2>
-                                    <p>左侧查看资料源列表，右侧查看处理历史、文件解析方式和最近一次状态，便于排查 OCR、扫描 PDF 或 Git / 目录同步问题。</p>
+                        <details id="processing-history-panel" class="panel workbench-disclosure-panel processing-history-panel">
+                            <summary class="workbench-disclosure-summary">
+                                <span>
+                                    <span class="workbench-disclosure-kicker">任务记录</span>
+                                    <strong>处理历史</strong>
+                                    <span>查看已经结束的导入、同步、入库或失败记录；日常确认结果优先看上面的导入进度和已入库内容。</span>
+                                </span>
+                            </summary>
+                            <div class="workbench-disclosure-body">
+                                <div class="panel-title-row compact-title-row">
+                                    <div>
+                                        <h2>处理历史</h2>
+                                        <p>这里用于追溯过去发生过什么，适合复盘失败原因、确认某次导入是否已经结束。</p>
+                                    </div>
+                                    <button id="refresh-history" class="secondary-btn" type="button">刷新历史</button>
                                 </div>
-                                <div class="button-row wrap">
-                                    <button id="refresh-sources" class="ghost-btn" type="button">刷新资料源</button>
-                                    <button id="sync-selected-source" class="secondary-btn" type="button">同步当前资料源</button>
-                                </div>
-                            </div>
 
-                            <div class="two-column content-workspace top-gap">
+                                <div class="history-filter-bar top-gap">
+                                    <button data-history-filter="all" class="pill active" type="button">全部</button>
+                                    <button data-history-filter="succeeded" class="pill" type="button">已入库</button>
+                                    <button data-history-filter="failed" class="pill" type="button">失败</button>
+                                    <button data-history-filter="skipped" class="pill" type="button">已跳过</button>
+                                </div>
+
+                                <div id="history-list" class="top-gap"></div>
+                                <p id="history-status" class="inline-status"></p>
+                            </div>
+                        </details>
+
+                        <details id="source-diagnostic-panel" class="panel workbench-disclosure-panel source-diagnostic-panel">
+                            <summary class="workbench-disclosure-summary">
+                                <span>
+                                    <span class="workbench-disclosure-kicker">高级诊断</span>
+                                    <strong>资料源诊断</strong>
+                                    <span>用于排查 Git、目录同步、OCR、文件解析问题；普通上传结果请看导入进度和已入库内容。</span>
+                                </span>
+                            </summary>
+                            <div class="workbench-disclosure-body">
+                                <div class="panel-title-row compact-title-row">
+                                    <div>
+                                        <h2>资料源诊断</h2>
+                                        <p>左侧是原始资料源，右侧是处理记录、文件解析方式和资料源配置。这里偏排障，不代表最终可问答内容。</p>
+                                    </div>
+                                    <div class="button-row wrap">
+                                        <button id="refresh-sources" class="ghost-btn" type="button">刷新资料源</button>
+                                        <button id="sync-selected-source" class="secondary-btn" type="button">同步当前资料源</button>
+                                    </div>
+                                </div>
+
+                                <div class="two-column content-workspace top-gap">
                                 <div class="list-panel">
                                     <div class="list-header">
                                         <h3>资料源列表</h3>
@@ -369,8 +405,9 @@
                                         </section>
                                     </div>
                                 </div>
+                                </div>
                             </div>
-                        </section>
+                        </details>
                     </section>
 
                     <section class="tab-panel" data-tab-panel="knowledge-articles" hidden>
@@ -380,9 +417,7 @@
                                     <h2>已入库内容</h2>
                                     <p>这里展示的是系统整理后的知识条目。你可以按标题、用途说明或来源文件查找，搜索仍兼容内部标识。</p>
                                 </div>
-                                <div class="article-panel-actions">
-                                    <span id="hotspot-refresh-status" class="pill">热点未刷新</span>
-                                    <button id="refresh-hotspots" class="secondary-btn" type="button">刷新热点</button>
+                                <div class="article-detail-button-group">
                                     <a class="secondary-btn article-ask-link" href="/admin/ask">去提问</a>
                                 </div>
                             </div>
@@ -411,8 +446,7 @@
                                     <select id="article-risk-filter">
                                         <option value="">全部风险</option>
                                         <option value="riskLevel:high">高风险内容</option>
-                                        <option value="isHotspot:true">高频热点</option>
-                                        <option value="requiresResultVerification:true">待结果抽检</option>
+                                        <option value="isHotspot:true">高频问题相关</option>
                                         <option value="riskReason:source_conflict">来源冲突</option>
                                         <option value="riskReason:user_reported">用户反馈</option>
                                     </select>
@@ -499,15 +533,9 @@
                                             <div id="article-review-history" class="review-history-list"></div>
                                         </section>
 
-                                        <section class="detail-section detail-section-grid">
-                                            <div>
-                                                <h4>关联信息</h4>
-                                                <div id="article-relations" class="tag-list"></div>
-                                            </div>
-                                            <div>
-                                                <h4>技术信息</h4>
-                                                <div id="article-technical-info" class="description-list"></div>
-                                            </div>
+                                        <section class="detail-section">
+                                            <h4>关联信息</h4>
+                                            <div id="article-relations" class="tag-list"></div>
                                         </section>
 
                                         <section class="detail-section">
@@ -516,8 +544,8 @@
                                         </section>
 
                                         <section class="detail-section">
-                                            <h4>技术元数据</h4>
-                                            <pre id="article-metadata" class="code-view">暂无元数据</pre>
+                                            <h4>开发诊断信息</h4>
+                                            <pre id="article-metadata" class="code-view">暂无开发诊断信息</pre>
                                         </section>
                                     </div>
                                 </div>
@@ -623,7 +651,7 @@
                             <details class="advanced-panel" data-help-faq-key="first-steps">
                                 <summary>第一次进入这个页面先做什么</summary>
                                 <div class="advanced-panel-body">
-                                    <p class="muted">先看首屏状态判断当前能不能直接问；如果还不能问，就先去“资料导入”上传文件或接 Git 仓库；导入后切到“当前处理任务”看处理进度，最后再到“已入库内容”确认结果。</p>
+                                    <p class="muted">先看首屏状态判断当前能不能直接问；如果还不能问，就先去“资料导入”上传文件或接 Git 仓库；导入后切到“导入进度”看处理进度，最后再到“已入库内容”确认结果。</p>
                                     <div class="help-action-row">
                                         <button id="scroll-workbench-top" class="secondary-btn" type="button">回到首屏状态</button>
                                         <button class="ghost-btn" type="button" data-tab-open="knowledge-upload">去资料导入</button>
@@ -634,9 +662,9 @@
                             <details class="advanced-panel" data-help-faq-key="upload-delay">
                                 <summary>为什么上传后一直看不到入库结果</summary>
                                 <div class="advanced-panel-body">
-                                    <p class="muted">先到“当前处理任务”看任务是不是还在排队或运行中；如果已经失败，优先看资料源与文件区块里的处理历史和文件解析方式，再决定是资料格式问题、解析问题，还是连接问题。</p>
+                                    <p class="muted">先到“导入进度”看任务是不是还在排队或运行中；如果已经失败，再展开“处理历史”或“资料源诊断”，判断是资料格式、解析链路还是连接问题。</p>
                                     <div class="help-action-row">
-                                        <button class="secondary-btn" type="button" data-tab-open="knowledge-runs">查看当前处理任务</button>
+                                        <button class="secondary-btn" type="button" data-tab-open="knowledge-runs">查看导入进度</button>
                                         <button class="ghost-btn" type="button" data-tab-open="knowledge-upload">回资料导入</button>
                                     </div>
                                 </div>
@@ -682,7 +710,7 @@
  </div>
 <script src="/admin/admin-tabs.js?v=20260502-tabs-scroll-2"></script>
 <script src="/admin/admin-common.js?v=20260508-common-1"></script>
-<script type="module" src="/admin/management.js?v=20260508-module-1"></script>
+<script type="module" src="/admin/management.js?v=20260523-module-2"></script>
 <script src="/admin/compile-review-queue.js?v=20260520-human-review-1"></script>
 </body>
 </html>

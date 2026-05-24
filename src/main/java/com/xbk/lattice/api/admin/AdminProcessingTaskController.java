@@ -33,12 +33,16 @@ public class AdminProcessingTaskController {
      * 查询当前处理任务列表。
      *
      * @param limit 返回数量
+     * @param status 任务状态过滤（active/terminal/all）
      * @return 当前处理任务列表
      */
     @GetMapping("/processing-tasks")
-    public AdminProcessingTaskListResponse listProcessingTasks(@RequestParam(defaultValue = "10") Integer limit) {
+    public AdminProcessingTaskListResponse listProcessingTasks(
+            @RequestParam(defaultValue = "10") Integer limit,
+            @RequestParam(defaultValue = "active") String status
+    ) {
         int resolvedLimit = limit == null ? 10 : Math.max(1, Math.min(limit.intValue(), 50));
-        return adminProcessingTaskService.listProcessingTasks(resolvedLimit);
+        return adminProcessingTaskService.listProcessingTasks(resolvedLimit, status);
     }
 
     /**

@@ -29,7 +29,11 @@ class AdminCompileReviewSummaryServiceTests {
         );
 
         AdminCompileReviewSummaryResponse response = summaryService.resolve("job-review-mode");
-        String detail = summaryService.buildStepDetail(response);
+        String detail = summaryService.buildStepDetail(
+                response,
+                AdminProcessingTaskDisplayStatus.SUCCEEDED.getCode(),
+                "review_articles"
+        );
 
         assertThat(response).isNotNull();
         assertThat(response.getRequestedReviewMode()).isEqualTo("LLM");
@@ -104,9 +108,84 @@ class AdminCompileReviewSummaryServiceTests {
                 null
         );
 
-        assertThat(summaryService.buildStepDetail(needsHumanReviewSummary)).isEqualTo("质量检查后需要人工确认");
-        assertThat(summaryService.buildStepDetail(fixedSummary)).isEqualTo("已根据检查结果修正内容");
-        assertThat(summaryService.buildStepDetail(completedSummary)).isEqualTo("质量检查已完成");
+        assertThat(summaryService.buildStepDetail(
+                needsHumanReviewSummary,
+                AdminProcessingTaskDisplayStatus.SUCCEEDED.getCode(),
+                "review_articles"
+        )).isEqualTo("质量检查后需要人工确认");
+        assertThat(summaryService.buildStepDetail(
+                fixedSummary,
+                AdminProcessingTaskDisplayStatus.SUCCEEDED.getCode(),
+                "fix_review_issues"
+        )).isEqualTo("已根据检查结果完成修正");
+        assertThat(summaryService.buildStepDetail(
+                completedSummary,
+                AdminProcessingTaskDisplayStatus.SUCCEEDED.getCode(),
+                "review_articles"
+        )).isEqualTo("质量检查已完成");
+    }
+
+    /**
+     * 验证 RUNNING 状态下优先展示进行中语义，而非终态总结。
+     */
+    @Test
+    void shouldShowInProgressSemanticsWhenTaskIsRunning() {
+        AdminCompileReviewSummaryService summaryService = new AdminCompileReviewSummaryService(
+                new StubCompileJobStepJdbcRepository(List.of(reviewStep()))
+        );
+        AdminCompileReviewSummaryResponse reviewOnlySummary = new AdminCompileReviewSummaryResponse(
+                true,
+                "review_articles",
+                "ReviewerAgent",
+                "LLM",
+                "anthropic",
+                "LLM 审查",
+                Integer.valueOf(0),
+                Integer.valueOf(0),
+                Integer.valueOf(0),
+                false,
+                null,
+                Integer.valueOf(0),
+                null,
+                "未触发自动修复：无 fixable issue",
+                null
+        );
+        AdminCompileReviewSummaryResponse fixTriggeredSummary = new AdminCompileReviewSummaryResponse(
+                true,
+                "review_articles",
+                "ReviewerAgent",
+                "LLM",
+                "anthropic",
+                "LLM 审查",
+                Integer.valueOf(1),
+                Integer.valueOf(0),
+                Integer.valueOf(0),
+                true,
+                "fix_review_issues",
+                Integer.valueOf(1),
+                "openai",
+                "已触发自动修复",
+                null
+        );
+
+        assertThat(summaryService.buildStepDetail(
+                reviewOnlySummary,
+                AdminProcessingTaskDisplayStatus.RUNNING.getCode(),
+                "review_articles"
+        ))
+                .isEqualTo("正在检查内容质量");
+        assertThat(summaryService.buildStepDetail(
+                fixTriggeredSummary,
+                AdminProcessingTaskDisplayStatus.RUNNING.getCode(),
+                "fix_review_issues"
+        ))
+                .isEqualTo("已发现待修复问题，正在自动修正");
+        assertThat(summaryService.buildStepDetail(
+                fixTriggeredSummary,
+                AdminProcessingTaskDisplayStatus.RUNNING.getCode(),
+                "review_articles"
+        ))
+                .isEqualTo("正在检查内容质量");
     }
 
     private CompileJobStepRecord reviewStep() {

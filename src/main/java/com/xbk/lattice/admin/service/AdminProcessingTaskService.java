@@ -30,6 +30,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -57,6 +58,13 @@ public class AdminProcessingTaskService {
     private final AdminCompileReviewSummaryService adminCompileReviewSummaryService;
 
     private final StatusService statusService;
+
+    private static final Set<String> TERMINAL_DISPLAY_STATUSES = Set.of(
+            "SUCCEEDED",
+            "SKIPPED_NO_CHANGE",
+            "FAILED",
+            "STALLED"
+    );
 
     /**
      * 创建工作台当前处理任务聚合服务。
@@ -94,14 +102,20 @@ public class AdminProcessingTaskService {
      * 查询当前处理任务列表。
      *
      * @param limit 返回数量
+     * @param status 任务状态过滤（active/terminal/all）
      * @return 当前处理任务列表响应
      */
-    public AdminProcessingTaskListResponse listProcessingTasks(int limit) {
+    public AdminProcessingTaskListResponse listProcessingTasks(int limit, String status) {
         int resolvedLimit = Math.max(limit, 1);
+        boolean terminal = "terminal".equals(status);
+        boolean all = "all".equals(status);
+        boolean skipCollapse = terminal || all;
+
         List<AdminProcessingTaskItemResponse> mergedItems = new ArrayList<AdminProcessingTaskItemResponse>();
-        List<SourceSyncRunDetail> recentRuns = collapseCurrentSourceRuns(
-                sourceUploadService.listRecentRunDetails(resolvedLimit)
-        );
+        List<SourceSyncRunDetail> recentRuns = sourceUploadService.listRecentRunDetails(resolvedLimit);
+        if (!skipCollapse) {
+            recentRuns = collapseCurrentSourceRuns(recentRuns);
+        }
         for (SourceSyncRunDetail recentRun : recentRuns) {
             mergedItems.add(toSourceSyncTask(recentRun));
         }
@@ -110,6 +124,13 @@ public class AdminProcessingTaskService {
             mergedItems.add(toStandaloneCompileTask(standaloneJob));
         }
         mergedItems.sort(new ProcessingTaskComparator());
+
+        if (terminal) {
+            mergedItems = mergedItems.stream()
+                    .filter(item -> TERMINAL_DISPLAY_STATUSES.contains(item.getDisplayStatus()))
+                    .collect(Collectors.toList());
+        }
+
         AdminProcessingTaskSummaryResponse summary = buildSummary(mergedItems);
         List<AdminProcessingTaskItemResponse> visibleItems = limitItems(mergedItems, resolvedLimit);
         return new AdminProcessingTaskListResponse(summary, visibleItems);
@@ -202,7 +223,9 @@ public class AdminProcessingTaskService {
         AdminCompileReviewSummaryResponse compileReviewSummary = adminCompileReviewSummaryService.resolve(runDetail.getCompileJobId());
         List<AdminProcessingTaskStepResponse> progressSteps = enrichReviewStepDetail(
                 presentation.getProgressSteps(),
-                compileReviewSummary
+                compileReviewSummary,
+                displayStatus,
+                runDetail.getCompileCurrentStep()
         );
         return new AdminProcessingTaskItemResponse(
                 "source-run:" + String.valueOf(runDetail.getRunId()),
@@ -290,7 +313,9 @@ public class AdminProcessingTaskService {
         AdminCompileReviewSummaryResponse compileReviewSummary = adminCompileReviewSummaryService.resolve(compileJobRecord.getJobId());
         List<AdminProcessingTaskStepResponse> progressSteps = enrichReviewStepDetail(
                 presentation.getProgressSteps(),
-                compileReviewSummary
+                compileReviewSummary,
+                derivedStatus,
+                compileJobRecord.getCurrentStep()
         );
         return new AdminProcessingTaskItemResponse(
                 "compile-job:" + compileJobRecord.getJobId(),
@@ -354,9 +379,15 @@ public class AdminProcessingTaskService {
      */
     private List<AdminProcessingTaskStepResponse> enrichReviewStepDetail(
             List<AdminProcessingTaskStepResponse> progressSteps,
-            AdminCompileReviewSummaryResponse compileReviewSummary
+            AdminCompileReviewSummaryResponse compileReviewSummary,
+            String displayStatus,
+            String currentStep
     ) {
-        String reviewDetail = adminCompileReviewSummaryService.buildStepDetail(compileReviewSummary);
+        String reviewDetail = adminCompileReviewSummaryService.buildStepDetail(
+                compileReviewSummary,
+                displayStatus,
+                currentStep
+        );
         if (reviewDetail == null || reviewDetail.isBlank() || progressSteps == null || progressSteps.isEmpty()) {
             return progressSteps;
         }

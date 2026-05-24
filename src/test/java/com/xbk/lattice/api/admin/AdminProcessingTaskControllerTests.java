@@ -107,7 +107,7 @@ class AdminProcessingTaskControllerTests {
                 "review_articles",
                 2,
                 3,
-                "正在审查文章（2/3）：payment-timeout"
+                "正在检查第 2 / 3 篇文章：payment-timeout"
         );
 
         Path standaloneDir = Files.createDirectories(tempDir.resolve("docs"));
@@ -127,7 +127,7 @@ class AdminProcessingTaskControllerTests {
                 "fix_review_issues",
                 6,
                 7,
-                "正在修复文章（6/7）：项目全流程真实验收手册"
+                "正在修正第 6 / 7 篇文章：项目全流程真实验收手册"
         );
 
         String responseBody = mockMvc.perform(get("/api/v1/admin/processing-tasks?limit=10"))
@@ -152,13 +152,13 @@ class AdminProcessingTaskControllerTests {
         assertThat(sourceSyncTask.path("displayStatusLabel").asText()).isEqualTo("进行中");
         assertThat(sourceSyncTask.path("currentStepLabel").asText()).isEqualTo("质量检查");
         assertThat(sourceSyncTask.path("progressText").asText()).contains("2 / 3");
-        assertThat(sourceSyncTask.path("reasonSummary").asText()).contains("正在审查文章");
+        assertThat(sourceSyncTask.path("reasonSummary").asText()).contains("正在检查内容质量");
         assertThat(sourceSyncTask.path("operationalNote").asText()).contains("当前步骤");
         assertThat(sourceSyncTask.path("displayTone").asText()).isEqualTo("warning");
         assertThat(sourceSyncTask.path("processingActive").asBoolean()).isTrue();
         assertThat(sourceSyncTask.path("requiresManualAction").asBoolean()).isFalse();
         assertThat(sourceSyncTask.path("noticeTone").asText()).isEqualTo("success");
-        assertThat(sourceSyncTask.path("completionNotice").asText()).contains("正在审查文章");
+        assertThat(sourceSyncTask.path("completionNotice").asText()).contains("正在检查内容质量");
         assertThat(sourceSyncTask.path("progressSteps").isArray()).isTrue();
         assertThat(sourceSyncTask.path("progressSteps").size()).isEqualTo(4);
         assertThat(sourceSyncTask.path("progressSteps").get(0).path("label").asText()).isEqualTo("资料接收");
@@ -168,7 +168,7 @@ class AdminProcessingTaskControllerTests {
         assertThat(sourceSyncTask.path("progressSteps").get(1).path("key").asText()).isEqualTo("COMPILE_NEW_ARTICLES");
         assertThat(sourceSyncTask.path("progressSteps").get(2).path("key").asText()).isEqualTo("REVIEW_ARTICLES");
         assertThat(sourceSyncTask.path("progressSteps").get(2).path("status").asText()).isEqualTo("ACTIVE");
-        assertThat(sourceSyncTask.path("progressSteps").get(2).path("detail").asText()).isEqualTo("正在审查文章草稿");
+        assertThat(sourceSyncTask.path("progressSteps").get(2).path("detail").asText()).isEqualTo("正在检查内容质量");
         assertThat(sourceSyncTask.path("progressSteps").get(2).path("detail").asText()).doesNotContain("细分状态");
         assertThat(sourceSyncTask.path("actions").isArray()).isTrue();
 
@@ -193,7 +193,7 @@ class AdminProcessingTaskControllerTests {
         assertThat(standaloneTask.path("progressSteps").get(1).path("label").asText()).isEqualTo("内容生成");
         assertThat(standaloneTask.path("progressSteps").get(2).path("label").asText()).isEqualTo("质量检查");
         assertThat(standaloneTask.path("progressSteps").get(3).path("label").asText()).isEqualTo("写入知识库");
-        assertThat(standaloneTask.path("progressSteps").get(2).path("detail").asText()).isEqualTo("正在修复审查问题");
+        assertThat(standaloneTask.path("progressSteps").get(2).path("detail").asText()).isEqualTo("正在根据检查结果修正内容");
         assertThat(standaloneTask.path("progressSteps").get(2).path("detail").asText()).doesNotContain("细分状态");
         assertThat(rootNode.path("summary").path("helpState").path("title").asText()).isNotBlank();
         assertThat(rootNode.path("summary").path("cards").isArray()).isTrue();
@@ -419,6 +419,51 @@ class AdminProcessingTaskControllerTests {
         assertThat(latestTask.path("requestedAt").asText()).isEqualTo("2026-05-04T01:38:33.848574Z");
         assertThat(rootNode.path("summary").path("succeededCount").asInt()).isEqualTo(1);
         assertThat(rootNode.path("summary").path("failedCount").asInt()).isEqualTo(0);
+    }
+
+    /**
+     * 验证 status=terminal 只返回终态任务且不做同 source 折叠。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldReturnAllTerminalRunsWithoutCollapseWhenStatusIsTerminal() throws Exception {
+        resetTables();
+        Long sourceId = createUploadSource("history-terminal-src", "历史终态测试.md");
+        insertSourceSyncRun(
+                sourceId,
+                "FAILED",
+                "2026-05-04T00:05:54.828323Z",
+                "2026-05-04T00:16:25.588161Z",
+                "处理失败",
+                "compile job heartbeat expired and lease timed out"
+        );
+        insertSourceSyncRun(
+                sourceId,
+                "SUCCEEDED",
+                "2026-05-04T01:38:33.848574Z",
+                "2026-05-04T02:10:10.834603Z",
+                "处理成功，资料已写入知识库",
+                null
+        );
+
+        String responseBody = mockMvc.perform(get("/api/v1/admin/processing-tasks?limit=20&status=terminal"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        JsonNode rootNode = OBJECT_MAPPER.readTree(responseBody);
+
+        JsonNode items = rootNode.path("items");
+        assertThat(items.isArray()).isTrue();
+        assertThat(items).hasSize(2);
+
+        assertThat(items.get(0).path("displayStatus").asText()).isIn("SUCCEEDED", "FAILED");
+        assertThat(items.get(1).path("displayStatus").asText()).isIn("SUCCEEDED", "FAILED");
+        assertThat(items.get(0).path("sourceId").asLong()).isEqualTo(sourceId.longValue());
+        assertThat(items.get(1).path("sourceId").asLong()).isEqualTo(sourceId.longValue());
+        assertThat(rootNode.path("summary").path("succeededCount").asInt()).isEqualTo(1);
+        assertThat(rootNode.path("summary").path("failedCount").asInt()).isEqualTo(1);
     }
 
     /**

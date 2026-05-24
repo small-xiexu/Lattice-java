@@ -113,7 +113,8 @@ public class AdminProcessingTaskPresentationResolver {
                 errorCode,
                 message,
                 errorMessage,
-                progressMessage
+                progressMessage,
+                currentStep
         );
         String operationalNote = buildOperationalNote(
                 normalizedDisplayStatus,
@@ -534,9 +535,9 @@ public class AdminProcessingTaskPresentationResolver {
             Integer progressTotal,
             String progressMessage
     ) {
-        if (progressCurrent != null && progressTotal != null && progressCurrent.intValue() > 0 && progressTotal.intValue() > 0) {
-            return String.valueOf(progressCurrent) + " / " + String.valueOf(progressTotal)
-                    + (progressMessage == null || progressMessage.isBlank() ? "" : " · " + compactDisplayMessage(progressMessage));
+        if (progressCurrent != null && progressTotal != null && progressCurrent.intValue() > 0 && progressTotal.intValue() > 0
+                && progressMessage != null && !progressMessage.isBlank()) {
+            return compactDisplayMessage(progressMessage);
         }
         if (progressMessage != null && !progressMessage.isBlank()) {
             return compactDisplayMessage(progressMessage);
@@ -570,7 +571,8 @@ public class AdminProcessingTaskPresentationResolver {
             String errorCode,
             String message,
             String errorMessage,
-            String progressMessage
+            String progressMessage,
+            String currentStep
     ) {
         if (AdminProcessingTaskDisplayStatus.WAIT_CONFIRM.matches(displayStatus)) {
             String compactMessage = compactDisplayMessage(message);
@@ -583,15 +585,17 @@ public class AdminProcessingTaskPresentationResolver {
             return resolveErrorCodeSummary(errorCode);
         }
         if (AdminProcessingTaskDisplayStatus.STALLED.matches(displayStatus)) {
-            return "任务长时间没有新的心跳或进度更新，建议重新同步资料源。";
+            return "任务暂停，等待重试";
         }
         if (AdminProcessingTaskDisplayStatus.FAILED.matches(displayStatus)) {
             String compactErrorMessage = compactDisplayMessage(errorMessage);
             return compactErrorMessage == null ? "任务处理失败，请检查资料源配置、网络链路或上传内容。" : compactErrorMessage;
         }
         if (AdminProcessingTaskDisplayStatus.RUNNING.matches(displayStatus)) {
-            String compactProgressMessage = compactDisplayMessage(progressMessage);
-            return compactProgressMessage == null ? "系统仍在推进当前步骤。" : compactProgressMessage;
+            if (currentStep != null && !currentStep.isBlank()) {
+                return resolveSpecificStateLabel(taskType, currentStep, displayStatus);
+            }
+            return "系统仍在推进当前步骤。";
         }
         if (AdminProcessingTaskDisplayStatus.COMPILE_QUEUED.matches(displayStatus)) {
             return "识别与整理已完成，正在等待内容生成任务开始执行。";
@@ -824,10 +828,10 @@ public class AdminProcessingTaskPresentationResolver {
             return "正在生成文章草稿";
         }
         if (AdminProcessingTaskStep.REVIEW_ARTICLES.getCode().equals(normalizedStep)) {
-            return "正在审查文章草稿";
+            return "正在检查内容质量";
         }
         if (AdminProcessingTaskStep.FIX_REVIEW_ISSUES.getCode().equals(normalizedStep)) {
-            return "正在修复审查问题";
+            return "正在根据检查结果修正内容";
         }
         if (AdminProcessingTaskStep.PERSIST_ARTICLES.getCode().equals(normalizedStep)) {
             return "正在写入知识库";
@@ -843,9 +847,11 @@ public class AdminProcessingTaskPresentationResolver {
         if (AdminProcessingTaskStep.GENERATE_SYNTHESIS_ARTIFACTS.getCode().equals(normalizedStep)) {
             return "正在整理知识库概览";
         }
-        if (AdminProcessingTaskStep.CAPTURE_REPO_SNAPSHOT.getCode().equals(normalizedStep)
-                || AdminProcessingTaskStep.FINALIZE_JOB.getCode().equals(normalizedStep)) {
-            return "入库完成";
+        if (AdminProcessingTaskStep.CAPTURE_REPO_SNAPSHOT.getCode().equals(normalizedStep)) {
+            return "正在生成资料快照";
+        }
+        if (AdminProcessingTaskStep.FINALIZE_JOB.getCode().equals(normalizedStep)) {
+            return "正在完成入库";
         }
         if (AdminProcessingTaskDisplayStatus.SKIPPED_NO_CHANGE.matches(displayStatus)) {
             return "无变化跳过";

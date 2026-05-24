@@ -36,6 +36,261 @@ class ManagementJsRuntimeTests {
         assertThat(html).doesNotContain("value=\"needs_human_review\"");
         assertThat(html).doesNotContain("Reviewer 判定原因");
         assertThat(html).doesNotContain("质量检查给出的原因");
+        // Article detail bar: button group still present
+        assertThat(html).contains("article-detail-button-group");
+        // Article detail: 不再出现"技术信息"独立标题
+        assertThat(html).doesNotContain("<h4>技术信息</h4>");
+        // Article detail: 仅保留一个"开发诊断信息"入口
+        long devDiagCount = html.lines()
+                .filter(line -> line.contains("<h4>开发诊断信息</h4>"))
+                .count();
+        assertThat(devDiagCount).as("article detail should have exactly one 开发诊断信息 section")
+                .isEqualTo(1);
+        // Article detail: 关联信息不再与"技术信息"组成强制双栏结构
+        // （detail-section-grid 仍用于结果反馈等其他区域，仅验证 article-relations 不在其中）
+        int articleRelationsIdx = html.indexOf("id=\"article-relations\"");
+        assertThat(articleRelationsIdx).as("article-relations element should exist").isPositive();
+        String beforeRelations = html.substring(Math.max(0, articleRelationsIdx - 300), articleRelationsIdx);
+        assertThat(beforeRelations).doesNotContain("detail-section-grid");
+        // Article detail: 开发诊断信息默认折叠（无 open 属性）
+        // （其他区域如 FAQ 等处可能有 open，仅检查开发诊断信息段）
+        int devDiagIdx = html.indexOf("<h4>开发诊断信息</h4>");
+        assertThat(devDiagIdx).as("开发诊断信息 section should exist").isPositive();
+        String devDiagSurrounding = html.substring(devDiagIdx, Math.min(html.length(), devDiagIdx + 400));
+        assertThat(devDiagSurrounding).doesNotContain("<details open");
+    }
+
+    /**
+     * 验证文章详情页 toggle / 折叠区不再使用冷蓝深底样式。
+     *
+     * @throws Exception 读取文件异常
+     */
+    @Test
+    void shouldNotUseColdBlueBackgroundInArticleDetailToggles() throws Exception {
+        String userDir = System.getProperty("user.dir");
+        Path cssPath = Path.of(userDir, "src/main/resources/static/admin/admin.css");
+        assertThat(Files.exists(cssPath)).isTrue();
+        String css = Files.readString(cssPath, StandardCharsets.UTF_8);
+
+        // Extract toggle rule blocks
+        String metaToggleBlock = extractCssBlock(css, ".article-metadata-toggle {");
+        String keyToggleBlock = extractCssBlock(css, ".article-keyword-toggle {");
+        String relToggleBlock = extractCssBlock(css, ".article-relations-toggle {");
+        String relToggleHoverBlock = extractCssBlock(css, ".article-relations-toggle:hover {");
+        String metaToggleCodeViewBlock = extractCssBlock(css, ".article-metadata-toggle .code-view {");
+
+        // 旧冷蓝底色不得出现
+        assertThat(metaToggleBlock).doesNotContain("rgba(23, 39, 65");
+        assertThat(metaToggleBlock).doesNotContain("rgba(143, 190, 255");
+        assertThat(keyToggleBlock).doesNotContain("rgba(23, 39, 65");
+        assertThat(keyToggleBlock).doesNotContain("rgba(143, 190, 255");
+        assertThat(relToggleBlock).doesNotContain("rgba(41, 69, 112");
+        assertThat(relToggleBlock).doesNotContain("rgba(126, 186, 255");
+        assertThat(relToggleBlock).doesNotContain("#b4d6ff");
+        assertThat(relToggleHoverBlock).doesNotContain("rgba(58, 96, 150");
+        assertThat(relToggleHoverBlock).doesNotContain("#d0e4ff");
+
+        // article-relations-toggle 不再使用 var(--primary-strong) 间接引用冷蓝
+        assertThat(relToggleBlock).doesNotContain("var(--primary-strong)");
+
+        // article-metadata-toggle .code-view 必须有显式暖色背景，不再继承深色底
+        assertThat(metaToggleCodeViewBlock).contains("linear-gradient");
+        assertThat(metaToggleCodeViewBlock).contains("rgba(41, 67, 56");
+        assertThat(metaToggleCodeViewBlock).doesNotContain("rgba(8, 15, 29");
+
+        // 新浅色体系应存在
+        assertThat(metaToggleBlock).contains("rgba(67, 79, 68");
+        assertThat(metaToggleBlock).contains("rgba(249, 244, 237");
+        assertThat(keyToggleBlock).contains("rgba(67, 79, 68");
+        assertThat(keyToggleBlock).contains("rgba(249, 244, 237");
+        assertThat(relToggleBlock).contains("rgba(242, 235, 223");
+    }
+
+    private String extractCssBlock(String css, String selector) {
+        return extractCssBlockFrom(css, selector, 0);
+    }
+
+    private String extractCssBlockFrom(String css, String selector, int fromIndex) {
+        int start = css.indexOf(selector, fromIndex);
+        if (start < 0) {
+            return "";
+        }
+        int braceStart = css.indexOf("{", start);
+        if (braceStart < 0) {
+            return "";
+        }
+        int depth = 1;
+        int i = braceStart + 1;
+        while (i < css.length() && depth > 0) {
+            char c = css.charAt(i);
+            if (c == '{') {
+                depth++;
+            } else if (c == '}') {
+                depth--;
+            }
+            i++;
+        }
+        return css.substring(start, i);
+    }
+
+    /**
+     * 验证 renderDescriptionList 空态文案已统一为"暂无开发诊断信息"，不再混用"技术信息"命名。
+     *
+     * @throws Exception 读取文件异常
+     */
+    @Test
+    void shouldUseUnifiedDevDiagnosticCopyInDescriptionListEmptyState() throws Exception {
+        String userDir = System.getProperty("user.dir");
+        Path part04Path = Path.of(userDir, "src/main/resources/static/admin/modules/management-runtime-part-04.js");
+        assertThat(Files.exists(part04Path)).isTrue();
+        String source = Files.readString(part04Path, StandardCharsets.UTF_8);
+
+        // 旧空态文案不得出现
+        assertThat(source).doesNotContain("暂无技术信息");
+        // 新空态文案必须出现
+        assertThat(source).contains("暂无开发诊断信息");
+    }
+
+    /**
+     * 验证"已入库内容"页已删除关注内容治理 UI（状态条、说明卡、重新分析按钮、需关注筛选项），
+     * 页面回归核心路径：搜索、列表、详情、风险提示、来源、复核历史。
+     *
+     * @throws Exception 读取文件异常
+     */
+    @Test
+    void shouldNotContainGovernanceAttentionUiInKnowledgeArticlesPage() throws Exception {
+        String userDir = System.getProperty("user.dir");
+
+        // 验证 index.html 不再包含治理 UI DOM
+        Path indexHtmlPath = Path.of(userDir, "src/main/resources/static/admin/index.html");
+        assertThat(Files.exists(indexHtmlPath)).isTrue();
+        String html = Files.readString(indexHtmlPath, StandardCharsets.UTF_8);
+        assertThat(html).doesNotContain("hotspot-refresh-status");
+        assertThat(html).doesNotContain("governance-explain-panel");
+        assertThat(html).doesNotContain("governance-explain-body");
+        assertThat(html).doesNotContain("governance-explain-dismiss");
+        assertThat(html).doesNotContain("理解\"关注内容\"指标");
+        assertThat(html).doesNotContain("重新分析关注内容");
+        assertThat(html).doesNotContain("关注内容未分析");
+
+        // 验证筛选下拉不再暴露"需关注"选项
+        assertThat(html).doesNotContain("requiresResultVerification:true\">需关注");
+
+        // 验证核心入口仍然保留
+        assertThat(html).contains("去提问");
+        assertThat(html).contains("已入库内容");
+        assertThat(html).contains("article-risk-filter");
+        assertThat(html).contains("搜索");
+        assertThat(html).contains("article-list");
+
+        // 验证 admin.css 不再包含治理说明面板样式
+        Path cssPath = Path.of(userDir, "src/main/resources/static/admin/admin.css");
+        assertThat(Files.exists(cssPath)).isTrue();
+        String css = Files.readString(cssPath, StandardCharsets.UTF_8);
+        assertThat(css).doesNotContain(".governance-explain-panel");
+        assertThat(css).doesNotContain(".governance-explain-body");
+        assertThat(css).doesNotContain(".governance-explain-item");
+        assertThat(css).doesNotContain(".governance-explain-action");
+
+        // 验证 part-04.js 不再保留治理展示/说明函数
+        Path part04Path = Path.of(userDir, "src/main/resources/static/admin/modules/management-runtime-part-04.js");
+        assertThat(Files.exists(part04Path)).isTrue();
+        String part04Source = Files.readString(part04Path, StandardCharsets.UTF_8);
+        assertThat(part04Source).doesNotContain("renderGovernanceExplainPanel");
+        assertThat(part04Source).doesNotContain("buildGovernanceExplainContent");
+        assertThat(part04Source).doesNotContain("syncGovernanceExplainPanel");
+        assertThat(part04Source).doesNotContain("renderHotspotRefreshStatus");
+        assertThat(part04Source).doesNotContain("buildHotspotRefreshStatusText");
+        assertThat(part04Source).doesNotContain("governanceExplainDismissed");
+        assertThat(part04Source).doesNotContain("lastHotspotResponse");
+        assertThat(part04Source).doesNotContain("_originalActivateKnowledgeTab");
+
+        // 四段式解释内容已移除
+        assertThat(part04Source).doesNotContain("你现在还不能做什么");
+
+        // 禁止旧术语（回归断言）
+        assertThat(part04Source).doesNotContain("抽检");
+        assertThat(part04Source).doesNotContain("待验证");
+        assertThat(part04Source).doesNotContain("热点刷新");
+        assertThat(part04Source).doesNotContain("热点未验证");
+    }
+
+    /**
+     * 验证首页工作台右侧状态卡已从深色大 CTA 降级为浅色辅助状态摘要卡。
+     *
+     * @throws Exception 读取文件异常
+     */
+    @Test
+    void shouldRenderRightStatusCardAsLightSummaryNotDarkHero() throws Exception {
+        String userDir = System.getProperty("user.dir");
+
+        // 验证 admin.css 中 .help-state-card 不再使用深色整块背景
+        Path cssPath = Path.of(userDir, "src/main/resources/static/admin/admin.css");
+        assertThat(Files.exists(cssPath)).isTrue();
+        String css = Files.readString(cssPath, StandardCharsets.UTF_8);
+
+        String helpStateCardBlock = extractCssBlock(css, ".help-state-card {");
+        assertThat(helpStateCardBlock).isNotEmpty();
+
+        // 禁止深色整块背景（冷蓝/深海军蓝/深绿底）
+        assertThat(helpStateCardBlock).doesNotContain("rgba(14, 24, 44");
+        assertThat(helpStateCardBlock).doesNotContain("rgba(9, 18, 34");
+        assertThat(helpStateCardBlock).doesNotContain("rgba(11, 33, 30");
+        assertThat(helpStateCardBlock).doesNotContain("rgba(41, 29, 13");
+        assertThat(helpStateCardBlock).doesNotContain("rgba(43, 15, 19");
+        // 禁止冷蓝色边框
+        assertThat(helpStateCardBlock).doesNotContain("rgba(143, 190, 255");
+        assertThat(helpStateCardBlock).doesNotContain("rgba(121, 210, 255");
+        assertThat(helpStateCardBlock).doesNotContain("rgba(118, 240, 200");
+        assertThat(helpStateCardBlock).doesNotContain("rgba(255, 197, 107");
+        assertThat(helpStateCardBlock).doesNotContain("rgba(255, 141, 141");
+
+        // 必须使用暖色浅底
+        assertThat(helpStateCardBlock).contains("rgba(67, 79, 68");
+
+        // help-state-card[data-help-tone] 变体也不再使用深色背景（扫描全文件）
+        String secondSuccessBlock = extractCssBlockFrom(css, ".help-state-card[data-help-tone=\"success\"] {",
+                css.indexOf(".help-state-card[data-help-tone=\"success\"] {") + 1);
+        assertThat(secondSuccessBlock).doesNotContain("rgba(11, 33, 30");
+        assertThat(secondSuccessBlock).doesNotContain("rgba(8, 23, 21");
+
+        String secondWarningBlock = extractCssBlockFrom(css, ".help-state-card[data-help-tone=\"warning\"] {",
+                css.indexOf(".help-state-card[data-help-tone=\"warning\"] {") + 1);
+        assertThat(secondWarningBlock).doesNotContain("rgba(41, 29, 13");
+        assertThat(secondWarningBlock).doesNotContain("rgba(27, 20, 10");
+
+        String secondDangerBlock = extractCssBlockFrom(css, ".help-state-card[data-help-tone=\"danger\"] {",
+                css.indexOf(".help-state-card[data-help-tone=\"danger\"] {") + 1);
+        assertThat(secondDangerBlock).doesNotContain("rgba(43, 15, 19");
+        assertThat(secondDangerBlock).doesNotContain("rgba(29, 11, 14");
+
+        // .help-card-eyebrow 不再使用冷蓝色
+        String eyebrowBlock = extractCssBlock(css, ".help-card-eyebrow {");
+        assertThat(eyebrowBlock).doesNotContain("rgba(143, 190, 255");
+        assertThat(eyebrowBlock).contains("var(--primary)");
+
+        // 验证 part-02.js 中右侧卡片文案为状态摘要而非 CTA
+        Path part02Path = Path.of(userDir, "src/main/resources/static/admin/modules/management-runtime-part-02.js");
+        assertThat(Files.exists(part02Path)).isTrue();
+        String part02Source = Files.readString(part02Path, StandardCharsets.UTF_8);
+        // 状态摘要标题
+        assertThat(part02Source).contains("当前状态");
+        // 不再使用 CTA 式引导标题
+        assertThat(part02Source).doesNotContain("现在该怎么做");
+
+        // 验证 index.html 中右侧为辅助区，不乱入左侧主引导文案
+        Path indexHtmlPath = Path.of(userDir, "src/main/resources/static/admin/index.html");
+        assertThat(Files.exists(indexHtmlPath)).isTrue();
+        String html = Files.readString(indexHtmlPath, StandardCharsets.UTF_8);
+        // 右侧卡片作为 workbench-hero-side 存在
+        assertThat(html).contains("workbench-hero-side");
+        // 左侧主引导文案不在右侧
+        String heroSideStart = html.substring(html.indexOf("workbench-hero-side"));
+        String heroSideEnd = heroSideStart.substring(0, heroSideStart.indexOf("workbench-status-panel") > 0
+                ? heroSideStart.indexOf("workbench-status-panel") + 30
+                : Math.min(heroSideStart.length(), 1200));
+        assertThat(heroSideEnd).doesNotContain("把资料放进来");
+        assertThat(heroSideEnd).doesNotContain("先导入资料");
     }
 
     /**
@@ -129,18 +384,36 @@ class ManagementJsRuntimeTests {
                 const commonSource = fs.readFileSync(process.argv[2], "utf8");
                 const moduleDir = process.argv[3];
                 const modulePrefix = process.argv[4];
-                const source = fs.readdirSync(moduleDir)
+                function parsePart(name) {
+                    const moduleSource = fs.readFileSync(path.join(moduleDir, name), "utf8");
+                    const matched = moduleSource.match(/export default (.*);\\s*$/s);
+                    if (!matched) {
+                        throw new Error("invalid runtime module: " + name);
+                    }
+                    return JSON.parse(matched[1]);
+                }
+
+                const runtimeModuleNames = fs.readdirSync(moduleDir)
                     .filter(function (name) { return name.startsWith(modulePrefix + "-runtime-part-"); })
-                    .sort()
-                    .map(function (name) {
-                        const moduleSource = fs.readFileSync(path.join(moduleDir, name), "utf8");
-                        const matched = moduleSource.match(/export default (.*);\\s*$/s);
-                        if (!matched) {
-                            throw new Error("invalid runtime module: " + name);
-                        }
-                        return JSON.parse(matched[1]);
-                    })
-                    .join("\\n");
+                    .sort();
+                const lastName = runtimeModuleNames[runtimeModuleNames.length - 1];
+                const namesWithoutLast = runtimeModuleNames.slice(0, -1);
+                const runtimeParts = namesWithoutLast.map(parsePart);
+
+                let historyPart = "";
+                try {
+                    const historyModuleSource = fs.readFileSync(path.join(moduleDir, "management-history-part.js"), "utf8");
+                    const historyMatched = historyModuleSource.match(/export default (.*);\\s*$/s);
+                    if (historyMatched) {
+                        historyPart = JSON.parse(historyMatched[1]);
+                    }
+                } catch (e) {}
+
+                if (historyPart) {
+                    runtimeParts.push(historyPart);
+                }
+                runtimeParts.push(parsePart(lastName));
+                const source = runtimeParts.join("\\n");
                 const sandbox = {
                     console: console,
                     URLSearchParams: URLSearchParams,
@@ -540,6 +813,38 @@ class ManagementJsRuntimeTests {
                     requiresResultVerification: true
                 }).includes("来源冲突"),
                     "risk summary should render generic risk reasons");
+                // buildArticleRiskSummary: new terms, no old internal terms
+                var hotspotRiskSummary = articleUi.buildArticleRiskSummary({
+                    riskLevel: "medium",
+                    riskReasons: [],
+                    isHotspot: true,
+                    requiresResultVerification: true
+                });
+                assert(hotspotRiskSummary.includes("高频问题相关"),
+                    "risk summary should use 高频问题相关 not 高频热点");
+                assert(!hotspotRiskSummary.includes("高频热点"),
+                    "risk summary should not expose internal term 高频热点");
+                assert(hotspotRiskSummary.includes("需关注"),
+                    "risk summary should use 需关注 not 需要结果抽检");
+                assert(!hotspotRiskSummary.includes("需要结果抽检"),
+                    "risk summary should not expose internal term 需要结果抽检");
+                assert(!hotspotRiskSummary.includes("抽检"),
+                    "risk summary should not expose internal term 抽检");
+                var lowRiskNoFlags = articleUi.buildArticleRiskSummary({
+                    riskLevel: "low",
+                    riskReasons: [],
+                    isHotspot: false,
+                    requiresResultVerification: false
+                });
+                assert(lowRiskNoFlags.includes("暂无额外关注原因"),
+                    "low risk summary should use 暂无额外关注原因 not 暂无额外抽检原因");
+                assert(!lowRiskNoFlags.includes("抽检"),
+                    "low risk summary should not expose 抽检");
+                var hotspotFnSrc = String(articleUi.buildArticleRiskSummary);
+                assert(!hotspotFnSrc.includes("高频热点"),
+                    "buildArticleRiskSummary source should not contain 高频热点");
+                assert(!hotspotFnSrc.includes("需要结果抽检"),
+                    "buildArticleRiskSummary source should not contain 需要结果抽检");
                 assert(articleUi.shouldShowArticleReviewPanel({ reviewStatus: "needs_human_review" }),
                     "needs_human_review article should show manual review panel");
                 assert(articleUi.shouldShowArticleReviewPanel({ reviewStatus: "needs_review" }),
@@ -594,6 +899,16 @@ class ManagementJsRuntimeTests {
                     "manual review panel should set default reviewer");
                 assert(elementState["article-review-history"].innerHTML.includes("确认通过"),
                     "review history should render readable approve action");
+                assert(elementState["article-review-history"].innerHTML.includes("review-history-row"),
+                    "review history should render compact timeline row structure");
+                assert(elementState["article-review-history"].innerHTML.includes("review-history-action"),
+                    "review history should render action label");
+                assert(elementState["article-review-history"].innerHTML.includes("review-history-status"),
+                    "review history should render status change");
+                assert(elementState["article-review-history"].innerHTML.includes("review-history-time"),
+                    "review history should render timestamp");
+                assert(!elementState["article-review-history"].innerHTML.includes("review-history-head"),
+                    "review history should not use old dark gray card structure");
                 assert(elementState["article-risk-summary"].innerHTML.includes("用户反馈"),
                     "detail should render readable risk notice");
                 sandbox.__LATTICE_ADMIN_TEST_STATE__.sourceFiles = [{
@@ -617,6 +932,75 @@ class ManagementJsRuntimeTests {
                     "source preview panel should become visible");
                 assert(elementState["article-source-preview"].innerHTML.includes("preview text"),
                     "source preview panel should render contentPreview only");
+                // 二次渲染回归：验证 closest(".detail-section") 路径连续两次渲染
+                // 不会产生 details 嵌套、id 丢失或 TypeError
+                delete elementState["article-metadata"];
+                var metadataSectionState = { innerHTML: "" };
+                var technicalInfoState = { innerHTML: "" };
+                sandbox.document.getElementById = function (id) {
+                    if (id === "article-technical-info") {
+                        elementState[id] = technicalInfoState;
+                        return technicalInfoState;
+                    }
+                    if (!elementState[id]) {
+                        var el = {
+                            textContent: "",
+                            innerHTML: "",
+                            hidden: false
+                        };
+                        if (id === "article-metadata") {
+                            el.closest = function (selector) {
+                                if (selector === ".detail-section") {
+                                    return metadataSectionState;
+                                }
+                                return null;
+                            };
+                        }
+                        elementState[id] = el;
+                    }
+                    return elementState[id];
+                };
+                articleUi.renderArticleDetail({
+                    articleKey: "article-010",
+                    conceptId: "article-010",
+                    title: "二次渲染测试 A",
+                    content: "正文",
+                    lifecycle: "ACTIVE",
+                    summary: "摘要",
+                    sourceCount: 1,
+                    sourcePaths: ["docs/a.md"],
+                    updatedAt: "2026-05-02T16:00:00+08:00",
+                    metadataJson: "a",
+                    isHotspot: true,
+                    requiresResultVerification: true
+                });
+                var _round1Html = metadataSectionState.innerHTML;
+                assert(_round1Html.includes("article-metadata-toggle"),
+                    "first render should wrap metadata in details");
+                assert(_round1Html.includes("a"),
+                    "first render should contain first metadata text");
+                articleUi.renderArticleDetail({
+                    articleKey: "article-011",
+                    conceptId: "article-011",
+                    title: "二次渲染测试 B",
+                    content: "正文B",
+                    lifecycle: "ACTIVE",
+                    summary: "摘要B",
+                    sourceCount: 1,
+                    sourcePaths: ["docs/b.md"],
+                    updatedAt: "2026-05-02T17:00:00+08:00",
+                    metadataJson: "b"
+                });
+                var _round2Html = metadataSectionState.innerHTML;
+                assert(_round2Html.includes("article-metadata-toggle"),
+                    "second render should still wrap metadata in details");
+                assert(_round2Html.includes("b"),
+                    "second render should show second metadata text");
+                var _toggleCount = (_round2Html.match(/article-metadata-toggle/g) || []).length;
+                assert(_toggleCount === 1,
+                    "second render should not nest multiple article-metadata-toggle, got " + _toggleCount);
+                assert(elementState["article-metadata"] !== undefined,
+                    "article-metadata element should still exist after two renders");
                 const summaryElements = {};
                 sandbox.document.getElementById = function (id) {
                     if (!summaryElements[id]) {
@@ -675,6 +1059,96 @@ class ManagementJsRuntimeTests {
                     "summary cards should avoid ambiguous pending feedback copy");
                 assert(!summaryElements["summary-cards"].innerHTML.includes("结果反馈待处理"),
                     "summary cards should use clearer answer feedback copy");
+
+                const metricCardWithAction = knowledgeUi.renderMetricCard({
+                    label: "待人工确认草稿",
+                    value: 2,
+                    action: "{\\"tab\\":\\"knowledge-runs\\",\\"scrollTo\\":\\"review-queue-list\\"}",
+                    actionHint: "去处理 →"
+                });
+                assert(metricCardWithAction.includes("<button type='button'"),
+                    "metric card with action should render as button element");
+                assert(metricCardWithAction.includes("data-metric-action="),
+                    "metric card with action should render data-metric-action attribute");
+                assert(metricCardWithAction.includes("clickable"),
+                    "metric card with action should have clickable class");
+                assert(metricCardWithAction.includes("action-hint"),
+                    "metric card with actionHint should render action-hint span");
+                assert(metricCardWithAction.includes("去处理 →"),
+                    "metric card action hint should be visible");
+
+                const metricCardWithoutAction = knowledgeUi.renderMetricCard({
+                    label: "知识条目",
+                    value: 100
+                });
+                assert(metricCardWithoutAction.includes("<div"),
+                    "metric card without action should render as div");
+                assert(!metricCardWithoutAction.includes("<button"),
+                    "metric card without action should not contain button tag");
+                assert(!metricCardWithoutAction.includes("data-metric-action="),
+                    "metric card without action should not render data-metric-action attribute");
+                assert(!metricCardWithoutAction.includes("clickable"),
+                    "metric card without action should not have clickable class");
+                assert(!metricCardWithoutAction.includes("action-hint"),
+                    "metric card without actionHint should not render action-hint span");
+
+                const metricCardZeroValue = knowledgeUi.renderMetricCard({
+                    label: "待分析提问",
+                    value: 0,
+                    action: undefined,
+                    actionHint: undefined
+                });
+                assert(metricCardZeroValue.includes("<div"),
+                    "metric card with undefined action should render as div");
+                assert(!metricCardZeroValue.includes("<button"),
+                    "metric card with undefined action should not contain button tag");
+                assert(!metricCardZeroValue.includes("data-metric-action="),
+                    "metric card with undefined action should not render data-metric-action");
+                assert(!metricCardZeroValue.includes("clickable"),
+                    "metric card with undefined action should not have clickable class");
+                assert(!metricCardZeroValue.includes("action-hint"),
+                    "metric card with undefined actionHint should not render action-hint span");
+
+                const summaryHtml = summaryElements["summary-cards"].innerHTML;
+                const actionAttrCount = (summaryHtml.match(/data-metric-action='/g) || []).length;
+                assert(actionAttrCount === 6,
+                    "summary should render exactly 6 clickable metric cards (pendingQueryCount=0 excluded), got " + actionAttrCount);
+
+                const expectedLabels = ["待人工确认草稿", "答案反馈待处理", "待分析提问",
+                    "已入库待复核", "高风险内容", "关注内容", "用户反馈风险"];
+                expectedLabels.forEach(function (label) {
+                    assert(summaryHtml.indexOf(label) !== -1,
+                        "summary should include metric card label: " + label);
+                });
+
+                var _prevGetElementById = sandbox.document.getElementById;
+                var filterEl = { value: "" };
+                sandbox.document.getElementById = function (id) {
+                    if (id === "article-review-status" || id === "article-risk-filter"
+                        || id === "query-feedback-status-filter") {
+                        return filterEl;
+                    }
+                    if (id === "search-articles" || id === "refresh-query-feedback") {
+                        return { click: function () {} };
+                    }
+                    return _prevGetElementById(id);
+                };
+                knowledgeUi.handleMetricCardAction(
+                    "{\\"tab\\":\\"knowledge-articles\\",\\"filters\\":{\\"article-review-status\\":\\"pending\\"}}");
+                assert(filterEl.value === "pending",
+                    "handleMetricCardAction should set article-review-status filter");
+
+                knowledgeUi.handleMetricCardAction(
+                    "{\\"tab\\":\\"knowledge-feedback\\",\\"filters\\":{\\"query-feedback-status-filter\\":\\"PENDING\\"}}");
+                assert(filterEl.value === "PENDING",
+                    "handleMetricCardAction should set query-feedback-status-filter filter");
+
+                knowledgeUi.handleMetricCardAction("not-json");
+                assert(true, "handleMetricCardAction should not throw on invalid JSON");
+
+                knowledgeUi.handleMetricCardAction("{}");
+                assert(true, "handleMetricCardAction should not throw on empty config");
+
                 const recentRunOverview = { innerHTML: "", dataset: {} };
                 summaryElements["recent-run-overview"] = recentRunOverview;
                 runs.renderRecentRunOverview({
@@ -709,22 +1183,10 @@ class ManagementJsRuntimeTests {
                     "help state should route to answer feedback queue when only result feedback is pending");
                 sandbox.__LATTICE_ADMIN_TEST_STATE__.overview.status.answerFeedbackPendingCount = 0;
                 const hotspotHelpState = knowledgeUi.deriveKnowledgeHelpState();
-                assert(hotspotHelpState.title.includes("高频热点"),
+                assert(hotspotHelpState.title.includes("高频问题"),
                     "help state should expose hotspot verification entry before generic high-risk entry");
-                assert(hotspotHelpState.description.includes("待结果抽检"),
+                assert(hotspotHelpState.description.includes("需关注"),
                     "hotspot help state should guide to result verification filter");
-                assert(articleUi.buildHotspotRefreshStatusText({
-                    hotspotCandidateCount: 2,
-                    updatedArticleCount: 1,
-                    heatScoreThreshold: 3
-                }).includes("更新 1"), "hotspot refresh status should include updated article count");
-                articleUi.renderHotspotRefreshStatus({
-                    hotspotCandidateCount: 2,
-                    updatedArticleCount: 1,
-                    heatScoreThreshold: 3
-                });
-                assert(summaryElements["hotspot-refresh-status"].dataset.status === "refreshed",
-                    "hotspot refresh status should record refreshed state");
                 assert(feedbackUi.buildQueryFeedbackListRequestUrl("PENDING", 20)
                     === "/api/v1/admin/query-feedback?status=PENDING&limit=20",
                     "feedback list request should include generic status filter");
@@ -891,6 +1353,410 @@ class ManagementJsRuntimeTests {
                 assert(detailElement.scrollIntoViewCalled,
                     "clicking source run rows should focus the detail panel");
 
+                const historyUi = sandbox.__LATTICE_ADMIN_TEST__.history;
+                assert(historyUi, "missing __LATTICE_ADMIN_TEST__.history export");
+                assert(typeof historyUi.loadProcessingHistory === "function",
+                    "missing loadProcessingHistory export");
+                assert(typeof historyUi.applyHistoryFilterAndRender === "function",
+                    "missing applyHistoryFilterAndRender export");
+                assert(typeof historyUi.renderHistoryItem === "function",
+                    "missing renderHistoryItem export");
+                assert(typeof historyUi.formatElapsed === "function",
+                    "missing formatElapsed export");
+
+                assert(historyUi.formatElapsed(null, null) === "\\u2014",
+                    "formatElapsed should return em-dash for null arguments");
+
+                const historyItemMarkup = historyUi.renderHistoryItem({
+                    sourceName: "测试资料.md",
+                    title: "测试资料.md",
+                    sourceType: "UPLOAD",
+                    displayStatus: "SUCCEEDED",
+                    requestedAt: "2026-05-20T08:00:00+08:00",
+                    updatedAt: "2026-05-20T08:05:30+08:00",
+                    persistedArticleCount: 3,
+                    sourceId: 42
+                });
+                assert(historyItemMarkup.includes("测试资料.md"),
+                    "history item should render source name");
+                assert(historyItemMarkup.includes("资料同步"),
+                    "history item should show source type label");
+                assert(historyItemMarkup.includes("data-history-source-id"),
+                    "history item should render detail button with source id");
+
+                const noSourceItemMarkup = historyUi.renderHistoryItem({
+                    sourceName: "独立编译任务.md",
+                    title: "独立编译任务.md",
+                    sourceType: "DIRECT_COMPILE",
+                    displayStatus: "FAILED",
+                    requestedAt: "2026-05-20T08:00:00+08:00",
+                    updatedAt: "2026-05-20T08:05:30+08:00",
+                    persistedArticleCount: 0
+                });
+                assert(noSourceItemMarkup.includes("独立编译"),
+                    "history item should show standalone compile type");
+                assert(!noSourceItemMarkup.includes("data-history-source-id"),
+                    "history item without sourceId should not render detail button");
+
+                const loadFnSource = String(historyUi.loadProcessingHistory);
+                assert(loadFnSource.includes("/api/v1/admin/processing-tasks"),
+                    "loadProcessingHistory should fetch processing-tasks endpoint");
+                assert(loadFnSource.includes("status=terminal"),
+                    "loadProcessingHistory should include status=terminal filter");
+                assert(loadFnSource.includes("limit=50"),
+                    "loadProcessingHistory should include limit=50");
+
+                const historyModuleSourceText = fs.readFileSync(path.join(moduleDir, "management-history-part.js"), "utf8");
+                assert(historyModuleSourceText.includes("processing-history-panel"),
+                    "history module should bind the collapsed processing history panel");
+                assert(historyModuleSourceText.includes("historyPanel.open"),
+                    "history module should load terminal tasks when the history panel is opened");
+
+                // History panel should always call loadProcessingHistory when opened (no _historyLoaded guard)
+                assert(!loadFnSource.includes("_historyLoaded"),
+                    "loadProcessingHistory should not gate on _historyLoaded; opened panel always loads");
+
+                // History empty state rendering
+                var emptyHistoryContainer = { innerHTML: "" };
+                var prevGetEl5 = sandbox.document.getElementById;
+                sandbox.document.getElementById = function (id) {
+                    if (id === "history-list") { return emptyHistoryContainer; }
+                    if (id === "history-status") { return { textContent: "" }; }
+                    return prevGetEl5 ? prevGetEl5(id) : null;
+                };
+                sandbox.__LATTICE_ADMIN_TEST__.history.applyHistoryFilterAndRender();
+                assert(emptyHistoryContainer.innerHTML.includes("暂无已结束的处理任务"),
+                    "history empty state should explain how tasks end up here");
+                sandbox.document.getElementById = prevGetEl5;
+
+                // Hotspot copy: old internal terms must be absent from runtime
+                var summarySrc = String(knowledgeUi.renderSummary);
+                assert(!summarySrc.includes("抽检"),
+                    "renderSummary should not expose internal term: 抽检");
+                assert(!summarySrc.includes("待验证"),
+                    "renderSummary should not expose internal term: 待验证");
+                assert(!summarySrc.includes("刷新热点"),
+                    "renderSummary should not expose internal term: 刷新热点");
+                assert(!summarySrc.includes("待结果抽检"),
+                    "renderSummary should not expose internal term: 待结果抽检");
+
+                // Hotspot copy: new user-facing terms present
+                assert(summarySrc.includes("关注内容") || summarySrc.includes("需关注") || summarySrc.includes("高频问题相关"),
+                    "renderSummary should use user-facing hotspot terms (关注内容/需关注/高频问题相关)");
+
+                // Part-04: old terms absent from buildArticleRiskSummary
+                var part04RiskSrc = String(articleUi.buildArticleRiskSummary);
+                assert(!part04RiskSrc.includes("结果抽检"),
+                    "part-04 should not expose internal term: 结果抽检");
+                assert(!part04RiskSrc.includes("需要结果抽检"),
+                    "part-04 should not expose internal term: 需要结果抽检");
+                assert(!part04RiskSrc.includes("暂无额外抽检原因"),
+                    "part-04 should not expose internal term: 暂无额外抽检原因");
+                assert(!part04RiskSrc.includes("高频热点"),
+                    "part-04 should not expose internal term: 高频热点");
+                assert(part04RiskSrc.includes("高频问题相关"),
+                    "buildArticleRiskSummary should use 高频问题相关");
+                assert(part04RiskSrc.includes("暂无额外关注原因"),
+                    "buildArticleRiskSummary should use 暂无额外关注原因");
+
+                // Part-04: review history compact timeline structure
+                var _part04ReviewHistorySrc = String(articleUi.renderArticleReviewHistory);
+                assert(_part04ReviewHistorySrc.includes("review-history-row"),
+                    "renderArticleReviewHistoryItem should use compact timeline row class");
+                assert(_part04ReviewHistorySrc.includes("review-history-action"),
+                    "renderArticleReviewHistoryItem should render action label");
+                assert(_part04ReviewHistorySrc.includes("review-history-meta"),
+                    "renderArticleReviewHistoryItem should use metadata row for comment/reviewer");
+                assert(!_part04ReviewHistorySrc.includes("review-history-head"),
+                    "renderArticleReviewHistoryItem should not use old dark gray card class");
+
+                // getBadgeLabel HOTSPOT_UNVERIFIED verified via risk summary output:
+                // hotspot flag → "高频问题相关" (not "高频热点" or "热点未验证")
+                var hotspotOnlySummary = articleUi.buildArticleRiskSummary({
+                    riskLevel: "low",
+                    riskReasons: [],
+                    isHotspot: true,
+                    requiresResultVerification: false
+                });
+                assert(hotspotOnlySummary.includes("高频问题相关"),
+                    "getBadgeLabel via riskSummary should map hotspot to 高频问题相关");
+                assert(!hotspotOnlySummary.includes("高频热点"),
+                    "riskSummary should not expose 高频热点");
+
+                // isTechKeyword tests
+                assert(typeof articleUi.isTechKeyword === "function",
+                    "missing isTechKeyword export");
+                assert(articleUi.isTechKeyword("docs/readme.md") === true,
+                    "isTechKeyword should detect file extension");
+                assert(articleUi.isTechKeyword("app.config.key") === true,
+                    "isTechKeyword should detect dotted config key");
+                assert(articleUi.isTechKeyword("my_variable_name") === true,
+                    "isTechKeyword should detect snake_case");
+                assert(articleUi.isTechKeyword("/path/to/file") === true,
+                    "isTechKeyword should detect path with slash");
+                assert(articleUi.isTechKeyword("foo=bar") === true,
+                    "isTechKeyword should detect key=value");
+                assert(articleUi.isTechKeyword("https://example.com") === true,
+                    "isTechKeyword should detect URL");
+                assert(articleUi.isTechKeyword("机器学习") === false,
+                    "isTechKeyword should not flag Chinese text");
+                assert(articleUi.isTechKeyword("payment") === false,
+                    "isTechKeyword should not flag simple word");
+                assert(articleUi.isTechKeyword("order-processing") === false,
+                    "isTechKeyword should not flag kebab-case");
+                assert(articleUi.isTechKeyword("") === true,
+                    "isTechKeyword should treat empty string as tech");
+
+                // Verify normalizeArticleKeywords is exported
+                assert(typeof articleUi.normalizeArticleKeywords === "function",
+                    "missing normalizeArticleKeywords export");
+
+                // Mock page-notice element to verify setStatus in handleMetricCardAction
+                var _pageNoticeEl = {
+                    hidden: true,
+                    textContent: "",
+                    className: ""
+                };
+                var _prevGetElementById3 = sandbox.document.getElementById;
+                sandbox.document.getElementById = function (id) {
+                    if (id === "page-notice") {
+                        return _pageNoticeEl;
+                    }
+                    if (id === "article-review-status" || id === "article-risk-filter"
+                        || id === "query-feedback-status-filter") {
+                        return filterEl;
+                    }
+                    if (id === "search-articles" || id === "refresh-query-feedback") {
+                        return { click: function () {} };
+                    }
+                    return _prevGetElementById3(id);
+                };
+                filterEl.value = "";
+                _pageNoticeEl.textContent = "";
+                _pageNoticeEl.className = "";
+                knowledgeUi.handleMetricCardAction(
+                    "{\\"tab\\":\\"knowledge-articles\\",\\"filters\\":{\\"article-review-status\\":\\"pending\\"}}");
+                assert(_pageNoticeEl.hidden === false,
+                    "handleMetricCardAction should show page-notice for articles tab");
+                assert(_pageNoticeEl.textContent !== "",
+                    "handleMetricCardAction should set status message for articles tab");
+
+                _pageNoticeEl.textContent = "";
+                _pageNoticeEl.className = "";
+                knowledgeUi.handleMetricCardAction(
+                    "{\\"tab\\":\\"knowledge-feedback\\",\\"filters\\":{\\"query-feedback-status-filter\\":\\"PENDING\\"}}");
+                assert(_pageNoticeEl.hidden === false,
+                    "handleMetricCardAction should show page-notice for feedback tab");
+                assert(_pageNoticeEl.textContent !== "",
+                    "handleMetricCardAction should set status message for feedback tab");
+
+                // resolveArticleMetricFilterMessage tests
+                assert(typeof knowledgeUi.resolveArticleMetricFilterMessage === "function",
+                    "missing resolveArticleMetricFilterMessage export");
+                var highRiskMsg = knowledgeUi.resolveArticleMetricFilterMessage({"article-risk-filter": "riskLevel:high"});
+                assert(highRiskMsg.includes("高风险"),
+                    "resolveArticleMetricFilterMessage should mention high risk for riskLevel:high");
+                var hotspotMsg = knowledgeUi.resolveArticleMetricFilterMessage({"article-risk-filter": "requiresResultVerification:true"});
+                assert(hotspotMsg.includes("高频问题相关内容"),
+                    "resolveArticleMetricFilterMessage should mention hotspot verification for requiresResultVerification:true");
+                assert(hotspotMsg.includes("仅用于查看"),
+                    "resolveArticleMetricFilterMessage should clarify view-only intent for hotspot verification");
+                var userReportedMsg = knowledgeUi.resolveArticleMetricFilterMessage({"article-risk-filter": "riskReason:user_reported"});
+                assert(userReportedMsg.includes("用户反馈风险"),
+                    "resolveArticleMetricFilterMessage should mention user reported for riskReason:user_reported");
+                var reviewMsg = knowledgeUi.resolveArticleMetricFilterMessage({"article-review-status": "pending"});
+                assert(reviewMsg.includes("复核状态"),
+                    "resolveArticleMetricFilterMessage should mention review status filter");
+                var emptyMsg = knowledgeUi.resolveArticleMetricFilterMessage(null);
+                assert(emptyMsg.includes("已切换到已入库内容"),
+                    "resolveArticleMetricFilterMessage should return default message for null filters");
+                assert(emptyMsg.includes("如列表为空"),
+                    "resolveArticleMetricFilterMessage should include empty-result hint");
+
+                // HandleMetricCardAction for hotspot (requiresResultVerification)
+                _pageNoticeEl.textContent = "";
+                _pageNoticeEl.className = "";
+                filterEl.value = "";
+                knowledgeUi.handleMetricCardAction(
+                    "{\\"tab\\":\\"knowledge-articles\\",\\"filters\\":{\\"article-risk-filter\\":\\"requiresResultVerification:true\\"}}");
+                assert(_pageNoticeEl.textContent.includes("高频问题相关内容"),
+                    "handleMetricCardAction should show hotspot-specific status for requiresResultVerification:true");
+                assert(_pageNoticeEl.textContent.includes("仅用于查看"),
+                    "handleMetricCardAction should include view-only hint for hotspot without processing closure");
+
+                // HandleMetricCardAction for user-reported risk
+                _pageNoticeEl.textContent = "";
+                knowledgeUi.handleMetricCardAction(
+                    "{\\"tab\\":\\"knowledge-articles\\",\\"filters\\":{\\"article-risk-filter\\":\\"riskReason:user_reported\\"}}");
+                assert(_pageNoticeEl.textContent.includes("用户反馈风险"),
+                    "handleMetricCardAction should show user-reported-specific status");
+
+                // HandleMetricCardAction for high risk
+                _pageNoticeEl.textContent = "";
+                knowledgeUi.handleMetricCardAction(
+                    "{\\"tab\\":\\"knowledge-articles\\",\\"filters\\":{\\"article-risk-filter\\":\\"riskLevel:high\\"}}");
+                assert(_pageNoticeEl.textContent.includes("高风险"),
+                    "handleMetricCardAction should show high-risk-specific status");
+
+                // pendingQueryCount > 0 but no data-metric-action
+                var pendingCardMarkup = knowledgeUi.renderMetricCard({
+                    label: "待分析提问",
+                    value: 27,
+                    action: undefined,
+                    actionHint: undefined
+                });
+                assert(pendingCardMarkup.includes("<div"),
+                    "pendingQuery card with count>0 should render as div when action is undefined");
+                assert(!pendingCardMarkup.includes("data-metric-action="),
+                    "pendingQuery card with count>0 should not render data-metric-action");
+
+                // normalizeArticleKeywords test: verify keywords from raw data (no DOM scanning)
+                var _prevGetEl4 = sandbox.document.getElementById;
+                var _articleRelationsEl = { innerHTML: "" };
+                sandbox.document.getElementById = function (id) {
+                    if (id === "article-relations") {
+                        return _articleRelationsEl;
+                    }
+                    if (id === "page-notice") {
+                        return _pageNoticeEl;
+                    }
+                    if (id === "article-review-status" || id === "article-risk-filter"
+                        || id === "query-feedback-status-filter") {
+                        return filterEl;
+                    }
+                    if (id === "search-articles" || id === "refresh-query-feedback") {
+                        return { click: function () {} };
+                    }
+                    return _prevGetEl4 ? _prevGetEl4(id) : null;
+                };
+                // Simulate article with keywords including tech keywords
+                sandbox.__LATTICE_ADMIN_TEST_STATE__._articleKeywordData = {
+                    keywords: ["机器学习", "支付系统", "订单处理", "用户认证", "数据同步", "缓存策略", "消息队列"],
+                    dependsOn: ["docs/readme.md"],
+                    related: ["app.config.key", "my_variable_name"]
+                };
+                articleUi.normalizeArticleKeywords();
+                var keywordHtml = _articleRelationsEl.innerHTML;
+                assert(keywordHtml.includes("article-keyword-section"),
+                    "normalizeArticleKeywords should render keyword section");
+                assert(keywordHtml.includes("article-keyword-visible"),
+                    "normalizeArticleKeywords should render visible keyword area");
+                // Should show max 6 visible normal keywords
+                assert(keywordHtml.includes("机器学习"),
+                    "normalizeArticleKeywords should include Chinese keyword");
+                // Should NOT include "关键词:" prefix (clean text only)
+                assert(!keywordHtml.includes("关键词: 机器学习"),
+                    "normalizeArticleKeywords should NOT prefix with '关键词: '");
+                // "还有 N 个关键词" should be in a details/summary, not a pill
+                assert(keywordHtml.includes("article-keyword-toggle"),
+                    "normalizeArticleKeywords should render expandable toggle for extra keywords");
+                assert(keywordHtml.includes("还有 "),
+                    "toggle should include '还有 N 个关键词' label");
+                // The count should include tech + overflow keywords
+                assert(keywordHtml.includes("article-relations-aux"),
+                    "normalizeArticleKeywords should render auxiliary relations section");
+                assert(keywordHtml.includes("关联信息"),
+                    "auxiliary section should include '关联信息' label");
+
+                // Verify pendingQueryCount card has no dev-facing copy
+                assert(!pendingCardMarkup.includes("去处理"),
+                    "pendingQuery card with count>0 should not contain '去处理' action hint");
+                assert(!pendingCardMarkup.includes("待开放"),
+                    "pendingQuery card should not contain dev-facing '待开放' copy");
+                assert(!summaryHtml.includes("处理入口待开放"),
+                    "summary should not contain dev-facing '处理入口待开放' copy");
+
+                // Verify actionHint semantics: only cards with backend closure use "去处理"
+                assert(summaryHtml.includes("去确认 \\u2192"),
+                    "draft card should use '去确认' action hint");
+                assert(summaryHtml.includes("查看反馈 \\u2192"),
+                    "feedback card should use '查看反馈' action hint");
+                // 3 cards have backend processing closures: 已入库待复核, 高风险内容, 用户反馈风险
+                var quChuLiCount = (summaryHtml.match(/去处理 \\u2192/g) || []).length;
+                assert(quChuLiCount === 3,
+                    "exactly 3 cards (manualReview, highRisk, userReported) should use 去处理, found: " + quChuLiCount);
+                assert(summaryHtml.includes("查看内容 \\u2192"),
+                    "hotspot card should use '查看内容' action hint");
+
+                // handleMetricCardAction scrollTo for articles and feedback tabs
+                var scrollTargetEl = { scrollIntoViewCalled: false, scrollIntoView: function () { this.scrollIntoViewCalled = true; } };
+                sandbox.document.getElementById = function (id) {
+                    if (id === "article-list" || id === "query-feedback-list") {
+                        return scrollTargetEl;
+                    }
+                    if (id === "page-notice") {
+                        return _pageNoticeEl;
+                    }
+                    if (id === "article-review-status" || id === "article-risk-filter"
+                        || id === "query-feedback-status-filter") {
+                        return filterEl;
+                    }
+                    if (id === "search-articles" || id === "refresh-query-feedback") {
+                        return { click: function () {} };
+                    }
+                    return _prevGetEl4 ? _prevGetEl4(id) : null;
+                };
+                scrollTargetEl.scrollIntoViewCalled = false;
+                knowledgeUi.handleMetricCardAction(
+                    "{\\"tab\\":\\"knowledge-articles\\",\\"filters\\":{\\"article-review-status\\":\\"pending\\"},\\"scrollTo\\":\\"article-list\\"}");
+                // scrollTo is async (setTimeout 200ms), so assert no immediate error
+                assert(true, "handleMetricCardAction with articles scrollTo should not throw");
+
+                scrollTargetEl.scrollIntoViewCalled = false;
+                knowledgeUi.handleMetricCardAction(
+                    "{\\"tab\\":\\"knowledge-feedback\\",\\"filters\\":{\\"query-feedback-status-filter\\":\\"PENDING\\"},\\"scrollTo\\":\\"query-feedback-list\\"}");
+                assert(true, "handleMetricCardAction with feedback scrollTo should not throw");
+
+                // Verify article detail metadata h4 renamed to dev-facing "开发诊断信息"
+                assert(metadataSectionState.innerHTML.includes("开发诊断信息"),
+                    "metadata section h4 should use '开发诊断信息' not '技术元数据'");
+                assert(!metadataSectionState.innerHTML.includes("技术元数据"),
+                    "metadata section should not contain old '技术元数据' copy");
+                assert(!metadataSectionState.innerHTML.includes("技术信息"),
+                    "metadata summary should not contain old '技术信息' copy");
+                // details should be closed by default (no 'open' attribute)
+                assert(!metadataSectionState.innerHTML.includes("<details open"),
+                    "metadata details should be closed by default");
+                // article-technical-info now rendered inside 开发诊断信息 details
+                assert(metadataSectionState.innerHTML.includes("article-technical-info"),
+                    "article-technical-info div should exist inside metadata details");
+                assert(metadataSectionState.innerHTML.includes("article-metadata-toggle"),
+                    "metadata section should still wrap details toggle");
+                // Verify renderArticleDetail source still references article-technical-info
+                // (now rendered inside the metadata collapsible section, not standalone)
+                var renderDetailSrc = String(articleUi.renderArticleDetail);
+                assert(renderDetailSrc.includes("article-technical-info"),
+                    "renderArticleDetail should render technical info inside metadata details");
+
+                // clearArticleDetail null-guard: should not throw when article-technical-info is missing
+                var _prevGetElForClear = sandbox.document.getElementById;
+                sandbox.document.getElementById = function (id) {
+                    if (id === "article-technical-info") {
+                        return null;
+                    }
+                    if (!elementState[id]) {
+                        elementState[id] = {
+                            textContent: "",
+                            innerHTML: "",
+                            hidden: false
+                        };
+                    }
+                    return elementState[id];
+                };
+                var clearErr = null;
+                try {
+                    articleUi.clearArticleDetail();
+                } catch (e) {
+                    clearErr = e;
+                }
+                assert(clearErr === null,
+                    "clearArticleDetail should not throw when article-technical-info is missing, got: " + (clearErr && clearErr.message));
+                // Verify clearArticleDetail source contains null guard
+                var clearDetailSrc = String(articleUi.clearArticleDetail);
+                assert(clearDetailSrc.includes("_techInfo"),
+                    "clearArticleDetail should null-guard article-technical-info write");
+                sandbox.document.getElementById = _prevGetEl4;
+
                 console.log("management-js-runtime-tests:ok");
                 """;
     }
@@ -917,6 +1783,7 @@ class ManagementJsRuntimeTests {
                         hidden: false,
                         disabled: false,
                         className: "",
+                        style: {},
                         dataset: {},
                         addEventListener: function () {},
                         querySelectorAll: function () { return []; },
@@ -969,6 +1836,8 @@ class ManagementJsRuntimeTests {
 
                 assert(queueUi, "missing __LATTICE_ADMIN_TEST__.compileReviewQueue export");
 
+                // ---- Existing assertions (preserved) ----
+
                 queueUi.renderEmptyDetail();
                 assert(elements["review-queue-detail"].innerHTML.includes("待人工确认说明"),
                     "empty detail should render human-review wording");
@@ -981,12 +1850,20 @@ class ManagementJsRuntimeTests {
                     sourcePaths: ["docs/a.md"],
                     fixAttemptCount: 1,
                     maxFixRounds: 2,
-                    updatedAt: "2026-05-20T16:00:00+08:00"
+                    updatedAt: "2026-05-20T16:00:00+08:00",
+                    reviewIssuesJson: "[{\\"severity\\":\\"HIGH\\",\\"category\\":\\"false_provenance\\"}]"
                 }];
                 queueUi.renderReviewQueueList(1);
-                assert(elements["review-queue-list"].innerHTML.includes("质量检查需要人工确认"),
-                    "list item should render quality-check wording");
-                assert(!elements["review-queue-list"].innerHTML.includes("Reviewer 判定需要人工确认"),
+                var listItemHtml = elements["review-queue-list"].innerHTML;
+                assert(listItemHtml.includes("草稿一"),
+                    "list item should show draft title");
+                assert(listItemHtml.includes("a.md"),
+                    "list item should show source file name");
+                assert(listItemHtml.includes("个问题"),
+                    "list item should show issue count");
+                assert(listItemHtml.includes("修复"),
+                    "list item should show fix round info");
+                assert(!listItemHtml.includes("Reviewer 判定需要人工确认"),
                     "list item should not render reviewer wording");
 
                 queueUi.renderReviewQueueDetail({
@@ -1007,12 +1884,359 @@ class ManagementJsRuntimeTests {
                     "detail runtime should not render reviewer wording");
 
                 assert(queueUi.buildDetailMeta({
+                    reviewIssuesJson: "[{\\"severity\\":\\"HIGH\\"}]",
                     updatedAt: "2026-05-20T16:00:00+08:00"
-                }).includes("质量检查需要人工确认"),
-                    "detail meta should render quality-check copy");
+                }).includes("风险等级"),
+                    "detail meta should include risk level");
+
+                // Review issue scroll class and count
+                assert(typeof queueUi.resolveReviewIssueCount === "function",
+                    "missing resolveReviewIssueCount export");
+                assert(queueUi.resolveReviewIssueCount("[{\\"severity\\":\\"HIGH\\"},{\\"severity\\":\\"MEDIUM\\"}]") === 2,
+                    "resolveReviewIssueCount should count array items");
+                assert(queueUi.resolveReviewIssueCount("[]") === 0,
+                    "resolveReviewIssueCount should return 0 for empty array");
+                assert(queueUi.resolveReviewIssueCount(null) === 0,
+                    "resolveReviewIssueCount should return 0 for null");
+
+                var issuesMarkup = queueUi.renderReviewIssues("[{\\"severity\\":\\"HIGH\\",\\"category\\":\\"false_provenance\\",\\"description\\":\\"来源不一致问题\\"}]");
+                assert(issuesMarkup.includes("review-issue-list-scroll"),
+                    "renderReviewIssues should include review-issue-list-scroll class");
+
+                // Render detail with issues and verify heading includes count
+                queueUi.renderReviewQueueDetail({
+                    id: "draft-2",
+                    title: "草稿二",
+                    content: "正文二",
+                    sourcePaths: ["docs/b.md"],
+                    reviewIssuesJson: "[{\\"severity\\":\\"HIGH\\",\\"category\\":\\"false_provenance\\",\\"description\\":\\"问题一\\"},{\\"severity\\":\\"MEDIUM\\",\\"category\\":\\"value_mismatch\\",\\"description\\":\\"问题二\\"},{\\"severity\\":\\"LOW\\",\\"category\\":\\"missing_referential\\",\\"description\\":\\"问题三\\"}]",
+                    fixAttemptCount: 1,
+                    maxFixRounds: 2,
+                    updatedAt: "2026-05-20T16:00:00+08:00"
+                });
+                assert(elements["review-queue-detail"].innerHTML.includes("待人工确认说明（共 3 个问题）"),
+                    "detail heading should include issue count");
+
+                // ---- New assertions: Risk level helpers ----
+
+                assert(typeof queueUi.resolveItemRiskLevel === "function",
+                    "missing resolveItemRiskLevel export");
+                assert(queueUi.resolveItemRiskLevel({ reviewIssuesJson: "[{\\"severity\\":\\"HIGH\\"}]" }) === "HIGH",
+                    "resolveItemRiskLevel should detect HIGH");
+                assert(queueUi.resolveItemRiskLevel({ reviewIssuesJson: "[{\\"severity\\":\\"MEDIUM\\"},{\\"severity\\":\\"HIGH\\"}]" }) === "HIGH",
+                    "resolveItemRiskLevel should detect highest severity");
+                assert(queueUi.resolveItemRiskLevel({ reviewIssuesJson: "[{\\"severity\\":\\"CRITICAL\\"}]" }) === "CRITICAL",
+                    "resolveItemRiskLevel should detect CRITICAL");
+                assert(queueUi.resolveItemRiskLevel({ reviewIssuesJson: "[]" }) === null,
+                    "resolveItemRiskLevel should return null for empty issues");
+                assert(queueUi.resolveItemRiskLevel({}) === null,
+                    "resolveItemRiskLevel should return null for no issues");
+
+                assert(typeof queueUi.resolveItemIssueTypes === "function",
+                    "missing resolveItemIssueTypes export");
+                var types = queueUi.resolveItemIssueTypes({ reviewIssuesJson: "[{\\"category\\":\\"false_provenance\\"},{\\"category\\":\\"value_mismatch\\"}]" });
+                assert(types.indexOf("false_provenance") >= 0 && types.indexOf("value_mismatch") >= 0,
+                    "resolveItemIssueTypes should return unique categories");
+
+                // ---- New assertions: Filtered items and grouping ----
+
+                assert(typeof queueUi.getFilteredItems === "function",
+                    "missing getFilteredItems export");
+                queueUi.state.items = [
+                    { id: "a", title: "A", sourcePaths: ["docs/x.md"], fixAttemptCount: 0, maxFixRounds: 2, reviewIssuesJson: "[{\\"severity\\":\\"HIGH\\",\\"category\\":\\"false_provenance\\"}]" },
+                    { id: "b", title: "B", sourcePaths: ["docs/y.md"], fixAttemptCount: 0, maxFixRounds: 2, reviewIssuesJson: "[{\\"severity\\":\\"LOW\\",\\"category\\":\\"missing_referential\\"}]" }
+                ];
+                queueUi.state.filters.sourceFile = "";
+                queueUi.state.filters.riskLevel = "";
+                queueUi.state.filters.issueType = "";
+                assert(queueUi.getFilteredItems().length === 2,
+                    "getFilteredItems should return all items with no filter");
+                queueUi.state.filters.sourceFile = "docs/x.md";
+                assert(queueUi.getFilteredItems().length === 1,
+                    "getFilteredItems should filter by source file");
+                queueUi.state.filters.sourceFile = "";
+                queueUi.state.filters.riskLevel = "LOW";
+                assert(queueUi.getFilteredItems().length === 1,
+                    "getFilteredItems should filter by risk level");
+                queueUi.state.filters.riskLevel = "";
+
+                assert(typeof queueUi.getFilterOptions === "function",
+                    "missing getFilterOptions export");
+                var opts = queueUi.getFilterOptions();
+                assert(opts.sources.indexOf("docs/x.md") >= 0,
+                    "getFilterOptions should list source files");
+
+                // ---- New assertions: Enhanced list card structure ----
+
+                queueUi.state.filters.groupBySource = false;
+                queueUi.renderReviewQueueList(2);
+                var listHtml = elements["review-queue-list"].innerHTML;
+                assert(listHtml.includes(">A<") && listHtml.includes(">B<"),
+                    "list should contain all items");
+                // Enhanced cards show risk badge
+                assert(listHtml.includes("review-queue-risk-badge"),
+                    "list cards should include risk badge elements");
+                // Enhanced cards show source file
+                assert(listHtml.includes("x.md") || listHtml.includes("y.md"),
+                    "list cards should include source file names");
+                // Enhanced cards show issue count
+                assert(listHtml.includes("个问题"),
+                    "list cards should include issue count");
+                // Enhanced cards show fix round info
+                assert(listHtml.includes("修复"),
+                    "list cards should include fix round info");
+                // Enhanced cards show issue type tags
+                assert(listHtml.includes("review-queue-issue-tag"),
+                    "list cards should include issue type tags");
+
+                // Grouped list rendering
+                queueUi.state.filters.groupBySource = true;
+                queueUi.renderReviewQueueList(2);
+                var groupedHtml = elements["review-queue-list"].innerHTML;
+                assert(groupedHtml.includes("review-queue-source-group"),
+                    "grouped list should contain source group elements");
+                assert(groupedHtml.includes("review-queue-source-group-header"),
+                    "grouped list should contain source group headers");
+
+                // ---- New assertions: Filter bar rendering ----
+
+                assert(typeof queueUi.renderFilterBar === "function",
+                    "missing renderFilterBar export");
+                queueUi.renderFilterBar();
+                var filterHtml = elements["review-queue-filter-bar"].innerHTML;
+                assert(filterHtml.includes("review-queue-filter-source") && filterHtml.includes("review-queue-filter-risk"),
+                    "filter bar should contain filter select elements");
+                assert(filterHtml.includes("全部来源文件") && filterHtml.includes("docs/x.md"),
+                    "source filter should contain all-source option and per-source options");
+                assert(filterHtml.includes("review-queue-group-source"),
+                    "filter bar should contain group toggle");
+
+                // ---- New assertions: Detail order (review issues before content) ----
+
+                queueUi.state.filters.groupBySource = false;
+                queueUi.renderReviewQueueDetail({
+                    id: "draft-order",
+                    title: "排序测试",
+                    content: "草稿正文内容",
+                    sourcePaths: ["docs/test.md"],
+                    reviewIssuesJson: "[{\\"severity\\":\\"HIGH\\",\\"category\\":\\"false_provenance\\",\\"description\\":\\"来源问题\\"}]",
+                    fixAttemptCount: 1,
+                    maxFixRounds: 2,
+                    updatedAt: "2026-05-20T16:00:00+08:00"
+                });
+                var detailHtml = elements["review-queue-detail"].innerHTML;
+                var issuesPos = detailHtml.indexOf("待人工确认说明");
+                var contentPos = detailHtml.indexOf("草稿正文");
+                assert(issuesPos >= 0 && contentPos >= 0,
+                    "detail should contain both review issues and content sections");
+                assert(issuesPos < contentPos,
+                    "review issues should appear before article content in detail view");
+                // Risk summary section exists
+                assert(detailHtml.includes("审核概览"),
+                    "detail should contain risk summary section");
+                assert(detailHtml.includes("review-risk-summary-row"),
+                    "detail should contain risk summary rows");
+
+                // ---- Existing assertions (preserved): no window.prompt/confirm/alert ----
+
+                var approveFnSrc = String(queueUi.approveSelectedReviewQueueItem);
+                var rejectFnSrc = String(queueUi.rejectSelectedReviewQueueItem);
+                assert(!approveFnSrc.includes("window.prompt") && !approveFnSrc.includes("window.confirm") && !approveFnSrc.includes("window.alert"),
+                    "approveSelectedReviewQueueItem should not use window.prompt/confirm/alert");
+                assert(!rejectFnSrc.includes("window.prompt") && !rejectFnSrc.includes("window.confirm") && !rejectFnSrc.includes("window.alert"),
+                    "rejectSelectedReviewQueueItem should not use window.prompt/confirm/alert");
+                assert(typeof queueUi.buildReviewActionModalHtml === "function",
+                    "missing buildReviewActionModalHtml export");
+                assert(typeof queueUi.openReviewActionModal === "function",
+                    "missing openReviewActionModal export");
+                assert(typeof queueUi.closeReviewActionModal === "function",
+                    "missing closeReviewActionModal export");
+
+                // ---- New assertions: Decision-panel approve modal ----
+
+                var approveModalHtml = queueUi.buildReviewActionModalHtml({
+                    id: "test-1",
+                    title: "测试草稿",
+                    sourcePaths: ["docs/test.md"],
+                    reviewIssuesJson: "[{\\"severity\\":\\"HIGH\\",\\"category\\":\\"false_provenance\\",\\"description\\":\\"来源不一致\\"}]",
+                    reviewStatus: "needs_human_review",
+                    updatedAt: "2026-05-20T08:00:00+08:00"
+                }, "approve");
+                // Title
+                assert(approveModalHtml.includes("确认入库"),
+                    "approve modal should use confirm title");
+                assert(!approveModalHtml.includes("确认这篇草稿可以入库？"),
+                    "approve modal should not use old question-style title");
+                // Draft title
+                assert(approveModalHtml.includes("测试草稿"),
+                    "approve modal should show draft title");
+
+                // === Decision summary (top, main visual focus) ===
+                assert(approveModalHtml.includes("review-decision-summary"),
+                    "approve modal should have decision summary block");
+                assert(approveModalHtml.includes("decision-summary-badges"),
+                    "decision summary should contain badges row");
+                assert(approveModalHtml.includes("高风险") || approveModalHtml.includes("中风险") || approveModalHtml.includes("低风险"),
+                    "decision summary should show risk level label");
+                assert(approveModalHtml.includes("decision-issue-count"),
+                    "decision summary should show issue count");
+                assert(approveModalHtml.includes("个待确认问题"),
+                    "decision summary should show pending issue count text");
+                assert(approveModalHtml.includes("decision-issue-tags") || approveModalHtml.includes("decision-issue-tag"),
+                    "decision summary should show issue type tags");
+                assert(approveModalHtml.includes("来源不一致"),
+                    "decision summary should show mapped issue type name");
+                assert(approveModalHtml.includes("decision-source-row"),
+                    "decision summary should contain source info row");
+                assert(approveModalHtml.includes("docs/test.md"),
+                    "decision summary should show source file name");
+                assert(approveModalHtml.includes("decision-context-hint"),
+                    "decision summary should contain context hint text");
+                // Source info is INSIDE decision summary (merged, not separate section)
+                assert(!approveModalHtml.includes("来源摘要"),
+                    "modal should not have separate source-summary section (merged into decision summary)");
+                assert(!approveModalHtml.includes("为什么需要你确认"),
+                    "modal should not have separate why-confirm section (replaced by decision summary)");
+
+                // === Checklist (decision aid, middle) ===
+                assert(approveModalHtml.includes("review-decision-checklist"),
+                    "approve modal should have decision checklist block");
+                assert(approveModalHtml.includes("核对清单"),
+                    "approve modal should have checklist title");
+                // Checklist items with risk-coded data attributes
+                assert(approveModalHtml.includes("data-risk"),
+                    "checklist items should have risk-level data attributes");
+                assert(approveModalHtml.includes("是否超出源文范围"),
+                    "checklist should include scope-boundary check");
+                assert(approveModalHtml.includes("是否存在概念偏差"),
+                    "checklist should include conceptual-distortion check");
+                assert(approveModalHtml.includes("来源是否足以支撑正文"),
+                    "checklist should include source-sufficiency check");
+
+                // === Operation record (bottom, subdued) ===
+                assert(approveModalHtml.includes("review-decision-record"),
+                    "approve modal should have subdued record section");
+                assert(approveModalHtml.includes("modal-operator"),
+                    "approve modal should include operator input");
+                assert(approveModalHtml.includes("操作人"),
+                    "approve modal should include operator label");
+
+                // Decision summary appears BEFORE record section in DOM order
+                var summaryPos = approveModalHtml.indexOf("review-decision-summary");
+                var recordPos = approveModalHtml.indexOf("review-decision-record");
+                assert(summaryPos >= 0 && recordPos >= 0,
+                    "modal should contain both summary and record sections");
+                assert(summaryPos < recordPos,
+                    "decision summary should appear before operation record");
+
+                // Optional note field
+                assert(approveModalHtml.includes("modal-approve-note") || approveModalHtml.includes("备注"),
+                    "approve modal should include optional note field");
+                // Action buttons
+                assert(approveModalHtml.includes("确认入库"),
+                    "approve modal should have confirm button");
+                assert(approveModalHtml.includes("驳回"),
+                    "approve modal should have reject button");
+                // No old-style hint banner
+                assert(!approveModalHtml.includes("确认后内容会进入正式知识库"),
+                    "approve modal should not use old hint banner text");
+                // No window.confirm
+                assert(!approveModalHtml.includes("window.confirm"),
+                    "approve modal html should not contain window.confirm");
+
+                // ---- New assertions: Decision-panel reject modal ----
+
+                var rejectModalHtml = queueUi.buildReviewActionModalHtml({
+                    id: "test-2",
+                    title: "测试草稿",
+                    sourcePaths: ["docs/test.md"],
+                    reviewIssuesJson: "[{\\"severity\\":\\"HIGH\\",\\"category\\":\\"conceptual_distortion\\"}]",
+                    reviewStatus: "needs_human_review",
+                    updatedAt: "2026-05-20T08:00:00+08:00"
+                }, "reject");
+                // Title
+                assert(rejectModalHtml.includes("驳回草稿"),
+                    "reject modal should use reject title");
+                assert(!rejectModalHtml.includes("驳回这篇草稿？"),
+                    "reject modal should not use old question-style title");
+                // Decision summary present
+                assert(rejectModalHtml.includes("review-decision-summary"),
+                    "reject modal should have decision summary");
+                // Checklist present with additional reject item
+                assert(rejectModalHtml.includes("核对清单"),
+                    "reject modal should have checklist");
+                // Reason textarea with hint
+                assert(rejectModalHtml.includes("modal-reject-reason"),
+                    "reject modal should include reason textarea");
+                assert(rejectModalHtml.includes("驳回原因"),
+                    "reject modal should label reason field");
+                assert(rejectModalHtml.includes("modal-field-hint"),
+                    "reject modal should include reason hint text");
+                assert(rejectModalHtml.includes("超出源文范围") || rejectModalHtml.includes("概念偏差"),
+                    "reject modal hint should suggest reason categories");
+                // Confirm button
+                assert(rejectModalHtml.includes("确认驳回"),
+                    "reject modal should have confirm reject button");
+                // Record section present
+                assert(rejectModalHtml.includes("review-decision-record"),
+                    "reject modal should have record section");
+                // Operator not the visual focus (record section comes after summary)
+                var rejectRecordPos = rejectModalHtml.indexOf("review-decision-record");
+                var rejectSummaryPos = rejectModalHtml.indexOf("review-decision-summary");
+                assert(rejectSummaryPos >= 0 && rejectRecordPos > rejectSummaryPos,
+                    "in reject modal, decision summary should appear before operation record");
+
+                // ---- Existing assertions (preserved): modal ESC/keydown cleanup ----
+
+                var closeModalSrc = String(queueUi.closeReviewActionModal);
+                assert(closeModalSrc.includes("removeEventListener"),
+                    "closeReviewActionModal should call removeEventListener for keydown cleanup");
+                assert(closeModalSrc.includes("_modalKeydownHandler"),
+                    "closeReviewActionModal should reference _modalKeydownHandler");
+
+                var openModalSrc = String(queueUi.openReviewActionModal);
+                assert(openModalSrc.includes("_modalKeydownHandler"),
+                    "openReviewActionModal should clean up stale _modalKeydownHandler");
+
+                var approveSrc = String(queueUi.approveSelectedReviewQueueItem);
+                assert(!approveSrc.includes("window.confirm") && !approveSrc.includes("window.prompt"),
+                    "approveSelectedReviewQueueItem should not use window.confirm/prompt");
+
+                // ---- New assertion: keyboard navigation handler exists ----
+                assert(queueSource.includes("handleListKeydown"),
+                    "compile-review-queue.js should define keyboard navigation handler");
+                assert(queueSource.includes("ArrowUp") && queueSource.includes("ArrowDown"),
+                    "compile-review-queue.js should handle arrow key navigation");
+
+                // ---- New assertion: no fake batch approve button ----
+                assert(!queueSource.includes("批量确认") && !queueSource.includes("batch-approve") && !queueSource.includes("batchApprove"),
+                    "compile-review-queue.js should not contain batch approve functionality");
 
                 console.log("compile-review-queue-runtime-tests:ok");
                 """;
+    }
+
+    /**
+     * 验证 ask-runtime-part-02.js 中 renderMarkdownLite 的 flushParagraph
+     * 在格式化后内容为空时不会生成空 {@code <p></p>}，且引用标记仍可正常渲染。
+     *
+     * @throws Exception 读取文件异常
+     */
+    @Test
+    void shouldPreventEmptyParagraphInMarkdownRendering() throws Exception {
+        String userDir = System.getProperty("user.dir");
+        Path askRuntimePath = Path.of(userDir,
+                "src/main/resources/static/admin/modules/ask-runtime-part-02.js");
+        assertThat(Files.exists(askRuntimePath)).isTrue();
+
+        String source = Files.readString(askRuntimePath, StandardCharsets.UTF_8);
+        // flushParagraph must check content before pushing <p>
+        assertThat(source).contains("_content.trim()");
+        assertThat(source).contains("paragraphBuffer = []");
+        // citation marker placeholder still preserved
+        assertThat(source).contains("CITATION_MARKER_");
+        // Must not generate empty <p></p> after trim check
+        assertThat(source).doesNotContain("\"<p>\" + formatInlineMarkdown");
     }
 
     /**

@@ -448,6 +448,9 @@ public class AdminLlmConfigController {
         if (!StringUtils.hasText(request.getModelName())) {
             throw new IllegalArgumentException("modelName不能为空");
         }
+        if (request.getTimeoutSeconds() != null && request.getTimeoutSeconds().intValue() <= 0) {
+            throw new IllegalArgumentException("timeoutSeconds必须为正整数");
+        }
         String modelKind = normalizeModelKind(request.getModelKind());
         if (LlmModelProfile.MODEL_KIND_EMBEDDING.equals(modelKind)
                 && (request.getExpectedDimensions() == null || request.getExpectedDimensions().intValue() <= 0)) {

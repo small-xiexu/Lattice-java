@@ -11,6 +11,13 @@
         }) || null;
     }
 
+    function normalizeLegacyTabName(tabName) {
+        const legacyTabs = {
+            "knowledge-history": "knowledge-runs"
+        };
+        return legacyTabs[tabName] || tabName;
+    }
+
     function ensureTabSemantics(root, triggers, panels) {
         triggers.forEach(function (trigger, index) {
             const panel = findPanelByTabName(panels, trigger.dataset.tabTrigger);
@@ -86,8 +93,10 @@
             return null;
         }
         ensureTabSemantics(root, triggers, panels);
-        const nextTab = tabName || triggers[0].dataset.tabTrigger;
-        const activePanel = findPanelByTabName(panels, nextTab);
+        const requestedTab = normalizeLegacyTabName(tabName || triggers[0].dataset.tabTrigger);
+        const activePanel = findPanelByTabName(panels, requestedTab)
+                || findPanelByTabName(panels, triggers[0].dataset.tabTrigger);
+        const nextTab = activePanel ? activePanel.dataset.tabPanel : requestedTab;
         triggers.forEach(function (trigger) {
             const active = trigger.dataset.tabTrigger === nextTab;
             trigger.classList.toggle("active", active);
@@ -113,7 +122,7 @@
             return null;
         }
         const params = new URLSearchParams(window.location.search || "");
-        const requestedTab = String(params.get(queryKey) || "").trim();
+        const requestedTab = normalizeLegacyTabName(String(params.get(queryKey) || "").trim());
         if (!requestedTab) {
             return null;
         }

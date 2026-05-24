@@ -342,7 +342,7 @@ public class ArticlePersistSupport {
                 current,
                 total,
                 CompileJobProgressMessageFormatter.format(
-                        "正在落库文章",
+                        "正在写入",
                         current,
                         total,
                         resolveReviewEnvelopeLabel(reviewEnvelope)

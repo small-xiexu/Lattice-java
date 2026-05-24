@@ -12,6 +12,10 @@ lattice:
     cache-key-prefix: ${LATTICE_LLM_CACHE_KEY_PREFIX:llm:cache:}
     review-enabled: ${LATTICE_LLM_REVIEW_ENABLED:false}
     max-input-chars: ${LATTICE_LLM_MAX_INPUT_CHARS:64000}
+    compile-timeout:
+      writer-seconds: ${LATTICE_LLM_COMPILE_TIMEOUT_WRITER_SECONDS:180}
+      reviewer-seconds: ${LATTICE_LLM_COMPILE_TIMEOUT_REVIEWER_SECONDS:120}
+      fixer-seconds: ${LATTICE_LLM_COMPILE_TIMEOUT_FIXER_SECONDS:180}
     chat-client:
       enabled: ${LATTICE_LLM_CHAT_CLIENT_ENABLED:true}
       query-answer-enabled: ${LATTICE_LLM_CHAT_CLIENT_QUERY_ANSWER_ENABLED:true}

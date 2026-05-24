@@ -81,17 +81,29 @@ public class AdminCompileReviewSummaryService {
      * 构建可直接放入处理任务步骤详情的展示文案。
      *
      * @param summary 审查摘要
+     * @param displayStatus 任务展示状态
      * @return 展示文案
      */
-    public String buildStepDetail(AdminCompileReviewSummaryResponse summary) {
+    public String buildStepDetail(
+            AdminCompileReviewSummaryResponse summary,
+            String displayStatus,
+            String currentStep
+    ) {
         if (summary == null || !summary.isReviewStepPresent()) {
             return null;
+        }
+        if (AdminProcessingTaskDisplayStatus.RUNNING.matches(displayStatus)) {
+            String normalizedCurrentStep = AdminProcessingTaskDisplayStatus.normalize(currentStep);
+            if (FIX_STEP_NAME.equalsIgnoreCase(normalizedCurrentStep)) {
+                return "已发现待修复问题，正在自动修正";
+            }
+            return "正在检查内容质量";
         }
         if (hasPositiveCount(summary.getNeedsHumanReviewCount())) {
             return "质量检查后需要人工确认";
         }
         if (summary.isFixStepPresent()) {
-            return "已根据检查结果修正内容";
+            return "已根据检查结果完成修正";
         }
         if (hasNoReviewIssue(summary)) {
             return "未发现需要修复的问题";

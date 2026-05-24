@@ -599,6 +599,50 @@ class LlmConfigCenterIntegrationTests {
     }
 
     /**
+     * 验证 AI 接入页在测试未保存对话模型时会传递显式超时配置。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldHonorExplicitTimeoutWhenTestingUnsavedChatModel() throws Exception {
+        resetTables();
+        AtomicReference<String> authorizationHeader = new AtomicReference<String>();
+        int port = startJsonServer(
+                "/v1/chat/completions",
+                new DelayedJsonHandler(
+                        "{"
+                                + "\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"OK\"}}],"
+                                + "\"usage\":{\"prompt_tokens\":8,\"completion_tokens\":1}"
+                                + "}",
+                        "Authorization",
+                        authorizationHeader,
+                        1500L
+                )
+        );
+        Long connectionId = createConnection(
+                "model-probe-openai-timeout",
+                "openai",
+                "http://127.0.0.1:" + port,
+                "sk-timeout-123456"
+        );
+
+        mockMvc.perform(post("/api/v1/admin/llm/models/test")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"connectionId\":" + connectionId + ","
+                                + "\"modelName\":\"gpt-5.4\","
+                                + "\"modelKind\":\"CHAT\","
+                                + "\"timeoutSeconds\":1"
+                                + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.providerType").value("openai"))
+                .andExpect(jsonPath("$.message").value(containsString("测试失败")));
+
+        assertThat(authorizationHeader.get()).isEqualTo("Bearer sk-timeout-123456");
+    }
+
+    /**
      * 验证 AI 接入页可测试已保存的向量模型，并检查返回维度。
      *
      * @throws Exception 测试异常
@@ -794,6 +838,67 @@ class LlmConfigCenterIntegrationTests {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             capturedHeader.set(exchange.getRequestHeaders().getFirst(headerName));
+            byte[] responseBytes = responseBody.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", APPLICATION_JSON_VALUE);
+            exchange.sendResponseHeaders(200, responseBytes.length);
+            exchange.getResponseBody().write(responseBytes);
+            exchange.close();
+        }
+    }
+
+    /**
+     * 延迟固定时长后返回 JSON 的处理器。
+     *
+     * 职责：用于验证模型测试链路会真正应用显式超时配置
+     *
+     * @author xiexu
+     */
+    private static final class DelayedJsonHandler implements HttpHandler {
+
+        private final String responseBody;
+
+        private final String headerName;
+
+        private final AtomicReference<String> capturedHeader;
+
+        private final long delayMillis;
+
+        /**
+         * 创建延迟 JSON 响应处理器。
+         *
+         * @param responseBody 响应体
+         * @param headerName 要记录的请求头名称
+         * @param capturedHeader 请求头捕获器
+         * @param delayMillis 延迟毫秒数
+         */
+        private DelayedJsonHandler(
+                String responseBody,
+                String headerName,
+                AtomicReference<String> capturedHeader,
+                long delayMillis
+        ) {
+            this.responseBody = responseBody;
+            this.headerName = headerName;
+            this.capturedHeader = capturedHeader;
+            this.delayMillis = delayMillis;
+        }
+
+        /**
+         * 延迟后返回固定 JSON。
+         *
+         * @param exchange HTTP 交换对象
+         * @throws IOException IO 异常
+         */
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            capturedHeader.set(exchange.getRequestHeaders().getFirst(headerName));
+            try {
+                Thread.sleep(delayMillis);
+            }
+            catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IOException("delayed json handler interrupted", exception);
+            }
             byte[] responseBytes = responseBody.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", APPLICATION_JSON_VALUE);
             exchange.sendResponseHeaders(200, responseBytes.length);
