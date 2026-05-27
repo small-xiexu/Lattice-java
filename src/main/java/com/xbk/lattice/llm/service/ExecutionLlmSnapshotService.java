@@ -255,7 +255,18 @@ public class ExecutionLlmSnapshotService {
             log.warn("LLM snapshot exists but provider connection {} is missing", snapshot.orElseThrow().getConnectionId());
             return Optional.empty();
         }
-        String apiKey = llmSecretCryptoService.decrypt(providerConnection.orElseThrow().getApiKeyCiphertext());
+        String apiKey;
+        try {
+            apiKey = llmSecretCryptoService.decrypt(providerConnection.orElseThrow().getApiKeyCiphertext());
+        }
+        catch (RuntimeException exception) {
+            if (requiresStrictBindings(normalizedScene)) {
+                throw exception;
+            }
+            log.warn("LLM snapshot exists but api key decrypt failed for connection {}, fallback to bootstrap route",
+                    snapshot.orElseThrow().getConnectionId(), exception);
+            return Optional.empty();
+        }
         return Optional.of(new LlmRouteResolution(
                 snapshot.orElseThrow().getScopeType(),
                 snapshot.orElseThrow().getScopeId(),

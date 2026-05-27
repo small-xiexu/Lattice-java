@@ -344,6 +344,127 @@ class ExecutionLlmSnapshotServiceTests {
     }
 
     /**
+     * 验证非 strict 场景（compile）apiKey 解密失败时优雅降级：返回 Optional.empty()，不向上传播异常。
+     */
+    @Test
+    void shouldReturnEmptyWhenApiKeyDecryptFailsForNonStrictScene() {
+        LlmProperties llmProperties = createProperties();
+        StubSnapshotRepository snapshotRepository = new StubSnapshotRepository();
+        StubConnectionRepository connectionRepository = new StubConnectionRepository();
+        RuntimeException decryptFailure = new RuntimeException("decrypt failed");
+        ExecutionLlmSnapshotService snapshotService = new ExecutionLlmSnapshotService(
+                llmProperties,
+                new StubBindingRepository(),
+                new StubModelRepository(),
+                connectionRepository,
+                snapshotRepository,
+                new FailingDecryptCryptoService(llmProperties, decryptFailure)
+        );
+        ExecutionLlmSnapshot snapshot = new ExecutionLlmSnapshot(
+                Long.valueOf(31L),
+                "compile_job",
+                "job-1",
+                "compile",
+                "writer",
+                Long.valueOf(1L),
+                Long.valueOf(11L),
+                Long.valueOf(21L),
+                "compile.writer.gpt54",
+                "openai",
+                "http://localhost:8888",
+                "gpt-5.4",
+                new BigDecimal("0.2"),
+                Integer.valueOf(4096),
+                Integer.valueOf(300),
+                "{}",
+                new BigDecimal("0.002500"),
+                new BigDecimal("0.010000"),
+                Integer.valueOf(1),
+                null
+        );
+        LlmProviderConnection connection = new LlmProviderConnection(
+                Long.valueOf(21L),
+                "openai-main",
+                "openai",
+                "http://localhost:8888",
+                "dummy-ciphertext",
+                "sk-du****3456",
+                true,
+                null,
+                "admin",
+                "admin",
+                null,
+                null
+        );
+        snapshotRepository.savedSnapshots = new ArrayList<>(List.of(snapshot));
+        connectionRepository.connection = connection;
+
+        Optional<LlmRouteResolution> route = snapshotService.resolveRoute("compile_job", "job-1", "compile", "writer");
+
+        assertThat(route).isEmpty();
+    }
+
+    /**
+     * 验证 strict 场景（deep_research）apiKey 解密失败时保持 fail-closed：异常向上传播，不静默降级。
+     */
+    @Test
+    void shouldThrowWhenApiKeyDecryptFailsForDeepResearchScene() {
+        LlmProperties llmProperties = createProperties();
+        StubSnapshotRepository snapshotRepository = new StubSnapshotRepository();
+        StubConnectionRepository connectionRepository = new StubConnectionRepository();
+        RuntimeException decryptFailure = new RuntimeException("decrypt failed");
+        ExecutionLlmSnapshotService snapshotService = new ExecutionLlmSnapshotService(
+                llmProperties,
+                new StubBindingRepository(),
+                new StubModelRepository(),
+                connectionRepository,
+                snapshotRepository,
+                new FailingDecryptCryptoService(llmProperties, decryptFailure)
+        );
+        ExecutionLlmSnapshot snapshot = new ExecutionLlmSnapshot(
+                Long.valueOf(31L),
+                "deep_research_run",
+                "dr-1",
+                "deep_research",
+                "researcher",
+                Long.valueOf(1L),
+                Long.valueOf(11L),
+                Long.valueOf(21L),
+                "deep.research.researcher",
+                "openai",
+                "http://localhost:8888",
+                "gpt-5.4",
+                new BigDecimal("0.2"),
+                Integer.valueOf(4096),
+                Integer.valueOf(300),
+                "{}",
+                new BigDecimal("0.002500"),
+                new BigDecimal("0.010000"),
+                Integer.valueOf(1),
+                null
+        );
+        LlmProviderConnection connection = new LlmProviderConnection(
+                Long.valueOf(21L),
+                "openai-main",
+                "openai",
+                "http://localhost:8888",
+                "dummy-ciphertext",
+                "sk-du****3456",
+                true,
+                null,
+                "admin",
+                "admin",
+                null,
+                null
+        );
+        snapshotRepository.savedSnapshots = new ArrayList<>(List.of(snapshot));
+        connectionRepository.connection = connection;
+
+        assertThatThrownBy(() -> snapshotService.resolveRoute("deep_research_run", "dr-1", "deep_research", "researcher"))
+                .isSameAs(decryptFailure);
+    }
+
+    /**
      * 验证 deep_research 场景不允许 bootstrap fallback。
      */
     @Test
@@ -439,6 +560,26 @@ class ExecutionLlmSnapshotServiceTests {
         @Override
         public Optional<LlmProviderConnection> findById(Long id) {
             return Optional.ofNullable(connection);
+        }
+    }
+
+    /**
+     * 解密失败密码服务替身。
+     *
+     * @author xiexu
+     */
+    private static class FailingDecryptCryptoService extends LlmSecretCryptoService {
+
+        private final RuntimeException exceptionToThrow;
+
+        private FailingDecryptCryptoService(LlmProperties llmProperties, RuntimeException exceptionToThrow) {
+            super(llmProperties);
+            this.exceptionToThrow = exceptionToThrow;
+        }
+
+        @Override
+        public String decrypt(String cipherText) {
+            throw exceptionToThrow;
         }
     }
 
