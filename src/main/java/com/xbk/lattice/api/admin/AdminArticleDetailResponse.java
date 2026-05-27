@@ -57,6 +57,8 @@ public class AdminArticleDetailResponse {
 
     private final String metadataJson;
 
+    private final AdminArticleTitleProfile titleProfile;
+
     /**
      * 创建管理侧文章详情响应。
      *
@@ -83,6 +85,7 @@ public class AdminArticleDetailResponse {
      * @param dependsOn 依赖关系
      * @param related 相关关系
      * @param metadataJson 元数据 JSON
+     * @param titleProfile 标题画像
      */
     public AdminArticleDetailResponse(
             Long sourceId,
@@ -107,7 +110,8 @@ public class AdminArticleDetailResponse {
             List<String> referentialKeywords,
             List<String> dependsOn,
             List<String> related,
-            String metadataJson
+            String metadataJson,
+            AdminArticleTitleProfile titleProfile
     ) {
         this.sourceId = sourceId;
         this.articleKey = articleKey;
@@ -132,6 +136,7 @@ public class AdminArticleDetailResponse {
         this.dependsOn = dependsOn;
         this.related = related;
         this.metadataJson = metadataJson;
+        this.titleProfile = titleProfile;
     }
 
     /**
@@ -339,5 +344,14 @@ public class AdminArticleDetailResponse {
      */
     public String getMetadataJson() {
         return metadataJson;
+    }
+
+    /**
+     * 获取标题画像。
+     *
+     * @return 标题画像
+     */
+    public AdminArticleTitleProfile getTitleProfile() {
+        return titleProfile;
     }
 }

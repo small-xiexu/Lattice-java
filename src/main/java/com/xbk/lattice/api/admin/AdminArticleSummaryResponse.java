@@ -47,6 +47,8 @@ public class AdminArticleSummaryResponse {
 
     private final String primarySourceName;
 
+    private final AdminArticleTitleProfile titleProfile;
+
     /**
      * 创建管理侧文章摘要响应。
      *
@@ -68,6 +70,7 @@ public class AdminArticleSummaryResponse {
      * @param primarySourcePath 首个来源路径
      * @param sourcePaths 完整来源路径列表
      * @param primarySourceName 首个来源文件名
+     * @param titleProfile 标题画像
      */
     public AdminArticleSummaryResponse(
             Long sourceId,
@@ -87,7 +90,8 @@ public class AdminArticleSummaryResponse {
             int sourceCount,
             String primarySourcePath,
             List<String> sourcePaths,
-            String primarySourceName
+            String primarySourceName,
+            AdminArticleTitleProfile titleProfile
     ) {
         this.sourceId = sourceId;
         this.articleKey = articleKey;
@@ -107,6 +111,7 @@ public class AdminArticleSummaryResponse {
         this.primarySourcePath = primarySourcePath;
         this.sourcePaths = sourcePaths;
         this.primarySourceName = primarySourceName;
+        this.titleProfile = titleProfile;
     }
 
     /**
@@ -269,5 +274,14 @@ public class AdminArticleSummaryResponse {
      */
     public String getPrimarySourceName() {
         return primarySourceName;
+    }
+
+    /**
+     * 获取标题画像。
+     *
+     * @return 标题画像
+     */
+    public AdminArticleTitleProfile getTitleProfile() {
+        return titleProfile;
     }
 }

@@ -1,5 +1,9 @@
 package com.xbk.lattice.api.admin;
 
+import com.xbk.lattice.shared.json.JsonMappers;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.admin.service.AdminArticleQueryService;
 import com.xbk.lattice.governance.ArticleCorrectionResult;
 import com.xbk.lattice.governance.ArticleCorrectionService;
@@ -37,6 +41,8 @@ import java.util.Locale;
 @RestController
 @RequestMapping("/api/v1/admin/articles")
 public class AdminArticleController {
+
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private final AdminArticleQueryService adminArticleQueryService;
 
@@ -133,7 +139,8 @@ public class AdminArticleController {
                     resolvedSourceCount,
                     primarySourcePath,
                     sourcePaths,
-                    primarySourcePath
+                    primarySourcePath,
+                    resolveTitleProfile(articleRecord)
             ));
         }
         return new AdminArticleListResponse(items.size(), items);
@@ -206,8 +213,57 @@ public class AdminArticleController {
                 articleRecord.getReferentialKeywords(),
                 articleRecord.getDependsOn(),
                 articleRecord.getRelated(),
-                articleRecord.getMetadataJson()
+                articleRecord.getMetadataJson(),
+                resolveTitleProfile(articleRecord)
         );
+    }
+
+    /**
+     * 解析文章标题画像。
+     *
+     * @param articleRecord 文章记录
+     * @return 标题画像
+     */
+    private AdminArticleTitleProfile resolveTitleProfile(ArticleRecord articleRecord) {
+        if (articleRecord == null || articleRecord.getMetadataJson() == null || articleRecord.getMetadataJson().isBlank()) {
+            return new AdminArticleTitleProfile(null, null, articleRecord == null ? null : articleRecord.getTitle(), "LEGACY_UNSET");
+        }
+        try {
+            JsonNode titleProfileNode = OBJECT_MAPPER.readTree(articleRecord.getMetadataJson()).path("titleProfile");
+            String sourceTitle = readText(titleProfileNode.path("sourceTitle"));
+            String anchorTitle = readText(titleProfileNode.path("anchorTitle"));
+            String representativeTitle = readText(titleProfileNode.path("representativeTitle"));
+            if (representativeTitle == null || representativeTitle.isBlank()) {
+                representativeTitle = articleRecord.getTitle();
+            }
+            String titleGenerationMode = readText(titleProfileNode.path("titleGenerationMode"));
+            if (titleGenerationMode == null || titleGenerationMode.isBlank()) {
+                titleGenerationMode = "LEGACY_UNSET";
+            }
+            return new AdminArticleTitleProfile(
+                    sourceTitle,
+                    anchorTitle,
+                    representativeTitle,
+                    titleGenerationMode
+            );
+        }
+        catch (Exception ignored) {
+            return new AdminArticleTitleProfile(null, null, articleRecord.getTitle(), "LEGACY_UNSET");
+        }
+    }
+
+    /**
+     * 读取节点文本。
+     *
+     * @param node JSON 节点
+     * @return 文本值
+     */
+    private String readText(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        String value = node.asText("");
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     /**

@@ -74,6 +74,7 @@ class AdminManagementControllerTests {
                 .andExpect(jsonPath("$.items[0].articleKey").value("default-source--payment-timeout"))
                 .andExpect(jsonPath("$.items[0].conceptId").value("payment-timeout"))
                 .andExpect(jsonPath("$.items[0].title").value("Payment Timeout"))
+                .andExpect(jsonPath("$.items[0].titleProfile.representativeTitle").value("Payment Timeout"))
                 .andExpect(jsonPath("$.items[0].sourceCount").value(1))
                 .andExpect(jsonPath("$.items[0].primarySourcePath").value("payment/analyze.json"))
                 .andExpect(jsonPath("$.items[0].primarySourceName").value("payment/analyze.json"))
@@ -86,6 +87,7 @@ class AdminManagementControllerTests {
                 .andExpect(jsonPath("$.articleKey").value("default-source--payment-timeout"))
                 .andExpect(jsonPath("$.conceptId").value("payment-timeout"))
                 .andExpect(jsonPath("$.summary").value("Handles payment timeout recovery"))
+                .andExpect(jsonPath("$.titleProfile.representativeTitle").value("Payment Timeout"))
                 .andExpect(jsonPath("$.sourceCount").value(1))
                 .andExpect(jsonPath("$.primarySourcePath").value("payment/analyze.json"))
                 .andExpect(jsonPath("$.updatedAt").exists())
@@ -106,6 +108,9 @@ class AdminManagementControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.count").value(1))
                 .andExpect(jsonPath("$.items[0].articleKey").value("knowledge-schema--payments"))
+                .andExpect(jsonPath("$.items[0].titleProfile.sourceTitle").value("Payments Knowledge Base"))
+                .andExpect(jsonPath("$.items[0].titleProfile.anchorTitle").value("Retry Policy"))
+                .andExpect(jsonPath("$.items[0].titleProfile.titleGenerationMode").value("RULE_BASED"))
                 .andExpect(jsonPath("$.items[0].sourceCount").value(4))
                 .andExpect(jsonPath("$.items[0].primarySourcePath").value("payments/PaymentRetryPolicy.java"))
                 .andExpect(jsonPath("$.items[0].sourcePaths[1]").value("docs/payment/PaymentRetryPolicy.md"))
@@ -129,6 +134,9 @@ class AdminManagementControllerTests {
         mockMvc.perform(get("/api/v1/admin/articles/knowledge-schema--payments"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.articleKey").value("knowledge-schema--payments"))
+                .andExpect(jsonPath("$.titleProfile.sourceTitle").value("Payments Knowledge Base"))
+                .andExpect(jsonPath("$.titleProfile.anchorTitle").value("Retry Policy"))
+                .andExpect(jsonPath("$.titleProfile.representativeTitle").value("Payments retry policy and constraints"))
                 .andExpect(jsonPath("$.sourceCount").value(4))
                 .andExpect(jsonPath("$.primarySourcePath").value("payments/PaymentRetryPolicy.java"))
                 .andExpect(jsonPath("$.sourcePaths[2]").value("excel/payment_retry_policy.xlsx"))
@@ -251,7 +259,7 @@ class AdminManagementControllerTests {
                         "excel/payment_retry_policy.xlsx",
                         "pdf/payment-retry-policy.pdf"
                 ),
-                "{\"domain\":\"payments\"}",
+                "{\"domain\":\"payments\",\"titleProfile\":{\"sourceTitle\":\"Payments Knowledge Base\",\"anchorTitle\":\"Retry Policy\",\"representativeTitle\":\"Payments retry policy and constraints\",\"titleGenerationMode\":\"RULE_BASED\"}}",
                 "",
                 List.of("retry", "payment"),
                 List.of(),
@@ -268,7 +276,7 @@ class AdminManagementControllerTests {
                 "ACTIVE",
                 OffsetDateTime.parse("2026-04-20T09:30:00+08:00"),
                 List.of("src/main/java/com/xbk/lattice/RetryHelper.java"),
-                "{\"domain\":\"payments\"}",
+                "{\"domain\":\"payments\",\"titleProfile\":{\"representativeTitle\":\"Retry Helper\",\"titleGenerationMode\":\"ANCHOR_DIRECT\"}}",
                 "Handles retry helper logic",
                 List.of("retry"),
                 List.of(),
@@ -285,7 +293,7 @@ class AdminManagementControllerTests {
                 "ACTIVE",
                 OffsetDateTime.parse("2026-04-20T08:45:00+08:00"),
                 List.of("docs/quick-start.md"),
-                "{\"domain\":\"guide\"}",
+                "{\"domain\":\"guide\",\"titleProfile\":{\"representativeTitle\":\"Quick Start\",\"titleGenerationMode\":\"ANCHOR_DIRECT\"}}",
                 "Quick start summary",
                 List.of("guide"),
                 List.of(),
