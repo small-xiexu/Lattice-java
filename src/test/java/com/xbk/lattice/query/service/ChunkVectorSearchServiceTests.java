@@ -52,6 +52,10 @@ class ChunkVectorSearchServiceTests {
         assertThat(firstHits).hasSize(1);
         assertThat(secondHits).hasSize(1);
         assertThat(firstHits.get(0).getArticleKey()).isEqualTo("chunk-article");
+        assertThat(firstHits.get(0).getMetadataJson())
+                .contains("\"chunkIdentity\":\"ARTICLE_CHUNK:chunk-article#0\"");
+        assertThat(firstHits.get(0).getMetadataJson())
+                .contains("\"chunkIndex\":0");
         assertThat(articleChunkVectorJdbcRepository.getLastEmbedding()).containsExactly(createEmbedding(0.31F, 4));
         assertThat(embeddingModel.getCallCount()).isEqualTo(1);
     }

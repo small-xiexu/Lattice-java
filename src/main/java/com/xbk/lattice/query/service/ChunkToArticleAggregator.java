@@ -23,30 +23,51 @@ public class ChunkToArticleAggregator {
      * @return article 命中列表
      */
     public List<QueryArticleHit> aggregate(List<ArticleChunkVectorHit> chunkHits) {
-        Map<String, ArticleChunkVectorHit> bestHitByConcept = new LinkedHashMap<String, ArticleChunkVectorHit>();
+        Map<String, ArticleChunkVectorHit> bestHitByChunk = new LinkedHashMap<String, ArticleChunkVectorHit>();
         for (ArticleChunkVectorHit chunkHit : chunkHits) {
-            String articleIdentity = chunkHit.getArticleKey();
-            if (articleIdentity == null || articleIdentity.isBlank()) {
-                articleIdentity = chunkHit.getConceptId();
-            }
-            ArticleChunkVectorHit currentBest = bestHitByConcept.get(articleIdentity);
+            String chunkIdentity = ChunkHitIdentitySupport.articleChunkIdentity(
+                    chunkHit.getArticleKey(),
+                    chunkHit.getConceptId(),
+                    Integer.valueOf(chunkHit.getChunkIndex())
+            );
+            ArticleChunkVectorHit currentBest = bestHitByChunk.get(chunkIdentity);
             if (currentBest == null || chunkHit.getScore() > currentBest.getScore()) {
-                bestHitByConcept.put(articleIdentity, chunkHit);
+                bestHitByChunk.put(chunkIdentity, chunkHit);
             }
         }
-        return bestHitByConcept.values().stream()
-                .map(chunkHit -> new QueryArticleHit(
-                        QueryEvidenceType.ARTICLE,
-                        chunkHit.getSourceId(),
-                        chunkHit.getArticleKey(),
-                        chunkHit.getConceptId(),
-                        chunkHit.getTitle(),
-                        chunkHit.getChunkText(),
-                        chunkHit.getMetadataJson(),
-                        chunkHit.getReviewStatus(),
-                        chunkHit.getSourcePaths(),
-                        chunkHit.getScore()
-                ))
+        return bestHitByChunk.values().stream()
+                .map(this::toQueryArticleHit)
                 .toList();
+    }
+
+    /**
+     * 转换为携带 chunk 身份的查询命中。
+     *
+     * @param chunkHit chunk 向量命中
+     * @return 查询命中
+     */
+    private QueryArticleHit toQueryArticleHit(ArticleChunkVectorHit chunkHit) {
+        String sectionAnchor = ChunkHitIdentitySupport.extractSectionAnchor(chunkHit.getChunkText());
+        String displayTitle = ChunkHitIdentitySupport.displayTitle(chunkHit.getTitle(), sectionAnchor);
+        String metadataJson = ChunkHitIdentitySupport.enrichMetadata(
+                chunkHit.getMetadataJson(),
+                chunkHit.getArticleKey(),
+                chunkHit.getConceptId(),
+                Integer.valueOf(chunkHit.getChunkIndex()),
+                RetrievalStrategyResolver.CHANNEL_CHUNK_VECTOR,
+                sectionAnchor
+        );
+        return new QueryArticleHit(
+                QueryEvidenceType.ARTICLE,
+                chunkHit.getSourceId(),
+                chunkHit.getArticleKey(),
+                chunkHit.getConceptId(),
+                displayTitle,
+                chunkHit.getChunkText(),
+                metadataJson,
+                chunkHit.getReviewStatus(),
+                chunkHit.getSourcePaths(),
+                chunkHit.getScore()
+        );
     }
 }

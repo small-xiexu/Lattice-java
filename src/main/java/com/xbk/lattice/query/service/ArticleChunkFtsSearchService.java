@@ -83,14 +83,16 @@ public class ArticleChunkFtsSearchService {
      * @return 查询命中
      */
     private QueryArticleHit toQueryArticleHit(LexicalSearchRecord record) {
+        String sectionAnchor = ChunkHitIdentitySupport.extractSectionAnchor(record.getContent());
+        String displayTitle = ChunkHitIdentitySupport.displayTitle(record.getTitle(), sectionAnchor);
         return new QueryArticleHit(
                 QueryEvidenceType.ARTICLE,
                 record.getSourceId(),
                 record.getItemKey(),
                 record.getConceptId(),
-                record.getTitle(),
+                displayTitle,
                 record.getContent(),
-                enrichMetadata(record),
+                enrichMetadata(record, sectionAnchor),
                 record.getReviewStatus(),
                 record.getSourcePaths(),
                 record.getScore()
@@ -101,13 +103,17 @@ public class ArticleChunkFtsSearchService {
      * 补充 chunk 元数据。
      *
      * @param record lexical 命中记录
+     * @param sectionAnchor 章节锚点
      * @return 元数据 JSON
      */
-    private String enrichMetadata(LexicalSearchRecord record) {
-        return "{\"channel\":\"article_chunk_fts\",\"chunkIndex\":"
-                + record.getChunkIndex()
-                + ",\"articleMetadata\":"
-                + record.getMetadataJson()
-                + "}";
+    private String enrichMetadata(LexicalSearchRecord record, String sectionAnchor) {
+        return ChunkHitIdentitySupport.enrichArticleChunkMetadata(
+                record.getMetadataJson(),
+                record.getItemKey(),
+                record.getConceptId(),
+                record.getChunkIndex(),
+                RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS,
+                sectionAnchor
+        );
     }
 }

@@ -490,6 +490,12 @@ public class RrfFusionService {
      * @return 命中身份键
      */
     private String buildHitKey(QueryArticleHit queryArticleHit) {
+        String chunkIdentity = ChunkHitIdentitySupport.readChunkIdentity(queryArticleHit.getMetadataJson());
+        if (queryArticleHit.getEvidenceType() == QueryEvidenceType.ARTICLE
+                && chunkIdentity != null
+                && !chunkIdentity.isBlank()) {
+            return queryArticleHit.getEvidenceType().name() + ":" + chunkIdentity;
+        }
         String identity = queryArticleHit.getArticleKey();
         if (identity == null || identity.isBlank()) {
             identity = queryArticleHit.getConceptId();

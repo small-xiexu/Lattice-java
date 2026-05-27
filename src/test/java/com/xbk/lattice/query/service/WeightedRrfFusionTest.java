@@ -147,6 +147,112 @@ class WeightedRrfFusionTest {
     }
 
     /**
+     * 验证 chunk 级命中使用 chunk identity，不会与同一 article 的整篇命中折叠。
+     */
+    @Test
+    void shouldKeepArticleChunkHitSeparateFromArticleHit() {
+        RrfFusionService rrfFusionService = new RrfFusionService();
+        QueryArticleHit articleHit = new QueryArticleHit(
+                QueryEvidenceType.ARTICLE,
+                1L,
+                "article-alpha",
+                "concept-alpha",
+                "Article Alpha",
+                "Article background",
+                "{}",
+                "passed",
+                List.of("alpha.md"),
+                1.0D
+        );
+        QueryArticleHit chunkHit = new QueryArticleHit(
+                QueryEvidenceType.ARTICLE,
+                1L,
+                "article-alpha",
+                "concept-alpha",
+                "Article Alpha / Deployment Plan",
+                "## Deployment Plan\nStep A",
+                "{\"chunkIdentity\":\"ARTICLE_CHUNK:article-alpha#2\",\"chunkIndex\":2}",
+                "passed",
+                List.of("alpha.md"),
+                1.0D
+        );
+
+        List<QueryArticleHit> fusedHits = rrfFusionService.fuse(
+                Map.of(
+                        RetrievalStrategyResolver.CHANNEL_FTS,
+                        List.of(articleHit),
+                        RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS,
+                        List.of(chunkHit)
+                ),
+                Map.of(
+                        RetrievalStrategyResolver.CHANNEL_FTS,
+                        1.0D,
+                        RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS,
+                        1.0D
+                ),
+                5,
+                60
+        );
+
+        assertThat(fusedHits).hasSize(2);
+        assertThat(fusedHits)
+                .extracting(QueryArticleHit::getTitle)
+                .contains("Article Alpha", "Article Alpha / Deployment Plan");
+    }
+
+    /**
+     * 验证没有 chunk identity 的普通 article 命中仍按 articleKey 融合。
+     */
+    @Test
+    void shouldStillMergePlainArticleHitsByArticleKey() {
+        RrfFusionService rrfFusionService = new RrfFusionService();
+        QueryArticleHit articleHit = new QueryArticleHit(
+                QueryEvidenceType.ARTICLE,
+                1L,
+                "article-alpha",
+                "concept-alpha",
+                "Article Alpha",
+                "Article background",
+                "{}",
+                "passed",
+                List.of("alpha.md"),
+                1.0D
+        );
+        QueryArticleHit articleVectorHit = new QueryArticleHit(
+                QueryEvidenceType.ARTICLE,
+                1L,
+                "article-alpha",
+                "concept-alpha",
+                "Article Alpha",
+                "Vector background",
+                "{}",
+                "passed",
+                List.of("alpha.md"),
+                1.0D
+        );
+
+        List<QueryArticleHit> fusedHits = rrfFusionService.fuse(
+                Map.of(
+                        RetrievalStrategyResolver.CHANNEL_FTS,
+                        List.of(articleHit),
+                        RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR,
+                        List.of(articleVectorHit)
+                ),
+                Map.of(
+                        RetrievalStrategyResolver.CHANNEL_FTS,
+                        1.0D,
+                        RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR,
+                        1.0D
+                ),
+                5,
+                60
+        );
+
+        assertThat(fusedHits).hasSize(1);
+        assertThat(fusedHits.get(0).getArticleKey()).isEqualTo("article-alpha");
+    }
+
+    /**
      * 验证普通多焦点查值题也会保留直接 source/fact card 证据。
      */
     @Test
