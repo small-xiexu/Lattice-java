@@ -35,6 +35,8 @@ import java.util.regex.Pattern;
 @Slf4j
 abstract class AnswerGenerationFallbackSnippetSelectionSupport extends AnswerGenerationReferencePathSupport {
 
+    private TerminalFieldAliasRules terminalFieldAliasRules = TerminalFieldAliasRules.loadDefault();
+
     /**
      * 创建无 LLM 的 fallback 片段选择支持。
      */
@@ -60,6 +62,7 @@ abstract class AnswerGenerationFallbackSnippetSelectionSupport extends AnswerGen
         List<String> snippets = new ArrayList<String>();
         List<String> selectedCandidates = new ArrayList<String>();
         List<String> coveredFocusTokens = new ArrayList<String>();
+        addBestTerminalFieldCandidate(question, rankedCandidates, selectedCandidates, snippets, limit);
         if (focusTokens != null) {
             for (String focusToken : focusTokens) {
                 if (coveredFocusTokens.contains(focusToken)) {
@@ -103,6 +106,51 @@ abstract class AnswerGenerationFallbackSnippetSelectionSupport extends AnswerGen
             }
         }
         return snippets;
+    }
+
+    /**
+     * 为结构化路径精确查值题优先补入末级字段贴合问题的候选。
+     *
+     * @param question 用户问题
+     * @param rankedCandidates 已排序候选句
+     * @param selectedCandidates 已选候选
+     * @param snippets 输出片段
+     * @param limit 最大条数
+     */
+    void addBestTerminalFieldCandidate(
+            String question,
+            List<Map.Entry<String, Integer>> rankedCandidates,
+            List<String> selectedCandidates,
+            List<String> snippets,
+            int limit
+    ) {
+        if (snippets.size() >= limit || rankedCandidates == null || rankedCandidates.isEmpty()) {
+            return;
+        }
+        List<String> queryTokens = extractQueryTokens(question);
+        String bestCandidate = "";
+        int bestScore = Integer.MIN_VALUE;
+        for (Map.Entry<String, Integer> rankedCandidate : rankedCandidates) {
+            String candidate = rankedCandidate.getKey();
+            if (selectedCandidates.contains(candidate)
+                    || !looksLikeQuestionFocusedStructuredPathValueCandidate(question, candidate, queryTokens)) {
+                continue;
+            }
+            int terminalScore = scoreStructuredPathTerminalFieldMatch(question, candidate, queryTokens);
+            if (terminalScore <= 0) {
+                continue;
+            }
+            int candidateScore = rankedCandidate.getValue().intValue() + terminalScore;
+            if (candidateScore > bestScore) {
+                bestScore = candidateScore;
+                bestCandidate = candidate;
+            }
+        }
+        if (bestCandidate.isBlank()) {
+            return;
+        }
+        selectedCandidates.add(bestCandidate);
+        snippets.add(stripEmbeddedCitationLiterals(bestCandidate));
     }
 
     /**
@@ -391,6 +439,7 @@ abstract class AnswerGenerationFallbackSnippetSelectionSupport extends AnswerGen
             if (looksLikeNumericQuestion(question) && containsNumericAssignmentSignal(normalizedLine)) {
                 score += 18;
             }
+            score += scoreStructuredPathTerminalFieldMatch(question, normalizedLine, preferredTokens);
         }
         if (looksLikeQuestionEchoLine(question, normalizedLine)) {
             score -= 60;
@@ -568,6 +617,228 @@ abstract class AnswerGenerationFallbackSnippetSelectionSupport extends AnswerGen
             return false;
         }
         return containsStructuredPathQuestionFocusToken(question, normalizedLine, preferredTokens);
+    }
+
+    /**
+     * 计算结构化路径末级字段与问题目标字段的贴合度。
+     *
+     * @param question 用户问题
+     * @param normalizedLine 归一化候选句
+     * @param preferredTokens 查询 token
+     * @return 匹配加分或 sibling 降权
+     */
+    int scoreStructuredPathTerminalFieldMatch(
+            String question,
+            String normalizedLine,
+            List<String> preferredTokens
+    ) {
+        List<String> targetFieldTokens = extractQuestionTerminalFieldTokens(question, preferredTokens);
+        if (targetFieldTokens.isEmpty()) {
+            return 0;
+        }
+        List<String> terminalFieldTokens = extractStructuredPathTerminalFieldTokens(normalizedLine);
+        if (terminalFieldTokens.isEmpty()) {
+            return 0;
+        }
+        if (matchesAnyTerminalFieldToken(terminalFieldTokens, targetFieldTokens)) {
+            return 64;
+        }
+        if (containsStructuredPathQuestionFocusToken(question, normalizedLine, preferredTokens)) {
+            return -28;
+        }
+        return 0;
+    }
+
+    /**
+     * 从问题中提取明确指向末级字段的通用技术字段 token。
+     *
+     * @param question 用户问题
+     * @param preferredTokens 查询 token
+     * @return 末级字段 token
+     */
+    List<String> extractQuestionTerminalFieldTokens(String question, List<String> preferredTokens) {
+        List<String> targetTokens = new ArrayList<String>();
+        List<String> tokens = preferredTokens == null || preferredTokens.isEmpty()
+                ? extractQueryTokens(question)
+                : preferredTokens;
+        List<String> rawQueryTokens = QueryTokenExtractor.extract(question);
+        for (String token : tokens) {
+            String normalizedToken = lowerCase(token);
+            String terminalFieldToken = normalizeQuestionTerminalFieldToken(normalizedToken);
+            if (!terminalFieldToken.isBlank() && !targetTokens.contains(terminalFieldToken)) {
+                targetTokens.add(terminalFieldToken);
+            }
+        }
+        for (String rawQueryToken : rawQueryTokens) {
+            String normalizedRawToken = lowerCase(rawQueryToken);
+            String terminalFieldToken = normalizeQuestionTerminalFieldToken(normalizedRawToken);
+            if (!terminalFieldToken.isBlank() && !targetTokens.contains(terminalFieldToken)) {
+                targetTokens.add(terminalFieldToken);
+            }
+        }
+        return targetTokens;
+    }
+
+    /**
+     * 将问题侧通用字段意图 token 归一化为结构化 leaf key token。
+     *
+     * @param token 问题 token
+     * @return leaf key token；无法归一化返回空串
+     */
+    String normalizeQuestionTerminalFieldToken(String token) {
+        if (token == null || token.isBlank()) {
+            return "";
+        }
+        if (isGenericTerminalFieldToken(token)) {
+            return token;
+        }
+        return terminalFieldAliasRules.canonicalForAlias(token);
+    }
+
+    /**
+     * 替换末级字段别名规则，供测试注入空配置或抽象 alias map。
+     *
+     * @param terminalFieldAliasRules 末级字段别名规则
+     */
+    void replaceTerminalFieldAliasRulesForTesting(TerminalFieldAliasRules terminalFieldAliasRules) {
+        this.terminalFieldAliasRules = terminalFieldAliasRules == null
+                ? TerminalFieldAliasRules.empty()
+                : terminalFieldAliasRules;
+    }
+
+    /**
+     * 判断 token 是否为通用技术字段名。
+     *
+     * @param token 候选 token
+     * @return 通用字段名返回 true
+     */
+    boolean isGenericTerminalFieldToken(String token) {
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+        return List.of(
+                "port",
+                "url",
+                "endpoint",
+                "image",
+                "version",
+                "value"
+        ).contains(token);
+    }
+
+    /**
+     * 提取结构化路径候选的末级字段 token。
+     *
+     * @param normalizedLine 归一化候选句
+     * @return 末级字段 token
+     */
+    List<String> extractStructuredPathTerminalFieldTokens(String normalizedLine) {
+        String structuredPath = extractStructuredPathFromValueCandidate(normalizedLine);
+        if (structuredPath.isBlank()) {
+            return List.of();
+        }
+        int lastDotIndex = structuredPath.lastIndexOf('.');
+        String terminalField = lastDotIndex < 0 ? structuredPath : structuredPath.substring(lastDotIndex + 1);
+        terminalField = terminalField.replaceAll("\\[[0-9]+]$", "");
+        return splitStructuredFieldNameTokens(terminalField);
+    }
+
+    /**
+     * 从结构化路径取值候选中抽取第一条 dotted path。
+     *
+     * @param normalizedLine 归一化候选句
+     * @return dotted path；不存在返回空串
+     */
+    String extractStructuredPathFromValueCandidate(String normalizedLine) {
+        if (!looksLikeStructuredPathValueCandidate(normalizedLine)) {
+            return "";
+        }
+        int delimiterIndex = answerEvidenceNormalizer.structuredAssignmentDelimiterIndex(normalizedLine);
+        String assignmentValue = structuredAssignmentValue(normalizedLine, delimiterIndex);
+        Pattern pathPattern = Pattern.compile(
+                "[A-Za-z][A-Za-z0-9_-]*(?:\\[[0-9]+])?(?:\\.[A-Za-z][A-Za-z0-9_-]*(?:\\[[0-9]+])?)+"
+        );
+        Matcher pathMatcher = pathPattern.matcher(assignmentValue);
+        if (pathMatcher.find()) {
+            return pathMatcher.group();
+        }
+        return "";
+    }
+
+    /**
+     * 将字段名按 camelCase、snake_case 与 kebab-case 拆成通用 token。
+     *
+     * @param fieldName 字段名
+     * @return 字段 token
+     */
+    List<String> splitStructuredFieldNameTokens(String fieldName) {
+        if (fieldName == null || fieldName.isBlank()) {
+            return List.of();
+        }
+        List<String> tokens = new ArrayList<String>();
+        String normalizedFieldName = fieldName.replaceAll("([a-z0-9])([A-Z])", "$1 $2");
+        String compactFieldName = lowerCase(fieldName).replaceAll("[^a-z0-9]", "");
+        if (!compactFieldName.isBlank()) {
+            tokens.add(compactFieldName);
+        }
+        for (String rawToken : normalizedFieldName.split("[^A-Za-z0-9]+")) {
+            String token = lowerCase(rawToken);
+            if (token.length() <= 1 || tokens.contains(token)) {
+                continue;
+            }
+            tokens.add(token);
+        }
+        return tokens;
+    }
+
+    /**
+     * 判断候选末级字段 token 是否覆盖问题目标字段 token。
+     *
+     * @param terminalFieldTokens 候选末级字段 token
+     * @param targetFieldTokens 问题目标字段 token
+     * @return 覆盖返回 true
+     */
+    boolean matchesAnyTerminalFieldToken(List<String> terminalFieldTokens, List<String> targetFieldTokens) {
+        for (String targetFieldToken : targetFieldTokens) {
+            for (String terminalFieldToken : terminalFieldTokens) {
+                if (terminalFieldToken.equals(targetFieldToken)
+                        || areEquivalentTerminalFieldTokens(terminalFieldToken, targetFieldToken)) {
+                    return true;
+                }
+                if (terminalFieldToken.length() >= 4 && terminalFieldToken.contains(targetFieldToken)) {
+                    return true;
+                }
+                if (targetFieldToken.length() >= 4 && targetFieldToken.contains(terminalFieldToken)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断两个末级字段 token 是否属于通用技术同义表达。
+     *
+     * @param leftToken 左侧 token
+     * @param rightToken 右侧 token
+     * @return 等价返回 true
+     */
+    boolean areEquivalentTerminalFieldTokens(String leftToken, String rightToken) {
+        return ("endpoint".equals(leftToken) && "url".equals(rightToken))
+                || ("url".equals(leftToken) && "endpoint".equals(rightToken));
+    }
+
+    /**
+     * 将通用末级字段同义 token 规整为统一键。
+     *
+     * @param token 字段 token
+     * @return 规整后的字段 token
+     */
+    String canonicalTerminalFieldToken(String token) {
+        if ("endpoint".equals(token)) {
+            return "url";
+        }
+        return token == null ? "" : token;
     }
 
     /**

@@ -1,6 +1,6 @@
 # 项目质量打磨进度与踩坑台账
 
-更新时间：2026-05-27（Q6 complementary evidence gate 复验失败后更新）
+更新时间：2026-05-27（Q6 terminal field alias 配置化修复 agentD 端到端验证后更新）
 
 本台账记录质量打磨、Query/SWIP eval、baseline 修复与多 agent 协作的当前状态。后续推进前先读本文件；阶段结论变化后必须回写。
 
@@ -21,14 +21,14 @@
 - compile review 默认 LLM 模式：代码实现已完成（agentA），新 job 默认 reviewMode 改为 `LLM`。运行时验证已完成（agentD）：默认不传 reviewMode 的真实 compile job 走 LLM reviewer（route=anthropic，非 rule-based），LLM non-pass 不入库，显式 RULE_BASED 仍走 rule-based 且可入库。入口闭环审计已完成（agentB）：用户可触发 compile 入口全部收敛到 StateGraph 的 Writer→Reviewer→Fixer→Reviewer→Persist gate 闭环。详见 `compile_review_default_llm_mode_fix_result_report.md`、`compile_review_default_llm_mode_runtime_verification_report.md`、`compile_review_entrypoint_loop_coverage_analysis_report.md`。
 - compile review prompt externalization：Writer / Reviewer / Fixer system prompt 已从 `LatticePrompts.java` 硬编码常量外置到 `src/main/resources/prompts/compiler/*.md`，由新增 `CompilerPromptProvider` @Service 统一加载，支持 `{{shared-grounding-rules}}` 占位符替换。期间修复两轮回归：SchemaAwarePrompts 多构造器 DI 注入失败、shared rules 占位符未生效导致 prompt 文件内联重复。pre-commit 质量复核已通过：redline BLOCKER=0，mvn test=824/0/0，未发现业务硬编码/case 特判/eval 污染。详见 `compile_review_prompt_externalization_pre_commit_quality_report.md`、`compile_review_prompt_externalization_final_runtime_gate_report.md`。
 - compile review 人工确认后入库链路：`needs_human_review` 编译草稿持久化到 `compile_article_review_queue`，后台 API 支持 list/detail/approve/reject，approve 后以 `review_status=passed` + `lifecycle=ACTIVE` 写入 articles/chunks/vector index，reject 后不入库。前端"待人工确认"入口可用。pre-commit 复核通过：redline BLOCKER=0，mvn test=844/0/0。已分两个提交：`8fe7001`（publish flow）+ `b453627`（admin API）。详见 `compile_human_review_queue_pre_commit_quality_report.md`。
-- 知识库验收 Q6 结构化 fact card 路径修复：fact card 生成层已通过，已保留 YAML/JSON/缩进式结构化字段路径，兼容旧 `key/value/raw`，新增 `keyPath/parentPath/pathSegments/contextPath/displayText` 并增强结构化证据文本。fallback structured evidence、path shape gate、complementary selector 三轮通用修复均已有阶段性进展。2026-05-27 agentD 已完成 Q6 complementary evidence gate 独立端到端复验，结论为 FAIL：修复已改变真实链路，Q6 不再回答原机器标识符误答，path-aware fact card 已进入最终 fallback evidence / `fallbackHits` 等价上下文；但 Q6 仍未端到端通过，`generationMode=FALLBACK`、`answerOutcome=SUCCESS` 时 Answer Accuracy 仍为 FAIL，错误从机器标识符误答下沉为同一 fact card 内 sibling 字段误答（实际 claim 为 `fieldPath: spec.containers[0].readinessProbe.periodSeconds = 10`，不是目标端口字段）。`citation_coverage=1.0` 不能作为通过依据，因为 citation 只证明错误 claim 所在源文件可被引用，没有支撑用户问题所需目标字段事实。当前阻塞已从“fact card 被 early return 屏蔽”下沉到 `buildExactPathConclusionLines` exact path 结论候选选择/排序误选 sibling 字段，Q6 不能标记完成。详见 `docs/test/knowledge-base-e2e/q6_fallback_structured_evidence_verification_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_second_root_cause_analysis_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_path_shape_gate_fix_result_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_path_shape_gate_verification_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_runtime_trace_analysis_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_complementary_evidence_gate_fix_result_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_complementary_evidence_gate_verification_report.md`。
+- 知识库验收 Q6 结构化 fact card 路径修复：fact card 生成层已通过，已保留 YAML/JSON/缩进式结构化字段路径，兼容旧 `key/value/raw`，新增 `keyPath/parentPath/pathSegments/contextPath/displayText` 并增强结构化证据文本。fallback structured evidence、path shape gate、complementary selector、exact path terminal field alias 已全部收口。2026-05-27 agentD 端到端验证通过，Q6 query/fallback 修复已闭环：redline `BLOCKER=0`、全量 `mvn test=915/0/0`、Query Java 主链未见中文字段语义硬编码 / Q6 特判 / 端口值特判 / Kubernetes 特判；真实 API 返回 `fieldPath: spec.containers[0].readinessProbe.tcpSocket.port = 8080`，citation 能支撑该事实，`periodSeconds=10` sibling 未被抢占；endpoint / URL / image / version / ordinary numeric 字段保护场景均通过。Q1-Q12 为 `12/12 PASS`，S1-S4 为 `3/4 PASS`，其中 S2 `下一步计划` 仍 FAIL。最终口径只能写成 `Q6 query/fallback 修复已闭环，整体最小验收仍因 S2 标题/anchor 搜索失败未完全通过`。下一步只应进入 Q6 terminal field alias scoped commit，然后把 S2 作为独立标题/anchor 搜索问题分析，禁止继续在 Q6/fallback 主链叠加规则。详见 `docs/test/knowledge-base-e2e/q6_fallback_structured_evidence_verification_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_second_root_cause_analysis_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_path_shape_gate_fix_result_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_path_shape_gate_verification_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_runtime_trace_analysis_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_complementary_evidence_gate_fix_result_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_complementary_evidence_gate_verification_report.md`、`docs/test/knowledge-base-e2e/q6_exact_path_terminal_field_fix_result_report.md`。
 
 ## 当前 Gate
 
 | 项 | 当前状态 | 说明 |
 |---|---|---|
-| redline | `BLOCKER=0` | Q6 complementary evidence gate 修复后：`bash scripts/scan-redline.sh special_cases_report.md` 通过，`BLOCKER=0 / REVIEW=2006 / ALLOWLIST=259`。 |
-| mvn test | `已恢复` | 2026-05-27 Q6 complementary evidence gate 修复后，全量 `mvn test=909/0/0` 通过。 |
+| redline | `BLOCKER=0` | Q6 terminal field alias 配置化修复后：`bash scripts/scan-redline.sh special_cases_report.md` 通过，汇总为 `BLOCKER=0`、`REVIEW=2028`、`ALLOWLIST=259`。 |
+| mvn test | `已恢复` | 2026-05-27 Q6 terminal field alias 配置化修复后，全量 `mvn test=915/0/0` 通过。 |
 | main baseline | 阶段 gate 已通过 | `final_query_baseline_gate_report.md` 为 `9/10` 且 gate 通过；`phase12_final_clean_rebuild_gate_report.md` 为 `8/10` 且 6 项 gate 通过。 |
 | SWIP strict eval | 稳定区间 `15-17/23` | focus snippet patch 副作用复核三轮：16/23、17/23、15/23；BANK-SETTLEMENT-001 三轮稳定 PASS；保护 case 三轮稳定 PASS。详见 `swip_focus_snippet_patch_side_effect_review_report.md`。 |
 | 当前数据库状态 | Q6 验收 clean 库 | agentD 已重建 `ai-rag-knowledge.lattice` 并导入完整知识库验收资料；用户要求确认的 2 条 `needs_human_review` 已 approve 发布。当前计数：`source_files=6`、`articles=6`、`article_chunks=13`、`fact_cards=11`、`article_vector_index=6`、`article_chunk_vector_index=13`。该库用于 Q6 复验，不代表 SWIP clean 库或主 baseline 库。 |
@@ -41,16 +41,16 @@
 | compile review 默认 LLM 模式 | 代码实现 + runtime 验证通过 | agentA 实现：新 job 默认 reviewMode=`LLM`，显式 `RULE_BASED` 仍可用。agentD runtime 验证通过：默认不传 reviewMode 走 LLM reviewer（route=anthropic），LLM non-pass 不入库，显式 RULE_BASED 仍走 rule-based 且可入库，未被测试 approved reviewer 掩盖，未触碰主库。agentB 入口闭环审计通过：用户 compile 入口全部收敛到 StateGraph。redline BLOCKER=0，mvn test=825/0/0。详见 `compile_review_default_llm_mode_fix_result_report.md`、`compile_review_default_llm_mode_runtime_verification_report.md`、`compile_review_entrypoint_loop_coverage_analysis_report.md`。 |
 | compile review prompt externalization | 代码实现 + runtime gate + pre-commit 复核通过 | agentA 实现：6 个 prompt 文件 + `CompilerPromptProvider` + DI 接入。agentD 两轮 runtime 验证（发现并修复 DI 注入失败 + shared rules 占位符未生效），最终 runtime gate 通过。agentD pre-commit 复核通过：redline BLOCKER=0，mvn test=824/0/0，无业务硬编码/case 特判/eval 污染。详见 `compile_review_prompt_externalization_pre_commit_quality_report.md`、`compile_review_prompt_externalization_final_runtime_gate_report.md`。 |
 | compile review 人工确认后入库 | 代码实现 + runtime 验证 + pre-commit 复核通过 + 已提交 | agentA 实现：后端 publish flow + 后台 list/detail/approve/reject API + 前端入口。agentD runtime 验证通过：后端全链路、approve 向量刷新、前端主流程。agentD pre-commit 复核通过：redline BLOCKER=0，mvn test=844/0/0，无主链误改。已提交（`8fe7001` + `b453627`）。详见 `compile_human_review_queue_pre_commit_quality_report.md`。 |
-| 知识库验收 Q6 fact card 路径 | selector gate 已验证生效；端到端仍 FAIL；阻塞于 exact path sibling 字段误选 | redline `BLOCKER=0`，`AnswerFallbackEvidenceSelectorTests + FactCardGenerationServiceTests=27/0/0`，全量 `mvn test=909/0/0`。agentD 复验确认 `FACT_CARD` 已进入最终 fallback 证据上下文，原机器标识符误答消失；真实答案仍错误，`buildExactPathConclusionLines` 误选同一 fact card 内 sibling 字段。Q6 未完成。 |
+| 知识库验收 Q6 fact card 路径 | Q6 query/fallback 修复已闭环；整体最小验收仍因 S2 标题/anchor 搜索失败未完全通过 | redline `BLOCKER=0`，`AnswerGenerationServiceTests=77/0/0`，`AnswerFallbackEvidenceSelectorTests + FactCardGenerationServiceTests=27/0/0`，全量 `mvn test=915/0/0`。agentD 已完成真实 API 验证：`spec.containers[0].readinessProbe.tcpSocket.port = 8080`，`periodSeconds=10` 未被抢占，endpoint / URL / image / version / ordinary numeric 字段保护场景均通过。 |
 
 ## 多 Agent 当前职责
 
 | Agent | 职责 | 当前状态 | 是否允许改代码 |
 |---|---|---|---|
-| agentA | 单一代码修复执行者 | Q6 complementary selector 修复已完成且运行态生效；下一轮如继续修代码，目标不再是 selector，而是 `buildExactPathConclusionLines` exact path structured value 候选选择/排序 | 是，但同一轮只能有一个 agentA 改主链 |
-| agentB | 治理/链路分析 | 可作为下一轮只读分析 Agent，先细化 `buildExactPathConclusionLines` 的通用修复边界，避免文件名、题面、端口值或业务字段硬编码 | 否 |
+| agentA | 单一代码修复执行者 | Q6 terminal field alias 配置化修复已完成端到端验证，后续只保留 scoped commit 收口，不再扩大 Q6/fallback 主链 | 是，但同一轮只能有一个 agentA 改主链 |
+| agentB | 治理/链路分析 | 可在 agentD 回归后继续只读分析新增失败，不得与 agentA 并行改主链 | 否 |
 | agentC | 项目进度台账与文档治理 | 已完成人工确认队列提交后台账更新与报告清理 | 否，除文档/报告 |
-| agentD | 验证/测试 | 已完成 Q6 complementary gate 端到端复验，结论 FAIL；后续负责下一轮修复后的真实 API 复验。 | 否，除验证报告 |
+| agentD | 验证/测试 | 已完成 Q6 端到端验证；后续若继续推进，只能独立分析 S2 标题/anchor 搜索，不得再在 Q6/fallback 主链叠加规则。 | 否，除验证报告 |
 
 ## 已验证结论
 
@@ -87,10 +87,9 @@
 - pre-commit 质量复核通过：redline BLOCKER=0，mvn test=824/0/0，未发现业务硬编码/case 特判/eval 污染，建议提交。
 - compile review 人工确认后入库链路已完成并提交：`needs_human_review` 编译草稿持久化到 `compile_article_review_queue`，后台 API list/detail/approve/reject 完整，approve 以 `review_status=passed` + `lifecycle=ACTIVE` 写入正式表并重建 chunk/vector，reject 不入库。前端"待人工确认"入口已联通。pre-commit 复核通过：redline BLOCKER=0，mvn test=844/0/0。
 - 已知非阻断遗留问题：（1）状态摘要未接 `compile_article_review_queue`，人工确认队列计数暂不反映在 Dashboard 摘要；（2）草稿正文 frontmatter 在队列详情中可见，后续可考虑隐藏；（3）`reviewRoute`/`reviewerModel` 展示可能不准确（取第一条 job step 路由而非 review step）；（4）审查/修复轮次展示仍待做。
-- Q6 complementary evidence gate 修复有效：正确 path-aware fact card 已进入最终 fallback evidence，`selectComplementaryEvidenceByQuestionTokens` early return 丢卡已不是当前故障点。
-- Q6 仍 FAIL：`generationMode=FALLBACK`、`answerOutcome=SUCCESS`，但 Answer Accuracy 失败；当前不是检索召回、fact card 生成、complementary selector 或 citation binding 的首要问题。
-- Q6 当前首要问题是 `buildExactPathConclusionLines` exact path conclusion 在同父级结构化字段中选错 sibling 字段；需要通用绑定问题字段语义与结构化路径终端字段，并对不回答目标字段的 sibling 字段降权。
-- `citation_coverage=1.0` 不能替代 Citation Accuracy；它只能说明错误 claim 所在源文件可被引用，不能证明 citation 支撑用户问题所需的目标字段事实。
+- Q6 terminal field alias 配置化修复已由 agentD 端到端验证闭环：redline `BLOCKER=0`、全量 `mvn test=915/0/0`，Query Java 主链未见中文字段语义硬编码 / Q6 特判 / 端口值特判 / Kubernetes 特判；真实 API 返回 `spec.containers[0].readinessProbe.tcpSocket.port = 8080`，citation 能支撑该目标字段事实，`periodSeconds=10` sibling 未被抢占，endpoint / URL / image / version / ordinary numeric 字段保护场景均通过。
+- Q6 query/fallback 修复已闭环；整体最小验收仍因 S2 标题/anchor 搜索失败未完全通过，Q1-Q12 为 `12/12 PASS`，S1-S4 为 `3/4 PASS`。S2 `下一步计划` 失败属于独立标题/anchor 搜索链路问题，不能归因到 Q6 terminal field alias。
+- `citation_coverage=1.0` 仍不能单独替代 Citation Accuracy；Q6 这次之所以成立，是因为 answer claim、source 文件和人工核验三者一致。
 
 ## 踩坑记录
 
@@ -121,7 +120,8 @@
 | prompt 外置后 shared rules 占位符未生效 | 初始外置时 4 个 role prompt 文件（writer/reviewer 各 text+image）直接内联了 shared grounding rules 全文，未使用 `{{shared-grounding-rules}}` 占位符 | shared-grounding-rules.md 成为死配置；内联重复导致 prompt 维护分散 | shared rules 修复：4 个文件内联替换为 `{{shared-grounding-rules}}`，测试补强断言占位符已解析且无未解析 `{{`。后续外置任何含共享片段的 prompt，必须验证占位符替换机制已生效。 |
 | Spring 多构造器无 `@Autowired` 导致 BeanCreationException | `SchemaAwarePrompts` 新增双参数构造器后，两个构造器均无 `@Autowired`，Spring 无法确定 DI 使用哪个构造器 | 多构造器 Bean 必须显式标注 DI 入口 | 新增构造器时，若类已有其他构造器，必须加 `@Autowired` 标注 DI 目标构造器。 |
 | 人工确认 approve 后向量索引未刷新 | approve 后 article 写入 articles 表但 `article_chunks` 未重建、向量索引未刷新，导致 query 无法召回 | 人工 approve 路径与 StateGraph persist 路径在 chunk/vector 重建逻辑上不共享代码路径，approve 侧缺失全量 chunk+vector 刷新 | approve 路径已补全 chunk 重建 + `SearchEngineMaintainer.refreshVectorIndex`。后续任何新增"绕开 StateGraph 写入 articles"的路径，必须同步验证 chunk/vector 重建。 |
-| Q6 fact card 已进入 `fallbackHits` 但 exact path conclusion 仍选错 sibling 字段 | 原机器标识符误答消失，`FACT_CARD` 已进入最终 fallback evidence；最终 claim 变成同一 fact card 内 sibling 字段：`fieldPath: spec.containers[0].readinessProbe.periodSeconds = 10`，不是目标端口字段。`citation_coverage=1.0` 但 citation 只证明错误 claim 所在源文件可引用，不支撑目标字段事实。 | selector early return 已不是当前故障点；当前故障层是 `buildExactPathConclusionLines` 结构化路径取值候选排序。需要通用地绑定问题字段语义与结构化路径终端字段，不能为 Q6 文件名、题面、字段名、端口值、Kubernetes 概念写特判。 | 下一轮不准继续盲改 selector；如果修代码，只允许处理 exact path structured value 候选选择/排序一个变量。修复前必须说明通用修复点、硬编码边界、影响测试和验证方式。禁止为 Q6 文件名、题面、端口值、Kubernetes / readiness / liveness / tcpSocket 等具体业务字段写生产逻辑特判；只能做通用结构化路径字段语义绑定、终端字段匹配和 sibling 字段降权策略。 |
+| Q6 exact path sibling 字段误选问题已闭环 | 真实 API 现在返回 `spec.containers[0].readinessProbe.tcpSocket.port = 8080`，`periodSeconds=10` sibling 未再抢占；endpoint / URL / image / version / ordinary numeric 保护场景通过 | 这说明 exact path terminal field alias 与通用 leaf key 绑定已经生效，Q6 主链不应再继续叠加规则 | 后续只保留 scoped commit 收口，S2 作为独立标题/anchor 搜索问题分析。 |
+| 中文 terminal field alias 必须保持配置化 | 上一轮曾在 Java 中把中文字段语义直接归一到 leaf key，现已迁移到配置 | 中文字段语义必须放在短小、通用、可审计的配置中；Java 主链只允许读取规则和处理英文通用 token | 后续新增中文字段 alias 必须走配置审计，不能在 Java if/else、业务词表、资料词表或题集词表中实现。 |
 | `compile_article_review_queue` 不区分 compile job | 多次 compile 产生的 `needs_human_review` 草稿混在同一队列，无 jobId 过滤 | 当前接受这种简化——人工确认场景本身就是低频率、逐条处理的 | 后续若需要按 job 维度管理人工确认，需给 `compile_article_review_queue` 增加 `job_id` 字段并支持筛选。 |
 | 前端编译进度卡片语义与轮次展示仍有缺口 | 前端进度卡片展示的步骤数、审查轮次、fix 轮次仍不完全反映 StateGraph 实际执行轮数 | 后端步骤和轮次信息已写入 job steps，前端尚未完全接入 | 不阻断当前提交。后续状态摘要和轮次展示迭代时统一接入。 |
 
@@ -140,7 +140,8 @@
 - 不准为 SWIP / IP / 151 / 银行结算写特判。
 - 不准为 Q6 文件名、题面、端口值写特判。
 - 不准为 Kubernetes / readiness / liveness / tcpSocket 等具体业务字段写生产逻辑特判。
-- Q6 下一轮只能做通用结构化路径字段语义绑定、终端字段匹配和 sibling 字段降权策略。
+- 不准在 Java 主链硬编码中文字段语义；中文 terminal field alias 必须配置化、短小、可审计。
+- Q6 下一轮必须由 agentD 做真实 API 与全面回归，不得只回归 Q6。
 
 ## 下一步计划
 
@@ -172,13 +173,14 @@
 26. （已完成）Q6 fallback runtime trace 只读归因：agentD 确认最终 `fallbackHits` 为 `SOURCE + ARTICLE`，fact card 9 未进入最终 fallback markdown；唯一 runtime gate 为 `selectComplementaryEvidenceByQuestionTokens` early return。详见 `docs/test/knowledge-base-e2e/q6_fallback_runtime_trace_analysis_report.md`。
 27. （已完成）Q6 complementary evidence gate 修复：只处理 `AnswerFallbackEvidenceSelector.selectComplementaryEvidenceByQuestionTokens` 一个最小变量，让高分 question-focused structured fact / path-aware fact card 不被 `SOURCE + ARTICLE` early return 屏蔽；redline、定向测试、全量 `mvn test` 通过。详见 `docs/test/knowledge-base-e2e/q6_fallback_complementary_evidence_gate_fix_result_report.md`。
 28. （已完成，FAIL）Q6 complementary evidence gate agentD 端到端复验：真实链路已改变，fact card 已进入最终 fallback evidence，原机器标识符误答消失；但最终答案误选同一 fact card 内 sibling 字段，Answer Accuracy 仍 FAIL。详见 `docs/test/knowledge-base-e2e/q6_fallback_complementary_evidence_gate_verification_report.md`。
-29. （下一步）Q6 exact path sibling 字段误选处理：优先交给 agentB 只读分析 `buildExactPathConclusionLines` 通用修复边界，或交给 agentA 做单变量最小修复 exact path structured value 候选选择/排序；不得改 selector，不得写 Q6 文件名、题面、端口值或 Kubernetes 业务字段特判。
-30. （后续）Q6 agentD 真实 API 端到端复验：下一轮修复后复用当前 Q6 clean 库和模型配置，确认答案 claim 与 citation 是否真实支撑目标字段事实。
-31. （后续）状态摘要接入人工确认队列：Dashboard 摘要展示 `compile_article_review_queue` 待处理计数。
-32. （后续）SWIP 两文档重建验收：验证 clean rebuild 全链路在人工确认队列就位后的正确性。
-33. （后续）审查/修复轮次展示：前端进度卡片接入 StateGraph 实际执行轮数。
-34. （后续）LLM approved 正向 canary 观察。
-35. （后续）Fixer→Re-reviewer loop runtime 验证。
+29. （已完成）Q6 exact path sibling 字段误选处理及 terminal field alias 配置化红线修正：agentD 已完成端到端验证，Q6 query/fallback 修复闭环；redline `BLOCKER=0`，全量 `mvn test=915/0/0`，真实 API 返回 `spec.containers[0].readinessProbe.tcpSocket.port = 8080`，`periodSeconds=10` 未被抢占。详见 `docs/test/knowledge-base-e2e/q6_exact_path_terminal_field_fix_result_report.md`。
+30. （下一步）Q6 terminal field alias scoped commit：仅收口最小提交，不继续扩大 Q6/fallback 主链。
+31. （后续）S2 标题/anchor 搜索问题独立分析：单独排查 `下一步计划` 的标题/anchor 命中链路，不归因到 Q6 terminal field alias。
+32. （后续）状态摘要接入人工确认队列：Dashboard 摘要展示 `compile_article_review_queue` 待处理计数。
+33. （后续）SWIP 两文档重建验收：验证 clean rebuild 全链路在人工确认队列就位后的正确性。
+34. （后续）审查/修复轮次展示：前端进度卡片接入 StateGraph 实际执行轮数。
+35. （后续）LLM approved 正向 canary 观察。
+36. （后续）Fixer→Re-reviewer loop runtime 验证。
 
 ## 更新规则
 

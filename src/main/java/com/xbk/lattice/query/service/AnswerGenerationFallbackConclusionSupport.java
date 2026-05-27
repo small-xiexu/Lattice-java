@@ -68,7 +68,87 @@ String buildEvidenceMarkdown(String question, List<QueryArticleHit> queryArticle
             List<QueryArticleHit> fallbackHits,
             List<String> queryTokens
     ) {
+        List<String> terminalFieldExactPathLines =
+                buildTerminalFieldExactPathConclusionLines(question, fallbackHits, queryTokens);
+        if (!terminalFieldExactPathLines.isEmpty()) {
+            return terminalFieldExactPathLines;
+        }
         return answerFallbackConclusionBuilder.buildEvidenceConclusionLines(question, fallbackHits, queryTokens);
+    }
+
+    /**
+     * 为末级字段明确的结构化路径查值题构建 exact path 结论。
+     *
+     * @param question 用户问题
+     * @param fallbackHits fallback 命中列表
+     * @param queryTokens 查询 token
+     * @return 结论行
+     */
+    private List<String> buildTerminalFieldExactPathConclusionLines(
+            String question,
+            List<QueryArticleHit> fallbackHits,
+            List<String> queryTokens
+    ) {
+        if (fallbackHits == null
+                || fallbackHits.isEmpty()
+                || !hasSingleTerminalFieldIntent(question, queryTokens)) {
+            return List.of();
+        }
+        QueryArticleHit bestHit = null;
+        String bestLine = "";
+        int bestScore = Integer.MIN_VALUE;
+        for (QueryArticleHit fallbackHit : fallbackHits) {
+            for (String rawLine : selectFallbackContentLines(fallbackHit.getContent())) {
+                String normalizedLine = answerEvidenceNormalizer.normalizeFallbackLineCandidate(rawLine);
+                if (!looksLikeStructuredPathValueCandidate(normalizedLine)) {
+                    continue;
+                }
+                int terminalScore = scoreStructuredPathTerminalFieldMatch(question, normalizedLine, queryTokens);
+                if (terminalScore <= 0) {
+                    continue;
+                }
+                int lineScore = scoreQuestionFocusedFallbackLine(question, rawLine, normalizedLine, queryTokens);
+                if (lineScore > bestScore) {
+                    bestScore = lineScore;
+                    bestHit = fallbackHit;
+                    bestLine = normalizedLine;
+                }
+            }
+        }
+        if (bestHit == null || bestLine.isBlank()) {
+            return List.of();
+        }
+        List<String> conclusionLines = new ArrayList<String>();
+        Set<String> selectedSemanticKeys = new LinkedHashSet<String>();
+        appendAggregatedConclusionLine(
+                question,
+                new EvidenceLineMatch(bestHit, bestLine, bestScore),
+                conclusionLines,
+                selectedSemanticKeys
+        );
+        return conclusionLines;
+    }
+
+    /**
+     * 判断问题是否只询问一个通用末级字段意图。
+     *
+     * @param question 用户问题
+     * @param queryTokens 查询 token
+     * @return 单一末级字段意图返回 true
+     */
+    private boolean hasSingleTerminalFieldIntent(String question, List<String> queryTokens) {
+        List<String> terminalFieldTokens = extractQuestionTerminalFieldTokens(question, queryTokens);
+        if (terminalFieldTokens.isEmpty()) {
+            return false;
+        }
+        Set<String> canonicalTokens = new LinkedHashSet<String>();
+        for (String terminalFieldToken : terminalFieldTokens) {
+            String canonicalToken = canonicalTerminalFieldToken(terminalFieldToken);
+            if (!canonicalToken.isBlank()) {
+                canonicalTokens.add(canonicalToken);
+            }
+        }
+        return canonicalTokens.size() == 1;
     }
 
     /**

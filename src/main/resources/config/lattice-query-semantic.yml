@@ -74,6 +74,11 @@ lattice:
       # 文档附录/结构标记信号：通用文档结构标识，用于非事实行识别
       boilerplate-section-signals:
         - "附录"
+      # 末级字段别名：通用字段语义到结构化 leaf key 的可审计映射，禁止放入业务域/资料/题集词表
+      terminal-field-aliases:
+        - canonical: "port"
+          aliases:
+            - "端口"
       # 答案形态-顺序信号：表达流程/步骤/阶段/顺序类语义
       sequence-signals:
         - "步骤"

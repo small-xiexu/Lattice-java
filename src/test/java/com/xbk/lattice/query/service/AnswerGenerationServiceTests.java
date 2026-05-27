@@ -1875,6 +1875,163 @@ class AnswerGenerationServiceTests {
     }
 
     /**
+     * 验证同父级结构化路径下，末级字段贴合问题语义的数值候选优先于 sibling 数值字段。
+     */
+    @Test
+    void shouldPreferTerminalFieldMatchingQuestionOverSiblingNumericField() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+        answerGenerationService.replaceTerminalFieldAliasRulesForTesting(
+                TerminalFieldAliasRules.fromCanonicalAliases(Map.of("port", List.of("端口")))
+        );
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "service-config.yaml 里的 listener 使用哪个端口？",
+                List.of(new QueryArticleHit(
+                        QueryEvidenceType.FACT_CARD,
+                        "fact-card:service-config:listener",
+                        "Service Config Listener",
+                        """
+                                fieldPath: service.listener.refreshSeconds = 10
+                                fieldPath: service.listener.port = 9091
+                                fieldPath: service.worker.port = 1001
+                                """,
+                        "{\"cardType\":\"FACT_ENUM\",\"answerShape\":\"ENUM\",\"sourceChunkIds\":[42]}",
+                        List.of("service-config.yaml"),
+                        2.0D
+                )),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("service.listener.port = 9091");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("service.listener.refreshSeconds = 10");
+    }
+
+    /**
+     * 验证末级字段中文 alias 来自语义配置文件，而不是 Java 主链词表。
+     */
+    @Test
+    void shouldLoadTerminalFieldAliasFromSemanticConfiguration() {
+        TerminalFieldAliasRules aliasRules = TerminalFieldAliasRules.loadDefault();
+
+        assertThat(aliasRules.canonicalForAlias("端口")).isEqualTo("port");
+    }
+
+    /**
+     * 验证空 alias 配置不会识别中文字段词，但英文末级字段 token 行为仍可用。
+     */
+    @Test
+    void shouldKeepEnglishTerminalFieldWhenAliasRulesAreEmpty() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+        answerGenerationService.replaceTerminalFieldAliasRulesForTesting(TerminalFieldAliasRules.empty());
+
+        assertThat(answerGenerationService.normalizeQuestionTerminalFieldToken("端口")).isBlank();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "service-config.yaml listener port?",
+                List.of(new QueryArticleHit(
+                        QueryEvidenceType.FACT_CARD,
+                        "fact-card:service-config:listener-english",
+                        "Service Config Listener",
+                        """
+                                fieldPath: service.listener.refreshSeconds = 10
+                                fieldPath: service.listener.port = 9091
+                                """,
+                        "{\"cardType\":\"FACT_ENUM\",\"answerShape\":\"ENUM\",\"sourceChunkIds\":[42]}",
+                        List.of("service-config.yaml"),
+                        2.0D
+                )),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("service.listener.port = 9091");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("service.listener.refreshSeconds = 10");
+    }
+
+    /**
+     * 验证 URL / endpoint 类问题仍会保留末级 url 字段，不被同父级其他结构化字段抢占。
+     */
+    @Test
+    void shouldKeepStructuredEndpointUrlWhenTerminalFieldMatchesEndpointIntent() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "service endpoint URL 是什么？",
+                List.of(new QueryArticleHit(
+                        QueryEvidenceType.FACT_CARD,
+                        "fact-card:service-endpoint:url",
+                        "Service Endpoint",
+                        """
+                                fieldPath: service.endpoint.timeoutSeconds = 5
+                                fieldPath: service.endpoint.url = https://example.test/api
+                                """,
+                        "{\"cardType\":\"FACT_ENUM\",\"answerShape\":\"ENUM\"}",
+                        List.of("service-config.yaml"),
+                        2.0D
+                )),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("service.endpoint.url = https://example.test/api");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("service.endpoint.timeoutSeconds = 5");
+    }
+
+    /**
+     * 验证 image 问题仍会选择末级 image 字段，不被 version sibling 字段抢占。
+     */
+    @Test
+    void shouldKeepStructuredImageWhenTerminalFieldMatchesImageIntent() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "runtime image 是什么？",
+                List.of(new QueryArticleHit(
+                        QueryEvidenceType.FACT_CARD,
+                        "fact-card:runtime:image",
+                        "Runtime Image",
+                        """
+                                fieldPath: runtime.version = 1.2.3
+                                fieldPath: runtime.image = registry.example/app:1.2.3
+                                """,
+                        "{\"cardType\":\"FACT_ENUM\",\"answerShape\":\"ENUM\"}",
+                        List.of("runtime-config.yaml"),
+                        2.0D
+                )),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("runtime.image = registry.example/app:1.2.3");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("runtime.version = 1.2.3");
+    }
+
+    /**
+     * 验证 version 问题仍会选择末级 version 字段，不被 image sibling 字段抢占。
+     */
+    @Test
+    void shouldKeepStructuredVersionWhenTerminalFieldMatchesVersionIntent() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "runtime version 是什么？",
+                List.of(new QueryArticleHit(
+                        QueryEvidenceType.FACT_CARD,
+                        "fact-card:runtime:version",
+                        "Runtime Version",
+                        """
+                                fieldPath: runtime.image = registry.example/app:1.2.3
+                                fieldPath: runtime.version = 1.2.3
+                                """,
+                        "{\"cardType\":\"FACT_ENUM\",\"answerShape\":\"ENUM\"}",
+                        List.of("runtime-config.yaml"),
+                        2.0D
+                )),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("runtime.version = 1.2.3");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("runtime.image = registry.example/app:1.2.3");
+    }
+
+    /**
      * 验证用户明确询问 URL / endpoint 时，真实 URL 不会被无关 dotted field path 抢占。
      */
     @Test
