@@ -51,6 +51,7 @@ public class DocumentParseApplicationService {
             return null;
         }
         String resolvedContent = parseOutput.resolveContent();
+        String normalizedMetadataJson = documentParseResultNormalizer.normalizeMetadata(parseOutput);
         return new DocumentParseResult(
                 parseOutput.getSourceId(),
                 parseOutput.getRelativePath(),
@@ -59,7 +60,7 @@ public class DocumentParseApplicationService {
                 parseOutput.getFileSize(),
                 parseOutput.getParseMode(),
                 parseOutput.getParseProvider(),
-                parseOutput.getMetadataJson(),
+                normalizedMetadataJson,
                 parseOutput.isVerbatim(),
                 parseOutput.getRawPath()
         );

@@ -6,7 +6,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xbk.lattice.compiler.domain.RawSource;
+import com.xbk.lattice.documentparse.domain.DocumentParseMode;
 import com.xbk.lattice.documentparse.domain.model.ParseOutput;
+import com.xbk.lattice.shared.text.DocumentTitleSupport;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -29,7 +31,7 @@ public class DocumentParseResultNormalizer {
      * @return RawSource
      */
     public RawSource normalize(ParseOutput parseOutput) {
-        String metadataJson = mergeMetadata(parseOutput);
+        String metadataJson = normalizeMetadata(parseOutput);
         return RawSource.parsed(
                 parseOutput.getSourceId(),
                 parseOutput.getRelativePath(),
@@ -45,22 +47,46 @@ public class DocumentParseResultNormalizer {
     }
 
     /**
-     * 合并统一元数据。
+     * 归一文档解析 metadata。
      *
      * @param parseOutput 文档解析输出
      * @return 合并后的元数据 JSON
      */
-    private String mergeMetadata(ParseOutput parseOutput) {
+    public String normalizeMetadata(ParseOutput parseOutput) {
         ObjectNode rootNode = parseMetadataObject(parseOutput.getMetadataJson());
+        String documentTitle = resolveDocumentTitle(parseOutput);
         rootNode.put("relativePath", parseOutput.getRelativePath());
         rootNode.put("parseMode", parseOutput.getParseMode().getCode());
         rootNode.put("parseProvider", parseOutput.getParseProvider());
         rootNode.put("ocrApplied", parseOutput.getParseMode().getCode().startsWith("ocr_"));
         rootNode.put("contentFormat", parseOutput.resolveContentFormat());
+        if (StringUtils.hasText(documentTitle)) {
+            rootNode.put("documentTitle", documentTitle);
+        }
         if (StringUtils.hasText(parseOutput.getStructuredContentJson())) {
             rootNode.put("structuredContentJson", parseOutput.getStructuredContentJson());
         }
         return rootNode.toString();
+    }
+
+    /**
+     * 解析单文件级 documentTitle。
+     *
+     * @param parseOutput 文档解析输出
+     * @return documentTitle
+     */
+    private String resolveDocumentTitle(ParseOutput parseOutput) {
+        if (parseOutput.getParseMode() == DocumentParseMode.TEXT_READ) {
+            return DocumentTitleSupport.resolveTextDocumentTitle(
+                    parseOutput.getRelativePath(),
+                    parseOutput.resolveContent(),
+                    parseOutput.getMetadataJson()
+            );
+        }
+        return DocumentTitleSupport.resolveDocumentTitle(
+                parseOutput.getRelativePath(),
+                parseOutput.getMetadataJson()
+        );
     }
 
     /**

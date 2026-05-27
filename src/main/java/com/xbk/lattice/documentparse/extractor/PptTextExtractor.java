@@ -128,6 +128,9 @@ public class PptTextExtractor {
      * @return 规范化文本
      */
     private String normalizeText(String value) {
+        if (value == null) {
+            return "";
+        }
         return String.valueOf(value)
                 .replace('\r', '\n')
                 .replaceAll("\\n{3,}", "\n\n")

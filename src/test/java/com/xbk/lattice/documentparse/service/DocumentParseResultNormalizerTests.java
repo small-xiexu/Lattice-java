@@ -49,5 +49,58 @@ class DocumentParseResultNormalizerTests {
         assertThat(rawSource.getMetadataJson()).contains("\"ocrApplied\":true");
         assertThat(rawSource.getMetadataJson()).contains("\"relativePath\":\"docs/scan.png\"");
         assertThat(rawSource.getMetadataJson()).contains("\"contentFormat\":\"plain_text\"");
+        assertThat(rawSource.getMetadataJson()).contains("\"documentTitle\":\"scan\"");
+    }
+
+    /**
+     * 验证文本解析结果会优先从正文 H1 提取 documentTitle。
+     */
+    @Test
+    void shouldResolveTextDocumentTitleFromHeading() {
+        DocumentParseResultNormalizer normalizer = new DocumentParseResultNormalizer();
+        ParseOutput parseOutput = new ParseOutput(
+                Long.valueOf(13L),
+                "docs/heading.md",
+                "# Delivery Plan\n\nbody",
+                "",
+                "",
+                "md",
+                128L,
+                DocumentParseMode.TEXT_READ,
+                "filesystem",
+                "{}",
+                false,
+                "docs/heading.md"
+        );
+
+        String metadataJson = normalizer.normalizeMetadata(parseOutput);
+
+        assertThat(metadataJson).contains("\"documentTitle\":\"Delivery Plan\"");
+    }
+
+    /**
+     * 验证解析 metadata 中已有标题时会优先复用该标题。
+     */
+    @Test
+    void shouldReuseDocumentTitleFromMetadataCandidates() {
+        DocumentParseResultNormalizer normalizer = new DocumentParseResultNormalizer();
+        ParseOutput parseOutput = new ParseOutput(
+                Long.valueOf(14L),
+                "docs/review.pptx",
+                "slide body",
+                "",
+                "",
+                "pptx",
+                512L,
+                DocumentParseMode.OFFICE_EXTRACT,
+                "poi_ppt",
+                "{\"slideTitles\":[\"Weekly Review\",\"Appendix\"]}",
+                true,
+                "docs/review.pptx"
+        );
+
+        String metadataJson = normalizer.normalizeMetadata(parseOutput);
+
+        assertThat(metadataJson).contains("\"documentTitle\":\"Weekly Review\"");
     }
 }

@@ -159,6 +159,20 @@ class DocumentParseRouterIntegrationTests {
         }
         Path csvPath = docsDir.resolve("rules.csv");
         Files.writeString(csvPath, "businessSubTypeCode,meaning\n1210,refund", StandardCharsets.UTF_8);
+        Path markdownPath = docsDir.resolve("playbook.md");
+        Files.writeString(
+                markdownPath,
+                """
+                        ---
+                        title: Delivery Playbook
+                        ---
+
+                        # Runtime Delivery
+
+                        Keep queue status aligned.
+                        """,
+                StandardCharsets.UTF_8
+        );
         Path wordPath = docsDir.resolve("brief.docx");
         writeSimpleWord(wordPath);
         Path excelPath = docsDir.resolve("codes.xlsx");
@@ -174,6 +188,7 @@ class DocumentParseRouterIntegrationTests {
 
         RawSource docSource = documentParseRouter.parseRawSource(tempDir, binaryDocPath);
         RawSource csvSource = documentParseRouter.parseRawSource(tempDir, csvPath);
+        RawSource markdownSource = documentParseRouter.parseRawSource(tempDir, markdownPath);
         RawSource wordSource = documentParseRouter.parseRawSource(tempDir, wordPath);
         RawSource excelSource = documentParseRouter.parseRawSource(tempDir, excelPath);
         RawSource pptSource = documentParseRouter.parseRawSource(tempDir, pptPath);
@@ -197,6 +212,12 @@ class DocumentParseRouterIntegrationTests {
         assertThat(csvSource.getContent()).contains("businessSubTypeCode,meaning");
         assertThat(csvSource.getContent()).contains("1210,refund");
         assertThat(csvSource.getMetadataJson()).contains("\"structuredContentJson\"");
+        assertThat(csvSource.getMetadataJson()).contains("\"documentTitle\":\"rules\"");
+
+        assertThat(markdownSource).isNotNull();
+        assertThat(markdownSource.getParseMode()).isEqualTo("text_read");
+        assertThat(markdownSource.getParseProvider()).isEqualTo("filesystem");
+        assertThat(markdownSource.getMetadataJson()).contains("\"documentTitle\":\"Delivery Playbook\"");
 
         assertThat(wordSource).isNotNull();
         assertThat(wordSource.getParseMode()).isEqualTo("office_extract");

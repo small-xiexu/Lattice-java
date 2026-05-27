@@ -6,6 +6,7 @@ import com.xbk.lattice.documentparse.domain.model.ParseRequest;
 import com.xbk.lattice.documentparse.extractor.CsvTextExtractor;
 import com.xbk.lattice.documentparse.extractor.SourceExtractionResult;
 import com.xbk.lattice.documentparse.port.NativeExtractor;
+import com.xbk.lattice.shared.text.DocumentTitleSupport;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -69,6 +70,12 @@ public class TextFileNativeExtractor implements NativeExtractor {
         if (normalizedContent.isEmpty()) {
             return null;
         }
+        String documentTitle = DocumentTitleSupport.resolveTextDocumentTitle(
+                parseRequest.getRelativePath(),
+                content,
+                "{}"
+        );
+        String metadataJson = DocumentTitleSupport.upsertDocumentTitle("{}", documentTitle);
         return new ParseOutput(
                 null,
                 parseRequest.getRelativePath(),
@@ -79,7 +86,7 @@ public class TextFileNativeExtractor implements NativeExtractor {
                 parseRequest.getFileSize(),
                 DocumentParseMode.TEXT_READ,
                 "filesystem",
-                "{}",
+                metadataJson,
                 false,
                 parseRequest.getRelativePath()
         );
@@ -94,6 +101,14 @@ public class TextFileNativeExtractor implements NativeExtractor {
         if (extractedContent == null || extractedContent.trim().isEmpty()) {
             return null;
         }
+        String documentTitle = DocumentTitleSupport.resolveDocumentTitle(
+                parseRequest.getRelativePath(),
+                extractionResult.getMetadataJson()
+        );
+        String metadataJson = DocumentTitleSupport.upsertDocumentTitle(
+                extractionResult.getMetadataJson(),
+                documentTitle
+        );
         return new ParseOutput(
                 null,
                 parseRequest.getRelativePath(),
@@ -104,7 +119,7 @@ public class TextFileNativeExtractor implements NativeExtractor {
                 parseRequest.getFileSize(),
                 DocumentParseMode.TEXT_READ,
                 "filesystem",
-                extractionResult.getMetadataJson(),
+                metadataJson,
                 extractionResult.isVerbatim(),
                 parseRequest.getRelativePath()
         );
