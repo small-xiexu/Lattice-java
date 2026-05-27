@@ -1,7 +1,7 @@
 {
   "suiteId": "e2e-clean-rebuild-query-regression",
   "version": "2026-05-23",
-  "description": "干净数据库全链路 E2E Query 验收套件。基于 full_rebuild_e2e_validation_asset_design_report.md 第 3 节设计的 12 个 case，覆盖 6 份知识源（D1-D6）的 ANSWER/ABSTAIN/结构化/多跳/拒答全部行为维度。供 scripts/run-query-regression.mjs 直接读取执行。",
+  "description": "干净数据库全链路 E2E Query 验收套件。基于 docs/reports/e2e/full_rebuild_e2e_validation_asset_design_report.md 第 3 节设计的 12 个 case，覆盖 6 份知识源（D1-D6）的 ANSWER/ABSTAIN/结构化/多跳/拒答全部行为维度。供 scripts/run-query-regression.mjs 直接读取执行。",
   "coverageDimensions": [
     "长文档事实提取",
     "架构边界与职责",
