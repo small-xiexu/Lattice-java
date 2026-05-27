@@ -1,0 +1,59 @@
+borrowing_system:
+  name: "校园实验室设备预约系统"
+  api_endpoint: "https://lab-equip.campus.edu/api/v2/borrow"
+  version: "v2.3.1"
+  max_concurrent_requests: 50
+  support_hours: "工作日 08:30-18:00"
+
+equipment_types:
+  - type: "常规设备"
+    category_id: "GEN"
+    max_borrow_days: 14
+    deposit_amount: 100
+    late_fee_per_day: 5
+    approval_required: "设备管理员"
+    return_check_required: true
+    examples:
+      - "离心机"
+      - "电子天平"
+
+  - type: "精密仪器"
+    category_id: "PREC"
+    max_borrow_days: 7
+    deposit_amount: 500
+    late_fee_per_day: 20
+    approval_required: "实验室主任"
+    return_check_required: true
+    examples:
+      - "气相色谱仪"
+      - "荧光分光光度计"
+
+  - type: "大型设备"
+    category_id: "LARGE"
+    max_borrow_days: 3
+    deposit_amount: 1000
+    late_fee_per_day: 50
+    approval_required: "院系分管领导"
+    return_check_required: true
+    examples:
+      - "大型环境模拟舱"
+      - "中试反应平台"
+
+approval_chain:
+  - stage: "指导教师审批"
+    sla_hours: 4
+    responsibility: "确认借用人与实验项目匹配，并核对安全培训状态"
+  - stage: "设备管理员审批"
+    sla_hours: 8
+    responsibility: "确认设备可用状态、预约冲突和归还检查要求"
+  - stage: "实验室主任审批"
+    sla_hours: 24
+    responsibility: "审批高价值或高风险设备的借用安排"
+
+return_policy:
+  same_day_return_cutoff: "17:30"
+  damage_report_required: true
+  overdue_notice_channels:
+    - "站内通知"
+    - "邮件"
+
