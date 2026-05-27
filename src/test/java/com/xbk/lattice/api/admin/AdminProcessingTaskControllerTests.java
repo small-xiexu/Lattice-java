@@ -253,6 +253,10 @@ class AdminProcessingTaskControllerTests {
         assertThat(sourceSyncTask.path("rejectedCount").asInt()).isZero();
         assertThat(sourceSyncTask.path("requiresManualAction").asBoolean()).isTrue();
         assertThat(rootNode.path("summary").path("waitingCount").asInt()).isEqualTo(1);
+        assertThat(rootNode.path("summary").path("cards").get(1).path("label").asText()).isEqualTo("待人工确认草稿");
+        assertThat(rootNode.path("summary").path("cards").get(1).path("value").asInt()).isEqualTo(1);
+        assertThat(rootNode.path("summary").path("cards").get(1).path("note").asText())
+                .isEqualTo("涉及 1 个处理任务，请打开下方任务继续人工确认");
         assertThat(rootNode.path("summary").path("succeededCount").asInt()).isZero();
     }
 

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>邪修智库｜工作台</title>
-    <link rel="stylesheet" href="/admin/admin.css?v=20260506-article-toolbar-wrap-1">
+    <link rel="stylesheet" href="/admin/admin.css?v=20260526-diagnostic-ui-align-1">
 </head>
 <body>
 <div class="app-shell">
@@ -320,23 +320,20 @@
                                 </span>
                             </summary>
                             <div class="workbench-disclosure-body">
-                                <div class="panel-title-row compact-title-row">
-                                    <div>
-                                        <h2>处理历史</h2>
-                                        <p>这里用于追溯过去发生过什么，适合复盘失败原因、确认某次导入是否已经结束。</p>
+                                <div class="history-toolbar">
+                                    <div class="history-filter-bar" role="tablist" aria-label="处理历史筛选">
+                                        <button data-history-filter="all" class="pill active" type="button">全部</button>
+                                        <button data-history-filter="succeeded" class="pill" type="button">已入库</button>
+                                        <button data-history-filter="failed" class="pill" type="button">失败</button>
+                                        <button data-history-filter="skipped" class="pill" type="button">已跳过</button>
                                     </div>
-                                    <button id="refresh-history" class="secondary-btn" type="button">刷新历史</button>
+                                    <div class="history-toolbar-actions">
+                                        <p id="history-status" class="history-status-pill" aria-live="polite"></p>
+                                        <button id="refresh-history" class="secondary-btn" type="button">刷新历史</button>
+                                    </div>
                                 </div>
 
-                                <div class="history-filter-bar top-gap">
-                                    <button data-history-filter="all" class="pill active" type="button">全部</button>
-                                    <button data-history-filter="succeeded" class="pill" type="button">已入库</button>
-                                    <button data-history-filter="failed" class="pill" type="button">失败</button>
-                                    <button data-history-filter="skipped" class="pill" type="button">已跳过</button>
-                                </div>
-
-                                <div id="history-list" class="top-gap"></div>
-                                <p id="history-status" class="inline-status"></p>
+                                <div id="history-list"></div>
                             </div>
                         </details>
 
@@ -349,24 +346,23 @@
                                 </span>
                             </summary>
                             <div class="workbench-disclosure-body">
-                                <div class="panel-title-row compact-title-row">
-                                    <div>
-                                        <h2>资料源诊断</h2>
-                                        <p>左侧是原始资料源，右侧是处理记录、文件解析方式和资料源配置。这里偏排障，不代表最终可问答内容。</p>
+                                <div class="diagnostic-toolbar">
+                                    <div class="diagnostic-toolbar-copy">
+                                        <p class="diagnostic-toolbar-note">这里偏排障，不代表最终可问答内容。先选资料源，再看处理记录、文件解析方式和配置。</p>
                                     </div>
-                                    <div class="button-row wrap">
+                                    <div class="diagnostic-toolbar-actions">
                                         <button id="refresh-sources" class="ghost-btn" type="button">刷新资料源</button>
                                         <button id="sync-selected-source" class="secondary-btn" type="button">同步当前资料源</button>
                                     </div>
                                 </div>
 
-                                <div class="two-column content-workspace top-gap">
+                                <div class="two-column content-workspace diagnostic-workspace">
                                 <div class="list-panel">
-                                    <div class="list-header">
+                                    <div class="list-header diagnostic-list-header">
                                         <h3>资料源列表</h3>
                                         <span id="source-count" class="pill">0</span>
                                     </div>
-                                    <div id="source-list" class="scroll-list top-gap"></div>
+                                    <div id="source-list" class="scroll-list diagnostic-scroll-list"></div>
                                 </div>
 
                                 <div class="detail-panel">
@@ -384,8 +380,8 @@
                                                     <p class="detail-section-copy">先看摘要列表，选中后再看当前这次处理的完整详情。</p>
                                                 </div>
                                             </div>
-                                            <div id="source-run-list" class="detail-compact-list top-gap"></div>
-                                            <div id="source-run-detail" class="detail-focus-card top-gap" hidden></div>
+                                            <div id="source-run-list" class="detail-compact-list diagnostic-compact-list"></div>
+                                            <div id="source-run-detail" class="detail-focus-card diagnostic-focus-card" hidden></div>
                                         </section>
 
                                         <section class="detail-section">
@@ -395,8 +391,8 @@
                                                     <p class="detail-section-copy">文件列表默认保持紧凑，只在选中后展示完整路径和解析细节。</p>
                                                 </div>
                                             </div>
-                                            <div id="source-file-list" class="detail-compact-list top-gap"></div>
-                                            <div id="source-file-detail" class="detail-focus-card top-gap" hidden></div>
+                                            <div id="source-file-list" class="detail-compact-list diagnostic-compact-list"></div>
+                                            <div id="source-file-detail" class="detail-focus-card diagnostic-focus-card" hidden></div>
                                         </section>
 
                                         <section class="detail-section">
@@ -710,7 +706,7 @@
  </div>
 <script src="/admin/admin-tabs.js?v=20260502-tabs-scroll-2"></script>
 <script src="/admin/admin-common.js?v=20260508-common-1"></script>
-<script type="module" src="/admin/management.js?v=20260523-module-2"></script>
+<script type="module" src="/admin/management.js?v=20260526-diagnostic-ui-align-1"></script>
 <script src="/admin/compile-review-queue.js?v=20260520-human-review-1"></script>
 </body>
 </html>

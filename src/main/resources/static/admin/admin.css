@@ -5125,6 +5125,15 @@ body::after {
     color: var(--primary-strong);
 }
 
+.pill.active {
+    border-color: rgba(0, 117, 74, 0.22);
+    background:
+            linear-gradient(135deg, rgba(232, 244, 236, 0.98), rgba(221, 238, 228, 0.96)),
+            radial-gradient(circle at top center, rgba(0, 117, 74, 0.08), transparent 52%);
+    color: var(--primary-strong);
+    box-shadow: inset 0 0 0 1px rgba(0, 117, 74, 0.06), 0 4px 10px rgba(76, 59, 36, 0.08);
+}
+
 .badge.success {
     border-color: rgba(31, 106, 73, 0.18);
     background: rgba(225, 239, 232, 0.96);
@@ -5765,6 +5774,239 @@ body::after {
 #source-list .list-item .item-meta,
 #source-list .list-item .item-summary {
     margin: 0;
+}
+
+.history-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.processing-history-panel .workbench-disclosure-body {
+    gap: 12px;
+    padding-top: 4px;
+}
+
+.history-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 10px 18px;
+    align-items: center;
+    padding: 12px 14px;
+    border: 1px solid rgba(0, 117, 74, 0.12);
+    border-radius: 16px;
+    background:
+            linear-gradient(180deg, rgba(248, 250, 247, 0.98), rgba(243, 246, 241, 0.98)),
+            radial-gradient(circle at top right, rgba(0, 117, 74, 0.05), transparent 42%);
+}
+
+.history-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+}
+
+.source-diagnostic-panel .workbench-disclosure-body {
+    gap: 12px;
+    padding-top: 4px;
+}
+
+.diagnostic-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 12px 18px;
+    align-items: center;
+    padding: 12px 14px;
+    border: 1px solid rgba(0, 117, 74, 0.12);
+    border-radius: 16px;
+    background:
+            linear-gradient(180deg, rgba(248, 250, 247, 0.98), rgba(243, 246, 241, 0.98)),
+            radial-gradient(circle at top right, rgba(0, 117, 74, 0.05), transparent 42%);
+}
+
+.diagnostic-toolbar-copy {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.diagnostic-toolbar-note {
+    margin: 0;
+    color: #53645a;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.diagnostic-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+}
+
+.diagnostic-workspace {
+    margin-top: 0;
+}
+
+.diagnostic-list-header {
+    align-items: center;
+}
+
+.diagnostic-scroll-list,
+.diagnostic-compact-list,
+.diagnostic-focus-card {
+    margin-top: 0;
+}
+
+.history-status-pill {
+    margin: 0;
+    padding: 8px 12px;
+    border: 1px solid rgba(0, 117, 74, 0.14);
+    border-radius: 999px;
+    background: rgba(245, 250, 247, 0.96);
+    color: #53645a;
+    font-size: 13px;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+
+#history-list {
+    display: grid;
+    gap: 10px;
+}
+
+.history-list-item {
+    display: grid;
+    gap: 10px;
+    align-content: start;
+    min-height: 0;
+    padding: 16px 18px;
+}
+
+.history-list-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    column-gap: 20px;
+}
+
+.history-list-item-main {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+}
+
+.history-list-item h4,
+.history-list-item .item-summary,
+.history-list-item .item-caption {
+    margin: 0;
+}
+
+.history-list-item-top {
+    display: grid;
+    gap: 6px;
+}
+
+.history-list-item-heading {
+    display: grid;
+    gap: 8px;
+}
+
+.history-list-item-top .meta-row {
+    gap: 8px;
+}
+
+.history-list-item-id {
+    margin: 0;
+    color: #6a776f;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.history-list-item-body {
+    display: grid;
+    gap: 6px;
+}
+
+.history-list-item .item-summary {
+    color: #516157;
+    line-height: 1.55;
+}
+
+.history-list-item .item-caption {
+    color: #617067;
+    line-height: 1.5;
+}
+
+.history-list-item-side {
+    display: grid;
+    justify-items: end;
+    align-content: center;
+    gap: 12px;
+    min-width: 170px;
+}
+
+.history-list-item .detail-compact-time {
+    margin: 0;
+    color: #6b776e;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.history-list-item-side .ghost-btn {
+    justify-self: end;
+    padding-inline: 15px;
+}
+
+.history-source-type-pill {
+    background: rgba(244, 239, 231, 0.92);
+}
+
+.history-loading,
+.history-error,
+.history-empty {
+    padding: 18px;
+    border: 1px dashed rgba(0, 117, 74, 0.16);
+    border-radius: 16px;
+    background: rgba(247, 250, 247, 0.95);
+}
+
+.history-error {
+    display: grid;
+    gap: 12px;
+    justify-items: start;
+}
+
+@media (max-width: 980px) {
+    .history-toolbar,
+    .history-toolbar-actions,
+    .diagnostic-toolbar,
+    .diagnostic-toolbar-actions {
+        align-items: flex-start;
+    }
+
+    .history-status-pill {
+        white-space: normal;
+    }
+
+    .history-list-item {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .history-list-item-side {
+        justify-items: start;
+        min-width: 0;
+        align-content: start;
+    }
+
+    .history-list-item-side .ghost-btn {
+        justify-self: start;
+    }
 }
 
 .source-list-row-top {

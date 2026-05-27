@@ -170,6 +170,42 @@ class AdminUploadControllerTests {
     }
 
     /**
+     * 验证 Markdown frontmatter 分隔线不会被误提取为 title hint。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldSkipMarkdownFrontmatterSeparatorWhenExtractingTitleHint() throws Exception {
+        resetTables();
+        MockMultipartFile sourceFile = new MockMultipartFile(
+                "files",
+                "notes/probe-and-incident-operations.md",
+                MediaType.TEXT_PLAIN_VALUE,
+                """
+                        ---
+                        owner: ops
+                        ---
+
+                        # Kubernetes 探针与事件响应协同手册
+
+                        这里是正文。
+                        """.getBytes(StandardCharsets.UTF_8)
+        );
+
+        String responseBody = mockMvc.perform(multipart("/api/v1/admin/uploads").file(sourceFile))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPILE_QUEUED"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        Long sourceId = readLong(responseBody, "sourceId");
+        KnowledgeSource createdSource = sourceService.findById(sourceId).orElseThrow();
+        JsonNode createdMetadataNode = OBJECT_MAPPER.readTree(createdSource.getMetadataJson());
+        assertThat(createdMetadataNode.path("bundleSummary").path("titleHints").get(0).asText())
+                .isEqualTo("Kubernetes 探针与事件响应协同手册");
+    }
+
+    /**
      * 验证 source-run 详情会优先展示待人工确认发布语义。
      *
      * @throws Exception 测试异常

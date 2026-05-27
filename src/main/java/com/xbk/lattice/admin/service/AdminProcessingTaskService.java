@@ -421,10 +421,12 @@ public class AdminProcessingTaskService {
         StatusSnapshot statusSnapshot = statusService.snapshot();
         int runningCount = 0;
         int waitingCount = 0;
+        int waitingDraftCount = 0;
         int succeededCount = 0;
         int failedCount = 0;
         for (AdminProcessingTaskItemResponse item : items) {
             String displayStatus = resolveDisplayStatus(item);
+            waitingDraftCount += Math.max(item == null ? 0 : item.getPendingHumanReviewCount(), 0);
             if (shouldCountAsWaiting(item, displayStatus)) {
                 waitingCount++;
             }
@@ -444,7 +446,7 @@ public class AdminProcessingTaskService {
                 0,
                 succeededCount,
                 failedCount,
-                buildSummaryCards(runningCount, waitingCount, 0, succeededCount, failedCount),
+                buildSummaryCards(runningCount, waitingCount, waitingDraftCount, 0, succeededCount, failedCount),
                 buildHelpState(statusSnapshot, runningCount, waitingCount, 0, succeededCount, failedCount)
         );
     }
@@ -467,7 +469,8 @@ public class AdminProcessingTaskService {
      * 构建顶部概览卡片。
      *
      * @param runningCount 运行中数量
-     * @param waitingCount 待确认数量
+     * @param waitingCount 待确认任务数量
+     * @param waitingDraftCount 待人工确认草稿数量
      * @param stalledCount 疑似卡住数量
      * @param succeededCount 已完成数量
      * @param failedCount 失败数量
@@ -476,6 +479,7 @@ public class AdminProcessingTaskService {
     private List<AdminProcessingTaskSummaryCardResponse> buildSummaryCards(
             int runningCount,
             int waitingCount,
+            int waitingDraftCount,
             int stalledCount,
             int succeededCount,
             int failedCount
@@ -487,11 +491,21 @@ public class AdminProcessingTaskService {
                 runningCount > 0 ? "系统仍在持续推进这些任务" : "当前没有正在推进的资料处理任务",
                 runningCount > 0 ? "warning" : ""
         ));
+        String waitingCardLabel = "待确认";
+        int waitingCardValue = waitingCount;
+        String waitingCardNote = waitingCount > 0 ? "请打开下方任务处理人工确认" : "当前没有需要人工确认的任务";
+        if (waitingDraftCount > 0) {
+            waitingCardLabel = "待人工确认草稿";
+            waitingCardValue = waitingDraftCount;
+            waitingCardNote = waitingCount > 0
+                    ? "涉及 " + waitingCount + " 个处理任务，请打开下方任务继续人工确认"
+                    : "请打开下方任务继续人工确认";
+        }
         cards.add(new AdminProcessingTaskSummaryCardResponse(
-                "待确认",
-                waitingCount,
-                waitingCount > 0 ? "请打开下方任务处理人工确认" : "当前没有需要人工确认的任务",
-                waitingCount > 0 ? "warning" : "success"
+                waitingCardLabel,
+                waitingCardValue,
+                waitingCardNote,
+                waitingCount > 0 || waitingDraftCount > 0 ? "warning" : "success"
         ));
         cards.add(new AdminProcessingTaskSummaryCardResponse(
                 "已完成",
