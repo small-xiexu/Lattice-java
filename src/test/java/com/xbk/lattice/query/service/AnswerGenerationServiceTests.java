@@ -1804,6 +1804,173 @@ class AnswerGenerationServiceTests {
     }
 
     /**
+     * 验证 path-aware 结构化字段命中问题焦点时，不会被同一卡片内的机器标识符行压过。
+     */
+    @Test
+    void shouldPreferQuestionFocusedStructuredPathFactOverMachineIdentifierLine() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "service-config.yaml 里的 primaryCheck 是多少？",
+                List.of(new QueryArticleHit(
+                        QueryEvidenceType.FACT_CARD,
+                        "fact-card:service-config:checks",
+                        "Service Config Checks",
+                        """
+                                fieldPath: spec.primaryCheck.socket.value = 9091
+                                image: registry.example/app:1.0
+                                fieldPath: spec.secondaryCheck.socket.value = 1001
+                                """,
+                        "{\"cardType\":\"FACT_ENUM\",\"answerShape\":\"ENUM\",\"sourceChunkIds\":[42]}",
+                        List.of("service-config.yaml"),
+                        2.0D
+                )),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("spec.primaryCheck.socket.value = 9091");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("registry.example/app:1.0");
+    }
+
+    /**
+     * 验证 source 排在 fact card 前且包含 slash-like 机器标识符时，path 补位仍优先消费贴题结构化路径取值。
+     */
+    @Test
+    void shouldPreferQuestionFocusedStructuredPathFactAcrossSourceAndFactCardHits() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "service-config.yaml 里的 primaryCheck value 是多少？",
+                List.of(
+                        new QueryArticleHit(
+                                QueryEvidenceType.SOURCE,
+                                "source-manifest#0",
+                                "Source Manifest",
+                                """
+                                        image: registry.example/system-agent:2.4.0
+                                        artifact: example.org/release-bundle:2.4.0
+                                        """,
+                                "{\"chunkIndex\":0}",
+                                List.of(),
+                                3.0D
+                        ),
+                        new QueryArticleHit(
+                                QueryEvidenceType.FACT_CARD,
+                                "fact-card:service-config:path-values",
+                                "Service Config Path Values",
+                                """
+                                        fieldPath: spec.primaryCheck.socket.value = 9091
+                                        fieldPath: spec.secondaryCheck.socket.value = 1001
+                                        """,
+                                "{\"cardType\":\"FACT_ENUM\",\"answerShape\":\"ENUM\",\"sourceChunkIds\":[42]}",
+                                List.of("service-config.yaml"),
+                                2.0D
+                        )
+                ),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("spec.primaryCheck.socket.value = 9091");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("registry.example/system-agent:2.4.0");
+    }
+
+    /**
+     * 验证用户明确询问 URL / endpoint 时，真实 URL 不会被无关 dotted field path 抢占。
+     */
+    @Test
+    void shouldKeepEndpointUrlAheadOfUnrelatedStructuredPathValue() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "Order API endpoint 是什么？",
+                List.of(
+                        new QueryArticleHit(
+                                QueryEvidenceType.SOURCE,
+                                "order-api.md#endpoint",
+                                "order-api.md",
+                                "endpoint: https://api.example.com/orders",
+                                "{\"filePath\":\"order-api.md\"}",
+                                List.of("order-api.md"),
+                                3.0D
+                        ),
+                        new QueryArticleHit(
+                                QueryEvidenceType.FACT_CARD,
+                                "fact-card:runtime:timeout",
+                                "Runtime Timeout",
+                                "fieldPath: spec.runtime.timeout.value = 5",
+                                "{\"cardType\":\"FACT_ENUM\",\"answerShape\":\"ENUM\"}",
+                                List.of("runtime-config.yaml"),
+                                2.0D
+                        )
+                ),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("https://api.example.com/orders");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("spec.runtime.timeout.value = 5");
+    }
+
+    /**
+     * 验证问题焦点询问机器标识符时，fallback 仍允许机器标识符作为答案。
+     */
+    @Test
+    void shouldAllowMachineIdentifierWhenQuestionFocusAsksForArtifactImageVersion() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "runtime-worker image version 是什么？",
+                List.of(
+                        new QueryArticleHit(
+                                QueryEvidenceType.SOURCE,
+                                "runtime-manifest.yaml#0",
+                                "runtime-manifest.yaml",
+                                "image: registry.example/runtime-worker:2.7.1",
+                                "{\"filePath\":\"runtime-manifest.yaml\"}",
+                                List.of("runtime-manifest.yaml"),
+                                3.0D
+                        ),
+                        new QueryArticleHit(
+                                QueryEvidenceType.FACT_CARD,
+                                "fact-card:runtime:check",
+                                "Runtime Check",
+                                "fieldPath: spec.healthCheck.socket.value = 9091",
+                                "{\"cardType\":\"FACT_ENUM\",\"answerShape\":\"ENUM\"}",
+                                List.of("runtime-manifest.yaml"),
+                                2.0D
+                        )
+                ),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("registry.example/runtime-worker:2.7.1");
+        assertThat(answerPayload.getAnswerMarkdown()).doesNotContain("spec.healthCheck.socket.value = 9091");
+    }
+
+    /**
+     * 验证没有结构化路径元数据的普通 key-number 证据仍保持原有 fallback 行为。
+     */
+    @Test
+    void shouldKeepPlainNumericAssignmentFallbackWithoutStructuredPathMetadata() {
+        AnswerGenerationService answerGenerationService = new AnswerGenerationService();
+
+        QueryAnswerPayload answerPayload = answerGenerationService.fallbackPayload(
+                "generic-config.yaml 里的 retryLimit value 是多少？",
+                List.of(new QueryArticleHit(
+                        QueryEvidenceType.SOURCE,
+                        "generic-config.yaml#0",
+                        "generic-config.yaml",
+                        "retryLimit = 3",
+                        "{\"filePath\":\"generic-config.yaml\"}",
+                        List.of("generic-config.yaml"),
+                        2.0D
+                )),
+                AnswerOutcome.SUCCESS
+        );
+
+        assertThat(answerPayload.getAnswerMarkdown()).contains("retryLimit = 3");
+    }
+
+    /**
      * 验证 fact card 兜底答案会优先引用同源 source chunk，而不是只停留在卡片过程证据。
      */
     @Test

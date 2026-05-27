@@ -136,6 +136,16 @@ final class KeyValueItem {
 
     final String raw;
 
+    final String parentPath;
+
+    final String keyPath;
+
+    final List<String> pathSegments;
+
+    final String contextPath;
+
+    final int lineIndex;
+
     /**
      * 创建键值列表项。
      *
@@ -144,9 +154,39 @@ final class KeyValueItem {
      * @param raw 原始行
      */
     KeyValueItem(String key, String value, String raw) {
+        this(key, value, raw, "", key, List.of(key), "", -1);
+    }
+
+    /**
+     * 创建带结构路径的键值列表项。
+     *
+     * @param key 键
+     * @param value 值
+     * @param raw 原始行
+     * @param parentPath 父级路径
+     * @param keyPath 完整字段路径
+     * @param pathSegments 路径片段
+     * @param contextPath 上下文路径
+     * @param lineIndex 原始行下标
+     */
+    KeyValueItem(
+            String key,
+            String value,
+            String raw,
+            String parentPath,
+            String keyPath,
+            List<String> pathSegments,
+            String contextPath,
+            int lineIndex
+    ) {
         this.key = key;
         this.value = value;
         this.raw = raw;
+        this.parentPath = parentPath == null ? "" : parentPath;
+        this.keyPath = keyPath == null || keyPath.isBlank() ? key : keyPath;
+        this.pathSegments = pathSegments == null ? List.of() : List.copyOf(pathSegments);
+        this.contextPath = contextPath == null ? "" : contextPath;
+        this.lineIndex = lineIndex;
     }
 
     /**
@@ -174,6 +214,153 @@ final class KeyValueItem {
      */
     String getRaw() {
         return raw;
+    }
+
+    /**
+     * 获取父级路径。
+     *
+     * @return 父级路径
+     */
+    String getParentPath() {
+        return parentPath;
+    }
+
+    /**
+     * 获取完整字段路径。
+     *
+     * @return 完整字段路径
+     */
+    String getKeyPath() {
+        return keyPath;
+    }
+
+    /**
+     * 获取路径片段。
+     *
+     * @return 路径片段
+     */
+    List<String> getPathSegments() {
+        return pathSegments;
+    }
+
+    /**
+     * 获取上下文路径。
+     *
+     * @return 上下文路径
+     */
+    String getContextPath() {
+        return contextPath;
+    }
+
+    /**
+     * 获取原始行下标。
+     *
+     * @return 原始行下标
+     */
+    int getLineIndex() {
+        return lineIndex;
+    }
+
+    /**
+     * 判断是否携带结构化路径。
+     *
+     * @return 有结构化路径返回 true
+     */
+    boolean hasStructuredPath() {
+        return !parentPath.isBlank()
+                || pathSegments.size() > 1
+                || !keyPath.equals(key);
+    }
+
+    /**
+     * 获取用于展示的路径化表达。
+     *
+     * @return 路径化键值表达
+     */
+    String getDisplayText() {
+        return getKeyPath() + " = " + value;
+    }
+}
+
+/**
+ * 结构化路径帧。
+ *
+ * @author xiexu
+ */
+final class StructuredPathFrame {
+
+    final int indent;
+
+    final List<String> fullPathSegments;
+
+    /**
+     * 创建结构化路径帧。
+     *
+     * @param indent 缩进层级
+     * @param fullPathSegments 当前完整路径片段
+     */
+    StructuredPathFrame(int indent, List<String> fullPathSegments) {
+        this.indent = indent;
+        this.fullPathSegments = fullPathSegments == null ? List.of() : List.copyOf(fullPathSegments);
+    }
+
+    /**
+     * 获取缩进层级。
+     *
+     * @return 缩进层级
+     */
+    int getIndent() {
+        return indent;
+    }
+
+    /**
+     * 获取完整路径片段。
+     *
+     * @return 完整路径片段
+     */
+    List<String> getFullPathSegments() {
+        return fullPathSegments;
+    }
+}
+
+/**
+ * 缩进式序列行。
+ *
+ * @author xiexu
+ */
+final class StructuredSequenceLine {
+
+    final int indent;
+
+    final String content;
+
+    /**
+     * 创建缩进式序列行。
+     *
+     * @param indent 缩进层级
+     * @param content 序列项内容
+     */
+    StructuredSequenceLine(int indent, String content) {
+        this.indent = indent;
+        this.content = content == null ? "" : content;
+    }
+
+    /**
+     * 获取缩进层级。
+     *
+     * @return 缩进层级
+     */
+    int getIndent() {
+        return indent;
+    }
+
+    /**
+     * 获取序列项内容。
+     *
+     * @return 序列项内容
+     */
+    String getContent() {
+        return content;
     }
 }
 

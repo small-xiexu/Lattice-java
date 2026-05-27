@@ -97,7 +97,13 @@ String buildEvidenceMarkdown(String question, List<QueryArticleHit> queryArticle
             List<String> snippets = selectExactPathCandidateLines(question, fallbackHit, queryTokens);
             for (String snippet : snippets) {
                 boolean pathContractSnippet = requiresPathContractCompanion(question) && containsPathContractSignal(snippet);
-                if ((!containsPathSignal(snippet) && !pathContractSnippet) || looksLikePathHeaderLine(snippet)) {
+                boolean structuredPathSnippet = looksLikeQuestionFocusedStructuredPathValueCandidate(
+                        question,
+                        snippet,
+                        queryTokens
+                );
+                if ((!containsPathSignal(snippet) && !pathContractSnippet && !structuredPathSnippet)
+                        || looksLikePathHeaderLine(snippet)) {
                     continue;
                 }
                 if (containsRequestedExactPathIdentifier(question)

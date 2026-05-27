@@ -116,6 +116,82 @@ class FactCardGenerationServiceTests {
     }
 
     /**
+     * 验证缩进式结构化键值会保留父级路径。
+     */
+    @Test
+    void shouldPreserveIndentedKeyValuePathInFactCard() {
+        SourceFileRecord sourceFileRecord = saveSourceFileWithChunk(
+                "samples/nested-config.yaml",
+                """
+                        root:
+                          entries:
+                            - name: alpha
+                              settings:
+                                label: local
+                                limit: 31
+                            - name: beta
+                              settings:
+                                label: remote
+                                limit: 32
+                        """
+        );
+
+        List<FactCardRecord> records = factCardGenerationService.rebuildForSourceFile(sourceFileRecord.getId());
+
+        FactCardRecord enumCard = findFirstWithItemsJson(records, "key_value_list");
+        assertThat(enumCard).isNotNull();
+        assertThat(enumCard.getItemsJson()).contains("\"pathAware\":true");
+        assertThat(enumCard.getItemsJson()).contains("root.entries[0].settings.limit");
+        assertThat(enumCard.getItemsJson()).contains("root.entries[1].settings.limit");
+        assertThat(enumCard.getItemsJson()).contains("\"parentPath\":\"root.entries[0].settings\"");
+        assertThat(enumCard.getItemsJson()).contains("\"displayText\":\"root.entries[0].settings.limit = 31\"");
+        assertThat(enumCard.getEvidenceText()).contains("fieldPath: root.entries[0].settings.limit = 31");
+        assertThat(enumCard.getEvidenceText()).contains("limit: 31");
+        assertThat(enumCard.getReviewStatus()).isEqualTo(FactCardReviewStatus.VALID);
+    }
+
+    /**
+     * 验证 JSON 结构化键值会保留父级路径。
+     */
+    @Test
+    void shouldPreserveJsonKeyValuePathInFactCard() {
+        SourceFileRecord sourceFileRecord = saveSourceFileWithChunk(
+                "samples/nested-config.json",
+                """
+                        {
+                          "root": {
+                            "items": [
+                              {
+                                "name": "alpha",
+                                "settings": {
+                                  "limit": 3
+                                }
+                              },
+                              {
+                                "name": "beta",
+                                "settings": {
+                                  "limit": 5
+                                }
+                              }
+                            ]
+                          }
+                        }
+                        """
+        );
+
+        List<FactCardRecord> records = factCardGenerationService.rebuildForSourceFile(sourceFileRecord.getId());
+
+        FactCardRecord enumCard = findFirstWithItemsJson(records, "key_value_list");
+        assertThat(enumCard).isNotNull();
+        assertThat(enumCard.getItemsJson()).contains("\"pathAware\":true");
+        assertThat(enumCard.getItemsJson()).contains("root.items[0].settings.limit");
+        assertThat(enumCard.getItemsJson()).contains("root.items[1].settings.limit");
+        assertThat(enumCard.getItemsJson()).contains("\"pathSegments\":[\"root\",\"items\",\"[0]\",\"settings\",\"limit\"]");
+        assertThat(enumCard.getEvidenceText()).contains("fieldPath: root.items[0].settings.limit = 3");
+        assertThat(enumCard.getReviewStatus()).isEqualTo(FactCardReviewStatus.VALID);
+    }
+
+    /**
      * 验证列表内键值结构可生成枚举卡。
      */
     @Test
@@ -597,6 +673,22 @@ class FactCardGenerationServiceTests {
     private FactCardRecord findFirst(List<FactCardRecord> records, FactCardType cardType) {
         for (FactCardRecord record : records) {
             if (record.getCardType() == cardType) {
+                return record;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 查询第一张包含指定 JSON 片段的事实卡。
+     *
+     * @param records 事实卡列表
+     * @param itemsJsonFragment JSON 片段
+     * @return 事实卡记录
+     */
+    private FactCardRecord findFirstWithItemsJson(List<FactCardRecord> records, String itemsJsonFragment) {
+        for (FactCardRecord record : records) {
+            if (record.getItemsJson() != null && record.getItemsJson().contains(itemsJsonFragment)) {
                 return record;
             }
         }

@@ -87,14 +87,27 @@ abstract class FactCardGenerationListSupport extends FactCardGenerationTableSupp
         }
         ObjectNode rootNode = OBJECT_MAPPER.createObjectNode();
         ArrayNode itemsNode = OBJECT_MAPPER.createArrayNode();
+        boolean hasStructuredPath = false;
         for (KeyValueItem item : items) {
             ObjectNode itemNode = OBJECT_MAPPER.createObjectNode();
             itemNode.put("key", item.getKey());
             itemNode.put("value", item.getValue());
             itemNode.put("raw", item.getRaw());
+            itemNode.put("parentPath", item.getParentPath());
+            itemNode.put("keyPath", item.getKeyPath());
+            itemNode.put("contextPath", item.getContextPath());
+            itemNode.put("displayText", item.getDisplayText());
+            itemNode.put("lineIndex", item.getLineIndex());
+            ArrayNode pathSegmentsNode = OBJECT_MAPPER.createArrayNode();
+            for (String pathSegment : item.getPathSegments()) {
+                pathSegmentsNode.add(pathSegment);
+            }
+            itemNode.set("pathSegments", pathSegmentsNode);
             itemsNode.add(itemNode);
+            hasStructuredPath = hasStructuredPath || item.hasStructuredPath();
         }
         rootNode.put("structure", "key_value_list");
+        rootNode.put("pathAware", hasStructuredPath);
         rootNode.set("items", itemsNode);
         String evidenceText = joinKeyValueEvidence(items);
         FactCardRecord record = buildRecord(

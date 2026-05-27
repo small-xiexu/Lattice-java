@@ -16,6 +16,8 @@ import java.util.Map;
  */
 final class AnswerFallbackEvidenceSelector {
 
+    private static final int COMPLEMENTARY_STRUCTURED_PATH_FACT_CARD_MIN_SCORE = 80;
+
     private final AnswerGenerationService support;
 
     private final AnswerMarkdownEvidenceNormalizer evidenceNormalizer = new AnswerMarkdownEvidenceNormalizer();
@@ -207,7 +209,122 @@ final class AnswerFallbackEvidenceSelector {
             QueryArticleHit tokenHit = support.findHitContainingAny(candidates, List.of(highSignalToken));
             addDistinctFallbackHit(question, selectedHits, tokenHit);
         }
+        addQuestionFocusedStructuredPathFactCard(question, candidates, selectedHits);
         return selectedHits.size() >= 2 ? selectedHits : List.of();
+    }
+
+    /**
+     * 在互补证据已选中原文和摘要时，补入同样贴题的结构化路径事实卡片。
+     *
+     * @param question 用户问题
+     * @param candidateHits 候选证据
+     * @param selectedHits 已选证据
+     */
+    private void addQuestionFocusedStructuredPathFactCard(
+            String question,
+            List<QueryArticleHit> candidateHits,
+            List<QueryArticleHit> selectedHits
+    ) {
+        if (!shouldSupplementStructuredPathFactCard(question, selectedHits)) {
+            return;
+        }
+        List<String> queryTokens = support.extractQueryTokens(question);
+        for (QueryArticleHit candidateHit : candidateHits) {
+            if (!isQuestionFocusedStructuredPathFactCard(question, candidateHit, queryTokens)) {
+                continue;
+            }
+            if (containsFallbackHit(question, selectedHits, candidateHit)) {
+                continue;
+            }
+            addDistinctFallbackHit(question, selectedHits, candidateHit);
+            return;
+        }
+    }
+
+    /**
+     * 判断当前互补证据集合是否需要补充结构化路径事实卡片。
+     *
+     * @param question 用户问题
+     * @param selectedHits 已选证据
+     * @return 需要补充返回 true
+     */
+    private boolean shouldSupplementStructuredPathFactCard(String question, List<QueryArticleHit> selectedHits) {
+        return support.looksLikeExactLookupQuestion(question)
+                && selectedHits != null
+                && selectedHits.size() >= 2
+                && containsEvidenceType(selectedHits, QueryEvidenceType.SOURCE)
+                && (containsEvidenceType(selectedHits, QueryEvidenceType.ARTICLE)
+                || containsEvidenceType(selectedHits, QueryEvidenceType.CONTRIBUTION));
+    }
+
+    /**
+     * 判断候选是否为高分且贴合问题焦点的结构化路径事实卡片。
+     *
+     * @param question 用户问题
+     * @param candidateHit 候选证据
+     * @param queryTokens 查询 token
+     * @return 命中返回 true
+     */
+    private boolean isQuestionFocusedStructuredPathFactCard(
+            String question,
+            QueryArticleHit candidateHit,
+            List<String> queryTokens
+    ) {
+        if (candidateHit == null || candidateHit.getEvidenceType() != QueryEvidenceType.FACT_CARD) {
+            return false;
+        }
+        int focusedScore = support.scoreQuestionFocusedFallbackHit(question, candidateHit, queryTokens);
+        if (focusedScore < COMPLEMENTARY_STRUCTURED_PATH_FACT_CARD_MIN_SCORE) {
+            return false;
+        }
+        for (String rawLine : selectStructuredPathFactCardCandidateLines(candidateHit)) {
+            String normalizedLine = evidenceNormalizer.normalizeFallbackLineCandidate(rawLine);
+            if (support.looksLikeQuestionFocusedStructuredPathValueCandidate(question, normalizedLine, queryTokens)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 选择 fact card 中可参与结构化路径事实判断的候选行。
+     *
+     * @param candidateHit 候选证据
+     * @return 候选行
+     */
+    private List<String> selectStructuredPathFactCardCandidateLines(QueryArticleHit candidateHit) {
+        List<String> candidateLines = new ArrayList<String>();
+        if (candidateHit == null) {
+            return candidateLines;
+        }
+        candidateLines.addAll(support.selectFallbackContentLines(candidateHit.getContent()));
+        candidateLines.addAll(evidenceNormalizer.selectStructuredJsonValueLines(candidateHit.getContent()));
+        return candidateLines;
+    }
+
+    /**
+     * 判断已选证据是否已经包含同一 fallback 证据。
+     *
+     * @param question 用户问题
+     * @param selectedHits 已选证据
+     * @param candidateHit 候选证据
+     * @return 已包含返回 true
+     */
+    private boolean containsFallbackHit(
+            String question,
+            List<QueryArticleHit> selectedHits,
+            QueryArticleHit candidateHit
+    ) {
+        if (selectedHits == null || candidateHit == null) {
+            return false;
+        }
+        String candidateKey = evidenceSupport.canonicalKey(question, candidateHit);
+        for (QueryArticleHit selectedHit : selectedHits) {
+            if (evidenceSupport.canonicalKey(question, selectedHit).equals(candidateKey)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

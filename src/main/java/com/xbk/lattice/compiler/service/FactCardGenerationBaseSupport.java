@@ -3,6 +3,7 @@ package com.xbk.lattice.compiler.service;
 import com.xbk.lattice.shared.json.JsonMappers;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -48,6 +49,10 @@ protected static final ObjectMapper OBJECT_MAPPER = JsonMappers.moduleAwareMappe
 
     protected static final Pattern KEY_VALUE_PATTERN = Pattern.compile(
             "^\\s*([^:=：]{1,80}?)\\s*[:=：]\\s*(.+?)\\s*$"
+    );
+
+    protected static final Pattern OPTIONAL_KEY_VALUE_PATTERN = Pattern.compile(
+            "^\\s*([^:=：]{1,80}?)\\s*[:=：]\\s*(.*?)\\s*$"
     );
 
     protected static final List<StatusDefinition> STATUS_DEFINITIONS = List.of(
@@ -336,20 +341,466 @@ protected static final ObjectMapper OBJECT_MAPPER = JsonMappers.moduleAwareMappe
      * @return 键值列表项
      */
     List<KeyValueItem> findKeyValueItems(List<String> lines) {
+        List<KeyValueItem> jsonItems = findJsonKeyValueItems(lines);
+        if (jsonItems.size() >= 2) {
+            return jsonItems;
+        }
+        return findIndentedKeyValueItems(lines);
+    }
+
+    /**
+     * 从 JSON 对象或数组中提取带路径的键值项。
+     *
+     * @param lines chunk 行
+     * @return 键值列表项
+     */
+    List<KeyValueItem> findJsonKeyValueItems(List<String> lines) {
+        String text = String.join("\n", lines).trim();
+        if (!text.startsWith("{") && !text.startsWith("[")) {
+            return List.of();
+        }
+        try {
+            JsonNode rootNode = OBJECT_MAPPER.readTree(text);
+            List<KeyValueItem> items = new ArrayList<KeyValueItem>();
+            collectJsonKeyValueItems(rootNode, List.of(), lines, items);
+            return items;
+        }
+        catch (JsonProcessingException exception) {
+            return List.of();
+        }
+    }
+
+    /**
+     * 递归收集 JSON 叶子值。
+     *
+     * @param node 当前节点
+     * @param pathSegments 父级路径
+     * @param lines 原始文本行
+     * @param items 键值项
+     */
+    void collectJsonKeyValueItems(
+            JsonNode node,
+            List<String> pathSegments,
+            List<String> lines,
+            List<KeyValueItem> items
+    ) {
+        if (node == null || node.isNull() || node.isMissingNode()) {
+            return;
+        }
+        if (node.isObject()) {
+            node.fields().forEachRemaining(entry -> {
+                List<String> childPathSegments = appendPathSegment(pathSegments, normalizeStructuredKey(entry.getKey()));
+                collectJsonKeyValueItems(entry.getValue(), childPathSegments, lines, items);
+            });
+            return;
+        }
+        if (node.isArray()) {
+            int index = 0;
+            for (JsonNode itemNode : node) {
+                List<String> childPathSegments = appendPathSegment(pathSegments, "[" + index + "]");
+                collectJsonKeyValueItems(itemNode, childPathSegments, lines, items);
+                index++;
+            }
+            return;
+        }
+        String value = normalizeStructuredValue(node.asText(""));
+        if (value.isBlank() || pathSegments.isEmpty()) {
+            return;
+        }
+        String key = lastNamedPathSegment(pathSegments);
+        String parentPath = joinPathSegments(pathSegments.subList(0, pathSegments.size() - 1));
+        String keyPath = joinPathSegments(pathSegments);
+        String raw = findRawLineForStructuredValue(lines, key, value, keyPath);
+        items.add(new KeyValueItem(
+                key,
+                value,
+                raw,
+                parentPath,
+                keyPath,
+                pathSegments,
+                parentPath,
+                findLineIndex(lines, raw)
+        ));
+    }
+
+    /**
+     * 从缩进式结构化文本中提取带路径的键值项。
+     *
+     * @param lines chunk 行
+     * @return 键值列表项
+     */
+    List<KeyValueItem> findIndentedKeyValueItems(List<String> lines) {
         List<KeyValueItem> items = new ArrayList<KeyValueItem>();
-        for (String line : lines) {
-            Matcher matcher = KEY_VALUE_PATTERN.matcher(stripListMarker(line));
+        List<StructuredPathFrame> pathFrames = new ArrayList<StructuredPathFrame>();
+        Map<String, Integer> sequenceIndexByParent = new LinkedHashMap<String, Integer>();
+        for (int lineIndex = 0; lineIndex < lines.size(); lineIndex++) {
+            String line = lines.get(lineIndex);
+            if (shouldSkipStructuredPathLine(line)) {
+                continue;
+            }
+            int indent = countLeadingIndent(line);
+            StructuredSequenceLine sequenceLine = parseSequenceLine(line);
+            if (sequenceLine == null) {
+                prunePathFrames(pathFrames, indent);
+            }
+            else {
+                prunePathFramesAfterSequenceLine(pathFrames, indent);
+            }
+            String content = line.substring(Math.min(indent, line.length()));
+            List<String> parentPathSegments = currentPathSegments(pathFrames);
+            int effectiveIndent = indent;
+            if (sequenceLine != null) {
+                parentPathSegments = appendSequencePathSegment(
+                        parentPathSegments,
+                        sequenceLine.getIndent(),
+                        sequenceIndexByParent
+                );
+                pathFrames.add(new StructuredPathFrame(sequenceLine.getIndent(), parentPathSegments));
+                content = sequenceLine.getContent();
+                effectiveIndent = sequenceLine.getIndent() + 2;
+            }
+            Matcher matcher = OPTIONAL_KEY_VALUE_PATTERN.matcher(content);
             if (!matcher.matches()) {
                 continue;
             }
-            String key = matcher.group(1).trim();
-            String value = matcher.group(2).trim();
-            if (key.isBlank() || value.isBlank()) {
+            String key = normalizeStructuredKey(matcher.group(1));
+            String value = normalizeStructuredValue(matcher.group(2));
+            if (key.isBlank()) {
                 continue;
             }
-            items.add(new KeyValueItem(key, value, line.trim()));
+            List<String> keyPathSegments = appendPathSegment(parentPathSegments, key);
+            if (value.isBlank() || isContainerStartValue(value)) {
+                pathFrames.add(new StructuredPathFrame(effectiveIndent, keyPathSegments));
+                continue;
+            }
+            String parentPath = joinPathSegments(parentPathSegments);
+            String keyPath = joinPathSegments(keyPathSegments);
+            items.add(new KeyValueItem(
+                    key,
+                    value,
+                    line.trim(),
+                    parentPath,
+                    keyPath,
+                    keyPathSegments,
+                    parentPath,
+                    lineIndex
+            ));
         }
         return items;
+    }
+
+    /**
+     * 判断结构化路径解析是否应跳过当前行。
+     *
+     * @param line 原始行
+     * @return 应跳过返回 true
+     */
+    boolean shouldSkipStructuredPathLine(String line) {
+        if (line == null || line.trim().isBlank()) {
+            return true;
+        }
+        String trimmedLine = line.trim();
+        return trimmedLine.startsWith("#")
+                || "---".equals(trimmedLine)
+                || "```".equals(trimmedLine)
+                || isTableLine(line);
+    }
+
+    /**
+     * 计算前导缩进宽度。
+     *
+     * @param line 原始行
+     * @return 缩进宽度
+     */
+    int countLeadingIndent(String line) {
+        if (line == null || line.isEmpty()) {
+            return 0;
+        }
+        int indent = 0;
+        while (indent < line.length()) {
+            char currentChar = line.charAt(indent);
+            if (currentChar == ' ') {
+                indent++;
+                continue;
+            }
+            if (currentChar == '\t') {
+                indent++;
+                continue;
+            }
+            break;
+        }
+        return Math.min(indent, line.length());
+    }
+
+    /**
+     * 解析缩进式序列行。
+     *
+     * @param line 原始行
+     * @return 序列行；不是序列时返回 null
+     */
+    StructuredSequenceLine parseSequenceLine(String line) {
+        int indent = countLeadingIndent(line);
+        if (indent >= line.length() || line.charAt(indent) != '-') {
+            return null;
+        }
+        int contentStart = indent + 1;
+        if (contentStart >= line.length() || !Character.isWhitespace(line.charAt(contentStart))) {
+            return null;
+        }
+        String content = line.substring(contentStart).trim();
+        if (content.isBlank()) {
+            return null;
+        }
+        return new StructuredSequenceLine(indent, content);
+    }
+
+    /**
+     * 清理不再属于当前缩进的路径帧。
+     *
+     * @param pathFrames 路径帧
+     * @param indent 当前缩进
+     */
+    void prunePathFrames(List<StructuredPathFrame> pathFrames, int indent) {
+        while (!pathFrames.isEmpty()
+                && pathFrames.get(pathFrames.size() - 1).getIndent() >= indent) {
+            pathFrames.remove(pathFrames.size() - 1);
+        }
+    }
+
+    /**
+     * 清理序列行前不再属于当前缩进的路径帧。
+     *
+     * @param pathFrames 路径帧
+     * @param indent 当前缩进
+     */
+    void prunePathFramesAfterSequenceLine(List<StructuredPathFrame> pathFrames, int indent) {
+        while (!pathFrames.isEmpty()
+                && pathFrames.get(pathFrames.size() - 1).getIndent() > indent) {
+            pathFrames.remove(pathFrames.size() - 1);
+        }
+        if (!pathFrames.isEmpty()
+                && pathFrames.get(pathFrames.size() - 1).getIndent() == indent
+                && pathEndsWithSequenceItem(pathFrames.get(pathFrames.size() - 1).getFullPathSegments())) {
+            pathFrames.remove(pathFrames.size() - 1);
+        }
+    }
+
+    /**
+     * 判断路径末端是否为序列项。
+     *
+     * @param pathSegments 路径片段
+     * @return 末端为序列项返回 true
+     */
+    boolean pathEndsWithSequenceItem(List<String> pathSegments) {
+        if (pathSegments == null || pathSegments.isEmpty()) {
+            return false;
+        }
+        String lastSegment = pathSegments.get(pathSegments.size() - 1);
+        return lastSegment != null && lastSegment.startsWith("[");
+    }
+
+    /**
+     * 读取当前路径片段。
+     *
+     * @param pathFrames 路径帧
+     * @return 当前路径片段
+     */
+    List<String> currentPathSegments(List<StructuredPathFrame> pathFrames) {
+        if (pathFrames.isEmpty()) {
+            return List.of();
+        }
+        return pathFrames.get(pathFrames.size() - 1).getFullPathSegments();
+    }
+
+    /**
+     * 追加序列索引路径片段。
+     *
+     * @param parentPathSegments 父级路径片段
+     * @param indent 当前缩进
+     * @param sequenceIndexByParent 序列计数
+     * @return 带序列索引的路径
+     */
+    List<String> appendSequencePathSegment(
+            List<String> parentPathSegments,
+            int indent,
+            Map<String, Integer> sequenceIndexByParent
+    ) {
+        String counterKey = joinPathSegments(parentPathSegments) + "@" + indent;
+        int index = sequenceIndexByParent.getOrDefault(counterKey, Integer.valueOf(0)).intValue();
+        sequenceIndexByParent.put(counterKey, Integer.valueOf(index + 1));
+        return appendPathSegment(parentPathSegments, "[" + index + "]");
+    }
+
+    /**
+     * 追加路径片段。
+     *
+     * @param pathSegments 原路径
+     * @param pathSegment 新片段
+     * @return 新路径
+     */
+    List<String> appendPathSegment(List<String> pathSegments, String pathSegment) {
+        String normalizedPathSegment = normalizeStructuredKey(pathSegment);
+        if (normalizedPathSegment.isBlank()) {
+            return pathSegments == null ? List.of() : List.copyOf(pathSegments);
+        }
+        List<String> result = new ArrayList<String>();
+        if (pathSegments != null) {
+            result.addAll(pathSegments);
+        }
+        result.add(normalizedPathSegment);
+        return result;
+    }
+
+    /**
+     * 拼接路径片段。
+     *
+     * @param pathSegments 路径片段
+     * @return 路径文本
+     */
+    String joinPathSegments(List<String> pathSegments) {
+        if (pathSegments == null || pathSegments.isEmpty()) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (String pathSegment : pathSegments) {
+            if (pathSegment == null || pathSegment.isBlank()) {
+                continue;
+            }
+            if (pathSegment.startsWith("[")) {
+                builder.append(pathSegment);
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append(".");
+            }
+            builder.append(pathSegment);
+        }
+        return builder.toString();
+    }
+
+    /**
+     * 读取最后一个具名路径片段。
+     *
+     * @param pathSegments 路径片段
+     * @return 最后一个具名路径片段
+     */
+    String lastNamedPathSegment(List<String> pathSegments) {
+        if (pathSegments == null || pathSegments.isEmpty()) {
+            return "";
+        }
+        for (int index = pathSegments.size() - 1; index >= 0; index--) {
+            String pathSegment = pathSegments.get(index);
+            if (pathSegment != null && !pathSegment.startsWith("[") && !pathSegment.isBlank()) {
+                return pathSegment;
+            }
+        }
+        return pathSegments.get(pathSegments.size() - 1);
+    }
+
+    /**
+     * 规范化结构化键名。
+     *
+     * @param value 原始键名
+     * @return 规范化键名
+     */
+    String normalizeStructuredKey(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.trim();
+        if (normalized.endsWith(",")) {
+            normalized = normalized.substring(0, normalized.length() - 1).trim();
+        }
+        return stripBalancedQuotes(normalized);
+    }
+
+    /**
+     * 规范化结构化值。
+     *
+     * @param value 原始值
+     * @return 规范化值
+     */
+    String normalizeStructuredValue(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.trim();
+        if (normalized.endsWith(",")) {
+            normalized = normalized.substring(0, normalized.length() - 1).trim();
+        }
+        return stripBalancedQuotes(normalized);
+    }
+
+    /**
+     * 去除成对引号。
+     *
+     * @param value 原始文本
+     * @return 去引号文本
+     */
+    String stripBalancedQuotes(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.trim();
+        if (normalized.length() < 2) {
+            return normalized;
+        }
+        boolean doubleQuoted = normalized.startsWith("\"") && normalized.endsWith("\"");
+        boolean singleQuoted = normalized.startsWith("'") && normalized.endsWith("'");
+        if (doubleQuoted || singleQuoted) {
+            return normalized.substring(1, normalized.length() - 1).trim();
+        }
+        return normalized;
+    }
+
+    /**
+     * 判断值是否是后续结构的起始标记。
+     *
+     * @param value 原始值
+     * @return 是结构起始标记返回 true
+     */
+    boolean isContainerStartValue(String value) {
+        String normalized = value == null ? "" : value.trim();
+        return "{".equals(normalized) || "[".equals(normalized);
+    }
+
+    /**
+     * 为 JSON 叶子值寻找原始行。
+     *
+     * @param lines 原始行
+     * @param key 键名
+     * @param value 值
+     * @param keyPath 完整路径
+     * @return 原始行或路径化表达
+     */
+    String findRawLineForStructuredValue(List<String> lines, String key, String value, String keyPath) {
+        for (String line : lines) {
+            String normalizedLine = line == null ? "" : line.trim();
+            if (normalizedLine.contains(key) && normalizedLine.contains(value)) {
+                return normalizedLine;
+            }
+        }
+        return keyPath + " = " + value;
+    }
+
+    /**
+     * 查找原始行下标。
+     *
+     * @param lines 原始行
+     * @param raw 原始行文本
+     * @return 行下标
+     */
+    int findLineIndex(List<String> lines, String raw) {
+        if (raw == null || raw.isBlank()) {
+            return -1;
+        }
+        for (int index = 0; index < lines.size(); index++) {
+            String line = lines.get(index);
+            if (line != null && raw.equals(line.trim())) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -547,7 +998,15 @@ protected static final ObjectMapper OBJECT_MAPPER = JsonMappers.moduleAwareMappe
             return FactCardReviewStatus.INCOMPLETE;
         }
         String chunkText = safeText(chunk.getChunkText());
-        if (!chunkText.contains(safeText(evidenceText))) {
+        String locatedEvidenceText = stripGeneratedStructuredEvidence(safeText(evidenceText));
+        if (locatedEvidenceText.isBlank()) {
+            return FactCardReviewStatus.LOW_CONFIDENCE;
+        }
+        if (containsGeneratedStructuredEvidence(evidenceText)
+                && isGeneratedStructuredEvidenceLocated(chunkText, locatedEvidenceText)) {
+            return FactCardReviewStatus.VALID;
+        }
+        if (!chunkText.contains(locatedEvidenceText)) {
             return FactCardReviewStatus.LOW_CONFIDENCE;
         }
         return FactCardReviewStatus.VALID;
@@ -568,6 +1027,67 @@ protected static final ObjectMapper OBJECT_MAPPER = JsonMappers.moduleAwareMappe
     }
 
     /**
+     * 去除生成的路径化证据行，只保留可回指原文的行。
+     *
+     * @param evidenceText 证据文本
+     * @return 原文证据文本
+     */
+    String stripGeneratedStructuredEvidence(String evidenceText) {
+        List<String> lines = splitLines(evidenceText);
+        List<String> sourceLines = new ArrayList<String>();
+        for (String line : lines) {
+            String normalizedLine = line == null ? "" : line.trim();
+            if (normalizedLine.isBlank() || isGeneratedStructuredEvidenceLine(normalizedLine)) {
+                continue;
+            }
+            sourceLines.add(normalizedLine);
+        }
+        return String.join("\n", sourceLines);
+    }
+
+    /**
+     * 判断证据中是否包含生成的路径化结构行。
+     *
+     * @param evidenceText 证据文本
+     * @return 包含返回 true
+     */
+    boolean containsGeneratedStructuredEvidence(String evidenceText) {
+        for (String line : splitLines(evidenceText)) {
+            if (isGeneratedStructuredEvidenceLine(line == null ? "" : line.trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断路径化结构证据的原始行是否都能回指到 chunk。
+     *
+     * @param chunkText chunk 文本
+     * @param locatedEvidenceText 去除生成行后的证据文本
+     * @return 可定位返回 true
+     */
+    boolean isGeneratedStructuredEvidenceLocated(String chunkText, String locatedEvidenceText) {
+        for (String line : splitLines(locatedEvidenceText)) {
+            String normalizedLine = line == null ? "" : line.trim();
+            if (!normalizedLine.isBlank() && !chunkText.contains(normalizedLine)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 判断是否为生成的路径化证据行。
+     *
+     * @param line 证据行
+     * @return 是路径化生成行返回 true
+     */
+    boolean isGeneratedStructuredEvidenceLine(String line) {
+        return line != null && line.startsWith("fieldPath: ");
+    }
+
+    /**
      * 拼接键值项证据文本。
      *
      * @param items 键值项
@@ -576,6 +1096,9 @@ protected static final ObjectMapper OBJECT_MAPPER = JsonMappers.moduleAwareMappe
     String joinKeyValueEvidence(List<KeyValueItem> items) {
         List<String> lines = new ArrayList<String>();
         for (KeyValueItem item : items) {
+            if (item.hasStructuredPath()) {
+                lines.add("fieldPath: " + item.getDisplayText());
+            }
             lines.add(item.getRaw());
         }
         return String.join("\n", lines);

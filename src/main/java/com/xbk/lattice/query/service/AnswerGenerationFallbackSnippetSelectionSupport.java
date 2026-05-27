@@ -179,6 +179,22 @@ abstract class AnswerGenerationFallbackSnippetSelectionSupport extends AnswerGen
         if (snippets.size() >= limit || !requiresStructuredEvidenceShape(question, shape)) {
             return;
         }
+        if ("path".equals(shape)) {
+            List<String> queryTokens = extractQueryTokens(question);
+            for (Map.Entry<String, Integer> rankedCandidate : rankedCandidates) {
+                if (snippets.size() >= limit) {
+                    return;
+                }
+                String candidate = rankedCandidate.getKey();
+                if (selectedCandidates.contains(candidate)
+                        || !looksLikeQuestionFocusedStructuredPathValueCandidate(question, candidate, queryTokens)) {
+                    continue;
+                }
+                selectedCandidates.add(candidate);
+                snippets.add(stripEmbeddedCitationLiterals(candidate));
+                return;
+            }
+        }
         for (Map.Entry<String, Integer> rankedCandidate : rankedCandidates) {
             String candidate = rankedCandidate.getKey();
             if (selectedCandidates.contains(candidate) || !matchesStructuredEvidenceShape(candidate, shape)) {
@@ -370,6 +386,12 @@ abstract class AnswerGenerationFallbackSnippetSelectionSupport extends AnswerGen
         if (looksLikeStructuredFactCandidate(question, normalizedLine)) {
             score += 12;
         }
+        if (looksLikeQuestionFocusedStructuredPathValueCandidate(question, normalizedLine, preferredTokens)) {
+            score += 72;
+            if (looksLikeNumericQuestion(question) && containsNumericAssignmentSignal(normalizedLine)) {
+                score += 18;
+            }
+        }
         if (looksLikeQuestionEchoLine(question, normalizedLine)) {
             score -= 60;
         }
@@ -475,6 +497,12 @@ abstract class AnswerGenerationFallbackSnippetSelectionSupport extends AnswerGen
         if (shouldCollectDistinctMachineIdentifiers(question) && containsMachineIdentifierSignal(normalizedLine)) {
             score += 18;
         }
+        if (looksLikeStructuredFactQuestion(question)
+                && containsMachineIdentifierSignal(normalizedLine)
+                && !looksLikeStructuredPathValueCandidate(normalizedLine)
+                && !containsStructuredPathQuestionFocusToken(question, normalizedLine, preferredTokens)) {
+            score -= 18;
+        }
         if (looksLikeFlowQuestion(question) && containsQuestionTokenInFlowTransition(question, normalizedLine)) {
             score += 24;
         }
@@ -521,6 +549,165 @@ abstract class AnswerGenerationFallbackSnippetSelectionSupport extends AnswerGen
             score -= 16;
         }
         return score;
+    }
+
+    /**
+     * 判断候选句是否为贴合问题焦点的结构化路径取值事实。
+     *
+     * @param question 用户问题
+     * @param normalizedLine 归一化候选句
+     * @param preferredTokens 查询 token
+     * @return 命中返回 true
+     */
+    boolean looksLikeQuestionFocusedStructuredPathValueCandidate(
+            String question,
+            String normalizedLine,
+            List<String> preferredTokens
+    ) {
+        if (!looksLikeExactLookupQuestion(question) || !looksLikeStructuredPathValueCandidate(normalizedLine)) {
+            return false;
+        }
+        return containsStructuredPathQuestionFocusToken(question, normalizedLine, preferredTokens);
+    }
+
+    /**
+     * 判断候选句是否携带通用结构化字段路径和值。
+     *
+     * @param normalizedLine 归一化候选句
+     * @return 携带返回 true
+     */
+    boolean looksLikeStructuredPathValueCandidate(String normalizedLine) {
+        if (normalizedLine == null || normalizedLine.isBlank()) {
+            return false;
+        }
+        int delimiterIndex = answerEvidenceNormalizer.structuredAssignmentDelimiterIndex(normalizedLine);
+        if (delimiterIndex <= 0) {
+            return false;
+        }
+        String assignmentKey = normalizedLine.substring(0, delimiterIndex).trim();
+        String assignmentValue = structuredAssignmentValue(normalizedLine, delimiterIndex);
+        if (assignmentKey.isBlank() || assignmentValue.isBlank()) {
+            return false;
+        }
+        if (isStructuredPathMetadataKey(assignmentKey)) {
+            return containsDottedFieldPath(assignmentValue)
+                    || containsAssignmentLikeMappingSignal(assignmentValue);
+        }
+        return false;
+    }
+
+    /**
+     * 判断候选句是否覆盖问题中的结构化字段焦点。
+     *
+     * @param question 用户问题
+     * @param normalizedLine 归一化候选句
+     * @param preferredTokens 查询 token
+     * @return 覆盖返回 true
+     */
+    boolean containsStructuredPathQuestionFocusToken(
+            String question,
+            String normalizedLine,
+            List<String> preferredTokens
+    ) {
+        if (normalizedLine == null || normalizedLine.isBlank()) {
+            return false;
+        }
+        List<String> tokens = preferredTokens == null || preferredTokens.isEmpty()
+                ? extractQueryTokens(question)
+                : preferredTokens;
+        String lowerCaseLine = lowerCase(normalizedLine);
+        for (String token : tokens) {
+            String normalizedToken = lowerCase(token);
+            if (!isStructuredPathFocusToken(normalizedToken)) {
+                continue;
+            }
+            if (lowerCaseLine.contains(normalizedToken)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断 key 是否为结构化路径元数据字段。
+     *
+     * @param assignmentKey 赋值键
+     * @return 是路径元数据字段返回 true
+     */
+    boolean isStructuredPathMetadataKey(String assignmentKey) {
+        if (assignmentKey == null || assignmentKey.isBlank()) {
+            return false;
+        }
+        String compactKey = lowerCase(assignmentKey).replaceAll("[^a-z]", "");
+        return "fieldpath".equals(compactKey)
+                || "keypath".equals(compactKey)
+                || "parentpath".equals(compactKey)
+                || "contextpath".equals(compactKey)
+                || "displaytext".equals(compactKey);
+    }
+
+    /**
+     * 判断文本是否包含 dotted field path。
+     *
+     * @param value 文本
+     * @return 包含返回 true
+     */
+    boolean containsDottedFieldPath(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        return value.matches("(?s).*[A-Za-z][A-Za-z0-9_-]*(?:\\[[0-9]+])?(?:\\.[A-Za-z][A-Za-z0-9_-]*(?:\\[[0-9]+])?)+.*");
+    }
+
+    /**
+     * 判断 token 是否适合作为结构化路径焦点。
+     *
+     * @param token 查询 token
+     * @return 适合返回 true
+     */
+    boolean isStructuredPathFocusToken(String token) {
+        if (token == null || token.isBlank() || token.length() <= 1) {
+            return false;
+        }
+        if (token.matches("\\d+")) {
+            return false;
+        }
+        if (isSourceLocatorToken(token)) {
+            return false;
+        }
+        return !"yaml".equals(token)
+                && !"yml".equals(token)
+                && !"json".equals(token)
+                && !"xml".equals(token)
+                && !"properties".equals(token)
+                && !"config".equals(token)
+                && !"file".equals(token)
+                && !"path".equals(token)
+                && !"field".equals(token)
+                && !"value".equals(token);
+    }
+
+    /**
+     * 判断 token 是否更像来源定位符而不是字段焦点。
+     *
+     * @param token 查询 token
+     * @return 是来源定位符返回 true
+     */
+    boolean isSourceLocatorToken(String token) {
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+        return token.contains("/")
+                || token.endsWith(".md")
+                || token.endsWith(".yaml")
+                || token.endsWith(".yml")
+                || token.endsWith(".json")
+                || token.endsWith(".properties")
+                || token.endsWith(".xml")
+                || token.endsWith(".csv")
+                || token.endsWith(".xlsx")
+                || token.endsWith(".docx")
+                || token.endsWith(".pdf");
     }
 
     /**
