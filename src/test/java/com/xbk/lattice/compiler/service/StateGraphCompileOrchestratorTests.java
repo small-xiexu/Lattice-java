@@ -4,6 +4,8 @@ import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.CompileJobStepJdbcRepository;
 import com.xbk.lattice.infra.persistence.CompileJobStepRecord;
+import com.xbk.lattice.shared.json.JsonMappers;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -93,6 +95,7 @@ class StateGraphCompileOrchestratorTests {
         assertThat(articleRecord.getSourcePaths()).contains("payment/base.json", "payment/update.json");
         assertThat(articleRecord.getContent()).contains("manual-review");
         assertThat(articleRecord.getContent()).contains("payment/update.json");
+        assertArticleMetadataHasAnalysisMode(articleRecord, "STRUCTURED");
         assertStepLogs(baselineResult.getJobId());
         assertStepLogs(incrementalResult.getJobId());
     }
@@ -336,6 +339,18 @@ class StateGraphCompileOrchestratorTests {
         assertThat(compileArticlesStep.getModelRoute()).isNotBlank();
         assertThat(reviewArticlesStep.getAgentRole()).isEqualTo("ReviewerAgent");
         assertThat(reviewArticlesStep.getModelRoute()).isEqualTo("rule-based");
+    }
+
+    /**
+     * 断言文章 metadata 中记录了 Analyze 模式。
+     *
+     * @param articleRecord 文章记录
+     * @param expectedAnalysisMode 预期模式
+     * @throws Exception JSON 解析异常
+     */
+    private void assertArticleMetadataHasAnalysisMode(ArticleRecord articleRecord, String expectedAnalysisMode) throws Exception {
+        JsonNode metadataNode = JsonMappers.defaultMapper().readTree(articleRecord.getMetadataJson());
+        assertThat(metadataNode.path("analysisMode").asText()).isEqualTo(expectedAnalysisMode);
     }
 
     /**

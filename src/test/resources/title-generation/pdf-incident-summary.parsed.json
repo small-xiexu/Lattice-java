@@ -1,0 +1,15 @@
+{
+  "caseId": "TG-PDF-UNSTABLE-001",
+  "format": "pdf",
+  "relativePath": "docs/monthly-incident-summary.pdf",
+  "sourceTitleCandidates": {
+    "documentTitle": "",
+    "bundleDisplayName": "",
+    "titleHints": []
+  },
+  "anchorTitle": "附录",
+  "extractedText": "附录\n本节汇总本月高频风险来源、人工确认积压与需关注结果抽检事项。\n当前积压主要集中在待人工确认队列，且多个热点条目缺少结果抽检闭环。",
+  "expectedSourceTitle": "monthly-incident-summary",
+  "expectedMode": "RULE_BASED",
+  "expectedRepresentativeTitle": "高频风险来源与人工确认积压事项"
+}

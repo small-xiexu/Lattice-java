@@ -176,6 +176,20 @@ public class CompilerProperties {
 
         private String pageMarkerPattern;
 
+        private int lightweightMinTotalChars = 80;
+
+        private int lightweightMinLineCount = 2;
+
+        private int lightweightMinMultiLineChars = 40;
+
+        private int lightweightMaxContentLines = 8;
+
+        private int lightweightMaxContentScanLines = 60;
+
+        private int lightweightMaxDescriptionChars = 220;
+
+        private int lightweightMaxLineChars = 240;
+
         private List<HeadingPatternRule> headingPatterns = new ArrayList<HeadingPatternRule>();
 
         private List<String> ignoredLinePrefixes = new ArrayList<String>();
@@ -472,6 +486,132 @@ public class CompilerProperties {
          */
         public void setPageMarkerPattern(String pageMarkerPattern) {
             this.pageMarkerPattern = pageMarkerPattern;
+        }
+
+        /**
+         * 获取小资料轻量概念最少总字符数。
+         *
+         * @return 最少总字符数
+         */
+        public int getLightweightMinTotalChars() {
+            return lightweightMinTotalChars;
+        }
+
+        /**
+         * 设置小资料轻量概念最少总字符数。
+         *
+         * @param lightweightMinTotalChars 最少总字符数
+         */
+        public void setLightweightMinTotalChars(int lightweightMinTotalChars) {
+            this.lightweightMinTotalChars = lightweightMinTotalChars;
+        }
+
+        /**
+         * 获取小资料轻量概念最少有效行数。
+         *
+         * @return 最少有效行数
+         */
+        public int getLightweightMinLineCount() {
+            return lightweightMinLineCount;
+        }
+
+        /**
+         * 设置小资料轻量概念最少有效行数。
+         *
+         * @param lightweightMinLineCount 最少有效行数
+         */
+        public void setLightweightMinLineCount(int lightweightMinLineCount) {
+            this.lightweightMinLineCount = lightweightMinLineCount;
+        }
+
+        /**
+         * 获取多行轻量概念最少总字符数。
+         *
+         * @return 最少总字符数
+         */
+        public int getLightweightMinMultiLineChars() {
+            return lightweightMinMultiLineChars;
+        }
+
+        /**
+         * 设置多行轻量概念最少总字符数。
+         *
+         * @param lightweightMinMultiLineChars 最少总字符数
+         */
+        public void setLightweightMinMultiLineChars(int lightweightMinMultiLineChars) {
+            this.lightweightMinMultiLineChars = lightweightMinMultiLineChars;
+        }
+
+        /**
+         * 获取小资料最多保留的内容行数。
+         *
+         * @return 内容行数上限
+         */
+        public int getLightweightMaxContentLines() {
+            return lightweightMaxContentLines;
+        }
+
+        /**
+         * 设置小资料最多保留的内容行数。
+         *
+         * @param lightweightMaxContentLines 内容行数上限
+         */
+        public void setLightweightMaxContentLines(int lightweightMaxContentLines) {
+            this.lightweightMaxContentLines = lightweightMaxContentLines;
+        }
+
+        /**
+         * 获取小资料最多扫描的正文行数。
+         *
+         * @return 扫描行数上限
+         */
+        public int getLightweightMaxContentScanLines() {
+            return lightweightMaxContentScanLines;
+        }
+
+        /**
+         * 设置小资料最多扫描的正文行数。
+         *
+         * @param lightweightMaxContentScanLines 扫描行数上限
+         */
+        public void setLightweightMaxContentScanLines(int lightweightMaxContentScanLines) {
+            this.lightweightMaxContentScanLines = lightweightMaxContentScanLines;
+        }
+
+        /**
+         * 获取小资料描述最大字符数。
+         *
+         * @return 描述最大字符数
+         */
+        public int getLightweightMaxDescriptionChars() {
+            return lightweightMaxDescriptionChars;
+        }
+
+        /**
+         * 设置小资料描述最大字符数。
+         *
+         * @param lightweightMaxDescriptionChars 描述最大字符数
+         */
+        public void setLightweightMaxDescriptionChars(int lightweightMaxDescriptionChars) {
+            this.lightweightMaxDescriptionChars = lightweightMaxDescriptionChars;
+        }
+
+        /**
+         * 获取小资料单行最大字符数。
+         *
+         * @return 单行最大字符数
+         */
+        public int getLightweightMaxLineChars() {
+            return lightweightMaxLineChars;
+        }
+
+        /**
+         * 设置小资料单行最大字符数。
+         *
+         * @param lightweightMaxLineChars 单行最大字符数
+         */
+        public void setLightweightMaxLineChars(int lightweightMaxLineChars) {
+            this.lightweightMaxLineChars = lightweightMaxLineChars;
         }
 
         /**

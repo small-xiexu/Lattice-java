@@ -39,6 +39,16 @@ public class DocumentTopicConceptExtractor extends DocumentTopicConceptSegmentat
     }
 
     /**
+     * 判断源文件是否满足长文档 topic 路由门槛。
+     *
+     * @param rawSource 源文件
+     * @return 满足门槛返回 true
+     */
+    public boolean matchesTopicGate(RawSource rawSource) {
+        return isLongDocument(rawSource);
+    }
+
+    /**
      * 从长文档中提取专题概念。
      *
      * @param groupKey 分组键

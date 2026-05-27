@@ -27,6 +27,12 @@ public class MergedConcept {
 
     private final List<ConceptSection> sections;
 
+    private final String analysisMode;
+
+    private final String failureReason;
+
+    private final String titleSource;
+
     /**
      * 创建合并后的概念。
      *
@@ -36,6 +42,9 @@ public class MergedConcept {
      * @param sourcePaths 来源路径
      * @param snippets 片段摘要
      * @param sections 章节列表
+     * @param analysisMode Analyze 概念生成模式
+     * @param failureReason Analyze 失败原因
+     * @param titleSource 标题来源
      */
     @JsonCreator
     public MergedConcept(
@@ -44,7 +53,10 @@ public class MergedConcept {
             @JsonProperty("description") String description,
             @JsonProperty("sourcePaths") List<String> sourcePaths,
             @JsonProperty("snippets") List<String> snippets,
-            @JsonProperty("sections") List<ConceptSection> sections
+            @JsonProperty("sections") List<ConceptSection> sections,
+            @JsonProperty("analysisMode") String analysisMode,
+            @JsonProperty("failureReason") String failureReason,
+            @JsonProperty("titleSource") String titleSource
     ) {
         this.conceptId = conceptId;
         this.title = title;
@@ -52,6 +64,9 @@ public class MergedConcept {
         this.sourcePaths = sourcePaths;
         this.snippets = snippets;
         this.sections = sections;
+        this.analysisMode = analysisMode;
+        this.failureReason = failureReason;
+        this.titleSource = titleSource;
     }
 
     /**
@@ -63,7 +78,7 @@ public class MergedConcept {
      * @param snippets 片段摘要
      */
     public MergedConcept(String conceptId, String title, List<String> sourcePaths, List<String> snippets) {
-        this(conceptId, title, "", sourcePaths, snippets, Collections.<ConceptSection>emptyList());
+        this(conceptId, title, "", sourcePaths, snippets, Collections.<ConceptSection>emptyList(), null, null, null);
     }
 
     /**
@@ -82,7 +97,28 @@ public class MergedConcept {
             List<String> sourcePaths,
             List<String> snippets
     ) {
-        this(conceptId, title, description, sourcePaths, snippets, Collections.<ConceptSection>emptyList());
+        this(conceptId, title, description, sourcePaths, snippets, Collections.<ConceptSection>emptyList(), null, null, null);
+    }
+
+    /**
+     * 创建合并后的概念。
+     *
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param description 描述
+     * @param sourcePaths 来源路径
+     * @param snippets 片段摘要
+     * @param sections 章节列表
+     */
+    public MergedConcept(
+            String conceptId,
+            String title,
+            String description,
+            List<String> sourcePaths,
+            List<String> snippets,
+            List<ConceptSection> sections
+    ) {
+        this(conceptId, title, description, sourcePaths, snippets, sections, null, null, null);
     }
 
     /**
@@ -137,5 +173,32 @@ public class MergedConcept {
      */
     public List<ConceptSection> getSections() {
         return sections;
+    }
+
+    /**
+     * 获取 Analyze 概念生成模式。
+     *
+     * @return Analyze 模式
+     */
+    public String getAnalysisMode() {
+        return analysisMode;
+    }
+
+    /**
+     * 获取 Analyze 失败原因。
+     *
+     * @return 失败原因
+     */
+    public String getFailureReason() {
+        return failureReason;
+    }
+
+    /**
+     * 获取标题来源。
+     *
+     * @return 标题来源
+     */
+    public String getTitleSource() {
+        return titleSource;
     }
 }

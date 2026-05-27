@@ -9,6 +9,7 @@ import com.xbk.lattice.documentparse.extractor.PdfTextExtractor;
 import com.xbk.lattice.documentparse.extractor.PptTextExtractor;
 import com.xbk.lattice.documentparse.extractor.SourceExtractionResult;
 import com.xbk.lattice.documentparse.extractor.WordTextExtractor;
+import com.xbk.lattice.shared.text.DocumentTitleSupport;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -273,7 +274,8 @@ public class IngestNode {
             String format = extractFormat(path.getFileName().toString());
             String trimmedContent = trimContent(content, format);
             long fileSize = Files.size(path);
-            return RawSource.extracted(relativePath, trimmedContent, format, fileSize, "{}", false, relativePath);
+            String metadataJson = buildTextMetadataJson(relativePath, content);
+            return RawSource.extracted(relativePath, trimmedContent, format, fileSize, metadataJson, false, relativePath);
         }
         catch (IOException ex) {
             log.error("Failed to read source file path: {}", path, ex);
@@ -297,12 +299,13 @@ public class IngestNode {
             }
             String relativePath = normalizePath(sourceDir.relativize(path));
             long fileSize = Files.size(path);
+            String metadataJson = buildParsedMetadataJson(relativePath, extractionResult.getMetadataJson());
             return RawSource.extracted(
                     relativePath,
                     trimContent(extractionResult.getContent(), "pdf"),
                     "pdf",
                     fileSize,
-                    extractionResult.getMetadataJson(),
+                    metadataJson,
                     extractionResult.isVerbatim(),
                     relativePath
             );
@@ -330,12 +333,13 @@ public class IngestNode {
             String relativePath = normalizePath(sourceDir.relativize(path));
             long fileSize = Files.size(path);
             String format = extractFormat(path.getFileName().toString());
+            String metadataJson = buildParsedMetadataJson(relativePath, extractionResult.getMetadataJson());
             return RawSource.extracted(
                     relativePath,
                     trimContent(extractionResult.getContent(), format),
                     format,
                     fileSize,
-                    extractionResult.getMetadataJson(),
+                    metadataJson,
                     extractionResult.isVerbatim(),
                     relativePath
             );
@@ -362,12 +366,13 @@ public class IngestNode {
             }
             String relativePath = normalizePath(sourceDir.relativize(path));
             long fileSize = Files.size(path);
+            String metadataJson = buildParsedMetadataJson(relativePath, extractionResult.getMetadataJson());
             return RawSource.extracted(
                     relativePath,
                     trimContent(extractionResult.getContent(), "docx"),
                     "docx",
                     fileSize,
-                    extractionResult.getMetadataJson(),
+                    metadataJson,
                     extractionResult.isVerbatim(),
                     relativePath
             );
@@ -394,12 +399,13 @@ public class IngestNode {
             }
             String relativePath = normalizePath(sourceDir.relativize(path));
             long fileSize = Files.size(path);
+            String metadataJson = buildParsedMetadataJson(relativePath, extractionResult.getMetadataJson());
             return RawSource.extracted(
                     relativePath,
                     trimContent(extractionResult.getContent(), "doc"),
                     "doc",
                     fileSize,
-                    extractionResult.getMetadataJson(),
+                    metadataJson,
                     extractionResult.isVerbatim(),
                     relativePath
             );
@@ -426,12 +432,13 @@ public class IngestNode {
             }
             String relativePath = normalizePath(sourceDir.relativize(path));
             long fileSize = Files.size(path);
+            String metadataJson = buildParsedMetadataJson(relativePath, extractionResult.getMetadataJson());
             return RawSource.extracted(
                     relativePath,
                     trimContent(extractionResult.getContent(), "pptx"),
                     "pptx",
                     fileSize,
-                    extractionResult.getMetadataJson(),
+                    metadataJson,
                     extractionResult.isVerbatim(),
                     relativePath
             );
@@ -455,7 +462,8 @@ public class IngestNode {
             String relativePath = normalizePath(sourceDir.relativize(path));
             long fileSize = Files.size(path);
             String content = "[Image file: " + relativePath + "]";
-            return RawSource.extracted(relativePath, content, format, fileSize, "{}", false, relativePath);
+            String metadataJson = buildParsedMetadataJson(relativePath, "{}");
+            return RawSource.extracted(relativePath, content, format, fileSize, metadataJson, false, relativePath);
         }
         catch (IOException ex) {
             log.warn("Failed to read image placeholder path: {}", path, ex);
@@ -489,6 +497,30 @@ public class IngestNode {
      */
     private boolean shouldPreserveFullExtractedContent(String format) {
         return "xlsx".equals(format) || "xls".equals(format);
+    }
+
+    /**
+     * 为文本文件构建包含 documentTitle 的 metadata。
+     *
+     * @param relativePath 相对路径
+     * @param content 原始内容
+     * @return metadata JSON
+     */
+    private String buildTextMetadataJson(String relativePath, String content) {
+        String documentTitle = DocumentTitleSupport.resolveTextDocumentTitle(relativePath, content, "{}");
+        return DocumentTitleSupport.upsertDocumentTitle("{}", documentTitle);
+    }
+
+    /**
+     * 为解析类文件构建包含 documentTitle 的 metadata。
+     *
+     * @param relativePath 相对路径
+     * @param metadataJson 原始 metadata JSON
+     * @return metadata JSON
+     */
+    private String buildParsedMetadataJson(String relativePath, String metadataJson) {
+        String documentTitle = DocumentTitleSupport.resolveDocumentTitle(relativePath, metadataJson);
+        return DocumentTitleSupport.upsertDocumentTitle(metadataJson, documentTitle);
     }
 
     /**

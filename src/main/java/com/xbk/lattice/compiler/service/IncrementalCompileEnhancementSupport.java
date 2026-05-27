@@ -30,6 +30,7 @@ import com.xbk.lattice.governance.PropagationService;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.query.service.ArticleChunkVectorIndexService;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
+import com.xbk.lattice.source.infra.KnowledgeSourceJdbcRepository;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -82,6 +83,7 @@ abstract class IncrementalCompileEnhancementSupport extends IncrementalCompilePl
             ArticleJdbcRepository articleJdbcRepository,
             ArticleChunkJdbcRepository articleChunkJdbcRepository,
             SourceFileJdbcRepository sourceFileJdbcRepository,
+            KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository,
             SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
             ArticleVectorIndexService articleVectorIndexService,
             ArticleChunkVectorIndexService articleChunkVectorIndexService,
@@ -96,6 +98,7 @@ abstract class IncrementalCompileEnhancementSupport extends IncrementalCompilePl
                 articleJdbcRepository,
                 articleChunkJdbcRepository,
                 sourceFileJdbcRepository,
+                knowledgeSourceJdbcRepository,
                 sourceFileChunkJdbcRepository,
                 articleVectorIndexService,
                 articleChunkVectorIndexService,
@@ -142,7 +145,7 @@ abstract class IncrementalCompileEnhancementSupport extends IncrementalCompilePl
                 existingArticle.getLifecycle(),
                 OffsetDateTime.now(),
                 sourcePaths,
-                buildIncrementalMetadataJson(summary, sourcePaths, mergedConcepts),
+                mergeIncrementalMetadataJson(existingArticle.getMetadataJson(), summary, sourcePaths, mergedConcepts),
                 summary,
                 referentialKeywords,
                 dependsOn,

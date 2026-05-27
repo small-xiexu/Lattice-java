@@ -229,6 +229,118 @@ class CompileArticleReviewFlowTests {
     }
 
     /**
+     * 验证编译时会为文章生成标题画像并回写最终展示标题。
+     */
+    @Test
+    void shouldPersistTitleProfileAndRepresentativeTitle() {
+        CompileArticleNode compileArticleNode = new CompileArticleNode(
+                null,
+                new FakeSourceFileJdbcRepository(),
+                null,
+                new DocumentSectionSelector(),
+                null,
+                null,
+                null
+        );
+
+        ArticleRecord articleRecord = compileArticleNode.compileDraft(new MergedConcept(
+                "quality-progress-and-lessons",
+                "下一步计划",
+                "从长文档中识别出的专题：下一步计划",
+                List.of("docs/quality-progress-and-lessons.md"),
+                List.of("Dashboard 状态摘要接入人工确认队列"),
+                List.of(
+                        new ConceptSection(
+                                "台账要求",
+                                List.of("每完成一个事项立即回写", "未验证事项不得勾选完成"),
+                                List.of("docs/quality-progress-and-lessons.md#台账要求")
+                        ),
+                        new ConceptSection(
+                                "联动范围",
+                                List.of("Dashboard 状态摘要", "人工确认队列", "回归验收记录"),
+                                List.of("docs/quality-progress-and-lessons.md#联动范围")
+                        )
+                )
+        ), null, 7L, "quality", null, "compile");
+
+        assertThat(articleRecord.getTitle()).isEqualTo("台账要求与联动范围");
+        assertThat(articleRecord.getContent()).contains("title: \"台账要求与联动范围\"");
+        assertThat(articleRecord.getContent()).contains("# 台账要求与联动范围");
+        assertThat(articleRecord.getMetadataJson()).contains("\"titleProfile\"");
+        assertThat(articleRecord.getMetadataJson()).contains("\"sourceTitle\":\"质量打磨阶段进展\"");
+        assertThat(articleRecord.getMetadataJson()).contains("\"anchorTitle\":\"下一步计划\"");
+        assertThat(articleRecord.getMetadataJson()).contains("\"representativeTitle\":\"台账要求与联动范围\"");
+        assertThat(articleRecord.getMetadataJson()).contains("\"titleGenerationMode\":\"RULE_BASED\"");
+    }
+
+    /**
+     * 验证 fallback 草稿会把标题来源与 fallback 原因写入 metadata。
+     */
+    @Test
+    void shouldPersistFallbackTitleSourceAndReasonInMetadata() {
+        CompileArticleNode compileArticleNode = new CompileArticleNode(
+                null,
+                new FakeSourceFileJdbcRepository(),
+                null,
+                new DocumentSectionSelector(),
+                null,
+                null,
+                null
+        );
+
+        ArticleRecord articleRecord = compileArticleNode.compileDraft(new MergedConcept(
+                "incident-response-checklists",
+                "Incident Response Checklists Lite",
+                "",
+                List.of("04_office/incident-response-checklists-lite.xlsx"),
+                List.of("checklist"),
+                List.of(),
+                "FALLBACK",
+                "EMPTY_RESULT",
+                "FILE_STEM"
+        ), null, 7L, "quality", null, "compile");
+
+        assertThat(articleRecord.getMetadataJson()).contains("\"analysisMode\":\"FALLBACK\"");
+        assertThat(articleRecord.getMetadataJson()).contains("\"failureReason\":\"EMPTY_RESULT\"");
+        assertThat(articleRecord.getMetadataJson()).contains("\"fallbackReason\":\"EMPTY_RESULT\"");
+        assertThat(articleRecord.getMetadataJson()).contains("\"titleSource\":\"FILE_STEM\"");
+    }
+
+    /**
+     * 验证规则标题低置信度时会进入 LLM 兜底并回写代表性标题模式。
+     */
+    @Test
+    void shouldUseLlmFallbackForLowConfidenceRepresentativeTitle() {
+        CompileArticleNode compileArticleNode = new CompileArticleNode(
+                createLlmGateway("标题：Dashboard 状态摘要接入与质量台账回写要求", "{}"),
+                new FakeSourceFileJdbcRepository(),
+                null,
+                new DocumentSectionSelector(),
+                null,
+                null,
+                null
+        );
+
+        ArticleRecord articleRecord = compileArticleNode.compileDraft(new MergedConcept(
+                "quality-progress-and-lessons",
+                "下一步计划",
+                "从长文档中识别出的专题：下一步计划",
+                List.of("docs/quality-progress-and-lessons.md"),
+                List.of("Dashboard 状态摘要接入人工确认队列"),
+                List.of(new ConceptSection(
+                        "台账要求",
+                        List.of("每完成一个事项立即回写", "未验证事项不得勾选完成"),
+                        List.of("docs/quality-progress-and-lessons.md#台账要求")
+                ))
+        ), null, 7L, "quality", "job-1", "compile");
+
+        assertThat(articleRecord.getTitle()).isEqualTo("Dashboard 状态摘要接入与质量台账回写要求");
+        assertThat(articleRecord.getMetadataJson()).contains("\"titleGenerationMode\":\"LLM_FALLBACK\"");
+        assertThat(articleRecord.getMetadataJson()).contains("\"titleGenerationConfidence\":\"MEDIUM\"");
+        assertThat(articleRecord.getMetadataJson()).contains("\"representativeTitle\":\"Dashboard 状态摘要接入与质量台账回写要求\"");
+    }
+
+    /**
      * 验证审查与修复阶段接收 sourceRef 相关片段，而不是完整来源全文前缀。
      */
     @Test
@@ -559,6 +671,23 @@ class CompileArticleReviewFlowTests {
                             "payment/analyze.json"
                     )
             );
+            records.put(
+                    "docs/quality-progress-and-lessons.md",
+                    new SourceFileRecord(
+                            1L,
+                            7L,
+                            "docs/quality-progress-and-lessons.md",
+                            "docs/quality-progress-and-lessons.md",
+                            null,
+                            "Dashboard 状态摘要接入人工确认队列",
+                            "md",
+                            200L,
+                            "Dashboard 状态摘要接入人工确认队列\n台账要求\n联动范围",
+                            "{\"documentTitle\":\"质量打磨阶段进展\"}",
+                            false,
+                            "docs/quality-progress-and-lessons.md"
+                    )
+            );
         }
 
         /**
@@ -573,6 +702,20 @@ class CompileArticleReviewFlowTests {
         @Override
         public Optional<SourceFileRecord> findByPath(String filePath) {
             return Optional.ofNullable(records.get(filePath));
+        }
+
+        @Override
+        public Optional<SourceFileRecord> findBySourceIdAndRelativePath(Long sourceId, String relativePath) {
+            SourceFileRecord sourceFileRecord = records.get(relativePath);
+            if (sourceFileRecord == null) {
+                return Optional.empty();
+            }
+            if (sourceId == null || sourceFileRecord.getSourceId() == null) {
+                return Optional.of(sourceFileRecord);
+            }
+            return sourceId.equals(sourceFileRecord.getSourceId())
+                    ? Optional.of(sourceFileRecord)
+                    : Optional.empty();
         }
     }
 

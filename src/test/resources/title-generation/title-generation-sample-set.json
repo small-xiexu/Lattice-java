@@ -1,0 +1,68 @@
+{
+  "version": "v1",
+  "cases": [
+    {
+      "caseId": "TG-MD-WEAK-001",
+      "fixturePath": "src/test/resources/title-generation/quality-progress-and-lessons.md",
+      "format": "md",
+      "expectedSourceTitle": "quality-progress-and-lessons",
+      "anchorTitle": "下一步计划",
+      "expectedMode": "RULE_BASED",
+      "expectedRepresentativeTitle": "Dashboard 状态摘要接入与质量台账回写要求"
+    },
+    {
+      "caseId": "TG-MD-STRONG-001",
+      "fixturePath": "src/test/resources/title-generation/vector-index-operations.md",
+      "format": "md",
+      "expectedSourceTitle": "向量索引运维手册",
+      "anchorTitle": "向量索引重建流程与状态校验",
+      "expectedMode": "ANCHOR_DIRECT",
+      "expectedRepresentativeTitle": "向量索引重建流程与状态校验"
+    },
+    {
+      "caseId": "TG-MD-WEAK-002",
+      "fixturePath": "src/test/resources/title-generation/compile-review-governance.md",
+      "format": "md",
+      "expectedSourceTitle": "compile-review-governance",
+      "anchorTitle": "说明",
+      "expectedMode": "RULE_BASED",
+      "expectedRepresentativeTitle": "人工确认入库约束与审查元数据一致性要求"
+    },
+    {
+      "caseId": "TG-MD-MULTI-001",
+      "fixturePath": "src/test/resources/title-generation/multi-section-migration.md",
+      "format": "md",
+      "expectedSourceTitle": "migration-notes",
+      "anchorTitle": "总结",
+      "expectedMode": "RULE_BASED",
+      "expectedRepresentativeTitle": "接口契约、路由切换与回退边界"
+    },
+    {
+      "caseId": "TG-OFFICE-UNSTABLE-001",
+      "fixturePath": "src/test/resources/title-generation/office-deployment-guide.parsed.json",
+      "format": "docx",
+      "expectedSourceTitle": "部署联调手册",
+      "anchorTitle": "部署步骤",
+      "expectedMode": "ANCHOR_DIRECT",
+      "expectedRepresentativeTitle": "部署步骤"
+    },
+    {
+      "caseId": "TG-PDF-UNSTABLE-001",
+      "fixturePath": "src/test/resources/title-generation/pdf-incident-summary.parsed.json",
+      "format": "pdf",
+      "expectedSourceTitle": "monthly-incident-summary",
+      "anchorTitle": "附录",
+      "expectedMode": "RULE_BASED",
+      "expectedRepresentativeTitle": "高频风险来源与人工确认积压事项"
+    },
+    {
+      "caseId": "TG-LLM-FALLBACK-001",
+      "fixturePath": "src/test/resources/title-generation/quality-progress-and-lessons.md",
+      "format": "md",
+      "expectedSourceTitle": "质量打磨阶段进展",
+      "anchorTitle": "下一步计划",
+      "expectedMode": "LLM_FALLBACK",
+      "expectedRepresentativeTitle": "Dashboard 状态摘要接入与质量台账回写要求"
+    }
+  ]
+}

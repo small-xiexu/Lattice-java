@@ -13,7 +13,11 @@ import com.xbk.lattice.compiler.domain.SourceBatch;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
 import com.xbk.lattice.compiler.prompt.SchemaAwarePrompts;
 import com.xbk.lattice.compiler.service.LlmGateway;
+import com.xbk.lattice.llm.error.LlmRetryExhaustedException;
+import com.xbk.lattice.llm.service.LlmRetrySupport;
+import com.xbk.lattice.shared.text.DocumentTitleSupport;
 
+import java.net.SocketTimeoutException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -37,9 +41,43 @@ public class AnalyzeNode {
 
     private static final String WRITER_ROLE = "writer";
 
+    private static final String ANALYSIS_MODE_STRUCTURED = "STRUCTURED";
+
+    private static final String ANALYSIS_MODE_TABLE_OVERVIEW = "TABLE_OVERVIEW";
+
+    private static final String ANALYSIS_MODE_LIGHTWEIGHT_SMALL_DOC = "LIGHTWEIGHT_SMALL_DOC";
+
+    private static final String ANALYSIS_MODE_TOPIC = "TOPIC";
+
+    private static final String ANALYSIS_MODE_LLM = "LLM";
+
+    private static final String ANALYSIS_MODE_FALLBACK = "FALLBACK";
+
+    private static final String FAILURE_REASON_EMPTY_RESULT = "EMPTY_RESULT";
+
+    private static final String FAILURE_REASON_PARSE_FAILED = "PARSE_FAILED";
+
+    private static final String FAILURE_REASON_TIMEOUT = "TIMEOUT";
+
+    private static final String FAILURE_REASON_ROUTE_UNAVAILABLE = "ROUTE_UNAVAILABLE";
+
+    private static final String FAILURE_REASON_LLM_CALL_FAILED = "LLM_CALL_FAILED";
+
+    private static final String TITLE_SOURCE_DOCUMENT_TITLE = "DOCUMENT_TITLE";
+
+    private static final String TITLE_SOURCE_FILE_STEM = "FILE_STEM";
+
+    private static final String TITLE_SOURCE_GROUP_KEY = "GROUP_KEY";
+
+    private static final String TITLE_SOURCE_SHARED_SOURCE_TITLE = "SHARED_SOURCE_TITLE";
+
+    private static final String TITLE_SOURCE_NEUTRAL_MULTI_SOURCE = "NEUTRAL_MULTI_SOURCE";
+
     private final LlmGateway llmGateway;
 
     private final SchemaAwarePrompts schemaAwarePrompts;
+
+    private final CompilerProperties.DocumentTopics documentTopics;
 
     private final DocumentTopicConceptExtractor documentTopicConceptExtractor;
 
@@ -102,7 +140,8 @@ public class AnalyzeNode {
     ) {
         this.llmGateway = llmGateway;
         this.schemaAwarePrompts = schemaAwarePrompts;
-        this.documentTopicConceptExtractor = new DocumentTopicConceptExtractor(documentTopics);
+        this.documentTopics = documentTopics == null ? new CompilerProperties.DocumentTopics() : documentTopics;
+        this.documentTopicConceptExtractor = new DocumentTopicConceptExtractor(this.documentTopics);
         this.structuredTableWriterGatePolicy = new StructuredTableWriterGatePolicy();
         this.documentTopicWriterGatePolicy = new DocumentTopicWriterGatePolicy();
     }
@@ -142,42 +181,62 @@ public class AnalyzeNode {
     public List<AnalyzedConcept> analyze(String groupKey, List<SourceBatch> sourceBatches, Path sourceDir) {
         List<AnalyzedConcept> analyzedConcepts = new ArrayList<AnalyzedConcept>();
         String conceptId = normalizeGroupKey(groupKey);
-        String title = toTitle(conceptId, groupKey);
 
         for (SourceBatch sourceBatch : sourceBatches) {
             List<RawSource> sortedSources = sortSources(sourceBatch.getSources());
             List<String> sourcePaths = collectSourcePaths(sortedSources);
             List<AnalyzedConcept> structuredConcepts = analyzeStructuredConcepts(sortedSources, sourcePaths);
             if (!structuredConcepts.isEmpty()) {
-                analyzedConcepts.addAll(structuredConcepts);
+                analyzedConcepts.addAll(tagAnalysisMode(structuredConcepts, ANALYSIS_MODE_STRUCTURED, null));
                 continue;
             }
 
             List<AnalyzedConcept> structuredTableOverviewConcepts =
                     structuredTableWriterGatePolicy.buildOverviewConcepts(sortedSources);
             if (!structuredTableOverviewConcepts.isEmpty()) {
-                analyzedConcepts.addAll(structuredTableOverviewConcepts);
+                analyzedConcepts.addAll(tagAnalysisMode(structuredTableOverviewConcepts, ANALYSIS_MODE_TABLE_OVERVIEW, null));
                 continue;
             }
 
-            List<AnalyzedConcept> topicAnalyzedConcepts = documentTopicConceptExtractor.extract(groupKey, sortedSources);
-            if (!topicAnalyzedConcepts.isEmpty()) {
-                analyzedConcepts.addAll(documentTopicWriterGatePolicy.rewrite(sortedSources, topicAnalyzedConcepts));
+            AnalyzeRouteResult analyzeRouteResult = analyzeLightweightAndTopicConcepts(groupKey, sortedSources);
+            if (!analyzeRouteResult.getAnalyzedConcepts().isEmpty() && analyzeRouteResult.getRemainingSources().isEmpty()) {
+                analyzedConcepts.addAll(analyzeRouteResult.getAnalyzedConcepts());
                 continue;
             }
 
-            List<AnalyzedConcept> llmAnalyzedConcepts = analyzeWithLlm(sortedSources, sourcePaths, sourceDir);
-            if (!llmAnalyzedConcepts.isEmpty()) {
-                analyzedConcepts.addAll(llmAnalyzedConcepts);
+            List<RawSource> llmSources = analyzeRouteResult.getRemainingSources().isEmpty()
+                    ? sortedSources
+                    : analyzeRouteResult.getRemainingSources();
+            List<String> llmSourcePaths = collectSourcePaths(llmSources);
+            AnalyzeAttemptResult llmAnalyzeAttempt = analyzeWithLlm(llmSources, llmSourcePaths, sourceDir);
+            if (!llmAnalyzeAttempt.getAnalyzedConcepts().isEmpty()) {
+                analyzedConcepts.addAll(analyzeRouteResult.getAnalyzedConcepts());
+                analyzedConcepts.addAll(tagAnalysisMode(
+                        llmAnalyzeAttempt.getAnalyzedConcepts(),
+                        ANALYSIS_MODE_LLM,
+                        llmAnalyzeAttempt.getFailureReason()
+                ));
                 continue;
             }
 
-            analyzedConcepts.add(new AnalyzedConcept(
+            if (!analyzeRouteResult.getAnalyzedConcepts().isEmpty()) {
+                analyzedConcepts.addAll(analyzeRouteResult.getAnalyzedConcepts());
+                analyzedConcepts.add(buildFallbackConcept(
+                        conceptId,
+                        groupKey,
+                        llmSourcePaths,
+                        llmSources,
+                        llmAnalyzeAttempt.getFailureReason()
+                ));
+                continue;
+            }
+
+            analyzedConcepts.add(buildFallbackConcept(
                     conceptId,
-                    title,
-                    "",
+                    groupKey,
                     sourcePaths,
-                    collectFallbackSnippets(sortedSources)
+                    sortedSources,
+                    llmAnalyzeAttempt.getFailureReason()
             ));
         }
         return analyzedConcepts;
@@ -190,9 +249,9 @@ public class AnalyzeNode {
      * @param sourcePaths 来源路径
      * @return 分析结果
      */
-    private List<AnalyzedConcept> analyzeWithLlm(List<RawSource> sortedSources, List<String> sourcePaths, Path sourceDir) {
+    private AnalyzeAttemptResult analyzeWithLlm(List<RawSource> sortedSources, List<String> sourcePaths, Path sourceDir) {
         if (llmGateway == null || sortedSources.isEmpty()) {
-            return new ArrayList<AnalyzedConcept>();
+            return AnalyzeAttemptResult.empty(FAILURE_REASON_ROUTE_UNAVAILABLE);
         }
         try {
             String systemPrompt = schemaAwarePrompts == null
@@ -207,13 +266,392 @@ public class AnalyzeNode {
             );
             List<StructuredConceptCandidate> conceptCandidates = parseStructuredConceptCandidates(llmResponse);
             if (conceptCandidates.isEmpty()) {
-                return new ArrayList<AnalyzedConcept>();
+                String failureReason = hasStructuredConceptSignal(llmResponse)
+                        ? FAILURE_REASON_PARSE_FAILED
+                        : FAILURE_REASON_EMPTY_RESULT;
+                return AnalyzeAttemptResult.empty(failureReason);
             }
-            return toAnalyzedConcepts(conceptCandidates, sourcePaths);
+            return AnalyzeAttemptResult.success(toAnalyzedConcepts(conceptCandidates, sourcePaths));
         }
         catch (RuntimeException ex) {
-            return new ArrayList<AnalyzedConcept>();
+            return AnalyzeAttemptResult.empty(resolveFailureReason(ex));
         }
+    }
+
+    /**
+     * 在规则路径内组合小资料轻量概念与长文档 topic 概念。
+     *
+     * @param groupKey 分组键
+     * @param sortedSources 已排序源文件
+     * @return 路由结果
+     */
+    private AnalyzeRouteResult analyzeLightweightAndTopicConcepts(String groupKey, List<RawSource> sortedSources) {
+        List<AnalyzedConcept> routeConcepts = new ArrayList<AnalyzedConcept>();
+        List<RawSource> remainingSources = new ArrayList<RawSource>();
+        for (RawSource rawSource : sortedSources) {
+            if (documentTopicConceptExtractor.matchesTopicGate(rawSource)) {
+                List<AnalyzedConcept> topicAnalyzedConcepts = documentTopicConceptExtractor.extract(groupKey, List.of(rawSource));
+                if (!topicAnalyzedConcepts.isEmpty()) {
+                    routeConcepts.addAll(tagAnalysisMode(
+                            documentTopicWriterGatePolicy.rewrite(List.of(rawSource), topicAnalyzedConcepts),
+                            ANALYSIS_MODE_TOPIC,
+                            null
+                    ));
+                    continue;
+                }
+                remainingSources.add(rawSource);
+                continue;
+            }
+
+            AnalyzedConcept lightweightConcept = buildLightweightSmallDocConcept(groupKey, rawSource);
+            if (lightweightConcept != null) {
+                routeConcepts.add(lightweightConcept.withAnalysisMetadata(ANALYSIS_MODE_LIGHTWEIGHT_SMALL_DOC, null));
+                continue;
+            }
+            remainingSources.add(rawSource);
+        }
+        return new AnalyzeRouteResult(routeConcepts, remainingSources);
+    }
+
+    /**
+     * 为单个小资料构建轻量概念。
+     *
+     * @param groupKey 分组键
+     * @param rawSource 源文件
+     * @return 轻量概念；信号不足时返回空
+     */
+    private AnalyzedConcept buildLightweightSmallDocConcept(String groupKey, RawSource rawSource) {
+        if (rawSource == null || rawSource.getContent() == null || rawSource.getContent().isBlank()) {
+            return null;
+        }
+        TitleResolution titleResolution = resolveLightweightTitle(rawSource);
+        if (titleResolution == null || titleResolution.getTitle().isEmpty()) {
+            return null;
+        }
+        String title = titleResolution.getTitle();
+        List<String> contentLines = collectLightweightContentLines(rawSource, title);
+        if (!hasLightweightSignal(contentLines)) {
+            return null;
+        }
+        String conceptId = buildLightweightConceptId(groupKey, rawSource);
+        String description = buildLightweightDescription(contentLines);
+        List<String> sourcePaths = List.of(rawSource.getRelativePath());
+        String sectionHeading = title;
+        List<ConceptSection> sections = List.of(new ConceptSection(
+                sectionHeading,
+                contentLines,
+                buildDefaultSourceRefs(sourcePaths, sectionHeading)
+        ));
+        return new AnalyzedConcept(
+                conceptId,
+                title,
+                description,
+                sourcePaths,
+                buildLightweightSnippets(contentLines, description),
+                sections,
+                null,
+                null,
+                titleResolution.getTitleSource()
+        );
+    }
+
+    /**
+     * 解析小资料展示标题。
+     *
+     * @param rawSource 源文件
+     * @return 轻量概念标题
+     */
+    private TitleResolution resolveLightweightTitle(RawSource rawSource) {
+        return resolveSourceTitleCandidate(rawSource);
+    }
+
+    /**
+     * 构建小资料概念标识。
+     *
+     * @param groupKey 分组键
+     * @param rawSource 源文件
+     * @return 轻量概念标识
+     */
+    private String buildLightweightConceptId(String groupKey, RawSource rawSource) {
+        String normalizedGroupKey = normalizeGroupKey(groupKey);
+        String sourceStem = normalizeGroupKey(DocumentTitleSupport.resolveFileNameTitle(rawSource.getRelativePath()));
+        if ("default".equals(sourceStem)) {
+            return normalizedGroupKey;
+        }
+        if (normalizedGroupKey.equals(sourceStem)) {
+            return sourceStem;
+        }
+        return normalizeGroupKey(normalizedGroupKey + "-" + sourceStem);
+    }
+
+    /**
+     * 收集小资料正文中的高信息量内容行。
+     *
+     * @param rawSource 源文件
+     * @param title 概念标题
+     * @return 内容行列表
+     */
+    private List<String> collectLightweightContentLines(RawSource rawSource, String title) {
+        Set<String> contentLines = new LinkedHashSet<String>();
+        String normalizedTitle = normalizeComparableText(title);
+        String[] lines = rawSource.getContent().split("\\R", -1);
+        int scannedLineCount = 0;
+        for (String line : lines) {
+            if (scannedLineCount >= documentTopics.getLightweightMaxContentScanLines()
+                    || contentLines.size() >= documentTopics.getLightweightMaxContentLines()) {
+                break;
+            }
+            String normalizedLine = normalizeLightweightLine(line);
+            if (normalizedLine.isEmpty() || isLightweightMarkerLine(normalizedLine)) {
+                continue;
+            }
+            if (!normalizedTitle.isEmpty() && normalizeComparableText(normalizedLine).equals(normalizedTitle)) {
+                continue;
+            }
+            contentLines.add(truncate(normalizedLine, documentTopics.getLightweightMaxLineChars()));
+            scannedLineCount++;
+        }
+        return new ArrayList<String>(contentLines);
+    }
+
+    /**
+     * 判断当前内容是否具备轻量概念信号。
+     *
+     * @param contentLines 内容行
+     * @return 信号足够返回 true
+     */
+    private boolean hasLightweightSignal(List<String> contentLines) {
+        if (contentLines == null || contentLines.isEmpty()) {
+            return false;
+        }
+        int totalChars = 0;
+        for (String contentLine : contentLines) {
+            totalChars += normalizeSnippet(contentLine).length();
+        }
+        return totalChars >= documentTopics.getLightweightMinTotalChars()
+                || (contentLines.size() >= documentTopics.getLightweightMinLineCount()
+                && totalChars >= documentTopics.getLightweightMinMultiLineChars());
+    }
+
+    /**
+     * 构建轻量概念描述。
+     *
+     * @param contentLines 内容行
+     * @return 描述文本
+     */
+    private String buildLightweightDescription(List<String> contentLines) {
+        List<String> descriptionLines = new ArrayList<String>();
+        int totalChars = 0;
+        for (String contentLine : contentLines) {
+            if (descriptionLines.size() >= 3) {
+                break;
+            }
+            String normalizedLine = normalizeSnippet(contentLine);
+            if (normalizedLine.isEmpty()) {
+                continue;
+            }
+            descriptionLines.add(normalizedLine);
+            totalChars += normalizedLine.length();
+            if (totalChars >= documentTopics.getLightweightMaxDescriptionChars()) {
+                break;
+            }
+        }
+        return truncate(String.join(" ", descriptionLines), documentTopics.getLightweightMaxDescriptionChars());
+    }
+
+    /**
+     * 构建轻量概念片段。
+     *
+     * @param contentLines 内容行
+     * @param description 描述文本
+     * @return 片段列表
+     */
+    private List<String> buildLightweightSnippets(List<String> contentLines, String description) {
+        Set<String> snippets = new LinkedHashSet<String>();
+        String normalizedDescription = normalizeSnippet(description);
+        if (!normalizedDescription.isEmpty()) {
+            snippets.add(normalizedDescription);
+        }
+        for (String contentLine : contentLines) {
+            if (snippets.size() >= 3) {
+                break;
+            }
+            String normalizedLine = normalizeSnippet(contentLine);
+            if (!normalizedLine.isEmpty()) {
+                snippets.add(normalizedLine);
+            }
+        }
+        return new ArrayList<String>(snippets);
+    }
+
+    /**
+     * 标准化小资料单行文本。
+     *
+     * @param line 原始单行文本
+     * @return 标准化后的单行文本
+     */
+    private String normalizeLightweightLine(String line) {
+        if (line == null) {
+            return "";
+        }
+        String normalizedLine = line.trim();
+        normalizedLine = normalizedLine.replaceAll("^#{1,6}\\s*", "");
+        normalizedLine = normalizedLine.replaceAll("\\s*#+\\s*$", "");
+        return normalizedLine.replaceAll("\\s+", " ").trim();
+    }
+
+    /**
+     * 判断当前单行是否只是版面标记。
+     *
+     * @param line 标准化后的单行文本
+     * @return 仅为标记返回 true
+     */
+    private boolean isLightweightMarkerLine(String line) {
+        String normalizedLine = normalizeSnippet(line);
+        if (normalizedLine.isEmpty()) {
+            return true;
+        }
+        String lowerCaseLine = normalizedLine.toLowerCase(Locale.ROOT);
+        return normalizedLine.equals("---")
+                || normalizedLine.startsWith("```")
+                || normalizedLine.startsWith("~~~")
+                || lowerCaseLine.matches("^===\\s*page\\s*:\\s*\\d+\\s*===$")
+                || lowerCaseLine.matches("^===\\s*sheet\\s*:\\s*.+===$")
+                || normalizedLine.matches("^---\\s+.+\\s+---$");
+    }
+
+    /**
+     * 归一化用于去重比较的文本。
+     *
+     * @param value 原始文本
+     * @return 去除版式噪音后的比较文本
+     */
+    private String normalizeComparableText(String value) {
+        return normalizeTitle(value)
+                .replaceAll("[#=_:\\-\\s]+", "")
+                .toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 截断文本，避免 section 行过长。
+     *
+     * @param value 原始文本
+     * @param maxChars 最大字符数
+     * @return 截断后的文本
+     */
+    private String truncate(String value, int maxChars) {
+        String normalizedValue = normalizeSnippet(value);
+        if (normalizedValue.length() <= maxChars) {
+            return normalizedValue;
+        }
+        return normalizedValue.substring(0, maxChars).trim();
+    }
+
+    /**
+     * 统一写入 Analyze 路由元数据。
+     *
+     * @param analyzedConcepts 分析结果
+     * @param analysisMode Analyze 概念生成模式
+     * @param failureReason Analyze 失败原因
+     * @return 带元数据的分析结果
+     */
+    private List<AnalyzedConcept> tagAnalysisMode(
+            List<AnalyzedConcept> analyzedConcepts,
+            String analysisMode,
+            String failureReason
+    ) {
+        List<AnalyzedConcept> taggedConcepts = new ArrayList<AnalyzedConcept>();
+        for (AnalyzedConcept analyzedConcept : analyzedConcepts) {
+            taggedConcepts.add(analyzedConcept.withAnalysisMetadata(analysisMode, failureReason));
+        }
+        return taggedConcepts;
+    }
+
+    /**
+     * 构建 fallback 概念。
+     *
+     * @param conceptId 概念标识
+     * @param title 标题
+     * @param sourcePaths 来源路径
+     * @param sortedSources 已排序源文件
+     * @param failureReason Analyze 失败原因
+     * @return fallback 概念
+     */
+    private AnalyzedConcept buildFallbackConcept(
+            String conceptId,
+            String groupKey,
+            List<String> sourcePaths,
+            List<RawSource> sortedSources,
+            String failureReason
+    ) {
+        TitleResolution titleResolution = resolveFallbackTitle(groupKey, sortedSources);
+        return new AnalyzedConcept(
+                conceptId,
+                titleResolution.getTitle(),
+                "",
+                sourcePaths,
+                collectFallbackSnippets(sortedSources),
+                new ArrayList<ConceptSection>(),
+                ANALYSIS_MODE_FALLBACK,
+                failureReason,
+                titleResolution.getTitleSource()
+        );
+    }
+
+    /**
+     * 判断模型输出是否至少包含结构化概念信号。
+     *
+     * @param llmResponse 模型输出
+     * @return 存在结构化概念信号返回 true
+     */
+    private boolean hasStructuredConceptSignal(String llmResponse) {
+        if (llmResponse == null) {
+            return false;
+        }
+        String normalizedResponse = llmResponse.trim();
+        return normalizedResponse.contains("\"concepts\"")
+                || normalizedResponse.contains("\"title\"")
+                || normalizedResponse.contains("\"id\"");
+    }
+
+    /**
+     * 解析 LLM 失败原因。
+     *
+     * @param exception 运行时异常
+     * @return 失败原因
+     */
+    private String resolveFailureReason(RuntimeException exception) {
+        Throwable rootCause = rootCause(exception);
+        if (rootCause instanceof SocketTimeoutException) {
+            return FAILURE_REASON_TIMEOUT;
+        }
+        String errorCode = LlmRetrySupport.resolveErrorCode(exception, false);
+        if ("LLM_RETRY_EXHAUSTED".equals(errorCode) && exception instanceof LlmRetryExhaustedException) {
+            return rootCause instanceof SocketTimeoutException
+                    ? FAILURE_REASON_TIMEOUT
+                    : FAILURE_REASON_LLM_CALL_FAILED;
+        }
+        if ("LLM_REQUEST_TIMEOUT".equals(errorCode)) {
+            return FAILURE_REASON_TIMEOUT;
+        }
+        if (errorCode != null && errorCode.contains("ROUTE")) {
+            return FAILURE_REASON_ROUTE_UNAVAILABLE;
+        }
+        return FAILURE_REASON_LLM_CALL_FAILED;
+    }
+
+    /**
+     * 查找根因异常。
+     *
+     * @param throwable 异常
+     * @return 根因
+     */
+    private Throwable rootCause(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current;
     }
 
     /**
@@ -633,6 +1071,9 @@ public class AnalyzeNode {
      * @return 标准化来源引用
      */
     private String normalizeSourceRef(String sourceRef) {
+        if (sourceRef == null) {
+            return "";
+        }
         return sourceRef.trim().replace('\\', '/');
     }
 
@@ -654,12 +1095,190 @@ public class AnalyzeNode {
     }
 
     /**
+     * 解析 fallback 标题及其来源。
+     *
+     * @param groupKey 分组键
+     * @param sortedSources 已排序源文件
+     * @return 标题解析结果
+     */
+    private TitleResolution resolveFallbackTitle(String groupKey, List<RawSource> sortedSources) {
+        if (sortedSources.size() == 1) {
+            return resolveSingleSourceTitle(sortedSources.get(0), groupKey);
+        }
+        TitleResolution sharedSourceTitle = resolveSharedSourceTitle(sortedSources);
+        if (sharedSourceTitle != null) {
+            return sharedSourceTitle;
+        }
+        return new TitleResolution(
+                buildNeutralMultiSourceTitle(sortedSources.size()),
+                TITLE_SOURCE_NEUTRAL_MULTI_SOURCE
+        );
+    }
+
+    /**
+     * 解析单来源 fallback 标题。
+     *
+     * @param rawSource 源文件
+     * @param groupKey 分组键
+     * @return 标题解析结果
+     */
+    private TitleResolution resolveSingleSourceTitle(RawSource rawSource, String groupKey) {
+        TitleResolution sourceTitle = resolveSourceTitleCandidate(rawSource);
+        if (sourceTitle != null) {
+            return sourceTitle;
+        }
+        return resolveGroupKeyTitle(groupKey);
+    }
+
+    /**
+     * 解析来源级标题候选。
+     *
+     * @param rawSource 源文件
+     * @return 标题解析结果；无稳定候选时返回空
+     */
+    private TitleResolution resolveSourceTitleCandidate(RawSource rawSource) {
+        if (rawSource == null) {
+            return null;
+        }
+        String documentTitle = normalizeTitle(DocumentTitleSupport.resolveMetadataDocumentTitle(rawSource.getMetadataJson()));
+        if (!documentTitle.isEmpty()) {
+            return new TitleResolution(documentTitle, TITLE_SOURCE_DOCUMENT_TITLE);
+        }
+        String fileStemTitle = buildDisplayFileStemTitle(rawSource.getRelativePath());
+        if (!fileStemTitle.isEmpty() && isSemanticTitleCandidate(fileStemTitle)) {
+            return new TitleResolution(fileStemTitle, TITLE_SOURCE_FILE_STEM);
+        }
+        return null;
+    }
+
+    /**
+     * 解析多来源共享标题。
+     *
+     * @param sortedSources 已排序源文件
+     * @return 标题解析结果；无法收敛共享标题时返回空
+     */
+    private TitleResolution resolveSharedSourceTitle(List<RawSource> sortedSources) {
+        String normalizedComparableTitle = null;
+        String preferredTitle = "";
+        for (RawSource rawSource : sortedSources) {
+            TitleResolution sourceTitle = resolveSourceTitleCandidate(rawSource);
+            if (sourceTitle == null || sourceTitle.getTitle().isEmpty()) {
+                return null;
+            }
+            String comparableTitle = normalizeComparableTitle(sourceTitle.getTitle());
+            if (comparableTitle.isEmpty()) {
+                return null;
+            }
+            if (normalizedComparableTitle == null) {
+                normalizedComparableTitle = comparableTitle;
+            }
+            else if (!normalizedComparableTitle.equals(comparableTitle)) {
+                return null;
+            }
+            if (sourceTitle.getTitle().length() > preferredTitle.length()) {
+                preferredTitle = sourceTitle.getTitle();
+            }
+        }
+        if (preferredTitle.isEmpty()) {
+            return null;
+        }
+        return new TitleResolution(preferredTitle, TITLE_SOURCE_SHARED_SOURCE_TITLE);
+    }
+
+    /**
+     * 基于分组键构建回退标题。
+     *
+     * @param groupKey 分组键
+     * @return 标题解析结果
+     */
+    private TitleResolution resolveGroupKeyTitle(String groupKey) {
+        String normalizedConceptId = normalizeGroupKey(groupKey);
+        return new TitleResolution(toTitle(normalizedConceptId, groupKey), TITLE_SOURCE_GROUP_KEY);
+    }
+
+    /**
+     * 基于文件名 stem 构建可读标题。
+     *
+     * @param relativePath 相对路径
+     * @return 展示标题
+     */
+    private String buildDisplayFileStemTitle(String relativePath) {
+        String fileStem = normalizeTitle(DocumentTitleSupport.resolveFileNameTitle(relativePath));
+        if (fileStem.isEmpty()) {
+            return "";
+        }
+        String normalizedStem = fileStem.replaceAll("[-_]+", " ").replaceAll("\\s+", " ").trim();
+        if (normalizedStem.isEmpty()) {
+            return "";
+        }
+        String[] words = normalizedStem.split(" ");
+        List<String> titledWords = new ArrayList<String>();
+        for (String word : words) {
+            if (word.isEmpty()) {
+                continue;
+            }
+            titledWords.add(toTitleWord(word));
+        }
+        return String.join(" ", titledWords).trim();
+    }
+
+    /**
+     * 判断标题是否具备基础语义信号。
+     *
+     * @param title 标题候选
+     * @return 具备语义信号返回 true
+     */
+    private boolean isSemanticTitleCandidate(String title) {
+        String normalizedTitle = normalizeTitle(title);
+        if (normalizedTitle.isEmpty()) {
+            return false;
+        }
+        if (normalizedTitle.length() >= 4) {
+            return true;
+        }
+        for (int index = 0; index < normalizedTitle.length(); index++) {
+            if (normalizedTitle.charAt(index) > 127) {
+                return true;
+            }
+        }
+        return normalizedTitle.contains(" ");
+    }
+
+    /**
+     * 归一化标题比较文本。
+     *
+     * @param title 原始标题
+     * @return 比较用标题
+     */
+    private String normalizeComparableTitle(String title) {
+        return normalizeTitle(title)
+                .replaceAll("[\\s\\-_:]+", "")
+                .toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 构建多来源中性概括标题。
+     *
+     * @param sourceCount 来源数量
+     * @return 中性标题
+     */
+    private String buildNeutralMultiSourceTitle(int sourceCount) {
+        if (sourceCount <= 1) {
+            return "资料概览";
+        }
+        return sourceCount + " 份资料概览";
+    }
+
+    /**
      * 归一化分组键为概念标识。
      *
      * @param groupKey 分组键
      * @return 概念标识
      */
     private String normalizeGroupKey(String groupKey) {
+        if (groupKey == null) {
+            return "default";
+        }
         String normalized = groupKey.trim().toLowerCase(Locale.ROOT)
                 .replaceAll("[^\\p{IsAlphabetic}\\p{IsDigit}]+", "-")
                 .replaceAll("^-+|-+$", "");
@@ -678,7 +1297,7 @@ public class AnalyzeNode {
      */
     private String toTitle(String conceptId, String groupKey) {
         if (conceptId.isEmpty()) {
-            return groupKey.trim();
+            return groupKey == null ? "" : groupKey.trim();
         }
         String[] words = conceptId.split("-");
         List<String> titledWords = new ArrayList<String>();
@@ -698,6 +1317,9 @@ public class AnalyzeNode {
      * @return 标准化标题
      */
     private String normalizeTitle(String title) {
+        if (title == null) {
+            return "";
+        }
         return title.trim().replaceAll("\\s+", " ");
     }
 
@@ -722,6 +1344,9 @@ public class AnalyzeNode {
      * @return 标准化后的片段
      */
     private String normalizeSnippet(String snippet) {
+        if (snippet == null) {
+            return "";
+        }
         return snippet.trim();
     }
 
@@ -765,6 +1390,155 @@ public class AnalyzeNode {
             this.description = description;
             this.snippets = snippets;
             this.sections = sections;
+        }
+    }
+
+    /**
+     * Analyze 规则路由结果。
+     *
+     * 职责：承载小资料 / topic 路径已命中的概念与待继续处理的剩余源文件
+     *
+     * @author xiexu
+     */
+    private static final class AnalyzeRouteResult {
+
+        private final List<AnalyzedConcept> analyzedConcepts;
+
+        private final List<RawSource> remainingSources;
+
+        /**
+         * 创建规则路由结果。
+         *
+         * @param analyzedConcepts 已命中的概念
+         * @param remainingSources 待继续处理的源文件
+         */
+        private AnalyzeRouteResult(List<AnalyzedConcept> analyzedConcepts, List<RawSource> remainingSources) {
+            this.analyzedConcepts = analyzedConcepts;
+            this.remainingSources = remainingSources;
+        }
+
+        /**
+         * 获取已命中的概念。
+         *
+         * @return 概念列表
+         */
+        private List<AnalyzedConcept> getAnalyzedConcepts() {
+            return analyzedConcepts;
+        }
+
+        /**
+         * 获取待继续处理的源文件。
+         *
+         * @return 源文件列表
+         */
+        private List<RawSource> getRemainingSources() {
+            return remainingSources;
+        }
+    }
+
+    /**
+     * 标题解析结果。
+     *
+     * 职责：承载概念标题与标题来源
+     *
+     * @author xiexu
+     */
+    private static final class TitleResolution {
+
+        private final String title;
+
+        private final String titleSource;
+
+        /**
+         * 创建标题解析结果。
+         *
+         * @param title 标题
+         * @param titleSource 标题来源
+         */
+        private TitleResolution(String title, String titleSource) {
+            this.title = title == null ? "" : title.trim();
+            this.titleSource = titleSource == null ? "" : titleSource.trim();
+        }
+
+        /**
+         * 获取标题。
+         *
+         * @return 标题
+         */
+        private String getTitle() {
+            return title;
+        }
+
+        /**
+         * 获取标题来源。
+         *
+         * @return 标题来源
+         */
+        private String getTitleSource() {
+            return titleSource;
+        }
+    }
+
+    /**
+     * Analyze 尝试结果。
+     *
+     * 职责：承载单条 Analyze 路径的概念结果与失败原因
+     *
+     * @author xiexu
+     */
+    private static final class AnalyzeAttemptResult {
+
+        private final List<AnalyzedConcept> analyzedConcepts;
+
+        private final String failureReason;
+
+        /**
+         * 创建 Analyze 尝试结果。
+         *
+         * @param analyzedConcepts 概念结果
+         * @param failureReason 失败原因
+         */
+        private AnalyzeAttemptResult(List<AnalyzedConcept> analyzedConcepts, String failureReason) {
+            this.analyzedConcepts = analyzedConcepts;
+            this.failureReason = failureReason;
+        }
+
+        /**
+         * 创建成功结果。
+         *
+         * @param analyzedConcepts 概念结果
+         * @return 尝试结果
+         */
+        private static AnalyzeAttemptResult success(List<AnalyzedConcept> analyzedConcepts) {
+            return new AnalyzeAttemptResult(analyzedConcepts, null);
+        }
+
+        /**
+         * 创建空结果。
+         *
+         * @param failureReason 失败原因
+         * @return 尝试结果
+         */
+        private static AnalyzeAttemptResult empty(String failureReason) {
+            return new AnalyzeAttemptResult(new ArrayList<AnalyzedConcept>(), failureReason);
+        }
+
+        /**
+         * 获取概念结果。
+         *
+         * @return 概念结果
+         */
+        private List<AnalyzedConcept> getAnalyzedConcepts() {
+            return analyzedConcepts;
+        }
+
+        /**
+         * 获取失败原因。
+         *
+         * @return 失败原因
+         */
+        private String getFailureReason() {
+            return failureReason;
         }
     }
 }

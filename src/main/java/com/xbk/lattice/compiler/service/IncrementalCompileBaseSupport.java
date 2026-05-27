@@ -3,7 +3,9 @@ package com.xbk.lattice.compiler.service;
 import com.xbk.lattice.shared.json.JsonMappers;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xbk.lattice.compiler.config.CompilerProperties;
 import com.xbk.lattice.compiler.domain.AnalyzedConcept;
 import com.xbk.lattice.compiler.domain.ConceptSection;
@@ -32,6 +34,7 @@ import com.xbk.lattice.governance.PropagationService;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.query.service.ArticleChunkVectorIndexService;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
+import com.xbk.lattice.source.infra.KnowledgeSourceJdbcRepository;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -91,6 +94,8 @@ abstract class IncrementalCompileBaseSupport {
 
     protected final SourceFileJdbcRepository sourceFileJdbcRepository;
 
+    protected final KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository;
+
     protected final SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository;
 
     protected final ArticleVectorIndexService articleVectorIndexService;
@@ -126,6 +131,7 @@ abstract class IncrementalCompileBaseSupport {
             ArticleJdbcRepository articleJdbcRepository,
             ArticleChunkJdbcRepository articleChunkJdbcRepository,
             SourceFileJdbcRepository sourceFileJdbcRepository,
+            KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository,
             SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
             ArticleVectorIndexService articleVectorIndexService,
             ArticleChunkVectorIndexService articleChunkVectorIndexService,
@@ -142,6 +148,7 @@ abstract class IncrementalCompileBaseSupport {
         this.compileArticleNode = new CompileArticleNode(
                 llmGateway,
                 sourceFileJdbcRepository,
+                knowledgeSourceJdbcRepository,
                 new DocumentSectionSelector(),
                 articleReviewerGateway,
                 reviewFixService,
@@ -152,6 +159,7 @@ abstract class IncrementalCompileBaseSupport {
         this.articleJdbcRepository = articleJdbcRepository;
         this.articleChunkJdbcRepository = articleChunkJdbcRepository;
         this.sourceFileJdbcRepository = sourceFileJdbcRepository;
+        this.knowledgeSourceJdbcRepository = knowledgeSourceJdbcRepository;
         this.sourceFileChunkJdbcRepository = sourceFileChunkJdbcRepository;
         this.articleVectorIndexService = articleVectorIndexService;
         this.articleChunkVectorIndexService = articleChunkVectorIndexService;
@@ -181,6 +189,28 @@ abstract class IncrementalCompileBaseSupport {
         catch (JsonProcessingException ex) {
             throw new IllegalStateException("构建增量编译 metadata 失败", ex);
         }
+    }
+
+    /**
+     * 合并增量编译 metadata，尽量保留已有标题画像等稳定字段。
+     *
+     * @param existingMetadataJson 原始 metadata JSON
+     * @param summary 摘要
+     * @param sourcePaths 来源路径
+     * @param mergedConcepts 增量概念
+     * @return 合并后的 metadata JSON
+     */
+    protected String mergeIncrementalMetadataJson(
+            String existingMetadataJson,
+            String summary,
+            List<String> sourcePaths,
+            List<MergedConcept> mergedConcepts
+    ) {
+        String incrementalMetadataJson = buildIncrementalMetadataJson(summary, sourcePaths, mergedConcepts);
+        ObjectNode mergedMetadataNode = readMetadataObject(existingMetadataJson);
+        ObjectNode incrementalMetadataNode = readMetadataObject(incrementalMetadataJson);
+        mergedMetadataNode.setAll(incrementalMetadataNode);
+        return mergedMetadataNode.toString();
     }
     /**
      * 合并文章来源路径。
@@ -618,5 +648,27 @@ abstract class IncrementalCompileBaseSupport {
         protected String getReviewStatus() {
             return reviewStatus;
         }
+    }
+
+    /**
+     * 读取 metadata JSON 为对象节点。
+     *
+     * @param metadataJson metadata JSON
+     * @return 对象节点
+     */
+    protected ObjectNode readMetadataObject(String metadataJson) {
+        if (metadataJson == null || metadataJson.isBlank()) {
+            return OBJECT_MAPPER.createObjectNode();
+        }
+        try {
+            JsonNode rootNode = OBJECT_MAPPER.readTree(metadataJson);
+            if (rootNode instanceof ObjectNode objectNode) {
+                return objectNode.deepCopy();
+            }
+        }
+        catch (Exception ignored) {
+            // 回退为空对象，兼容异常 metadata
+        }
+        return OBJECT_MAPPER.createObjectNode();
     }
 }

@@ -1,0 +1,17 @@
+{
+  "caseId": "TG-OFFICE-UNSTABLE-001",
+  "format": "docx",
+  "relativePath": "docs/office-deployment-guide.docx",
+  "sourceTitleCandidates": {
+    "documentTitle": "",
+    "bundleDisplayName": "部署联调手册",
+    "titleHints": [
+      "部署联调手册"
+    ]
+  },
+  "anchorTitle": "部署步骤",
+  "extractedText": "部署步骤\n先校验连接配置、数据库 schema 和模型绑定，再执行联调页面验收。\n最后确认管理后台状态摘要、人工确认入口与运行态开关是否一致。",
+  "expectedSourceTitle": "部署联调手册",
+  "expectedMode": "ANCHOR_DIRECT",
+  "expectedRepresentativeTitle": "部署步骤"
+}

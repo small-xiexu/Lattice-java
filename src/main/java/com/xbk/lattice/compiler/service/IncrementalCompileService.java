@@ -30,6 +30,7 @@ import com.xbk.lattice.governance.PropagationService;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.query.service.ArticleChunkVectorIndexService;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
+import com.xbk.lattice.source.infra.KnowledgeSourceJdbcRepository;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -89,6 +90,7 @@ public class IncrementalCompileService extends IncrementalCompileEnhancementSupp
                 articleChunkJdbcRepository,
                 sourceFileJdbcRepository,
                 null,
+                null,
                 new ArticleVectorIndexService(),
                 new ArticleChunkVectorIndexService(),
                 null
@@ -131,6 +133,7 @@ public class IncrementalCompileService extends IncrementalCompileEnhancementSupp
                 articleJdbcRepository,
                 articleChunkJdbcRepository,
                 sourceFileJdbcRepository,
+                null,
                 sourceFileChunkJdbcRepository,
                 articleVectorIndexService,
                 new ArticleChunkVectorIndexService(),
@@ -174,6 +177,7 @@ public class IncrementalCompileService extends IncrementalCompileEnhancementSupp
                 articleJdbcRepository,
                 articleChunkJdbcRepository,
                 sourceFileJdbcRepository,
+                null,
                 sourceFileChunkJdbcRepository,
                 articleVectorIndexService,
                 articleChunkVectorIndexService,
@@ -215,6 +219,7 @@ public class IncrementalCompileService extends IncrementalCompileEnhancementSupp
                 articleJdbcRepository,
                 articleChunkJdbcRepository,
                 sourceFileJdbcRepository,
+                null,
                 sourceFileChunkJdbcRepository,
                 articleVectorIndexService,
                 new ArticleChunkVectorIndexService(),
@@ -251,6 +256,101 @@ public class IncrementalCompileService extends IncrementalCompileEnhancementSupp
             ArticleChunkVectorIndexService articleChunkVectorIndexService,
             DocumentParseApplicationService documentParseApplicationService
     ) {
+        this(
+                compilerProperties,
+                llmGateway,
+                articleReviewerGateway,
+                reviewFixService,
+                synthesisArtifactsService,
+                articleJdbcRepository,
+                articleChunkJdbcRepository,
+                sourceFileJdbcRepository,
+                null,
+                sourceFileChunkJdbcRepository,
+                articleVectorIndexService,
+                articleChunkVectorIndexService,
+                documentParseApplicationService
+        );
+    }
+
+    /**
+     * 创建增量编译服务。
+     *
+     * @param compilerProperties 编译配置
+     * @param llmGateway LLM 网关
+     * @param articleReviewerGateway 文章审查网关
+     * @param reviewFixService 审查修复服务
+     * @param synthesisArtifactsService 合成产物服务
+     * @param articleJdbcRepository 文章仓储
+     * @param articleChunkJdbcRepository 文章 chunk 仓储
+     * @param sourceFileJdbcRepository 源文件仓储
+     * @param knowledgeSourceJdbcRepository 资料源仓储
+     * @param sourceFileChunkJdbcRepository 源文件 chunk 仓储
+     * @param articleVectorIndexService 文章向量索引服务
+     * @param documentParseApplicationService 文档解析应用服务
+     */
+    public IncrementalCompileService(
+            CompilerProperties compilerProperties,
+            LlmGateway llmGateway,
+            ArticleReviewerGateway articleReviewerGateway,
+            ReviewFixService reviewFixService,
+            SynthesisArtifactsService synthesisArtifactsService,
+            ArticleJdbcRepository articleJdbcRepository,
+            ArticleChunkJdbcRepository articleChunkJdbcRepository,
+            SourceFileJdbcRepository sourceFileJdbcRepository,
+            KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository,
+            SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
+            ArticleVectorIndexService articleVectorIndexService,
+            DocumentParseApplicationService documentParseApplicationService
+    ) {
+        this(
+                compilerProperties,
+                llmGateway,
+                articleReviewerGateway,
+                reviewFixService,
+                synthesisArtifactsService,
+                articleJdbcRepository,
+                articleChunkJdbcRepository,
+                sourceFileJdbcRepository,
+                knowledgeSourceJdbcRepository,
+                sourceFileChunkJdbcRepository,
+                articleVectorIndexService,
+                new ArticleChunkVectorIndexService(),
+                documentParseApplicationService
+        );
+    }
+    /**
+     * 创建增量编译服务。
+     *
+     * @param compilerProperties 编译配置
+     * @param llmGateway LLM 网关
+     * @param articleReviewerGateway 文章审查网关
+     * @param reviewFixService 审查修复服务
+     * @param synthesisArtifactsService 合成产物服务
+     * @param articleJdbcRepository 文章仓储
+     * @param articleChunkJdbcRepository 文章 chunk 仓储
+     * @param sourceFileJdbcRepository 源文件仓储
+     * @param knowledgeSourceJdbcRepository 资料源仓储
+     * @param sourceFileChunkJdbcRepository 源文件 chunk 仓储
+     * @param articleVectorIndexService 文章向量索引服务
+     * @param articleChunkVectorIndexService 文章分块向量索引服务
+     * @param documentParseApplicationService 文档解析应用服务
+     */
+    public IncrementalCompileService(
+            CompilerProperties compilerProperties,
+            LlmGateway llmGateway,
+            ArticleReviewerGateway articleReviewerGateway,
+            ReviewFixService reviewFixService,
+            SynthesisArtifactsService synthesisArtifactsService,
+            ArticleJdbcRepository articleJdbcRepository,
+            ArticleChunkJdbcRepository articleChunkJdbcRepository,
+            SourceFileJdbcRepository sourceFileJdbcRepository,
+            KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository,
+            SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
+            ArticleVectorIndexService articleVectorIndexService,
+            ArticleChunkVectorIndexService articleChunkVectorIndexService,
+            DocumentParseApplicationService documentParseApplicationService
+    ) {
         super(
                 compilerProperties,
                 llmGateway,
@@ -260,6 +360,7 @@ public class IncrementalCompileService extends IncrementalCompileEnhancementSupp
                 articleJdbcRepository,
                 articleChunkJdbcRepository,
                 sourceFileJdbcRepository,
+                knowledgeSourceJdbcRepository,
                 sourceFileChunkJdbcRepository,
                 articleVectorIndexService,
                 articleChunkVectorIndexService,

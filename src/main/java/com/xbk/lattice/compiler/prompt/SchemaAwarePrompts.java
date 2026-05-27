@@ -84,6 +84,16 @@ public class SchemaAwarePrompts {
                 : LatticePrompts.SYSTEM_COMPILE_IMAGE_ARTICLE;
     }
 
+    /**
+     * 获取代表性标题生成 prompt。
+     *
+     * @param outputDir 输入目录
+     * @return 叠加后的代表性标题 prompt
+     */
+    public String getRepresentativeTitlePrompt(Path outputDir) {
+        return appendSchemaRules(LatticePrompts.SYSTEM_COMPILE_REPRESENTATIVE_TITLE, outputDir);
+    }
+
     private String appendSchemaRules(String basePrompt, Path outputDir) {
         String schema = tryLoadSchema(outputDir);
         if (schema == null || schema.isBlank()) {

@@ -23,6 +23,7 @@ import com.xbk.lattice.compiler.prompt.SchemaAwarePrompts;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.llm.service.ExecutionLlmSnapshotService;
+import com.xbk.lattice.source.infra.KnowledgeSourceJdbcRepository;
 import com.xbk.lattice.query.domain.ReviewResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -74,6 +75,7 @@ public class ArticleCompileSupport {
             ArticleReviewerGateway articleReviewerGateway,
             ReviewFixService reviewFixService,
             SourceFileJdbcRepository sourceFileJdbcRepository,
+            KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository,
             LlmProperties llmProperties,
             ExecutionLlmSnapshotService executionLlmSnapshotService,
             ObjectProvider<CompileJobLeaseManager> compileJobLeaseManagerProvider,
@@ -85,6 +87,7 @@ public class ArticleCompileSupport {
                 articleReviewerGateway,
                 reviewFixService,
                 sourceFileJdbcRepository,
+                knowledgeSourceJdbcRepository,
                 new AgentModelRouter(executionLlmSnapshotService, llmProperties),
                 compileJobLeaseManagerProvider.getIfAvailable(),
                 compilerPromptProvider
@@ -113,9 +116,47 @@ public class ArticleCompileSupport {
                 articleReviewerGateway,
                 reviewFixService,
                 sourceFileJdbcRepository,
+                null,
                 new AgentModelRouter(llmGateway),
                 null,
                 null
+        );
+    }
+
+    /**
+     * 创建编译文章认知支撑服务。
+     *
+     * @param compilerProperties 编译配置
+     * @param llmGateway LLM 网关
+     * @param articleReviewerGateway 文章审查网关
+     * @param reviewFixService 审查修复服务
+     * @param sourceFileJdbcRepository 源文件仓储
+     * @param llmProperties LLM 配置
+     * @param executionLlmSnapshotService 执行快照服务
+     * @param compileJobLeaseManagerProvider 编译租约 Provider
+     * @param compilerPromptProvider Prompt Provider
+     */
+    public ArticleCompileSupport(
+            CompilerProperties compilerProperties,
+            LlmGateway llmGateway,
+            ArticleReviewerGateway articleReviewerGateway,
+            ReviewFixService reviewFixService,
+            SourceFileJdbcRepository sourceFileJdbcRepository,
+            LlmProperties llmProperties,
+            ExecutionLlmSnapshotService executionLlmSnapshotService,
+            ObjectProvider<CompileJobLeaseManager> compileJobLeaseManagerProvider,
+            CompilerPromptProvider compilerPromptProvider
+    ) {
+        this(
+                compilerProperties,
+                llmGateway,
+                articleReviewerGateway,
+                reviewFixService,
+                sourceFileJdbcRepository,
+                null,
+                new AgentModelRouter(executionLlmSnapshotService, llmProperties),
+                compileJobLeaseManagerProvider == null ? null : compileJobLeaseManagerProvider.getIfAvailable(),
+                compilerPromptProvider
         );
     }
 
@@ -125,6 +166,7 @@ public class ArticleCompileSupport {
             ArticleReviewerGateway articleReviewerGateway,
             ReviewFixService reviewFixService,
             SourceFileJdbcRepository sourceFileJdbcRepository,
+            KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository,
             AgentModelRouter agentModelRouter,
             CompileJobLeaseManager compileJobLeaseManager,
             CompilerPromptProvider compilerPromptProvider
@@ -132,6 +174,7 @@ public class ArticleCompileSupport {
         this.compileArticleNode = new CompileArticleNode(
                 llmGateway,
                 sourceFileJdbcRepository,
+                knowledgeSourceJdbcRepository,
                 new DocumentSectionSelector(),
                 articleReviewerGateway,
                 reviewFixService,

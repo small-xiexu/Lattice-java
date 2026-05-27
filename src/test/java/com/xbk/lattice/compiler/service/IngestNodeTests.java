@@ -68,6 +68,61 @@ class IngestNodeTests {
         assertThat(rawSources.get(0).getRelativePath()).isEqualTo("docs/intro.md");
         assertThat(rawSources.get(0).getContent()).isEqualTo("abcde");
         assertThat(rawSources.get(0).getFormat()).isEqualTo("md");
+        assertThat(rawSources.get(0).getMetadataJson()).contains("\"documentTitle\":\"intro\"");
+    }
+
+    /**
+     * 验证文本标题会按 frontmatter、H1、文件名回退顺序写入 metadata。
+     *
+     * @param tempDir 临时目录
+     * @throws IOException IO 异常
+     */
+    @Test
+    void shouldWriteTextDocumentTitleIntoMetadata(@TempDir Path tempDir) throws IOException {
+        Path docsDir = Files.createDirectories(tempDir.resolve("docs"));
+        Files.writeString(
+                docsDir.resolve("frontmatter.md"),
+                """
+                        ---
+                        title: Frontmatter Title
+                        ---
+
+                        # Heading Title
+
+                        body
+                        """,
+                StandardCharsets.UTF_8
+        );
+        Files.writeString(
+                docsDir.resolve("heading-only.md"),
+                """
+                        # Heading Only Title
+
+                        body
+                        """,
+                StandardCharsets.UTF_8
+        );
+        Files.writeString(docsDir.resolve("fallback-name.txt"), "plain body", StandardCharsets.UTF_8);
+
+        IngestNode ingestNode = new IngestNode(new CompilerProperties());
+        List<RawSource> rawSources = ingestNode.ingest(tempDir);
+
+        RawSource frontmatterSource = rawSources.stream()
+                .filter(rawSource -> "docs/frontmatter.md".equals(rawSource.getRelativePath()))
+                .findFirst()
+                .orElseThrow();
+        RawSource headingSource = rawSources.stream()
+                .filter(rawSource -> "docs/heading-only.md".equals(rawSource.getRelativePath()))
+                .findFirst()
+                .orElseThrow();
+        RawSource fallbackSource = rawSources.stream()
+                .filter(rawSource -> "docs/fallback-name.txt".equals(rawSource.getRelativePath()))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(frontmatterSource.getMetadataJson()).contains("\"documentTitle\":\"Frontmatter Title\"");
+        assertThat(headingSource.getMetadataJson()).contains("\"documentTitle\":\"Heading Only Title\"");
+        assertThat(fallbackSource.getMetadataJson()).contains("\"documentTitle\":\"fallback-name\"");
     }
 
     /**
@@ -231,6 +286,7 @@ class IngestNodeTests {
         assertThat(excelSource.getRelativePath()).isEqualTo("docs/codes.xlsx");
         assertThat(excelSource.getFormat()).isEqualTo("xlsx");
         assertThat(excelSource.getMetadataJson()).contains("sheetCount");
+        assertThat(excelSource.getMetadataJson()).contains("\"documentTitle\":\"Codes\"");
         assertThat(excelSource.getContent()).contains("=== Sheet: Codes ===");
         assertThat(excelSource.getContent()).contains("businessSubTypeCode,meaning");
         assertThat(excelSource.getContent()).contains("1210,refund");
@@ -240,16 +296,19 @@ class IngestNodeTests {
         assertThat(excelSource.getContent()).contains("=== Sheet: Settings ===");
         assertThat(wordSource.getRelativePath()).isEqualTo("docs/brief.docx");
         assertThat(wordSource.getMetadataJson()).contains("paragraphCount");
+        assertThat(wordSource.getMetadataJson()).contains("\"documentTitle\":\"brief\"");
         assertThat(wordSource.getContent()).contains("Payment timeout recovery");
         assertThat(wordSource.getContent()).contains("retry=3");
         assertThat(binaryWordSource.getRelativePath()).isEqualTo("docs/binary-brief.doc");
         assertThat(binaryWordSource.getMetadataJson()).contains("binaryWord");
         assertThat(binaryWordSource.getMetadataJson()).contains("extractionStrategy");
         assertThat(binaryWordSource.getMetadataJson()).contains("listFormattingPreserved");
+        assertThat(binaryWordSource.getMetadataJson()).contains("\"documentTitle\":\"binary-brief\"");
         assertThat(binaryWordSource.getContent()).contains("payment timeout");
         assertThat(binaryWordSource.getContent()).contains("retry=3");
         assertThat(pptSource.getRelativePath()).isEqualTo("docs/briefing.pptx");
         assertThat(pptSource.getMetadataJson()).contains("slideCount");
+        assertThat(pptSource.getMetadataJson()).contains("\"documentTitle\":\"briefing\"");
         assertThat(pptSource.getContent()).contains("=== Slide: 1 ===");
         assertThat(pptSource.getContent()).contains("Timeout review");
     }

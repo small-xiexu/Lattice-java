@@ -10,6 +10,7 @@ import com.xbk.lattice.compiler.node.BatchSplitNode;
 import com.xbk.lattice.compiler.node.CrossGroupMergeNode;
 import com.xbk.lattice.compiler.node.GroupNode;
 import com.xbk.lattice.compiler.node.IngestNode;
+import com.xbk.lattice.compiler.prompt.SchemaAwarePrompts;
 import com.xbk.lattice.documentparse.application.DocumentParseApplicationService;
 import com.xbk.lattice.infra.persistence.ArticleChunkJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
@@ -18,6 +19,7 @@ import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import com.xbk.lattice.infra.persistence.StructuredTableJdbcRepository;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
+import com.xbk.lattice.source.infra.KnowledgeSourceJdbcRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -90,6 +92,7 @@ public class SourceIngestSupport {
             SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
             CompilationWalStore compilationWalStore,
             ArticleVectorIndexService articleVectorIndexService,
+            KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository,
             DocumentParseApplicationService documentParseApplicationService
     ) {
         this.ingestNode = new IngestNode(compilerProperties, documentParseApplicationService);
@@ -98,7 +101,11 @@ public class SourceIngestSupport {
                 compilerProperties,
                 new FileRankingService(compilerProperties)
         );
-        this.analyzeNode = new AnalyzeNode(null, null, compilerProperties);
+        this.analyzeNode = new AnalyzeNode(
+                llmGateway,
+                new SchemaAwarePrompts(compilerProperties),
+                compilerProperties
+        );
         this.crossGroupMergeNode = new CrossGroupMergeNode();
         this.sourceFileJdbcRepository = sourceFileJdbcRepository;
         this.sourceFileChunkJdbcRepository = sourceFileChunkJdbcRepository;
@@ -112,6 +119,7 @@ public class SourceIngestSupport {
                 articleJdbcRepository,
                 articleChunkJdbcRepository,
                 sourceFileJdbcRepository,
+                knowledgeSourceJdbcRepository,
                 sourceFileChunkJdbcRepository,
                 articleVectorIndexService,
                 documentParseApplicationService

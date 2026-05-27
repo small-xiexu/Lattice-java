@@ -30,6 +30,7 @@ import com.xbk.lattice.governance.PropagationService;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
 import com.xbk.lattice.query.service.ArticleChunkVectorIndexService;
 import com.xbk.lattice.query.service.ArticleVectorIndexService;
+import com.xbk.lattice.source.infra.KnowledgeSourceJdbcRepository;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -82,6 +83,7 @@ abstract class IncrementalCompilePlanningSupport extends IncrementalCompileWrite
             ArticleJdbcRepository articleJdbcRepository,
             ArticleChunkJdbcRepository articleChunkJdbcRepository,
             SourceFileJdbcRepository sourceFileJdbcRepository,
+            KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository,
             SourceFileChunkJdbcRepository sourceFileChunkJdbcRepository,
             ArticleVectorIndexService articleVectorIndexService,
             ArticleChunkVectorIndexService articleChunkVectorIndexService,
@@ -96,6 +98,7 @@ abstract class IncrementalCompilePlanningSupport extends IncrementalCompileWrite
                 articleJdbcRepository,
                 articleChunkJdbcRepository,
                 sourceFileJdbcRepository,
+                knowledgeSourceJdbcRepository,
                 sourceFileChunkJdbcRepository,
                 articleVectorIndexService,
                 articleChunkVectorIndexService,

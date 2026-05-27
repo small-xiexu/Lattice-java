@@ -60,6 +60,44 @@ class CrossGroupMergeNodeTests {
     }
 
     /**
+     * 验证合并节点会同步保留最终标题对应的标题来源。
+     */
+    @Test
+    void shouldPreserveWinningTitleSourceWhenMergingConcepts() {
+        CrossGroupMergeNode crossGroupMergeNode = new CrossGroupMergeNode();
+        List<AnalyzedConcept> analyzedConcepts = Arrays.asList(
+                new AnalyzedConcept(
+                        "incident-response",
+                        "Incident Response",
+                        "",
+                        Arrays.asList("ops/a.md"),
+                        Arrays.asList("snippet-a"),
+                        List.of(),
+                        "FALLBACK",
+                        "EMPTY_RESULT",
+                        "GROUP_KEY"
+                ),
+                new AnalyzedConcept(
+                        "incident-response",
+                        "Incident Response Checklist",
+                        "",
+                        Arrays.asList("ops/checklist.xlsx"),
+                        Arrays.asList("snippet-b"),
+                        List.of(),
+                        "FALLBACK",
+                        "EMPTY_RESULT",
+                        "FILE_STEM"
+                )
+        );
+
+        List<MergedConcept> mergedConcepts = crossGroupMergeNode.merge(analyzedConcepts);
+
+        assertThat(mergedConcepts).hasSize(1);
+        assertThat(mergedConcepts.get(0).getTitle()).isEqualTo("Incident Response Checklist");
+        assertThat(mergedConcepts.get(0).getTitleSource()).isEqualTo("FILE_STEM");
+    }
+
+    /**
      * 验证合并节点会稳定排序来源，并去掉空白或仅因首尾空格不同的重复片段。
      */
     @Test

@@ -34,13 +34,20 @@ public class CrossGroupMergeNode {
             String normalizedConceptId = normalizeConceptId(analyzedConcept.getConceptId());
             MergeBucket mergeBucket = buckets.computeIfAbsent(
                     normalizedConceptId,
-                    key -> new MergeBucket(
-                            selectPreferredTitle("", analyzedConcept.getTitle(), normalizedConceptId),
-                            selectPreferredDescription("", analyzedConcept.getDescription())
-                    )
+                    key -> new MergeBucket("", "", "", "", "")
             );
-            mergeBucket.title = selectPreferredTitle(mergeBucket.title, analyzedConcept.getTitle(), normalizedConceptId);
+            mergePreferredTitle(mergeBucket, analyzedConcept, normalizedConceptId);
             mergeBucket.description = selectPreferredDescription(mergeBucket.description, analyzedConcept.getDescription());
+            mergeBucket.analysisMode = selectPreferredMetadata(
+                    mergeBucket.analysisMode,
+                    analyzedConcept.getAnalysisMode(),
+                    "FALLBACK"
+            );
+            mergeBucket.failureReason = selectPreferredMetadata(
+                    mergeBucket.failureReason,
+                    analyzedConcept.getFailureReason(),
+                    null
+            );
             mergeSourcePaths(mergeBucket, analyzedConcept.getSourcePaths());
             mergeSnippets(mergeBucket, analyzedConcept.getSnippets());
             mergeSections(mergeBucket, analyzedConcept.getSections());
@@ -51,16 +58,51 @@ public class CrossGroupMergeNode {
             MergeBucket mergeBucket = entry.getValue();
             List<String> sourcePaths = new ArrayList<String>(mergeBucket.sourcePaths);
             Collections.sort(sourcePaths);
+            String mergedTitle = normalizeTitle(mergeBucket.title);
+            if (mergedTitle.isEmpty()) {
+                mergedTitle = buildFallbackTitle(entry.getKey());
+            }
             mergedConcepts.add(new MergedConcept(
                     entry.getKey(),
-                    mergeBucket.title,
+                    mergedTitle,
                     mergeBucket.description,
                     sourcePaths,
                     new ArrayList<String>(mergeBucket.snippets),
-                    toConceptSections(mergeBucket.sections)
+                    toConceptSections(mergeBucket.sections),
+                    mergeBucket.analysisMode,
+                    mergeBucket.failureReason,
+                    mergeBucket.titleSource
             ));
         }
         return mergedConcepts;
+    }
+
+    /**
+     * 合并更合适的标题及其来源。
+     *
+     * @param mergeBucket 合并桶
+     * @param analyzedConcept 候选概念
+     * @param conceptId 概念标识
+     */
+    private void mergePreferredTitle(MergeBucket mergeBucket, AnalyzedConcept analyzedConcept, String conceptId) {
+        String normalizedCurrentTitle = normalizeTitle(mergeBucket.title);
+        String normalizedCandidateTitle = normalizeTitle(analyzedConcept.getTitle());
+        if (normalizedCurrentTitle.isEmpty() && normalizedCandidateTitle.isEmpty()) {
+            mergeBucket.title = buildFallbackTitle(conceptId);
+            return;
+        }
+        if (normalizedCurrentTitle.isEmpty()) {
+            mergeBucket.title = normalizedCandidateTitle;
+            mergeBucket.titleSource = normalizeMetadataValue(analyzedConcept.getTitleSource());
+            return;
+        }
+        if (normalizedCandidateTitle.isEmpty()) {
+            return;
+        }
+        if (normalizedCandidateTitle.length() > normalizedCurrentTitle.length()) {
+            mergeBucket.title = normalizedCandidateTitle;
+            mergeBucket.titleSource = normalizeMetadataValue(analyzedConcept.getTitleSource());
+        }
     }
 
     /**
@@ -228,6 +270,9 @@ public class CrossGroupMergeNode {
      * @return 标准化后的标题
      */
     private String normalizeTitle(String title) {
+        if (title == null) {
+            return "";
+        }
         return title.trim().replaceAll("[-_]+", " ").replaceAll("\\s+", " ");
     }
 
@@ -249,6 +294,48 @@ public class CrossGroupMergeNode {
      */
     private String normalizeSourceRef(String sourceRef) {
         return sourceRef.trim().replace('\\', '/');
+    }
+
+    /**
+     * 标准化元数据值。
+     *
+     * @param value 原始值
+     * @return 标准化结果
+     */
+    private String normalizeMetadataValue(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim();
+    }
+
+    /**
+     * 选择更稳定的元数据值。
+     *
+     * @param currentValue 当前值
+     * @param candidateValue 候选值
+     * @param highestPriorityValue 最高优先级值
+     * @return 选中的元数据值
+     */
+    private String selectPreferredMetadata(String currentValue, String candidateValue, String highestPriorityValue) {
+        String normalizedCurrentValue = normalizeMetadataValue(currentValue);
+        String normalizedCandidateValue = normalizeMetadataValue(candidateValue);
+        if (normalizedCurrentValue.isEmpty()) {
+            return normalizedCandidateValue;
+        }
+        if (normalizedCandidateValue.isEmpty()) {
+            return normalizedCurrentValue;
+        }
+        if (highestPriorityValue != null && highestPriorityValue.equals(normalizedCandidateValue)) {
+            return normalizedCandidateValue;
+        }
+        if (highestPriorityValue != null && highestPriorityValue.equals(normalizedCurrentValue)) {
+            return normalizedCurrentValue;
+        }
+        if (normalizedCandidateValue.length() > normalizedCurrentValue.length()) {
+            return normalizedCandidateValue;
+        }
+        return normalizedCurrentValue;
     }
 
     /**
@@ -288,6 +375,12 @@ public class CrossGroupMergeNode {
 
         private String description;
 
+        private String analysisMode;
+
+        private String failureReason;
+
+        private String titleSource;
+
         private final Set<String> sourcePaths = new LinkedHashSet<String>();
 
         private final Set<String> snippets = new LinkedHashSet<String>();
@@ -300,9 +393,12 @@ public class CrossGroupMergeNode {
          * @param title 标题
          * @param description 描述
          */
-        private MergeBucket(String title, String description) {
+        private MergeBucket(String title, String description, String analysisMode, String failureReason, String titleSource) {
             this.title = title;
             this.description = description;
+            this.analysisMode = analysisMode;
+            this.failureReason = failureReason;
+            this.titleSource = titleSource;
         }
     }
 

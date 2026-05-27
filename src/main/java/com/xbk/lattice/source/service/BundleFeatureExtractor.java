@@ -1,6 +1,7 @@
 package com.xbk.lattice.source.service;
 
 import com.xbk.lattice.source.domain.BundleSummary;
+import com.xbk.lattice.shared.text.DocumentTitleSupport;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -18,6 +19,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -35,6 +38,10 @@ public class BundleFeatureExtractor {
     private static final int MAX_KEYWORDS = 12;
 
     private static final int MAX_TITLE_HINTS = 5;
+
+    private static final Pattern MARKDOWN_FRONTMATTER_BODY_PATTERN = Pattern.compile("\\A---\\R.*?\\R---\\R?(.*)\\z", Pattern.DOTALL);
+
+    private static final Pattern TITLE_HINT_PLACEHOLDER_PATTERN = Pattern.compile("^(?:([-*_=`~])\\1{2,}|```+|~~~+)$");
 
     /**
      * 提取资料包特征。
@@ -230,14 +237,119 @@ public class BundleFeatureExtractor {
         if (!isTitleHintCandidate(relativePath)) {
             return;
         }
-        List<String> lines = Files.readAllLines(filePath, StandardCharsets.UTF_8);
-        for (String line : lines) {
-            String trimmed = line == null ? "" : line.trim();
-            if (!trimmed.isBlank()) {
-                titleHints.add(trimmed.replaceFirst("^#+\\s*", ""));
-                return;
-            }
+        String content = Files.readString(filePath, StandardCharsets.UTF_8);
+        String titleHint = extractTitleHint(relativePath, content);
+        if (hasText(titleHint)) {
+            titleHints.add(titleHint);
         }
+    }
+
+    /**
+     * 为标题提示候选文件提取通用标题。
+     *
+     * @param relativePath 相对路径
+     * @param content 文件内容
+     * @return 标题提示；不存在时返回空串
+     */
+    private String extractTitleHint(String relativePath, String content) {
+        if (!hasText(content)) {
+            return "";
+        }
+        String normalizedPath = relativePath.toLowerCase(Locale.ROOT);
+        if (normalizedPath.endsWith(".md") || normalizedPath.endsWith(".markdown")) {
+            return extractMarkdownTitleHint(relativePath, content);
+        }
+        return extractFirstMeaningfulTitleLine(content);
+    }
+
+    /**
+     * 为 Markdown 提取标题提示。
+     *
+     * @param relativePath 相对路径
+     * @param content 文件内容
+     * @return 标题提示；不存在时返回空串
+     */
+    private String extractMarkdownTitleHint(String relativePath, String content) {
+        String resolvedDocumentTitle = DocumentTitleSupport.resolveTextDocumentTitle(relativePath, content, null);
+        String fileNameTitle = DocumentTitleSupport.resolveFileNameTitle(relativePath);
+        if (hasText(resolvedDocumentTitle)
+                && !resolvedDocumentTitle.equals(fileNameTitle)
+                && !isTitleHintPlaceholder(resolvedDocumentTitle)) {
+            return resolvedDocumentTitle;
+        }
+        return extractFirstMeaningfulTitleLine(stripLeadingMarkdownFrontmatter(content));
+    }
+
+    /**
+     * 提取首个有效标题行。
+     *
+     * @param content 文件内容
+     * @return 首个有效标题行；不存在时返回空串
+     */
+    private String extractFirstMeaningfulTitleLine(String content) {
+        List<String> lines = content.lines().toList();
+        for (String line : lines) {
+            String normalizedLine = normalizeTitleHintLine(line);
+            if (!hasText(normalizedLine) || isTitleHintPlaceholder(normalizedLine)) {
+                continue;
+            }
+            return normalizedLine;
+        }
+        return "";
+    }
+
+    /**
+     * 去掉 Markdown 开头的 frontmatter 区块。
+     *
+     * @param content 文件内容
+     * @return 去掉 frontmatter 后的正文
+     */
+    private String stripLeadingMarkdownFrontmatter(String content) {
+        if (!hasText(content)) {
+            return "";
+        }
+        Matcher matcher = MARKDOWN_FRONTMATTER_BODY_PATTERN.matcher(content.trim());
+        return matcher.matches() ? matcher.group(1) : content;
+    }
+
+    /**
+     * 归一化标题提示候选行。
+     *
+     * @param line 原始行
+     * @return 归一化后的文本
+     */
+    private String normalizeTitleHintLine(String line) {
+        String trimmedLine = line == null ? "" : line.trim();
+        if (!hasText(trimmedLine)) {
+            return "";
+        }
+        return trimmedLine
+                .replaceFirst("^#+\\s*", "")
+                .replaceAll("\\s+#+\\s*$", "")
+                .trim();
+    }
+
+    /**
+     * 判断候选标题是否只是占位分隔线。
+     *
+     * @param titleHint 候选标题
+     * @return 是否为占位分隔线
+     */
+    private boolean isTitleHintPlaceholder(String titleHint) {
+        if (!hasText(titleHint)) {
+            return false;
+        }
+        return TITLE_HINT_PLACEHOLDER_PATTERN.matcher(titleHint.trim()).matches();
+    }
+
+    /**
+     * 判断文本是否有内容。
+     *
+     * @param value 文本
+     * @return 是否有内容
+     */
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isBlank();
     }
 
     private boolean isTitleHintCandidate(String relativePath) {

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs/test/title-generation/title-profile.schema.json",
+  "title": "Article Title Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sourceTitle",
+    "anchorTitle",
+    "representativeTitle",
+    "titleGenerationMode",
+    "titleGenerationVersion"
+  ],
+  "properties": {
+    "sourceTitle": {
+      "type": "string",
+      "minLength": 1
+    },
+    "anchorTitle": {
+      "type": "string",
+      "minLength": 1
+    },
+    "representativeTitle": {
+      "type": "string",
+      "minLength": 1
+    },
+    "titleGenerationMode": {
+      "type": "string",
+      "enum": [
+        "ANCHOR_DIRECT",
+        "RULE_BASED",
+        "LLM_FALLBACK",
+        "LEGACY_UNSET"
+      ]
+    },
+    "titleGenerationConfidence": {
+      "type": "string",
+      "enum": [
+        "HIGH",
+        "MEDIUM",
+        "LOW"
+      ]
+    },
+    "titleGenerationVersion": {
+      "type": "string",
+      "pattern": "^v[0-9]+$"
+    }
+  }
+}

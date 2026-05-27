@@ -261,12 +261,14 @@ public class ArticleJdbcRepository {
      * @return 检索文本
      */
     private String buildArticleSearchText(ArticleRecord articleRecord) {
+        String titleProfileText = buildTitleProfileSearchText(articleRecord.getMetadataJson());
         return String.join(
                 " ",
                 safeText(articleRecord.getTitle()),
                 safeText(articleRecord.getSummary()),
                 safeText(articleRecord.getContent()),
-                safeText(articleRecord.getMetadataJson())
+                safeText(articleRecord.getMetadataJson()),
+                safeText(titleProfileText)
         ).trim();
     }
 
@@ -293,6 +295,22 @@ public class ArticleJdbcRepository {
      */
     private String safeText(String value) {
         return value == null ? "" : value;
+    }
+
+    /**
+     * 构建标题画像检索文本。
+     *
+     * @param metadataJson 元数据 JSON
+     * @return 检索文本
+     */
+    private String buildTitleProfileSearchText(String metadataJson) {
+        JsonNode titleProfileNode = readMetadata(metadataJson).path("titleProfile");
+        return String.join(
+                " ",
+                safeText(titleProfileNode.path("sourceTitle").asText("")),
+                safeText(titleProfileNode.path("anchorTitle").asText("")),
+                safeText(titleProfileNode.path("representativeTitle").asText(""))
+        ).trim();
     }
 
     /**

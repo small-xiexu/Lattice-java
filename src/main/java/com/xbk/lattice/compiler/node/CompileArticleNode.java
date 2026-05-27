@@ -9,6 +9,7 @@ import com.xbk.lattice.compiler.domain.ConceptSection;
 import com.xbk.lattice.compiler.domain.MergedConcept;
 import com.xbk.lattice.compiler.prompt.LatticePrompts;
 import com.xbk.lattice.compiler.prompt.SchemaAwarePrompts;
+import com.xbk.lattice.compiler.service.ArticleTitleProfileSupport;
 import com.xbk.lattice.compiler.service.ArticleReviewerGateway;
 import com.xbk.lattice.compiler.service.DocumentSectionSelector;
 import com.xbk.lattice.compiler.service.LlmGateway;
@@ -17,6 +18,8 @@ import com.xbk.lattice.infra.persistence.ArticleRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
 import com.xbk.lattice.query.domain.ReviewResult;
+import com.xbk.lattice.source.domain.KnowledgeSource;
+import com.xbk.lattice.source.infra.KnowledgeSourceJdbcRepository;
 
 import java.nio.file.Path;
 import java.time.OffsetDateTime;
@@ -48,6 +51,8 @@ public class CompileArticleNode {
 
     private static final Pattern ARTICLE_HEADING_PATTERN = Pattern.compile("(?m)^#{1,6}\\s+(.+?)\\s*$");
 
+    private static final Pattern FRONTMATTER_PATTERN = Pattern.compile("\\A---\\R(.*?)\\R---\\R?(.*)\\z", Pattern.DOTALL);
+
     private static final String COMPILE_SCENE = "compile";
 
     private static final String WRITER_ROLE = "writer";
@@ -62,9 +67,13 @@ public class CompileArticleNode {
 
     private static final int REVIEW_SOURCE_PER_SOURCE_MAX_CHARS = 4000;
 
+    private static final int TITLE_SOURCE_SNIPPET_MAX_CHARS = 1800;
+
     private final LlmGateway llmGateway;
 
     private final SourceFileJdbcRepository sourceFileJdbcRepository;
+
+    private final KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository;
 
     private final DocumentSectionSelector documentSectionSelector;
 
@@ -91,6 +100,7 @@ public class CompileArticleNode {
         this(
                 llmGateway,
                 sourceFileJdbcRepository,
+                null,
                 documentSectionSelector,
                 articleReviewerGateway,
                 reviewFixService,
@@ -111,6 +121,7 @@ public class CompileArticleNode {
     public CompileArticleNode(
             LlmGateway llmGateway,
             SourceFileJdbcRepository sourceFileJdbcRepository,
+            KnowledgeSourceJdbcRepository knowledgeSourceJdbcRepository,
             DocumentSectionSelector documentSectionSelector,
             ArticleReviewerGateway articleReviewerGateway,
             ReviewFixService reviewFixService,
@@ -118,10 +129,40 @@ public class CompileArticleNode {
     ) {
         this.llmGateway = llmGateway;
         this.sourceFileJdbcRepository = sourceFileJdbcRepository;
+        this.knowledgeSourceJdbcRepository = knowledgeSourceJdbcRepository;
         this.documentSectionSelector = documentSectionSelector;
         this.articleReviewerGateway = articleReviewerGateway;
         this.reviewFixService = reviewFixService;
         this.schemaAwarePrompts = schemaAwarePrompts;
+    }
+
+    /**
+     * 创建文章编译节点。
+     *
+     * @param llmGateway LLM 网关
+     * @param sourceFileJdbcRepository 源文件仓储
+     * @param documentSectionSelector 文档章节选择器
+     * @param articleReviewerGateway 文章审查网关
+     * @param reviewFixService 审查修复服务
+     * @param schemaAwarePrompts SCHEMA 感知 Prompt 服务
+     */
+    public CompileArticleNode(
+            LlmGateway llmGateway,
+            SourceFileJdbcRepository sourceFileJdbcRepository,
+            DocumentSectionSelector documentSectionSelector,
+            ArticleReviewerGateway articleReviewerGateway,
+            ReviewFixService reviewFixService,
+            SchemaAwarePrompts schemaAwarePrompts
+    ) {
+        this(
+                llmGateway,
+                sourceFileJdbcRepository,
+                null,
+                documentSectionSelector,
+                articleReviewerGateway,
+                reviewFixService,
+                schemaAwarePrompts
+        );
     }
 
     /**
@@ -177,23 +218,32 @@ public class CompileArticleNode {
             String scopeId,
             String scene
     ) {
+        ArticleTitleProfileSupport.TitleProfile titleProfile = resolveTitleProfile(
+                mergedConcept,
+                sourceDir,
+                sourceId,
+                scopeId,
+                scene
+        );
+        String finalTitle = resolveFinalTitle(mergedConcept, titleProfile);
         String summary = buildSummary(mergedConcept);
         List<String> referentialKeywords = extractReferentialKeywords(mergedConcept);
-        String markdownContent = tryCompileWithLlm(mergedConcept, summary, sourceDir, sourceId, scopeId, scene);
+        String markdownContent = tryCompileWithLlm(mergedConcept, finalTitle, summary, sourceDir, sourceId, scopeId, scene);
         if (markdownContent == null || markdownContent.isBlank()) {
-            markdownContent = buildFallbackMarkdown(mergedConcept, summary, referentialKeywords);
+            markdownContent = buildFallbackMarkdown(mergedConcept, finalTitle, summary, referentialKeywords);
         }
+        markdownContent = rewriteTitleInMarkdown(markdownContent, finalTitle);
         String articleKey = buildArticleKey(sourceCode, mergedConcept.getConceptId());
         return new ArticleRecord(
                 sourceId,
                 articleKey,
                 mergedConcept.getConceptId(),
-                mergedConcept.getTitle(),
+                finalTitle,
                 markdownContent,
                 "ACTIVE",
                 OffsetDateTime.now(),
                 mergedConcept.getSourcePaths(),
-                buildMetadataJson(mergedConcept),
+                buildMetadataJson(mergedConcept, titleProfile),
                 summary,
                 referentialKeywords,
                 List.of(),
@@ -367,6 +417,7 @@ public class CompileArticleNode {
      */
     private String tryCompileWithLlm(
             MergedConcept mergedConcept,
+            String articleTitle,
             String summary,
             Path sourceDir,
             Long sourceId,
@@ -378,7 +429,7 @@ public class CompileArticleNode {
         }
         try {
             String systemPrompt = resolveCompileSystemPrompt(mergedConcept, sourceDir);
-            String userPrompt = buildCompilePrompt(mergedConcept, summary, sourceId);
+            String userPrompt = buildCompilePrompt(mergedConcept, articleTitle, summary, sourceId);
             return scopeId == null || scopeId.isBlank()
                     ? llmGateway.generateText(COMPILE_SCENE, WRITER_ROLE, "compile-article", systemPrompt, userPrompt)
                     : llmGateway.generateTextWithScope(
@@ -393,6 +444,130 @@ public class CompileArticleNode {
         catch (RuntimeException ex) {
             return null;
         }
+    }
+
+    /**
+     * 在规则层低置信度时使用 LLM 生成代表性标题。
+     *
+     * @param mergedConcept 合并概念
+     * @param sourceDir 源目录
+     * @param sourceId 资料源主键
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param ruleBasedProfile 规则标题画像
+     * @return LLM 兜底后的标题画像；失败时返回原画像
+     */
+    private ArticleTitleProfileSupport.TitleProfile enrichTitleProfileWithLlmFallback(
+            MergedConcept mergedConcept,
+            Path sourceDir,
+            Long sourceId,
+            String scopeId,
+            String scene,
+            ArticleTitleProfileSupport.TitleProfile ruleBasedProfile
+    ) {
+        if (!ArticleTitleProfileSupport.shouldUseLlmFallback(ruleBasedProfile) || llmGateway == null) {
+            return ruleBasedProfile;
+        }
+        String llmTitle = tryGenerateRepresentativeTitleWithLlm(
+                mergedConcept,
+                sourceDir,
+                sourceId,
+                scopeId,
+                scene,
+                ruleBasedProfile
+        );
+        if (llmTitle == null || llmTitle.isBlank()) {
+            return ruleBasedProfile;
+        }
+        return new ArticleTitleProfileSupport.TitleProfile(
+                ruleBasedProfile.getSourceTitle(),
+                ruleBasedProfile.getAnchorTitle(),
+                llmTitle,
+                "LLM_FALLBACK",
+                "MEDIUM",
+                ruleBasedProfile.getTitleGenerationVersion()
+        );
+    }
+
+    /**
+     * 调用 LLM 生成代表性标题。
+     *
+     * @param mergedConcept 合并概念
+     * @param sourceDir 源目录
+     * @param sourceId 资料源主键
+     * @param scopeId 作用域标识
+     * @param scene 场景
+     * @param ruleBasedProfile 规则标题画像
+     * @return 代表性标题；失败时返回空字符串
+     */
+    private String tryGenerateRepresentativeTitleWithLlm(
+            MergedConcept mergedConcept,
+            Path sourceDir,
+            Long sourceId,
+            String scopeId,
+            String scene,
+            ArticleTitleProfileSupport.TitleProfile ruleBasedProfile
+    ) {
+        try {
+            String systemPrompt = resolveRepresentativeTitleSystemPrompt(sourceDir);
+            String userPrompt = buildRepresentativeTitlePrompt(mergedConcept, sourceId, ruleBasedProfile);
+            String rawTitle = scopeId == null || scopeId.isBlank()
+                    ? llmGateway.generateText(COMPILE_SCENE, WRITER_ROLE, "compile-title", systemPrompt, userPrompt)
+                    : llmGateway.generateTextWithScope(
+                            scopeId,
+                            scene == null || scene.isBlank() ? COMPILE_SCENE : scene,
+                            WRITER_ROLE,
+                            "compile-title",
+                            systemPrompt,
+                            userPrompt
+                    );
+            return ArticleTitleProfileSupport.normalizeGeneratedTitleCandidate(rawTitle);
+        }
+        catch (RuntimeException exception) {
+            return "";
+        }
+    }
+
+    /**
+     * 解析代表性标题生成的系统提示词。
+     *
+     * @param sourceDir 源目录
+     * @return 系统提示词
+     */
+    private String resolveRepresentativeTitleSystemPrompt(Path sourceDir) {
+        return schemaAwarePrompts == null
+                ? LatticePrompts.SYSTEM_COMPILE_REPRESENTATIVE_TITLE
+                : schemaAwarePrompts.getRepresentativeTitlePrompt(sourceDir);
+    }
+
+    /**
+     * 构建代表性标题生成提示词。
+     *
+     * @param mergedConcept 合并概念
+     * @param sourceId 资料源主键
+     * @param ruleBasedProfile 规则标题画像
+     * @return 用户提示词
+     */
+    private String buildRepresentativeTitlePrompt(
+            MergedConcept mergedConcept,
+            Long sourceId,
+            ArticleTitleProfileSupport.TitleProfile ruleBasedProfile
+    ) {
+        StringBuilder promptBuilder = new StringBuilder();
+        promptBuilder.append("Source title: ").append(nullToEmpty(ruleBasedProfile.getSourceTitle())).append("\n");
+        promptBuilder.append("Anchor title: ").append(nullToEmpty(ruleBasedProfile.getAnchorTitle())).append("\n");
+        promptBuilder.append("Current rule-based title: ").append(nullToEmpty(ruleBasedProfile.getRepresentativeTitle())).append("\n");
+        promptBuilder.append("Concept ID: ").append(mergedConcept.getConceptId()).append("\n\n");
+        String structuredSectionsPayload = buildStructuredSectionsPayload(mergedConcept, 1200);
+        if (!structuredSectionsPayload.isBlank()) {
+            promptBuilder.append(structuredSectionsPayload).append("\n");
+        }
+        String relevantSourcePayload = buildWriterSourceContents(mergedConcept, sourceId, TITLE_SOURCE_SNIPPET_MAX_CHARS);
+        if (!relevantSourcePayload.isBlank()) {
+            promptBuilder.append("Relevant source content:").append("\n");
+            promptBuilder.append(relevantSourcePayload).append("\n");
+        }
+        return promptBuilder.toString().trim();
     }
 
     /**
@@ -421,8 +596,21 @@ public class CompileArticleNode {
      * @return 提示词
      */
     private String buildCompilePrompt(MergedConcept mergedConcept, String summary, Long sourceId) {
+        return buildCompilePrompt(mergedConcept, mergedConcept.getTitle(), summary, sourceId);
+    }
+
+    /**
+     * 构建文章编译提示词。
+     *
+     * @param mergedConcept 合并概念
+     * @param articleTitle 文章标题
+     * @param summary 摘要
+     * @param sourceId 资料源主键
+     * @return 提示词
+     */
+    private String buildCompilePrompt(MergedConcept mergedConcept, String articleTitle, String summary, Long sourceId) {
         StringBuilder promptBuilder = new StringBuilder();
-        promptBuilder.append("Compile a knowledge article about: \"").append(mergedConcept.getTitle()).append("\"").append("\n\n");
+        promptBuilder.append("Compile a knowledge article about: \"").append(articleTitle).append("\"").append("\n\n");
         promptBuilder.append("Description: ").append(summary).append("\n\n");
         promptBuilder.append("Concept ID: ").append(mergedConcept.getConceptId()).append("\n\n");
         String structuredSectionsPayload = buildStructuredSectionsPayload(
@@ -511,10 +699,15 @@ public class CompileArticleNode {
      * @param referentialKeywords 明确性关键词
      * @return Markdown 内容
      */
-    private String buildFallbackMarkdown(MergedConcept mergedConcept, String summary, List<String> referentialKeywords) {
+    private String buildFallbackMarkdown(
+            MergedConcept mergedConcept,
+            String articleTitle,
+            String summary,
+            List<String> referentialKeywords
+    ) {
         StringBuilder contentBuilder = new StringBuilder();
         contentBuilder.append("---").append("\n");
-        contentBuilder.append("title: ").append("\"").append(mergedConcept.getTitle()).append("\"").append("\n");
+        contentBuilder.append("title: ").append("\"").append(articleTitle).append("\"").append("\n");
         contentBuilder.append("summary: ").append("\"").append(escapeYaml(summary)).append("\"").append("\n");
         contentBuilder.append("referential_keywords: ").append(formatYamlList(referentialKeywords)).append("\n");
         contentBuilder.append("sources: ").append(formatYamlList(mergedConcept.getSourcePaths())).append("\n");
@@ -524,7 +717,7 @@ public class CompileArticleNode {
         contentBuilder.append("compiled_at: ").append("\"").append(OffsetDateTime.now()).append("\"").append("\n");
         contentBuilder.append("review_status: pending").append("\n");
         contentBuilder.append("---").append("\n\n");
-        contentBuilder.append("# ").append(mergedConcept.getTitle()).append("\n\n");
+        contentBuilder.append("# ").append(articleTitle).append("\n\n");
         if (!summary.isBlank()) {
             contentBuilder.append(summary).append("\n\n");
         }
@@ -1109,13 +1302,38 @@ public class CompileArticleNode {
      * @param mergedConcept 合并概念
      * @return metadata JSON
      */
-    private String buildMetadataJson(MergedConcept mergedConcept) {
+    private String buildMetadataJson(
+            MergedConcept mergedConcept,
+            ArticleTitleProfileSupport.TitleProfile titleProfile
+    ) {
         Map<String, Object> metadata = new LinkedHashMap<String, Object>();
         metadata.put("description", mergedConcept.getDescription());
         metadata.put("structured", !mergedConcept.getSections().isEmpty());
         metadata.put("sourceCount", mergedConcept.getSourcePaths().size());
         metadata.put("snippetCount", mergedConcept.getSnippets().size());
         metadata.put("sectionCount", mergedConcept.getSections().size());
+        if (mergedConcept.getAnalysisMode() != null && !mergedConcept.getAnalysisMode().isBlank()) {
+            metadata.put("analysisMode", mergedConcept.getAnalysisMode());
+        }
+        if (mergedConcept.getFailureReason() != null && !mergedConcept.getFailureReason().isBlank()) {
+            metadata.put("failureReason", mergedConcept.getFailureReason());
+        }
+        if (mergedConcept.getTitleSource() != null && !mergedConcept.getTitleSource().isBlank()) {
+            metadata.put("titleSource", mergedConcept.getTitleSource());
+        }
+        if ("FALLBACK".equals(mergedConcept.getAnalysisMode())
+                && mergedConcept.getFailureReason() != null
+                && !mergedConcept.getFailureReason().isBlank()) {
+            metadata.put("fallbackReason", mergedConcept.getFailureReason());
+        }
+        Map<String, Object> titleProfileNode = new LinkedHashMap<String, Object>();
+        titleProfileNode.put("sourceTitle", titleProfile.getSourceTitle());
+        titleProfileNode.put("anchorTitle", titleProfile.getAnchorTitle());
+        titleProfileNode.put("representativeTitle", titleProfile.getRepresentativeTitle());
+        titleProfileNode.put("titleGenerationMode", titleProfile.getTitleGenerationMode());
+        titleProfileNode.put("titleGenerationConfidence", titleProfile.getTitleGenerationConfidence());
+        titleProfileNode.put("titleGenerationVersion", titleProfile.getTitleGenerationVersion());
+        metadata.put("titleProfile", titleProfileNode);
         try {
             return OBJECT_MAPPER.writeValueAsString(metadata);
         }
@@ -1146,5 +1364,192 @@ public class CompileArticleNode {
      */
     private String escapeYaml(String value) {
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    /**
+     * 解析最终标题。
+     *
+     * @param mergedConcept 合并概念
+     * @param titleProfile 标题画像
+     * @return 最终标题
+     */
+    private String resolveFinalTitle(
+            MergedConcept mergedConcept,
+            ArticleTitleProfileSupport.TitleProfile titleProfile
+    ) {
+        if (titleProfile != null && titleProfile.getRepresentativeTitle() != null
+                && !titleProfile.getRepresentativeTitle().isBlank()) {
+            return titleProfile.getRepresentativeTitle();
+        }
+        return mergedConcept.getTitle();
+    }
+
+    /**
+     * 解析标题画像。
+     *
+     * @param mergedConcept 合并概念
+     * @param sourceId 资料源主键
+     * @return 标题画像
+     */
+    private ArticleTitleProfileSupport.TitleProfile resolveTitleProfile(
+            MergedConcept mergedConcept,
+            Path sourceDir,
+            Long sourceId,
+            String scopeId,
+            String scene
+    ) {
+        List<SourceFileRecord> sourceFileRecords = resolveSourceFiles(mergedConcept, sourceId);
+        KnowledgeSource knowledgeSource = resolveKnowledgeSource(sourceId);
+        ArticleTitleProfileSupport.TitleProfile ruleBasedProfile = ArticleTitleProfileSupport.resolve(
+                mergedConcept,
+                sourceFileRecords,
+                knowledgeSource
+        );
+        return enrichTitleProfileWithLlmFallback(
+                mergedConcept,
+                sourceDir,
+                sourceId,
+                scopeId,
+                scene,
+                ruleBasedProfile
+        );
+    }
+
+    /**
+     * 查询概念对应来源文件。
+     *
+     * @param mergedConcept 合并概念
+     * @param sourceId 资料源主键
+     * @return 来源文件列表
+     */
+    private List<SourceFileRecord> resolveSourceFiles(MergedConcept mergedConcept, Long sourceId) {
+        if (sourceFileJdbcRepository == null) {
+            return List.of();
+        }
+        List<SourceFileRecord> sourceFileRecords = new ArrayList<SourceFileRecord>();
+        for (String sourcePath : safeList(mergedConcept == null ? null : mergedConcept.getSourcePaths())) {
+            Optional<SourceFileRecord> sourceFileRecord = sourceId == null
+                    ? sourceFileJdbcRepository.findByPath(sourcePath)
+                    : sourceFileJdbcRepository.findBySourceIdAndRelativePath(sourceId, sourcePath);
+            if (sourceFileRecord.isEmpty()) {
+                sourceFileRecord = sourceFileJdbcRepository.findByPath(sourcePath);
+            }
+            sourceFileRecord.ifPresent(sourceFileRecords::add);
+        }
+        return sourceFileRecords;
+    }
+
+    /**
+     * 查询资料源记录。
+     *
+     * @param sourceId 资料源主键
+     * @return 资料源记录
+     */
+    private KnowledgeSource resolveKnowledgeSource(Long sourceId) {
+        if (knowledgeSourceJdbcRepository == null || sourceId == null) {
+            return null;
+        }
+        return knowledgeSourceJdbcRepository.findById(sourceId).orElse(null);
+    }
+
+    /**
+     * 重写 Markdown 中的标题。
+     *
+     * @param markdownContent Markdown 内容
+     * @param finalTitle 最终标题
+     * @return 重写后的 Markdown
+     */
+    private String rewriteTitleInMarkdown(String markdownContent, String finalTitle) {
+        if (markdownContent == null || markdownContent.isBlank() || finalTitle == null || finalTitle.isBlank()) {
+            return markdownContent;
+        }
+        String normalizedContent = ArticleMarkdownSupport.normalizeGeneratedMarkdown(markdownContent);
+        Matcher matcher = FRONTMATTER_PATTERN.matcher(normalizedContent.trim());
+        if (!matcher.matches()) {
+            return normalizedContent;
+        }
+        String frontmatter = matcher.group(1);
+        String body = matcher.group(2);
+        String normalizedFrontmatter = rewriteFrontmatterTitle(frontmatter, finalTitle);
+        String normalizedBody = rewriteFirstHeading(body, finalTitle);
+        return """
+                ---
+                %s
+                ---
+
+                %s
+                """.formatted(normalizedFrontmatter, normalizedBody == null ? "" : normalizedBody.strip()).trim();
+    }
+
+    private String nullToEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
+    /**
+     * 重写 frontmatter title。
+     *
+     * @param frontmatter 原始 frontmatter
+     * @param finalTitle 最终标题
+     * @return 新 frontmatter
+     */
+    private String rewriteFrontmatterTitle(String frontmatter, String finalTitle) {
+        String[] lines = frontmatter.split("\\R", -1);
+        StringBuilder builder = new StringBuilder();
+        boolean replaced = false;
+        for (String line : lines) {
+            String trimmedLine = line.trim();
+            if (trimmedLine.startsWith("title:")) {
+                appendLine(builder, "title: \"" + escapeYaml(finalTitle) + "\"");
+                replaced = true;
+                continue;
+            }
+            appendLine(builder, line);
+        }
+        if (!replaced) {
+            appendLine(builder, "title: \"" + escapeYaml(finalTitle) + "\"");
+        }
+        return builder.toString().trim();
+    }
+
+    /**
+     * 重写首个一级标题。
+     *
+     * @param body 原始正文
+     * @param finalTitle 最终标题
+     * @return 新正文
+     */
+    private String rewriteFirstHeading(String body, String finalTitle) {
+        if (body == null || body.isBlank()) {
+            return "# " + finalTitle;
+        }
+        String[] lines = body.split("\\R", -1);
+        StringBuilder builder = new StringBuilder();
+        boolean replaced = false;
+        for (String line : lines) {
+            String trimmedLine = line.trim();
+            if (!replaced && trimmedLine.startsWith("# ") && !trimmedLine.startsWith("## ")) {
+                appendLine(builder, "# " + finalTitle);
+                replaced = true;
+                continue;
+            }
+            appendLine(builder, line);
+        }
+        if (!replaced) {
+            return "# " + finalTitle + "\n\n" + body.strip();
+        }
+        return builder.toString().trim();
+    }
+
+    /**
+     * 向构建器追加一行。
+     *
+     * @param builder 构建器
+     * @param line 行内容
+     */
+    private void appendLine(StringBuilder builder, String line) {
+        if (builder.length() > 0) {
+            builder.append("\n");
+        }
+        builder.append(line == null ? "" : line);
     }
 }

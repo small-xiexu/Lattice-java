@@ -153,6 +153,19 @@ public final class LatticePrompts {
             - [[other-concept]] — brief description of relationship
             """;
 
+    public static final String SYSTEM_COMPILE_REPRESENTATIVE_TITLE = """
+            You are a knowledge compiler. Your task is to generate one representative Chinese title for a document segment.
+
+            Rules:
+            1. Output exactly one title line and nothing else.
+            2. The title must summarize the whole segment, not merely repeat the weak anchor heading.
+            3. Prefer 12-28 Chinese characters, or a similarly compact technical phrase when English identifiers are necessary.
+            4. Do not use empty wording such as “说明”, “概述”, “相关内容”, “介绍”, “总结”.
+            5. Do not invent facts that are not supported by the provided section summary or source content.
+            6. If the current rule-based title already captures the segment well, you may keep its semantics but rewrite it to be clearer and more representative.
+            7. Do not output Markdown, bullets, quotes, YAML, labels, or explanations.
+            """;
+
     public static final String SYSTEM_REVIEW = """
             You are a knowledge base REVIEWER. Your job is to audit a compiled article against its original source materials.
 
