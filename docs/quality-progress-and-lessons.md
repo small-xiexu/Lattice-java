@@ -1,6 +1,6 @@
 # 项目质量打磨进度与踩坑台账
 
-更新时间：2026-05-27（agentA S2 chunk/anchor identity 修复后更新，补充代码层验证与 agentD 验收建议）
+更新时间：2026-05-28（agentC 同步 fresh eval 2 三轮失败实验与 terminal unit 物化方向）
 
 本台账记录质量打磨、Query/SWIP eval、baseline 修复与多 agent 协作的当前状态。后续推进前先读本文件；阶段结论变化后必须回写。
 
@@ -23,6 +23,9 @@
 - compile review 人工确认后入库链路：`needs_human_review` 编译草稿持久化到 `compile_article_review_queue`，后台 API 支持 list/detail/approve/reject，approve 后以 `review_status=passed` + `lifecycle=ACTIVE` 写入 articles/chunks/vector index，reject 后不入库。前端"待人工确认"入口可用。pre-commit 复核通过：redline BLOCKER=0，mvn test=844/0/0。已分两个提交：`8fe7001`（publish flow）+ `b453627`（admin API）。详见 `compile_human_review_queue_pre_commit_quality_report.md`。
 - 知识库验收 Q6 结构化 fact card 路径修复：fact card 生成层已通过，已保留 YAML/JSON/缩进式结构化字段路径，兼容旧 `key/value/raw`，新增 `keyPath/parentPath/pathSegments/contextPath/displayText` 并增强结构化证据文本。fallback structured evidence、path shape gate、complementary selector、exact path terminal field alias 已全部收口。2026-05-27 agentD 端到端验证通过，Q6 query/fallback 修复已闭环：redline `BLOCKER=0`、全量 `mvn test=915/0/0`、Query Java 主链未见中文字段语义硬编码 / Q6 特判 / 端口值特判 / Kubernetes 特判；真实 API 返回 `fieldPath: spec.containers[0].readinessProbe.tcpSocket.port = 8080`，citation 能支撑该事实，`periodSeconds=10` sibling 未被抢占；endpoint / URL / image / version / ordinary numeric 字段保护场景均通过。Q1-Q12 为 `12/12 PASS`，S1-S4 为 `3/4 PASS`，其中 S2 `下一步计划` 仍 FAIL。最终口径只能写成 `Q6 query/fallback 修复已闭环，整体最小验收仍因 S2 标题/anchor 搜索失败未完全通过`。下一步只应进入 Q6 terminal field alias scoped commit，然后把 S2 作为独立标题/anchor 搜索问题分析，禁止继续在 Q6/fallback 主链叠加规则。详见 `docs/test/knowledge-base-e2e/q6_fallback_structured_evidence_verification_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_second_root_cause_analysis_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_path_shape_gate_fix_result_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_path_shape_gate_verification_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_runtime_trace_analysis_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_complementary_evidence_gate_fix_result_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_complementary_evidence_gate_verification_report.md`、`docs/test/knowledge-base-e2e/q6_exact_path_terminal_field_fix_result_report.md`。
 - 知识库验收 S2 标题/anchor 搜索身份修复：agentB 已只读归因为 article chunk FTS 召回后被 ARTICLE articleKey 身份折叠，导致 chunk/anchor 独立席位丢失；agentA 已完成最小通用修复，chunk 级命中写入 `chunkIdentity/chunkIndex/sectionAnchor/channel`，RRF 对带 `chunkIdentity` 的 ARTICLE hit 使用 chunk 级 key，普通 article hit 仍按 articleKey/conceptId 融合。代码层验证通过：redline `BLOCKER=0`、定向测试 `13/0/0`、全量 `mvn test=921/0/0`；本轮未清库、未重建、未导入资料，仍需 agentD 做完整知识库验收，覆盖 Q1-Q12、S1-S4 与 Q6 保护场景。详见 `docs/test/knowledge-base-e2e/s2_title_anchor_search_root_cause_analysis_report.md`、`docs/test/knowledge-base-e2e/s2_chunk_anchor_identity_fix_result_report.md`。
+- fresh eval 2 当前正式基线仍以 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/acceptance-report.md` 为准：Answer Accuracy `10/15`，Search Accuracy `1/4`，Recall@10 `13/15`，Citation Accuracy `2/15`，Abstain Accuracy `2/2`，Hallucination Count `5`，结论为未通过。
+- fresh eval 2 结构化 terminal value 桶未闭环：`FQ3/FQ4/FQ6/FG1/FG2` 在 structured fact terminal binding、selector gate、conclusion gate 三轮 query fallback 方向实验后仍为 `0/5 PASS`。三轮实验报告只建议归档为失败实验，不建议提交对应代码。
+- fresh eval 2 最新根因判断已从 retrieval 召回转向 evidence unit 粒度：FACT_CARD 已稳定召回且包含目标 terminal assignment，但整卡粒度导致同卡 sibling 共用卡级 identity、score、citation 边界，fallback 容易选中 `type/name/return_policy` 等近邻字段。下一步不再继续叠 query fallback selector/conclusion/snippet gate，应转向 compile/index 层 structured terminal assignment evidence unit materialization，第一阶段先生成 terminal units 并进入 FTS 检索。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/fresh_eval_terminal_assignment_conclusion_gate_verification_report.md`、`docs/test/knowledge-base-e2e/fresh-eval-2026-05/structured_terminal_evidence_unit_materialization_design_report.md`。
 - 已提交 scoped commit 清单（2026-05-27 收口审计）：
 
   | Commit | 描述 | 所属桶 |
@@ -57,15 +60,16 @@
 | compile review 人工确认后入库 | 代码实现 + runtime 验证 + pre-commit 复核通过 + 已提交 | agentA 实现：后端 publish flow + 后台 list/detail/approve/reject API + 前端入口。agentD runtime 验证通过：后端全链路、approve 向量刷新、前端主流程。agentD pre-commit 复核通过：redline BLOCKER=0，mvn test=844/0/0，无主链误改。已提交（`8fe7001` + `b453627`）。详见 `compile_human_review_queue_pre_commit_quality_report.md`。 |
 | 知识库验收 Q6 fact card 路径 | Q6 query/fallback 修复已闭环；整体最小验收仍因 S2 标题/anchor 搜索失败未完全通过 | redline `BLOCKER=0`，`AnswerGenerationServiceTests=77/0/0`，`AnswerFallbackEvidenceSelectorTests + FactCardGenerationServiceTests=27/0/0`，全量 `mvn test=915/0/0`。agentD 已完成真实 API 验证：`spec.containers[0].readinessProbe.tcpSocket.port = 8080`，`periodSeconds=10` 未被抢占，endpoint / URL / image / version / ordinary numeric 字段保护场景均通过。 |
 | 知识库验收 S2 chunk/anchor identity | 代码层修复 + 待 agentD 端到端验收 | agentA 完成 chunk identity 最小修复：article chunk FTS / chunk vector 保留 chunk 级身份，RRF 不再把带 `chunkIdentity` 的 chunk hit 与整篇 article hit 按 articleKey 折叠；展示标题通用保留 section anchor。redline `BLOCKER=0`，定向测试 `13/0/0`，全量 `mvn test=921/0/0`。 |
+| fresh eval 2 | 未通过；正式基线仍以 `acceptance-report.md` 为准 | 结构化 terminal value 题 `FQ3/FQ4/FQ6/FG1/FG2` 三轮 query fallback 实验后仍 `0/5 PASS`；FACT_CARD 已召回但整卡 evidence unit 粒度导致 sibling 抢答。下一步进入 terminal unit 第一阶段：生成 terminal units 并进入 FTS 检索。 |
 
 ## 多 Agent 当前职责
 
 | Agent | 职责 | 当前状态 | 是否允许改代码 |
 |---|---|---|---|
-| agentA | 单一代码修复执行者 | S2 chunk/anchor identity 最小通用修复已完成代码层验证；不再扩大 Q6/fallback 主链 | 是，但同一轮只能有一个 agentA 改主链 |
-| agentB | 治理/链路分析 | 已完成 S2 只读归因；可在 agentD 端到端回归后继续只读分析新增失败，不得与 agentA 并行改主链 | 否 |
-| agentC | 项目进度台账与文档治理 | 已完成 7 个 scoped commit 台账同步与剩余文档收口审计 | 否，除文档/报告 |
-| agentD | 验证/测试 | 已完成 Q6 端到端验证；下一步建议对 S2 chunk/anchor identity 修复做完整知识库验收，并回归 Q1-Q12、S1-S4、Q6 保护场景。 | 否，除验证报告 |
+| agentA | 单一代码修复执行者 | 下一轮若进入 fresh eval 2 修复，只做 terminal unit 第一阶段：生成 terminal units 并进入 FTS 检索；禁止继续叠 query fallback gate | 是，但同一轮只能有一个 agentA 改主链 |
+| agentB | 治理/链路分析 | 可在 terminal unit 修复后只读定位 unit 生成、FTS 召回、RRF 身份或 citation binding 失效点；不得与 agentA 并行改主链 | 否 |
+| agentC | 项目进度台账与文档治理 | 已同步 fresh eval 2 最新失败结论、terminal unit 方向与提交计划验证码 | 否，除文档/报告 |
+| agentD | 验证/测试 | terminal unit 第一阶段完成后，先验证 `FQ3/FQ4/FQ6/FG1/FG2` 是否命中目标 unit；通过后再跑完整 Public Eval 2 与 Q6/S2 保护回归。 | 否，除验证报告 |
 
 ## 已验证结论
 
@@ -106,6 +110,9 @@
 - Q6 query/fallback 修复已闭环；整体最小验收仍因 S2 标题/anchor 搜索失败未完全通过，Q1-Q12 为 `12/12 PASS`，S1-S4 为 `3/4 PASS`。S2 `下一步计划` 失败属于独立标题/anchor 搜索链路问题，不能归因到 Q6 terminal field alias。
 - S2 标题/anchor 搜索已完成代码层身份修复：article chunk FTS / chunk vector 命中现在保留 `chunkIdentity`，RRF 不再与整篇 article hit 按 articleKey 无条件折叠；搜索结果 title/metadata 可通用展示 section anchor。当前仅完成 redline、定向测试、全量 Maven，真实 API 排序与展示仍待 agentD 端到端验证。
 - `citation_coverage=1.0` 仍不能单独替代 Citation Accuracy；Q6 这次之所以成立，是因为 answer claim、source 文件和人工核验三者一致。
+- fresh eval 2 未通过，且三轮 query fallback 方向实验均失败；`FQ3/FQ4/FQ6/FG1/FG2` 当前仍是 `0/5 PASS`。
+- fresh eval 2 当前不再归因为 retrieval 缺失：目标 FACT_CARD 已召回并包含 terminal assignment，真正缺口是整卡 evidence unit 粒度过粗，导致 sibling 字段抢答与 citation 边界不稳定。
+- structured terminal unit 的 `fieldLabel`、`fieldAliases`、`fieldDescription` 只能来自源文件内容与通用结构规则，不得来自 public/hidden 题集、标准答案、expected citation、case id 或 query 日志；hidden eval 仍不得被 AI 读取。
 
 ## 踩坑记录
 
@@ -138,6 +145,8 @@
 | 人工确认 approve 后向量索引未刷新 | approve 后 article 写入 articles 表但 `article_chunks` 未重建、向量索引未刷新，导致 query 无法召回 | 人工 approve 路径与 StateGraph persist 路径在 chunk/vector 重建逻辑上不共享代码路径，approve 侧缺失全量 chunk+vector 刷新 | approve 路径已补全 chunk 重建 + `SearchEngineMaintainer.refreshVectorIndex`。后续任何新增"绕开 StateGraph 写入 articles"的路径，必须同步验证 chunk/vector 重建。 |
 | Q6 exact path sibling 字段误选问题已闭环 | 真实 API 现在返回 `spec.containers[0].readinessProbe.tcpSocket.port = 8080`，`periodSeconds=10` sibling 未再抢占；endpoint / URL / image / version / ordinary numeric 保护场景通过 | 这说明 exact path terminal field alias 与通用 leaf key 绑定已经生效，Q6 主链不应再继续叠加规则 | 后续只保留 scoped commit 收口，S2 作为独立标题/anchor 搜索问题分析。 |
 | 中文 terminal field alias 必须保持配置化 | 上一轮曾在 Java 中把中文字段语义直接归一到 leaf key，现已迁移到配置 | 中文字段语义必须放在短小、通用、可审计的配置中；Java 主链只允许读取规则和处理英文通用 token | 后续新增中文字段 alias 必须走配置审计，不能在 Java if/else、业务词表、资料词表或题集词表中实现。 |
+| query fallback 叠 gate 对 fresh eval 2 无收益 | structured fact terminal binding、selector gate、conclusion gate 三轮服务级复验均为 `0/5 PASS` | 问题不在“再精调 fallback 选行”，而在 FACT_CARD 整卡粒度无法稳定表达单个 terminal assignment | 禁止继续在 query fallback 主链叠加 selector/conclusion/snippet gate；下一步先做 terminal unit 第一阶段，让检索返回单字段证据。 |
+| terminal unit alias 来源存在 eval 污染风险 | field label/alias/description 若从题集、答案或 query 日志派生，会把 public/hidden eval 泄漏进索引规则 | alias 必须来自源文件和通用结构规则；hidden eval 只允许记录指标与失败类型 | 生成 terminal unit 时不得读取 hidden eval；不得把题面、case id、expected citation、答案值写入代码、prompt、配置或 SQL。 |
 | `compile_article_review_queue` 不区分 compile job | 多次 compile 产生的 `needs_human_review` 草稿混在同一队列，无 jobId 过滤 | 当前接受这种简化——人工确认场景本身就是低频率、逐条处理的 | 后续若需要按 job 维度管理人工确认，需给 `compile_article_review_queue` 增加 `job_id` 字段并支持筛选。 |
 | 前端编译进度卡片语义与轮次展示仍有缺口 | 前端进度卡片展示的步骤数、审查轮次、fix 轮次仍不完全反映 StateGraph 实际执行轮数 | 后端步骤和轮次信息已写入 job steps，前端尚未完全接入 | 不阻断当前提交。后续状态摘要和轮次展示迭代时统一接入。 |
 
@@ -158,6 +167,8 @@
 - 不准为 Kubernetes / readiness / liveness / tcpSocket 等具体业务字段写生产逻辑特判。
 - 不准在 Java 主链硬编码中文字段语义；中文 terminal field alias 必须配置化、短小、可审计。
 - Q6 下一轮必须由 agentD 做真实 API 与全面回归，不得只回归 Q6。
+- fresh eval 2 禁止继续沿 query fallback 主链叠加 selector / conclusion / snippet gate 追通过。
+- structured terminal unit 的 label / alias / description 禁止来自题集、答案、query 日志或 hidden eval。
 
 ## 下一步计划
 
@@ -198,11 +209,18 @@
 32. （已完成）S2 标题/anchor 搜索问题独立分析：agentB 单独排查 `下一步计划` 的标题/anchor 命中链路，确认不归因到 Q6 terminal field alias。详见 `docs/test/knowledge-base-e2e/s2_title_anchor_search_root_cause_analysis_report.md`。
 33. （已完成，待验收）S2 chunk/anchor identity 最小通用修复：agentA 保留 chunk 级 identity，避免 article chunk FTS / chunk vector 命中被整篇 article 折叠；redline `BLOCKER=0`，定向测试 `13/0/0`，全量 `mvn test=921/0/0`。详见 `docs/test/knowledge-base-e2e/s2_chunk_anchor_identity_fix_result_report.md`。
 34. （后续）S2 agentD 完整知识库端到端验收：清库/重建/导入如由 agentD 判断需要后执行，至少回归 Q1-Q12、S1-S4、S2 搜索展示与 Q6 保护场景。
-35. （后续）状态摘要接入人工确认队列：Dashboard 摘要展示 `compile_article_review_queue` 待处理计数。
-36. （后续）SWIP 两文档重建验收：验证 clean rebuild 全链路在人工确认队列就位后的正确性。
-37. （后续）审查/修复轮次展示：前端进度卡片接入 StateGraph 实际执行轮数。
-38. （后续）LLM approved 正向 canary 观察。
-39. （后续）Fixer→Re-reviewer loop runtime 验证。
+35. （已完成，FAIL）fresh eval 2 首轮正式验收：正式基线以 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/acceptance-report.md` 为准，Answer Accuracy `10/15`，Search Accuracy `1/4`，Recall@10 `13/15`，Citation Accuracy `2/15`，结论为未通过。
+36. （已完成，FAIL）fresh eval 2 structured fact terminal binding 实验：工程门禁通过，但服务级 `FQ3/FQ4/FQ6/FG1/FG2 = 0/5 PASS`，不建议提交对应代码。
+37. （已完成，FAIL）fresh eval 2 selector gate 实验：FACT_CARD 仍未进入最终 answer/citation，服务级 `0/5 PASS`，不建议提交对应代码。
+38. （已完成，FAIL）fresh eval 2 conclusion gate 实验：FACT_CARD 已召回但仍选错 sibling，服务级 `0/5 PASS`，不建议提交对应代码。
+39. （已完成）fresh eval 2 terminal unit 设计：已明确下一步转向 compile/index 层 structured terminal assignment evidence unit materialization；第一阶段先生成 terminal units 并进入 FTS 检索，禁止继续叠 query fallback gate。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/structured_terminal_evidence_unit_materialization_design_report.md`。
+40. （后续）fresh eval 2 terminal unit 第一阶段实现：展开 FACT_ENUM / key_value_list / path-aware items 为 terminal units，接入 FTS，使用 unit identity 避免 sibling 折叠；field label/alias/description 只能来自源文件与通用结构规则。
+41. （后续）terminal unit agentD 验证：先验证 `FQ3/FQ4/FQ6/FG1/FG2` 是否命中目标 unit 且 answer claim 命中；通过后再跑完整 Public Eval 2、Q6 terminal field alias 保护和 S2 chunk/anchor identity 保护。
+42. （后续）状态摘要接入人工确认队列：Dashboard 摘要展示 `compile_article_review_queue` 待处理计数。
+43. （后续）SWIP 两文档重建验收：验证 clean rebuild 全链路在人工确认队列就位后的正确性。
+44. （后续）审查/修复轮次展示：前端进度卡片接入 StateGraph 实际执行轮数。
+45. （后续）LLM approved 正向 canary 观察。
+46. （后续）Fixer→Re-reviewer loop runtime 验证。
 
 ## 更新规则
 
