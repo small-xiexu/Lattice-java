@@ -59,6 +59,8 @@ public final class QueryGraphStateKeys {
 
     public static final String FACT_CARD_VECTOR_HITS_REF = "factCardVectorHitsRef";
 
+    public static final String FACT_CARD_TERMINAL_UNIT_HITS_REF = "factCardTerminalUnitHitsRef";
+
     public static final String CONTRIBUTION_HITS_REF = "contributionHitsRef";
 
     public static final String GRAPH_HITS_REF = "graphHitsRef";

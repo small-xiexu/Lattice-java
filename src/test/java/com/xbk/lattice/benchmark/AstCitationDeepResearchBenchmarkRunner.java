@@ -82,6 +82,7 @@ import com.xbk.lattice.query.service.ArticleChunkFtsSearchService;
 import com.xbk.lattice.query.service.ChunkVectorSearchService;
 import com.xbk.lattice.query.service.ContributionSearchService;
 import com.xbk.lattice.query.service.FactCardFtsSearchService;
+import com.xbk.lattice.query.service.FactCardTerminalUnitFtsSearchService;
 import com.xbk.lattice.query.service.FactCardVectorSearchService;
 import com.xbk.lattice.query.evidence.domain.EvidenceAnchor;
 import com.xbk.lattice.query.evidence.domain.EvidenceAnchorSourceType;
@@ -2524,6 +2525,7 @@ class AstCitationDeepResearchBenchmarkRunner {
                     new SourceChunkFtsSearchService(null),
                     new FactCardFtsSearchService(null),
                     new FactCardVectorSearchService(),
+                    new FactCardTerminalUnitFtsSearchService(null),
                     new ContributionSearchService(null),
                     new GraphSearchService(),
                     new VectorSearchService(),

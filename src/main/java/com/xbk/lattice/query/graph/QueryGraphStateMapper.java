@@ -49,6 +49,7 @@ public class QueryGraphStateMapper {
         state.setSourceChunkHitsRef(readString(stateMap, QueryGraphStateKeys.SOURCE_CHUNK_HITS_REF));
         state.setFactCardHitsRef(readString(stateMap, QueryGraphStateKeys.FACT_CARD_HITS_REF));
         state.setFactCardVectorHitsRef(readString(stateMap, QueryGraphStateKeys.FACT_CARD_VECTOR_HITS_REF));
+        state.setFactCardTerminalUnitHitsRef(readString(stateMap, QueryGraphStateKeys.FACT_CARD_TERMINAL_UNIT_HITS_REF));
         state.setContributionHitsRef(readString(stateMap, QueryGraphStateKeys.CONTRIBUTION_HITS_REF));
         state.setGraphHitsRef(readString(stateMap, QueryGraphStateKeys.GRAPH_HITS_REF));
         state.setArticleVectorHitsRef(readString(stateMap, QueryGraphStateKeys.ARTICLE_VECTOR_HITS_REF));
@@ -113,6 +114,7 @@ public class QueryGraphStateMapper {
         values.put(QueryGraphStateKeys.SOURCE_CHUNK_HITS_REF, state.getSourceChunkHitsRef());
         values.put(QueryGraphStateKeys.FACT_CARD_HITS_REF, state.getFactCardHitsRef());
         values.put(QueryGraphStateKeys.FACT_CARD_VECTOR_HITS_REF, state.getFactCardVectorHitsRef());
+        values.put(QueryGraphStateKeys.FACT_CARD_TERMINAL_UNIT_HITS_REF, state.getFactCardTerminalUnitHitsRef());
         values.put(QueryGraphStateKeys.CONTRIBUTION_HITS_REF, state.getContributionHitsRef());
         values.put(QueryGraphStateKeys.GRAPH_HITS_REF, state.getGraphHitsRef());
         values.put(QueryGraphStateKeys.ARTICLE_VECTOR_HITS_REF, state.getArticleVectorHitsRef());

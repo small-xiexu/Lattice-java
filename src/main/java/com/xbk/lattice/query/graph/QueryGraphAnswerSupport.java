@@ -19,6 +19,7 @@ import com.xbk.lattice.query.service.ArticleChunkFtsSearchService;
 import com.xbk.lattice.query.service.ChunkVectorSearchService;
 import com.xbk.lattice.query.service.ContributionSearchService;
 import com.xbk.lattice.query.service.FactCardFtsSearchService;
+import com.xbk.lattice.query.service.FactCardTerminalUnitFtsSearchService;
 import com.xbk.lattice.query.service.FactCardVectorSearchService;
 import com.xbk.lattice.query.service.FtsSearchService;
 import com.xbk.lattice.query.service.GraphSearchService;
@@ -80,6 +81,7 @@ abstract class QueryGraphAnswerSupport extends QueryGraphRetrievalSupport {
             SourceChunkFtsSearchService sourceChunkFtsSearchService,
             FactCardFtsSearchService factCardFtsSearchService,
             FactCardVectorSearchService factCardVectorSearchService,
+            FactCardTerminalUnitFtsSearchService factCardTerminalUnitFtsSearchService,
             ContributionSearchService contributionSearchService,
             GraphSearchService graphSearchService,
             VectorSearchService vectorSearchService,
@@ -110,6 +112,7 @@ abstract class QueryGraphAnswerSupport extends QueryGraphRetrievalSupport {
                 sourceChunkFtsSearchService,
                 factCardFtsSearchService,
                 factCardVectorSearchService,
+                factCardTerminalUnitFtsSearchService,
                 contributionSearchService,
                 graphSearchService,
                 vectorSearchService,

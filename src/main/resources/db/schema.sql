@@ -543,6 +543,96 @@ CREATE INDEX IF NOT EXISTS idx_fact_cards_content_hash
 CREATE INDEX IF NOT EXISTS idx_fact_cards_search_tsv
     ON fact_cards USING GIN (search_tsv);
 
+CREATE TABLE IF NOT EXISTS fact_card_terminal_units (
+    id BIGSERIAL PRIMARY KEY,
+    unit_id VARCHAR(320) NOT NULL,
+    terminal_unit_identity VARCHAR(360) NOT NULL,
+    fact_card_id BIGINT NOT NULL REFERENCES fact_cards (id) ON DELETE CASCADE,
+    card_id VARCHAR(256) NOT NULL REFERENCES fact_cards (card_id) ON DELETE CASCADE,
+    source_id BIGINT,
+    source_file_id BIGINT REFERENCES source_files (id) ON DELETE CASCADE,
+    source_chunk_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    article_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    card_type VARCHAR(32) NOT NULL,
+    answer_shape VARCHAR(32) NOT NULL,
+    structure VARCHAR(64) NOT NULL DEFAULT '',
+    item_index INTEGER NOT NULL DEFAULT 0,
+    key_path TEXT NOT NULL DEFAULT '',
+    parent_path TEXT NOT NULL DEFAULT '',
+    terminal_key TEXT NOT NULL DEFAULT '',
+    path_segments_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    field_label TEXT NOT NULL DEFAULT '',
+    field_aliases_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    field_description TEXT NOT NULL DEFAULT '',
+    display_text TEXT NOT NULL DEFAULT '',
+    value_text TEXT NOT NULL DEFAULT '',
+    normalized_value TEXT NOT NULL DEFAULT '',
+    value_type VARCHAR(32) NOT NULL DEFAULT 'string',
+    source_refs_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    fts_text TEXT NOT NULL DEFAULT '',
+    metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    review_status VARCHAR(32) NOT NULL DEFAULT 'low_confidence',
+    confidence DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    content_hash VARCHAR(64) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    search_tsv TSVECTOR NOT NULL DEFAULT ''::tsvector
+);
+
+COMMENT ON TABLE fact_card_terminal_units IS '事实证据卡终端字段证据单元表';
+COMMENT ON COLUMN fact_card_terminal_units.id IS '终端证据单元主键 ID';
+COMMENT ON COLUMN fact_card_terminal_units.unit_id IS '终端证据单元稳定业务标识';
+COMMENT ON COLUMN fact_card_terminal_units.terminal_unit_identity IS '终端证据单元检索融合身份';
+COMMENT ON COLUMN fact_card_terminal_units.fact_card_id IS '所属事实证据卡主键 ID';
+COMMENT ON COLUMN fact_card_terminal_units.card_id IS '所属事实证据卡稳定业务标识';
+COMMENT ON COLUMN fact_card_terminal_units.source_id IS '所属资料源主键 ID';
+COMMENT ON COLUMN fact_card_terminal_units.source_file_id IS '所属源文件主键 ID';
+COMMENT ON COLUMN fact_card_terminal_units.source_chunk_ids IS '回指的源文件分块主键数组';
+COMMENT ON COLUMN fact_card_terminal_units.article_ids IS '关联背景文章主键数组';
+COMMENT ON COLUMN fact_card_terminal_units.card_type IS '所属事实证据卡类型';
+COMMENT ON COLUMN fact_card_terminal_units.answer_shape IS '所属答案形态';
+COMMENT ON COLUMN fact_card_terminal_units.structure IS '结构化条目来源结构';
+COMMENT ON COLUMN fact_card_terminal_units.item_index IS '条目在事实卡内的稳定序号';
+COMMENT ON COLUMN fact_card_terminal_units.key_path IS '终端字段完整路径';
+COMMENT ON COLUMN fact_card_terminal_units.parent_path IS '终端字段父级路径';
+COMMENT ON COLUMN fact_card_terminal_units.terminal_key IS '终端字段末级键名';
+COMMENT ON COLUMN fact_card_terminal_units.path_segments_json IS '终端字段路径片段 JSON';
+COMMENT ON COLUMN fact_card_terminal_units.field_label IS '源内容派生字段展示名';
+COMMENT ON COLUMN fact_card_terminal_units.field_aliases_json IS '源内容与通用拆词派生字段别名 JSON';
+COMMENT ON COLUMN fact_card_terminal_units.field_description IS '终端字段通用上下文描述';
+COMMENT ON COLUMN fact_card_terminal_units.display_text IS '终端字段展示文本';
+COMMENT ON COLUMN fact_card_terminal_units.value_text IS '终端字段原始展示值';
+COMMENT ON COLUMN fact_card_terminal_units.normalized_value IS '终端字段通用归一化值';
+COMMENT ON COLUMN fact_card_terminal_units.value_type IS '按值形态推断的通用类型';
+COMMENT ON COLUMN fact_card_terminal_units.source_refs_json IS '终端字段来源回指 JSON';
+COMMENT ON COLUMN fact_card_terminal_units.fts_text IS '终端字段全文检索文本';
+COMMENT ON COLUMN fact_card_terminal_units.metadata_json IS '终端字段查询透传元数据 JSON';
+COMMENT ON COLUMN fact_card_terminal_units.review_status IS '继承事实证据卡审查状态';
+COMMENT ON COLUMN fact_card_terminal_units.confidence IS '继承或派生置信度';
+COMMENT ON COLUMN fact_card_terminal_units.content_hash IS '终端字段内容哈希';
+COMMENT ON COLUMN fact_card_terminal_units.search_tsv IS '终端字段全文检索 tsvector';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_fact_card_terminal_units_unit_id
+    ON fact_card_terminal_units (unit_id);
+
+CREATE INDEX IF NOT EXISTS idx_fact_card_terminal_units_identity
+    ON fact_card_terminal_units (terminal_unit_identity);
+
+CREATE INDEX IF NOT EXISTS idx_fact_card_terminal_units_fact_card_id
+    ON fact_card_terminal_units (fact_card_id);
+
+CREATE INDEX IF NOT EXISTS idx_fact_card_terminal_units_source_file_id
+    ON fact_card_terminal_units (source_file_id);
+
+CREATE INDEX IF NOT EXISTS idx_fact_card_terminal_units_parent_path
+    ON fact_card_terminal_units (parent_path);
+
+CREATE INDEX IF NOT EXISTS idx_fact_card_terminal_units_value_type
+    ON fact_card_terminal_units (value_type);
+
+CREATE INDEX IF NOT EXISTS idx_fact_card_terminal_units_search_tsv
+    ON fact_card_terminal_units USING GIN (search_tsv);
+
 CREATE TABLE IF NOT EXISTS article_snapshots (
     snapshot_id BIGSERIAL PRIMARY KEY,
     source_id BIGINT,

@@ -503,6 +503,7 @@ class QueryGraphOrchestratorTests {
                 RetrievalStrategyResolver.CHANNEL_SOURCE,
                 RetrievalStrategyResolver.CHANNEL_SOURCE_CHUNK_FTS,
                 RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS,
+                RetrievalStrategyResolver.CHANNEL_FACT_CARD_TERMINAL_FTS,
                 RetrievalStrategyResolver.CHANNEL_FACT_CARD_VECTOR,
                 RetrievalStrategyResolver.CHANNEL_CONTRIBUTION,
                 RetrievalStrategyResolver.CHANNEL_GRAPH,

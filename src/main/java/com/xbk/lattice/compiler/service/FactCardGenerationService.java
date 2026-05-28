@@ -7,9 +7,12 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xbk.lattice.compiler.service.mapper.FactCardGenerationMapper;
 import com.xbk.lattice.infra.persistence.FactCardJdbcRepository;
 import com.xbk.lattice.infra.persistence.FactCardRecord;
+import com.xbk.lattice.infra.persistence.FactCardTerminalUnitJdbcRepository;
+import com.xbk.lattice.infra.persistence.FactCardTerminalUnitRecord;
 import com.xbk.lattice.query.evidence.domain.AnswerShape;
 import com.xbk.lattice.query.evidence.domain.FactCardReviewStatus;
 import com.xbk.lattice.query.evidence.domain.FactCardType;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +44,10 @@ private final FactCardGenerationMapper factCardGenerationMapper;
 
     private final FactCardJdbcRepository factCardJdbcRepository;
 
+    private final FactCardTerminalUnitJdbcRepository factCardTerminalUnitJdbcRepository;
+
+    private final FactCardTerminalUnitMaterializer factCardTerminalUnitMaterializer;
+
     /**
      * 创建事实证据卡生成服务。
      *
@@ -51,8 +58,35 @@ private final FactCardGenerationMapper factCardGenerationMapper;
             FactCardGenerationMapper factCardGenerationMapper,
             FactCardJdbcRepository factCardJdbcRepository
     ) {
+        this(
+                factCardGenerationMapper,
+                factCardJdbcRepository,
+                null,
+                new FactCardTerminalUnitMaterializer()
+        );
+    }
+
+    /**
+     * 创建事实证据卡生成服务。
+     *
+     * @param factCardGenerationMapper 事实卡生成 Mapper
+     * @param factCardJdbcRepository 事实证据卡仓储
+     * @param factCardTerminalUnitJdbcRepository terminal unit 仓储
+     * @param factCardTerminalUnitMaterializer terminal unit 物化器
+     */
+    @Autowired
+    public FactCardGenerationService(
+            FactCardGenerationMapper factCardGenerationMapper,
+            FactCardJdbcRepository factCardJdbcRepository,
+            FactCardTerminalUnitJdbcRepository factCardTerminalUnitJdbcRepository,
+            FactCardTerminalUnitMaterializer factCardTerminalUnitMaterializer
+    ) {
         this.factCardGenerationMapper = factCardGenerationMapper;
         this.factCardJdbcRepository = factCardJdbcRepository;
+        this.factCardTerminalUnitJdbcRepository = factCardTerminalUnitJdbcRepository;
+        this.factCardTerminalUnitMaterializer = factCardTerminalUnitMaterializer == null
+                ? new FactCardTerminalUnitMaterializer()
+                : factCardTerminalUnitMaterializer;
     }
 
     /**
@@ -67,9 +101,11 @@ private final FactCardGenerationMapper factCardGenerationMapper;
             return List.of();
         }
         List<FactCardRecord> factCardRecords = generateForSourceFile(sourceFileId);
+        deleteTerminalUnitsBySourceFileId(sourceFileId);
         factCardJdbcRepository.deleteBySourceFileId(sourceFileId);
         for (FactCardRecord factCardRecord : factCardRecords) {
-            factCardJdbcRepository.upsert(factCardRecord);
+            FactCardRecord savedFactCardRecord = factCardJdbcRepository.upsert(factCardRecord);
+            materializeTerminalUnits(savedFactCardRecord);
         }
         return factCardRecords;
     }
@@ -113,5 +149,31 @@ private final FactCardGenerationMapper factCardGenerationMapper;
      */
     private List<FactCardSourceChunkView> findChunksBySourceFileId(Long sourceFileId) {
         return factCardGenerationMapper.findChunksBySourceFileId(sourceFileId);
+    }
+
+    /**
+     * 删除指定源文件的 terminal unit。
+     *
+     * @param sourceFileId 源文件主键
+     */
+    private void deleteTerminalUnitsBySourceFileId(Long sourceFileId) {
+        if (factCardTerminalUnitJdbcRepository == null) {
+            return;
+        }
+        factCardTerminalUnitJdbcRepository.deleteBySourceFileId(sourceFileId);
+    }
+
+    /**
+     * 为已保存事实卡物化 terminal unit。
+     *
+     * @param factCardRecord 已保存事实卡
+     */
+    private void materializeTerminalUnits(FactCardRecord factCardRecord) {
+        if (factCardTerminalUnitJdbcRepository == null || factCardTerminalUnitMaterializer == null) {
+            return;
+        }
+        List<FactCardTerminalUnitRecord> terminalUnitRecords =
+                factCardTerminalUnitMaterializer.materialize(factCardRecord);
+        factCardTerminalUnitJdbcRepository.upsertAll(terminalUnitRecords);
     }
 }

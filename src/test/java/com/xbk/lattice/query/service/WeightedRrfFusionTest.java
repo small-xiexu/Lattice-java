@@ -253,6 +253,61 @@ class WeightedRrfFusionTest {
     }
 
     /**
+     * 验证同一 fact card 下的两个 terminal unit 不会被 RRF 折叠。
+     */
+    @Test
+    void shouldKeepSiblingTerminalUnitsSeparateByUnitIdentity() {
+        RrfFusionService rrfFusionService = new RrfFusionService();
+
+        List<QueryArticleHit> fusedHits = rrfFusionService.fuse(
+                Map.of(
+                        RetrievalStrategyResolver.CHANNEL_FACT_CARD_TERMINAL_FTS,
+                        List.of(
+                                terminalUnitHit("terminal-unit:alpha", "alpha_limit = 31"),
+                                terminalUnitHit("terminal-unit:beta", "beta_mode = enabled")
+                        )
+                ),
+                Map.of(RetrievalStrategyResolver.CHANNEL_FACT_CARD_TERMINAL_FTS, 1.0D),
+                5,
+                60
+        );
+
+        assertThat(fusedHits).hasSize(2);
+        assertThat(fusedHits)
+                .extracting(QueryArticleHit::getArticleKey)
+                .containsExactlyInAnyOrder("fc:shared-card", "fc:shared-card");
+        assertThat(fusedHits)
+                .extracting(QueryArticleHit::getContent)
+                .containsExactlyInAnyOrder("alpha_limit = 31", "beta_mode = enabled");
+    }
+
+    /**
+     * 验证 terminalUnitIdentity 优先于 articleKey 作为 RRF hit identity。
+     */
+    @Test
+    void shouldPreferTerminalUnitIdentityOverFactCardKey() {
+        RrfFusionService rrfFusionService = new RrfFusionService();
+
+        List<QueryArticleHit> fusedHits = rrfFusionService.fuse(
+                Map.of(
+                        RetrievalStrategyResolver.CHANNEL_FACT_CARD_TERMINAL_FTS,
+                        List.of(terminalUnitHit("terminal-unit:shared", "first")),
+                        RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS,
+                        List.of(terminalUnitHit("terminal-unit:shared", "second"))
+                ),
+                Map.of(
+                        RetrievalStrategyResolver.CHANNEL_FACT_CARD_TERMINAL_FTS, 1.0D,
+                        RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS, 1.0D
+                ),
+                5,
+                60
+        );
+
+        assertThat(fusedHits).hasSize(1);
+        assertThat(fusedHits.get(0).getArticleKey()).isEqualTo("fc:shared-card");
+    }
+
+    /**
      * 验证普通多焦点查值题也会保留直接 source/fact card 证据。
      */
     @Test
@@ -371,6 +426,7 @@ class WeightedRrfFusionTest {
         weights.put(RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS, 20.0D);
         weights.put(RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR, 20.0D);
         weights.put(RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS, 1.0D);
+        weights.put(RetrievalStrategyResolver.CHANNEL_FACT_CARD_TERMINAL_FTS, 1.0D);
         weights.put(RetrievalStrategyResolver.CHANNEL_FACT_CARD_VECTOR, 1.0D);
         weights.put(RetrievalStrategyResolver.CHANNEL_SOURCE_CHUNK_FTS, 1.0D);
         Set<String> enabledChannels = new LinkedHashSet<String>(weights.keySet());
@@ -441,6 +497,30 @@ class WeightedRrfFusionTest {
                 content,
                 "{}",
                 reviewStatus,
+                List.of("source.md"),
+                1.0D
+        );
+    }
+
+    /**
+     * 构造 terminal unit 命中。
+     *
+     * @param terminalUnitIdentity terminal unit 身份
+     * @param content 内容
+     * @return Fact Card terminal unit 命中
+     */
+    private QueryArticleHit terminalUnitHit(String terminalUnitIdentity, String content) {
+        return new QueryArticleHit(
+                QueryEvidenceType.FACT_CARD,
+                12L,
+                "fc:shared-card",
+                "fc:shared-card",
+                "Synthetic Terminal Unit",
+                content,
+                "{\"terminalUnitIdentity\":\"" + terminalUnitIdentity
+                        + "\",\"unitId\":\"" + terminalUnitIdentity
+                        + "\",\"cardId\":\"fc:shared-card\"}",
+                "valid",
                 List.of("source.md"),
                 1.0D
         );

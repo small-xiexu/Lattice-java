@@ -125,6 +125,7 @@ final class QueryGraphTestSupport {
                 new SourceChunkFtsSearchService(null),
                 new FactCardFtsSearchService(null),
                 new FactCardVectorSearchService(),
+                new FactCardTerminalUnitFtsSearchService(null),
                 contributionSearchService,
                 new GraphSearchService(),
                 vectorSearchService,

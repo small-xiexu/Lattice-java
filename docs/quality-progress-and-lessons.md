@@ -1,6 +1,6 @@
 # 项目质量打磨进度与踩坑台账
 
-更新时间：2026-05-28（agentC 同步 fresh eval 2 三轮失败实验与 terminal unit 物化方向）
+更新时间：2026-05-28（agentC 同步 fresh eval 2 三轮失败实验与 terminal unit 物化方向，写入长期路线策略与 Query 复杂度治理独立线）
 
 本台账记录质量打磨、Query/SWIP eval、baseline 修复与多 agent 协作的当前状态。后续推进前先读本文件；阶段结论变化后必须回写。
 
@@ -39,6 +39,17 @@
   | `be4d216` | fix(llm): apiKey 解密失败优雅降级，deep_research 保持 fail-closed | LLM infrastructure |
 
   上述 7 个 commit 均已按各自范围完成 redline、全量 Maven、定向测试或端到端验证闭环（Q6 terminal field alias 有真实 API 端到端验证；title-generation、documentparse、admin、LLM snapshot 为 redline + 全量 Maven + 定向测试/scoped verification）。剩余未提交项仅为 docs/report 审计归档，详见未提交文档收口计划 `docs/test/remaining_docs_reports_commit_plan.md`。
+- **长期路线（2026-05-28 agentC 写入）**：
+
+  长期目标为 **5 套 public eval + 1-2 套 hidden eval**，形成持续泛化验收闭环：
+  ```
+  public eval 发现问题 → 修通用能力 → 旧题集保护回归 → 新 public eval 泛化检查 → hidden eval 最终验收
+  ```
+  - **短期**：terminal unit Phase 1A — 让 structured terminal assignment 生成独立 evidence unit，并进入 FTS / RRF。这是 evidence 粒度建设，不是 query fallback 补丁。
+  - **中期**：Query 主链复杂度治理 — 降低 AnswerGeneration 继承链深度，治理 `.contains()` 规则分流，减少 query fallback 主链 gate 式补丁累积。**独立开线，不与 terminal unit Phase 1A 并行改代码。**
+  - **长期**：完成 5+2 eval 闭环，禁止无限修题。hidden eval 只用于最终泛化验收，AI 不得读取题目/答案/关键词/文件名/case id。
+
+  详见 `docs/test/knowledge-base-e2e/eval-validation-roadmap.md`。
 
 ## 当前 Gate
 
@@ -113,6 +124,8 @@
 - fresh eval 2 未通过，且三轮 query fallback 方向实验均失败；`FQ3/FQ4/FQ6/FG1/FG2` 当前仍是 `0/5 PASS`。
 - fresh eval 2 当前不再归因为 retrieval 缺失：目标 FACT_CARD 已召回并包含 terminal assignment，真正缺口是整卡 evidence unit 粒度过粗，导致 sibling 字段抢答与 citation 边界不稳定。
 - structured terminal unit 的 `fieldLabel`、`fieldAliases`、`fieldDescription` 只能来自源文件内容与通用结构规则，不得来自 public/hidden 题集、标准答案、expected citation、case id 或 query 日志；hidden eval 仍不得被 AI 读取。
+- 长期路线已确立（2026-05-28 agentC）：5 套 public eval + 1-2 套 hidden eval 闭环；短期 terminal unit Phase 1A（evidence 粒度建设），中期 Query 主链复杂度治理（独立线），长期 5+2 eval 持续泛化验收。详见 `docs/test/knowledge-base-e2e/eval-validation-roadmap.md`。
+- Query 复杂度治理必须独立开线，不与 terminal unit Phase 1A 并行改代码；两条线串行执行，治理线待 Phase 1A agentD 验收通过后单开。
 
 ## 踩坑记录
 
@@ -169,6 +182,9 @@
 - Q6 下一轮必须由 agentD 做真实 API 与全面回归，不得只回归 Q6。
 - fresh eval 2 禁止继续沿 query fallback 主链叠加 selector / conclusion / snippet gate 追通过。
 - structured terminal unit 的 label / alias / description 禁止来自题集、答案、query 日志或 hidden eval。
+- 禁止 terminal unit Phase 1A 与 Query 复杂度治理并行改代码；两条线必须串行，治理线待 Phase 1A 验收通过后单开。
+- terminal unit 是 evidence 粒度建设，不是 query fallback 补丁；不得在 terminal unit 实现中向 query fallback 主链追加新 gate。
+- 禁止无限修题：长期目标是 5+2 eval 闭环（public eval 发现 → 修通用能力 → 回归保护 → hidden eval 验收），不是逐题追 PASS。
 
 ## 下一步计划
 
@@ -216,11 +232,12 @@
 39. （已完成）fresh eval 2 terminal unit 设计：已明确下一步转向 compile/index 层 structured terminal assignment evidence unit materialization；第一阶段先生成 terminal units 并进入 FTS 检索，禁止继续叠 query fallback gate。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/structured_terminal_evidence_unit_materialization_design_report.md`。
 40. （后续）fresh eval 2 terminal unit 第一阶段实现：展开 FACT_ENUM / key_value_list / path-aware items 为 terminal units，接入 FTS，使用 unit identity 避免 sibling 折叠；field label/alias/description 只能来自源文件与通用结构规则。
 41. （后续）terminal unit agentD 验证：先验证 `FQ3/FQ4/FQ6/FG1/FG2` 是否命中目标 unit 且 answer claim 命中；通过后再跑完整 Public Eval 2、Q6 terminal field alias 保护和 S2 chunk/anchor identity 保护。
-42. （后续）状态摘要接入人工确认队列：Dashboard 摘要展示 `compile_article_review_queue` 待处理计数。
-43. （后续）SWIP 两文档重建验收：验证 clean rebuild 全链路在人工确认队列就位后的正确性。
-44. （后续）审查/修复轮次展示：前端进度卡片接入 StateGraph 实际执行轮数。
-45. （后续）LLM approved 正向 canary 观察。
-46. （后续）Fixer→Re-reviewer loop runtime 验证。
+42. （后续，独立线）Query 主链复杂度治理：terminal unit Phase 1A 验收通过后单开一轮，降低 AnswerGeneration 继承链深度，治理 `.contains()` 规则分流，冻结 query fallback 主链不再接受新 gate 式补丁。此线不与 terminal unit Phase 1A 并行改代码。详见 `docs/test/knowledge-base-e2e/eval-validation-roadmap.md`。
+43. （后续）状态摘要接入人工确认队列：Dashboard 摘要展示 `compile_article_review_queue` 待处理计数。
+44. （后续）SWIP 两文档重建验收：验证 clean rebuild 全链路在人工确认队列就位后的正确性。
+45. （后续）审查/修复轮次展示：前端进度卡片接入 StateGraph 实际执行轮数。
+46. （后续）LLM approved 正向 canary 观察。
+47. （后续）Fixer→Re-reviewer loop runtime 验证。
 
 ## 更新规则
 

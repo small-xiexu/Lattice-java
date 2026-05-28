@@ -19,6 +19,7 @@ import com.xbk.lattice.query.service.ArticleChunkFtsSearchService;
 import com.xbk.lattice.query.service.ChunkVectorSearchService;
 import com.xbk.lattice.query.service.ContributionSearchService;
 import com.xbk.lattice.query.service.FactCardFtsSearchService;
+import com.xbk.lattice.query.service.FactCardTerminalUnitFtsSearchService;
 import com.xbk.lattice.query.service.FactCardVectorSearchService;
 import com.xbk.lattice.query.service.FtsSearchService;
 import com.xbk.lattice.query.service.GraphSearchService;
@@ -92,6 +93,8 @@ abstract class QueryGraphDefinitionBaseSupport {
 
     protected static final String CHANNEL_FACT_CARD_VECTOR = RetrievalStrategyResolver.CHANNEL_FACT_CARD_VECTOR;
 
+    protected static final String CHANNEL_FACT_CARD_TERMINAL_FTS = RetrievalStrategyResolver.CHANNEL_FACT_CARD_TERMINAL_FTS;
+
     protected static final String CHANNEL_CONTRIBUTION = RetrievalStrategyResolver.CHANNEL_CONTRIBUTION;
 
     protected static final String CHANNEL_GRAPH = RetrievalStrategyResolver.CHANNEL_GRAPH;
@@ -113,6 +116,8 @@ abstract class QueryGraphDefinitionBaseSupport {
     protected final FactCardFtsSearchService factCardFtsSearchService;
 
     protected final FactCardVectorSearchService factCardVectorSearchService;
+
+    protected final FactCardTerminalUnitFtsSearchService factCardTerminalUnitFtsSearchService;
 
     protected final ContributionSearchService contributionSearchService;
 
@@ -165,6 +170,7 @@ abstract class QueryGraphDefinitionBaseSupport {
             SourceChunkFtsSearchService sourceChunkFtsSearchService,
             FactCardFtsSearchService factCardFtsSearchService,
             FactCardVectorSearchService factCardVectorSearchService,
+            FactCardTerminalUnitFtsSearchService factCardTerminalUnitFtsSearchService,
             ContributionSearchService contributionSearchService,
             GraphSearchService graphSearchService,
             VectorSearchService vectorSearchService,
@@ -196,6 +202,9 @@ abstract class QueryGraphDefinitionBaseSupport {
         this.factCardVectorSearchService = factCardVectorSearchService == null
                 ? new FactCardVectorSearchService()
                 : factCardVectorSearchService;
+        this.factCardTerminalUnitFtsSearchService = factCardTerminalUnitFtsSearchService == null
+                ? new FactCardTerminalUnitFtsSearchService(null)
+                : factCardTerminalUnitFtsSearchService;
         this.contributionSearchService = contributionSearchService;
         this.graphSearchService = graphSearchService;
         this.vectorSearchService = vectorSearchService;
@@ -293,6 +302,14 @@ abstract class QueryGraphDefinitionBaseSupport {
                         CHANNEL_FACT_CARD_FTS,
                         "fact_card",
                         context -> factCardFtsSearchService.search(context.getRetrievalQuestion(), context.getLimit())
+                ),
+                new SupplierRetrievalChannel(
+                        CHANNEL_FACT_CARD_TERMINAL_FTS,
+                        "fact_card",
+                        context -> factCardTerminalUnitFtsSearchService.search(
+                                context.getRetrievalQuestion(),
+                                context.getLimit()
+                        )
                 ),
                 new SupplierRetrievalChannel(
                         CHANNEL_FACT_CARD_VECTOR,
@@ -393,6 +410,9 @@ abstract class QueryGraphDefinitionBaseSupport {
         else if (CHANNEL_FACT_CARD_VECTOR.equals(channel)) {
             delta.put(QueryGraphStateKeys.FACT_CARD_VECTOR_HITS_REF, ref);
         }
+        else if (CHANNEL_FACT_CARD_TERMINAL_FTS.equals(channel)) {
+            delta.put(QueryGraphStateKeys.FACT_CARD_TERMINAL_UNIT_HITS_REF, ref);
+        }
         else if (CHANNEL_CONTRIBUTION.equals(channel)) {
             delta.put(QueryGraphStateKeys.CONTRIBUTION_HITS_REF, ref);
         }
@@ -432,6 +452,7 @@ abstract class QueryGraphDefinitionBaseSupport {
         channelHits.put(CHANNEL_SOURCE, queryWorkingSetStore.loadHits(state.getSourceHitsRef()));
         channelHits.put(CHANNEL_SOURCE_CHUNK_FTS, queryWorkingSetStore.loadHits(state.getSourceChunkHitsRef()));
         channelHits.put(CHANNEL_FACT_CARD_FTS, queryWorkingSetStore.loadHits(state.getFactCardHitsRef()));
+        channelHits.put(CHANNEL_FACT_CARD_TERMINAL_FTS, queryWorkingSetStore.loadHits(state.getFactCardTerminalUnitHitsRef()));
         channelHits.put(CHANNEL_FACT_CARD_VECTOR, queryWorkingSetStore.loadHits(state.getFactCardVectorHitsRef()));
         channelHits.put(CHANNEL_CONTRIBUTION, queryWorkingSetStore.loadHits(state.getContributionHitsRef()));
         channelHits.put(CHANNEL_GRAPH, queryWorkingSetStore.loadHits(state.getGraphHitsRef()));

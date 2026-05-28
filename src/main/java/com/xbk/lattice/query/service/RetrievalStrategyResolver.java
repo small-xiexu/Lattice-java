@@ -30,6 +30,8 @@ public class RetrievalStrategyResolver {
 
     public static final String CHANNEL_FACT_CARD_FTS = "fact_card_fts";
 
+    public static final String CHANNEL_FACT_CARD_TERMINAL_FTS = "fact_card_terminal_fts";
+
     public static final String CHANNEL_FACT_CARD_VECTOR = "fact_card_vector";
 
     public static final String CHANNEL_CONTRIBUTION = "contribution";
@@ -119,6 +121,7 @@ public class RetrievalStrategyResolver {
         weights.put(CHANNEL_SOURCE, settings.getSourceWeight());
         weights.put(CHANNEL_SOURCE_CHUNK_FTS, settings.getSourceChunkWeight());
         weights.put(CHANNEL_FACT_CARD_FTS, settings.getFactCardWeight());
+        weights.put(CHANNEL_FACT_CARD_TERMINAL_FTS, settings.getFactCardWeight());
         weights.put(CHANNEL_FACT_CARD_VECTOR, settings.getFactCardWeight());
         weights.put(CHANNEL_CONTRIBUTION, settings.getContributionWeight());
         weights.put(CHANNEL_GRAPH, settings.getGraphWeight());
@@ -147,6 +150,7 @@ public class RetrievalStrategyResolver {
             multiply(weights, CHANNEL_SOURCE, 1.20D);
             multiply(weights, CHANNEL_SOURCE_CHUNK_FTS, 1.45D);
             multiply(weights, CHANNEL_FACT_CARD_FTS, 1.15D);
+            multiply(weights, CHANNEL_FACT_CARD_TERMINAL_FTS, 1.30D);
             multiply(weights, CHANNEL_ARTICLE_CHUNK_FTS, 0.90D);
             multiply(weights, CHANNEL_FTS, 0.85D);
         }
@@ -176,6 +180,7 @@ public class RetrievalStrategyResolver {
             return;
         }
         multiply(weights, CHANNEL_FACT_CARD_FTS, 1.65D);
+        multiply(weights, CHANNEL_FACT_CARD_TERMINAL_FTS, 1.85D);
         multiply(weights, CHANNEL_FACT_CARD_VECTOR, 1.25D);
         multiply(weights, CHANNEL_SOURCE_CHUNK_FTS, 1.45D);
         multiply(weights, CHANNEL_SOURCE, 1.15D);
@@ -243,6 +248,7 @@ public class RetrievalStrategyResolver {
         multiply(weights, CHANNEL_SOURCE, 1.15D);
         multiply(weights, CHANNEL_SOURCE_CHUNK_FTS, 1.25D);
         multiply(weights, CHANNEL_FACT_CARD_FTS, 1.25D);
+        multiply(weights, CHANNEL_FACT_CARD_TERMINAL_FTS, 1.45D);
         multiply(weights, CHANNEL_ARTICLE_CHUNK_FTS, 0.70D);
         multiply(weights, CHANNEL_FTS, 0.75D);
         if (isStructuredAnswerShape(answerShape) || queryIntent == QueryIntent.CONFIGURATION) {

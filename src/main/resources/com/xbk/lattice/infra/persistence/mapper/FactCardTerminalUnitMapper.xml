@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xbk.lattice.infra.persistence.mapper.FactCardTerminalUnitMapper">
+
+    <resultMap id="FactCardTerminalUnitRecordResultMap"
+               type="com.xbk.lattice.infra.persistence.FactCardTerminalUnitRecord">
+        <constructor>
+            <arg column="id" javaType="java.lang.Long"/>
+            <arg column="unit_id" javaType="java.lang.String"/>
+            <arg column="terminal_unit_identity" javaType="java.lang.String"/>
+            <arg column="fact_card_id" javaType="java.lang.Long"/>
+            <arg column="card_id" javaType="java.lang.String"/>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="source_file_id" javaType="java.lang.Long"/>
+            <arg column="source_chunk_ids" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.LongListArrayTypeHandler"/>
+            <arg column="article_ids" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.LongListArrayTypeHandler"/>
+            <arg column="card_type" javaType="com.xbk.lattice.query.evidence.domain.FactCardType"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.FactCardTypeHandler"/>
+            <arg column="answer_shape" javaType="com.xbk.lattice.query.evidence.domain.AnswerShape"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.AnswerShapeTypeHandler"/>
+            <arg column="structure" javaType="java.lang.String"/>
+            <arg column="item_index" javaType="_int"/>
+            <arg column="key_path" javaType="java.lang.String"/>
+            <arg column="parent_path" javaType="java.lang.String"/>
+            <arg column="terminal_key" javaType="java.lang.String"/>
+            <arg column="path_segments_json" javaType="java.lang.String"/>
+            <arg column="field_label" javaType="java.lang.String"/>
+            <arg column="field_aliases_json" javaType="java.lang.String"/>
+            <arg column="field_description" javaType="java.lang.String"/>
+            <arg column="display_text" javaType="java.lang.String"/>
+            <arg column="value_text" javaType="java.lang.String"/>
+            <arg column="normalized_value" javaType="java.lang.String"/>
+            <arg column="value_type" javaType="java.lang.String"/>
+            <arg column="source_refs_json" javaType="java.lang.String"/>
+            <arg column="fts_text" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="review_status" javaType="com.xbk.lattice.query.evidence.domain.FactCardReviewStatus"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.FactCardReviewStatusTypeHandler"/>
+            <arg column="confidence" javaType="_double"/>
+            <arg column="content_hash" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.OffsetDateTime"/>
+            <arg column="updated_at" javaType="java.time.OffsetDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="LexicalSearchRecordResultMap" type="com.xbk.lattice.infra.persistence.LexicalSearchRecord">
+        <constructor>
+            <arg column="source_id" javaType="java.lang.Long"/>
+            <arg column="item_key" javaType="java.lang.String"/>
+            <arg column="concept_id" javaType="java.lang.String"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="content" javaType="java.lang.String"/>
+            <arg column="metadata_json" javaType="java.lang.String"/>
+            <arg column="review_status" javaType="java.lang.String"/>
+            <arg column="source_paths" javaType="java.util.List"
+                 typeHandler="com.xbk.lattice.infra.persistence.mybatis.StringListArrayTypeHandler"/>
+            <arg column="chunk_index" javaType="java.lang.Integer"/>
+            <arg column="verbatim" javaType="java.lang.Boolean"/>
+            <arg column="score" javaType="_double"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="FactCardTerminalUnitColumns">
+        id, unit_id, terminal_unit_identity, fact_card_id, card_id, source_id, source_file_id,
+        source_chunk_ids, article_ids, card_type, answer_shape, structure, item_index,
+        key_path, parent_path, terminal_key, path_segments_json::text as path_segments_json,
+        field_label, field_aliases_json::text as field_aliases_json, field_description,
+        display_text, value_text, normalized_value, value_type, source_refs_json::text as source_refs_json,
+        fts_text, metadata_json::text as metadata_json, review_status, confidence,
+        content_hash, created_at, updated_at
+    </sql>
+
+    <select id="tableExists" resultType="_boolean">
+        select to_regclass(current_schema() || '.fact_card_terminal_units') is not null
+    </select>
+
+    <select id="upsert" resultMap="FactCardTerminalUnitRecordResultMap">
+        insert into fact_card_terminal_units (
+            unit_id, terminal_unit_identity, fact_card_id, card_id, source_id, source_file_id,
+            source_chunk_ids, article_ids, card_type, answer_shape, structure, item_index,
+            key_path, parent_path, terminal_key, path_segments_json, field_label, field_aliases_json,
+            field_description, display_text, value_text, normalized_value, value_type, source_refs_json,
+            fts_text, metadata_json, review_status, confidence, content_hash, search_tsv
+        )
+        values (
+            #{record.unitId},
+            #{record.terminalUnitIdentity},
+            #{record.factCardId},
+            #{record.cardId},
+            #{record.sourceId},
+            #{record.sourceFileId},
+            #{record.sourceChunkIds,typeHandler=com.xbk.lattice.infra.persistence.mybatis.LongListArrayTypeHandler},
+            #{record.articleIds,typeHandler=com.xbk.lattice.infra.persistence.mybatis.LongListArrayTypeHandler},
+            #{record.cardType,typeHandler=com.xbk.lattice.infra.persistence.mybatis.FactCardTypeHandler},
+            #{record.answerShape,typeHandler=com.xbk.lattice.infra.persistence.mybatis.AnswerShapeTypeHandler},
+            #{record.structure},
+            #{record.itemIndex},
+            #{record.keyPath},
+            #{record.parentPath},
+            #{record.terminalKey},
+            #{record.pathSegmentsJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{record.fieldLabel},
+            #{record.fieldAliasesJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{record.fieldDescription},
+            #{record.displayText},
+            #{record.valueText},
+            #{record.normalizedValue},
+            #{record.valueType},
+            #{record.sourceRefsJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{record.ftsText},
+            #{record.metadataJson,typeHandler=com.xbk.lattice.infra.persistence.mybatis.PostgresJsonbTypeHandler},
+            #{record.reviewStatus,typeHandler=com.xbk.lattice.infra.persistence.mybatis.FactCardReviewStatusTypeHandler},
+            #{record.confidence},
+            #{record.contentHash},
+            to_tsvector('simple'::regconfig, #{record.ftsText})
+        )
+        on conflict (unit_id) do update
+        set terminal_unit_identity = excluded.terminal_unit_identity,
+            fact_card_id = excluded.fact_card_id,
+            card_id = excluded.card_id,
+            source_id = excluded.source_id,
+            source_file_id = excluded.source_file_id,
+            source_chunk_ids = excluded.source_chunk_ids,
+            article_ids = excluded.article_ids,
+            card_type = excluded.card_type,
+            answer_shape = excluded.answer_shape,
+            structure = excluded.structure,
+            item_index = excluded.item_index,
+            key_path = excluded.key_path,
+            parent_path = excluded.parent_path,
+            terminal_key = excluded.terminal_key,
+            path_segments_json = excluded.path_segments_json,
+            field_label = excluded.field_label,
+            field_aliases_json = excluded.field_aliases_json,
+            field_description = excluded.field_description,
+            display_text = excluded.display_text,
+            value_text = excluded.value_text,
+            normalized_value = excluded.normalized_value,
+            value_type = excluded.value_type,
+            source_refs_json = excluded.source_refs_json,
+            fts_text = excluded.fts_text,
+            metadata_json = excluded.metadata_json,
+            review_status = excluded.review_status,
+            confidence = excluded.confidence,
+            content_hash = excluded.content_hash,
+            search_tsv = excluded.search_tsv,
+            updated_at = CURRENT_TIMESTAMP
+        returning <include refid="FactCardTerminalUnitColumns"/>
+    </select>
+
+    <select id="findByUnitId" resultMap="FactCardTerminalUnitRecordResultMap">
+        select <include refid="FactCardTerminalUnitColumns"/>
+        from fact_card_terminal_units
+        where unit_id = #{unitId}
+    </select>
+
+    <select id="findByFactCardId" resultMap="FactCardTerminalUnitRecordResultMap">
+        select <include refid="FactCardTerminalUnitColumns"/>
+        from fact_card_terminal_units
+        where fact_card_id = #{factCardId}
+        order by item_index asc, id asc
+    </select>
+
+    <select id="findBySourceFileId" resultMap="FactCardTerminalUnitRecordResultMap">
+        select <include refid="FactCardTerminalUnitColumns"/>
+        from fact_card_terminal_units
+        where source_file_id = #{sourceFileId}
+        order by fact_card_id asc, item_index asc, id asc
+    </select>
+
+    <delete id="deleteByFactCardId">
+        delete from fact_card_terminal_units
+        where fact_card_id = #{factCardId}
+    </delete>
+
+    <delete id="deleteBySourceFileId">
+        delete from fact_card_terminal_units
+        where source_file_id = #{sourceFileId}
+    </delete>
+
+    <delete id="deleteAll">
+        delete from fact_card_terminal_units
+    </delete>
+
+    <select id="countAll" resultType="_int">
+        select count(*)
+        from fact_card_terminal_units
+    </select>
+
+    <select id="searchLexical" resultMap="LexicalSearchRecordResultMap">
+        with query as (
+            select plainto_tsquery(cast(#{tsConfig} as regconfig), #{question}) as tsq
+        )
+        select unit.source_id,
+               unit.terminal_unit_identity as item_key,
+               unit.terminal_unit_identity as concept_id,
+               concat_ws(' / ', nullif(fc.title, ''), nullif(unit.key_path, '')) as title,
+               trim(concat_ws(E'\n', unit.display_text, unit.field_description)) as content,
+               (
+                   unit.metadata_json
+                   || jsonb_build_object(
+                       'terminalUnitId', unit.id,
+                       'unitId', unit.unit_id,
+                       'terminalUnitIdentity', unit.terminal_unit_identity,
+                       'factCardId', unit.fact_card_id,
+                       'cardId', unit.card_id,
+                       'keyPath', unit.key_path,
+                       'parentPath', unit.parent_path,
+                       'terminalKey', unit.terminal_key,
+                       'value', unit.value_text,
+                       'valueType', unit.value_type,
+                       'displayText', unit.display_text,
+                       'channel', 'fact_card_terminal_fts'
+                   )
+               )::text as metadata_json,
+               unit.review_status,
+               array_remove(array[sf.file_path], null)::text[] as source_paths,
+               null::integer as chunk_index,
+               false as verbatim,
+               ts_rank_cd(unit.search_tsv, query.tsq)
+               <foreach collection="likeTokens" item="likeToken">
+                   + case when lower(unit.field_label) like #{likeToken} then 4.0 else 0 end
+                   + case when lower(unit.field_aliases_json::text) like #{likeToken} then 3.0 else 0 end
+                   + case when lower(unit.key_path) like #{likeToken} then 5.0 else 0 end
+                   + case when lower(unit.parent_path) like #{likeToken} then 2.0 else 0 end
+                   + case when lower(unit.terminal_key) like #{likeToken} then 4.0 else 0 end
+                   + case when lower(unit.display_text) like #{likeToken} then 5.0 else 0 end
+                   + case when lower(unit.value_text) like #{likeToken} then 3.0 else 0 end
+                   + case when lower(unit.normalized_value) like #{likeToken} then 3.0 else 0 end
+                   + case when lower(unit.value_type) like #{likeToken} then 1.0 else 0 end
+                   + case when lower(unit.fts_text) like #{likeToken} then 2.0 else 0 end
+               </foreach>
+               as score
+        from fact_card_terminal_units unit
+        join fact_cards fc on fc.id = unit.fact_card_id
+        left join source_files sf on sf.id = unit.source_file_id
+        cross join query
+        where unit.search_tsv @@ query.tsq
+        <foreach collection="likeTokens" item="likeToken">
+           or lower(unit.field_label) like #{likeToken}
+           or lower(unit.field_aliases_json::text) like #{likeToken}
+           or lower(unit.key_path) like #{likeToken}
+           or lower(unit.parent_path) like #{likeToken}
+           or lower(unit.terminal_key) like #{likeToken}
+           or lower(unit.display_text) like #{likeToken}
+           or lower(unit.value_text) like #{likeToken}
+           or lower(unit.normalized_value) like #{likeToken}
+           or lower(unit.value_type) like #{likeToken}
+           or lower(unit.fts_text) like #{likeToken}
+        </foreach>
+        order by score desc, unit.updated_at desc, unit.terminal_unit_identity asc
+        limit #{limit}
+    </select>
+</mapper>

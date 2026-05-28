@@ -27,6 +27,32 @@
 - 旧题集回归不得明显下降。
 - 修复必须是通用能力修复，不得写题集、文件名、业务词、case id、答案值特判。
 
+## 长期路线策略
+
+长期目标不是无限修题，而是形成闭环：
+
+```
+public eval 发现问题 → 修通用能力 → 旧题集保护回归 → 新 public eval 泛化检查 → hidden eval 最终验收
+```
+
+### 三层目标
+
+| 层级 | 目标 | 说明 |
+|---|---|---|
+| 短期 | terminal unit Phase 1A | 让 structured terminal assignment 生成独立 evidence unit，并进入 FTS / RRF。这是 **evidence 粒度建设**，不是 query fallback 补丁。 |
+| 中期 | Query 主链复杂度治理 | 降低 AnswerGeneration 继承链深度，治理 `.contains()` 规则分流，减少 query fallback 主链的 selector / conclusion / snippet gate 式补丁累积。**独立开线，不与 terminal unit Phase 1A 并行改代码。** |
+| 长期 | 5+2 eval 闭环 | 完成 5 套 public eval + 1-2 套 hidden eval，形成持续泛化验收能力。 |
+
+### 关键原则
+
+- **public eval**：用于暴露能力缺口、驱动通用能力修复。每套设计聚焦一个领域维度（结构化字段、标题搜索、多文档冲突、表格/CSV、跨文档组合等），通过后作为回归保护集保留。
+- **hidden eval**：只用于最终泛化验收，AI 不得读取题目、答案、关键词、文件名、case id。hidden eval 不用于指导代码特判，只记录指标、失败类型分布和 gate 结果。
+- **禁止无限修题**：禁止为了单题 PASS 修改题集预期或验收口径；修复必须是通用能力修复，不得写题集、文件名、业务词、case id、答案值特判。
+- **禁止 query fallback 叠 gate**：禁止继续在 query fallback 主链叠加 selector / conclusion / snippet gate 来追 fresh eval 结构化题通过；应优先修 evidence unit 粒度。
+- **terminal unit 是 evidence 粒度建设**：不是 query fallback 补丁，目标是让检索返回单字段证据而非整卡 sibling 折叠。
+- **Query 复杂度治理独立开线**：不与 terminal unit Phase 1A 并行改代码；待 Phase 1A 完成并 agentD 验证通过后，单开一轮进行。
+- **hidden eval 防污染**：structured terminal unit 的 `fieldLabel` / `fieldAliases` / `fieldDescription` 只能来自源文件内容与通用结构规则，不得来自 public / hidden 题集、标准答案、expected citation、case id 或 query 日志。
+
 ## Public Eval 规划
 
 | 序号 | 领域 | 状态 | 当前结论 | 下一步 |
@@ -89,6 +115,25 @@
 | 4 | agentB | 若 terminal unit 仍失败，只读定位 unit 生成、FTS 召回、RRF 身份或 citation binding 哪一层失效 | 否 | 否 |
 | 5 | agentA | 标题/anchor/representativeTitle 物化或搜索身份问题另开独立轮次处理 | 是，需另开一轮 | 可能需要 |
 
+## Query 主链复杂度治理（独立线）
+
+此线独立于 terminal unit Phase 1A，**不与终端单价段并行改代码**。启动条件：terminal unit Phase 1A 完成并 agentD 验证通过后，单开一轮进行。
+
+### 治理目标
+
+| 方向 | 问题 | 目标 |
+|---|---|---|
+| AnswerGeneration 继承链 | 当前继承深度大，新增行为靠子类重写，回归面广 | 降低继承深度，收敛为显式策略/组合模式 |
+| `.contains()` 规则分流 | 大量分支靠字符串 contains 判断分流，可维护性差 | 收敛为显式类型/枚举/策略分发 |
+| query fallback 补丁累积 | selector / conclusion / snippet gate 式补丁持续叠加 | 冻结 query fallback 主链，不再接受新 gate 式补丁 |
+
+### 治理节奏
+
+1. terminal unit Phase 1A 完成且 agentD 验证通过后，单开治理轮次。
+2. 先做只读审计：列出 AnswerGeneration 继承链全图、所有 `.contains()` 分支点、所有 fallback gate。
+3. 按影响面从窄到宽逐步重构，每步必须通过旧题集回归。
+4. 重构完成后，作为后续所有 eval 修复的基线。
+
 ## Hidden Eval 规则
 
 - Hidden eval 不能放入 `docs/test/**` 或任何 AI 可读仓库路径。
@@ -105,6 +150,8 @@
 - 禁止同一轮同时修多个根因。
 - 禁止在 Java 主链硬编码中文字段语义；如确需字段语义配置，必须短小、通用、可审计，并单独评审。
 - 禁止继续在 query fallback 主链叠加 selector / conclusion / snippet gate 来追 fresh eval 结构化题通过；应优先修 evidence unit 粒度。
+- 禁止 terminal unit Phase 1A 与 Query 复杂度治理并行改代码；两条线必须串行，治理线待 Phase 1A 验收通过后单开。
+- terminal unit 是 evidence 粒度建设，不是 query fallback 补丁；不得在 terminal unit 实现中向 query fallback 主链追加新 gate。
 - redline `BLOCKER>0` 时停止准确率调优。
 - `mvn test` 失败时停止业务 eval。
 

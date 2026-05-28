@@ -1,6 +1,10 @@
 package com.xbk.lattice.query.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.query.evidence.domain.AnswerShape;
+import com.xbk.lattice.shared.json.JsonMappers;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -21,6 +25,8 @@ import java.util.Set;
  */
 @Service
 public class RrfFusionService {
+
+    private static final ObjectMapper OBJECT_MAPPER = JsonMappers.defaultMapper();
 
     private static final int DEFAULT_RRF_K = 60;
 
@@ -427,6 +433,7 @@ public class RrfFusionService {
             return false;
         }
         return channels.contains(RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS)
+                || channels.contains(RetrievalStrategyResolver.CHANNEL_FACT_CARD_TERMINAL_FTS)
                 || channels.contains(RetrievalStrategyResolver.CHANNEL_FACT_CARD_VECTOR)
                 || channels.contains(RetrievalStrategyResolver.CHANNEL_SOURCE_CHUNK_FTS)
                 || channels.contains(RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR)
@@ -490,6 +497,12 @@ public class RrfFusionService {
      * @return 命中身份键
      */
     private String buildHitKey(QueryArticleHit queryArticleHit) {
+        if (queryArticleHit.getEvidenceType() == QueryEvidenceType.FACT_CARD) {
+            String terminalUnitIdentity = readTerminalUnitIdentity(queryArticleHit.getMetadataJson());
+            if (terminalUnitIdentity != null && !terminalUnitIdentity.isBlank()) {
+                return queryArticleHit.getEvidenceType().name() + ":" + terminalUnitIdentity;
+            }
+        }
         String chunkIdentity = ChunkHitIdentitySupport.readChunkIdentity(queryArticleHit.getMetadataJson());
         if (queryArticleHit.getEvidenceType() == QueryEvidenceType.ARTICLE
                 && chunkIdentity != null
@@ -501,5 +514,61 @@ public class RrfFusionService {
             identity = queryArticleHit.getConceptId();
         }
         return queryArticleHit.getEvidenceType().name() + ":" + identity;
+    }
+
+    /**
+     * 读取 terminal unit 稳定身份。
+     *
+     * @param metadataJson metadata JSON
+     * @return terminal unit identity；没有时返回空字符串
+     */
+    private String readTerminalUnitIdentity(String metadataJson) {
+        JsonNode metadataNode = readMetadata(metadataJson);
+        String terminalUnitIdentity = textValue(metadataNode, "terminalUnitIdentity");
+        if (terminalUnitIdentity != null && !terminalUnitIdentity.isBlank()) {
+            return terminalUnitIdentity;
+        }
+        String channel = textValue(metadataNode, "channel");
+        if (!RetrievalStrategyResolver.CHANNEL_FACT_CARD_TERMINAL_FTS.equals(channel)
+                && !metadataNode.has("terminalUnitId")) {
+            return "";
+        }
+        return textValue(metadataNode, "unitId");
+    }
+
+    /**
+     * 读取 metadata JSON。
+     *
+     * @param metadataJson metadata JSON
+     * @return JSON 节点
+     */
+    private JsonNode readMetadata(String metadataJson) {
+        if (metadataJson == null || metadataJson.isBlank()) {
+            return OBJECT_MAPPER.createObjectNode();
+        }
+        try {
+            return OBJECT_MAPPER.readTree(metadataJson);
+        }
+        catch (JsonProcessingException exception) {
+            return OBJECT_MAPPER.createObjectNode();
+        }
+    }
+
+    /**
+     * 读取文本字段。
+     *
+     * @param node JSON 节点
+     * @param fieldName 字段名
+     * @return 字段文本
+     */
+    private String textValue(JsonNode node, String fieldName) {
+        if (node == null || fieldName == null) {
+            return "";
+        }
+        JsonNode valueNode = node.path(fieldName);
+        if (valueNode == null || valueNode.isMissingNode() || valueNode.isNull()) {
+            return "";
+        }
+        return valueNode.asText("");
     }
 }

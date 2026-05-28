@@ -30,6 +30,8 @@ public class KnowledgeSearchService {
 
     private final FactCardFtsSearchService factCardFtsSearchService;
 
+    private final FactCardTerminalUnitFtsSearchService factCardTerminalUnitFtsSearchService;
+
     private final FactCardVectorSearchService factCardVectorSearchService;
 
     private final ContributionSearchService contributionSearchService;
@@ -67,6 +69,7 @@ public class KnowledgeSearchService {
      * @param sourceSearchService 源文件检索
      * @param sourceChunkFtsSearchService 源文件分块 FTS 检索
      * @param factCardFtsSearchService Fact Card FTS 检索
+     * @param factCardTerminalUnitFtsSearchService Fact Card terminal unit FTS 检索
      * @param factCardVectorSearchService Fact Card 向量检索
      * @param contributionSearchService contribution 检索
      * @param graphSearchService 图谱检索
@@ -81,6 +84,7 @@ public class KnowledgeSearchService {
             SourceSearchService sourceSearchService,
             SourceChunkFtsSearchService sourceChunkFtsSearchService,
             FactCardFtsSearchService factCardFtsSearchService,
+            FactCardTerminalUnitFtsSearchService factCardTerminalUnitFtsSearchService,
             FactCardVectorSearchService factCardVectorSearchService,
             ContributionSearchService contributionSearchService,
             GraphSearchService graphSearchService,
@@ -101,6 +105,9 @@ public class KnowledgeSearchService {
         this.sourceSearchService = sourceSearchService;
         this.sourceChunkFtsSearchService = sourceChunkFtsSearchService;
         this.factCardFtsSearchService = factCardFtsSearchService;
+        this.factCardTerminalUnitFtsSearchService = factCardTerminalUnitFtsSearchService == null
+                ? new FactCardTerminalUnitFtsSearchService(null)
+                : factCardTerminalUnitFtsSearchService;
         this.factCardVectorSearchService = factCardVectorSearchService == null
                 ? new FactCardVectorSearchService()
                 : factCardVectorSearchService;
@@ -171,6 +178,7 @@ public class KnowledgeSearchService {
                 sourceSearchService,
                 sourceChunkFtsSearchService,
                 factCardFtsSearchService,
+                new FactCardTerminalUnitFtsSearchService(null),
                 factCardVectorSearchService,
                 contributionSearchService,
                 graphSearchService,
@@ -210,6 +218,7 @@ public class KnowledgeSearchService {
                 sourceSearchService,
                 new SourceChunkFtsSearchService(null),
                 new FactCardFtsSearchService(null),
+                new FactCardTerminalUnitFtsSearchService(null),
                 new FactCardVectorSearchService(),
                 contributionSearchService,
                 new GraphSearchService(),
@@ -222,6 +231,69 @@ public class KnowledgeSearchService {
                 new AnswerShapeClassifier(),
                 new RetrievalStrategyResolver(),
                 null,
+                new QuerySearchProperties()
+        );
+    }
+
+    /**
+     * 创建知识检索服务。
+     *
+     * @param ftsSearchService 文章 FTS 检索
+     * @param articleChunkFtsSearchService 文章分块 FTS 检索
+     * @param refKeySearchService referential keywords 检索
+     * @param sourceSearchService 源文件检索
+     * @param sourceChunkFtsSearchService 源文件分块 FTS 检索
+     * @param contributionSearchService contribution 检索
+     * @param graphSearchService 图谱检索
+     * @param vectorSearchService 向量检索
+     * @param chunkVectorSearchService Chunk 向量检索
+     * @param rrfFusionService RRF 融合服务
+     * @param queryRetrievalSettingsService 检索配置服务
+     * @param queryRewriteService Query 改写服务
+     * @param queryIntentClassifier Query 意图分类器
+     * @param answerShapeClassifier 答案形态分类器
+     * @param retrievalStrategyResolver 检索策略解析器
+     * @param retrievalAuditService 检索审计服务
+     */
+    public KnowledgeSearchService(
+            FtsSearchService ftsSearchService,
+            ArticleChunkFtsSearchService articleChunkFtsSearchService,
+            RefKeySearchService refKeySearchService,
+            SourceSearchService sourceSearchService,
+            SourceChunkFtsSearchService sourceChunkFtsSearchService,
+            FactCardTerminalUnitFtsSearchService factCardTerminalUnitFtsSearchService,
+            ContributionSearchService contributionSearchService,
+            GraphSearchService graphSearchService,
+            VectorSearchService vectorSearchService,
+            ChunkVectorSearchService chunkVectorSearchService,
+            RrfFusionService rrfFusionService,
+            QueryRetrievalSettingsService queryRetrievalSettingsService,
+            QueryRewriteService queryRewriteService,
+            QueryIntentClassifier queryIntentClassifier,
+            AnswerShapeClassifier answerShapeClassifier,
+            RetrievalStrategyResolver retrievalStrategyResolver,
+            RetrievalAuditService retrievalAuditService
+    ) {
+        this(
+                ftsSearchService,
+                articleChunkFtsSearchService,
+                refKeySearchService,
+                sourceSearchService,
+                sourceChunkFtsSearchService,
+                new FactCardFtsSearchService(null),
+                factCardTerminalUnitFtsSearchService,
+                new FactCardVectorSearchService(),
+                contributionSearchService,
+                graphSearchService,
+                vectorSearchService,
+                chunkVectorSearchService,
+                rrfFusionService,
+                queryRetrievalSettingsService,
+                queryRewriteService,
+                queryIntentClassifier,
+                answerShapeClassifier,
+                retrievalStrategyResolver,
+                retrievalAuditService,
                 new QuerySearchProperties()
         );
     }
@@ -270,8 +342,7 @@ public class KnowledgeSearchService {
                 refKeySearchService,
                 sourceSearchService,
                 sourceChunkFtsSearchService,
-                new FactCardFtsSearchService(null),
-                new FactCardVectorSearchService(),
+                new FactCardTerminalUnitFtsSearchService(null),
                 contributionSearchService,
                 graphSearchService,
                 vectorSearchService,
@@ -282,8 +353,7 @@ public class KnowledgeSearchService {
                 queryIntentClassifier,
                 answerShapeClassifier,
                 retrievalStrategyResolver,
-                retrievalAuditService,
-                new QuerySearchProperties()
+                retrievalAuditService
         );
     }
 
@@ -330,6 +400,7 @@ public class KnowledgeSearchService {
                 sourceSearchService,
                 sourceChunkFtsSearchService,
                 new FactCardFtsSearchService(null),
+                new FactCardTerminalUnitFtsSearchService(null),
                 new FactCardVectorSearchService(),
                 contributionSearchService,
                 graphSearchService,
@@ -464,6 +535,14 @@ public class KnowledgeSearchService {
                         RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS,
                         "fact_card",
                         context -> factCardFtsSearchService.search(context.getRetrievalQuestion(), context.getLimit())
+                ),
+                new SupplierRetrievalChannel(
+                        RetrievalStrategyResolver.CHANNEL_FACT_CARD_TERMINAL_FTS,
+                        "fact_card",
+                        context -> factCardTerminalUnitFtsSearchService.search(
+                                context.getRetrievalQuestion(),
+                                context.getLimit()
+                        )
                 ),
                 new SupplierRetrievalChannel(
                         RetrievalStrategyResolver.CHANNEL_FACT_CARD_VECTOR,

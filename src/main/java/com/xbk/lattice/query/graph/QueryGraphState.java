@@ -62,6 +62,8 @@ public class QueryGraphState {
 
     private String factCardVectorHitsRef;
 
+    private String factCardTerminalUnitHitsRef;
+
     private String contributionHitsRef;
 
     private String graphHitsRef;

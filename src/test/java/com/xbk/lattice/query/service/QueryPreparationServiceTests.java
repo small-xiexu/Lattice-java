@@ -61,6 +61,8 @@ class QueryPreparationServiceTests {
         assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_REFKEY)).isTrue();
         assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_SOURCE_CHUNK_FTS)).isTrue();
         assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS)).isTrue();
+        assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_FACT_CARD_TERMINAL_FTS))
+                .isTrue();
         assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_FACT_CARD_VECTOR)).isFalse();
         assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR)).isFalse();
         assertThat(retrievalStrategy.isChannelEnabled(RetrievalStrategyResolver.CHANNEL_CHUNK_VECTOR)).isFalse();
@@ -69,6 +71,8 @@ class QueryPreparationServiceTests {
                 .isGreaterThan(settings.getRefkeyWeight());
         assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS))
                 .isGreaterThan(settings.getFactCardWeight());
+        assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_FACT_CARD_TERMINAL_FTS))
+                .isGreaterThan(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS));
         assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS))
                 .isLessThan(settings.getArticleChunkWeight());
     }
@@ -135,6 +139,8 @@ class QueryPreparationServiceTests {
         assertThat(retrievalStrategy.getAnswerShape()).isEqualTo(AnswerShape.SEQUENCE);
         assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS))
                 .isGreaterThan(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS));
+        assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_FACT_CARD_TERMINAL_FTS))
+                .isGreaterThan(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS));
         assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_FACT_CARD_VECTOR))
                 .isGreaterThan(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS));
         assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_SOURCE_CHUNK_FTS))
@@ -169,6 +175,8 @@ class QueryPreparationServiceTests {
                 .isGreaterThan(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS));
         assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS))
                 .isGreaterThan(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_ARTICLE_CHUNK_FTS));
+        assertThat(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_FACT_CARD_TERMINAL_FTS))
+                .isGreaterThan(retrievalStrategy.weightOf(RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS));
     }
 
     /**
@@ -228,6 +236,41 @@ class QueryPreparationServiceTests {
         assertThat(retrievalAuditService.lastStrategyTag).contains("rewrite=on");
         assertThat(hits).hasSize(1);
         assertThat(hits.get(0).getConceptId()).isEqualTo("payment-timeout");
+    }
+
+    /**
+     * 验证 KnowledgeSearchService 会调度 terminal unit FTS channel。
+     */
+    @Test
+    void shouldDispatchTerminalUnitFtsChannelWhenEnabled() {
+        CapturingFactCardTerminalUnitFtsSearchService terminalUnitFtsSearchService =
+                new CapturingFactCardTerminalUnitFtsSearchService();
+        KnowledgeSearchService knowledgeSearchService = new KnowledgeSearchService(
+                new FtsSearchService(null),
+                new ArticleChunkFtsSearchService(null),
+                new RefKeySearchService(null),
+                new SourceSearchService(null),
+                new SourceChunkFtsSearchService(null),
+                terminalUnitFtsSearchService,
+                new ContributionSearchService(null),
+                new GraphSearchService(),
+                new VectorSearchService(),
+                new ChunkVectorSearchService(),
+                new RrfFusionService(),
+                new QueryRetrievalSettingsService(),
+                new QueryRewriteService(),
+                new QueryIntentClassifier(),
+                new AnswerShapeClassifier(),
+                new RetrievalStrategyResolver(),
+                null
+        );
+
+        List<QueryArticleHit> hits = knowledgeSearchService.search("alpha_limit value", 5);
+
+        assertThat(terminalUnitFtsSearchService.lastQuestion).contains("alpha_limit");
+        assertThat(hits).hasSize(1);
+        assertThat(hits.get(0).getArticleKey()).isEqualTo("terminal-unit:alpha");
+        assertThat(hits.get(0).getMetadataJson()).contains("\"terminalUnitIdentity\":\"terminal-unit:alpha\"");
     }
 
     /**
@@ -348,6 +391,50 @@ class QueryPreparationServiceTests {
                     "retry policy",
                     "{}",
                     List.of("payment-timeout.md"),
+                    1.0D
+            ));
+        }
+    }
+
+    /**
+     * 捕获 terminal unit FTS 检索的服务。
+     *
+     * @author xiexu
+     */
+    private static class CapturingFactCardTerminalUnitFtsSearchService extends FactCardTerminalUnitFtsSearchService {
+
+        private String lastQuestion;
+
+        /**
+         * 创建捕获 terminal unit 问题的服务。
+         */
+        private CapturingFactCardTerminalUnitFtsSearchService() {
+            super(null);
+        }
+
+        /**
+         * 记录查询问题并返回固定 terminal unit 命中。
+         *
+         * @param question 查询问题
+         * @param limit 返回数量
+         * @return 固定 terminal unit 命中
+         */
+        @Override
+        public List<QueryArticleHit> search(String question, int limit) {
+            lastQuestion = question;
+            if (question == null || !question.contains("alpha_limit")) {
+                return List.of();
+            }
+            return List.of(new QueryArticleHit(
+                    QueryEvidenceType.FACT_CARD,
+                    15L,
+                    "terminal-unit:alpha",
+                    "terminal-unit:alpha",
+                    "Synthetic Terminal",
+                    "alpha_limit = 31",
+                    "{\"terminalUnitIdentity\":\"terminal-unit:alpha\",\"unitId\":\"unit-alpha\"}",
+                    "valid",
+                    List.of("terminal-unit/synthetic.md"),
                     1.0D
             ));
         }
