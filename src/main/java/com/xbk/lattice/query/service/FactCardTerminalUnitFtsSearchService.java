@@ -22,6 +22,8 @@ public class FactCardTerminalUnitFtsSearchService {
 
     private final FtsConfigResolver ftsConfigResolver;
 
+    private final FactCardTerminalUnitIntentReranker intentReranker;
+
     /**
      * 创建 Fact Card terminal unit FTS 检索服务。
      *
@@ -30,7 +32,8 @@ public class FactCardTerminalUnitFtsSearchService {
     public FactCardTerminalUnitFtsSearchService(
             FactCardTerminalUnitJdbcRepository factCardTerminalUnitJdbcRepository
     ) {
-        this(factCardTerminalUnitJdbcRepository, new FtsConfigResolver());
+        this(factCardTerminalUnitJdbcRepository, new FtsConfigResolver(),
+                new FactCardTerminalUnitIntentReranker(new QuerySemanticRules()));
     }
 
     /**
@@ -38,14 +41,33 @@ public class FactCardTerminalUnitFtsSearchService {
      *
      * @param factCardTerminalUnitJdbcRepository terminal unit 仓储
      * @param ftsConfigResolver FTS 配置解析器
+     * @param semanticRules 查询语义规则（Spring 注入，携带 YAML 配置绑定）
      */
     @Autowired
     public FactCardTerminalUnitFtsSearchService(
             FactCardTerminalUnitJdbcRepository factCardTerminalUnitJdbcRepository,
-            FtsConfigResolver ftsConfigResolver
+            FtsConfigResolver ftsConfigResolver,
+            QuerySemanticRules semanticRules
+    ) {
+        this(factCardTerminalUnitJdbcRepository, ftsConfigResolver,
+                new FactCardTerminalUnitIntentReranker(semanticRules));
+    }
+
+    /**
+     * 创建 Fact Card terminal unit FTS 检索服务（完整参数，测试用）。
+     *
+     * @param factCardTerminalUnitJdbcRepository terminal unit 仓储
+     * @param ftsConfigResolver FTS 配置解析器
+     * @param intentReranker 字段意图重排器
+     */
+    public FactCardTerminalUnitFtsSearchService(
+            FactCardTerminalUnitJdbcRepository factCardTerminalUnitJdbcRepository,
+            FtsConfigResolver ftsConfigResolver,
+            FactCardTerminalUnitIntentReranker intentReranker
     ) {
         this.factCardTerminalUnitJdbcRepository = factCardTerminalUnitJdbcRepository;
         this.ftsConfigResolver = ftsConfigResolver;
+        this.intentReranker = intentReranker;
     }
 
     /**
@@ -78,6 +100,9 @@ public class FactCardTerminalUnitFtsSearchService {
             if (FactCardReviewUsagePolicy.allowsQueryCandidate(hit.getReviewStatus())) {
                 hits.add(hit);
             }
+        }
+        if (intentReranker != null) {
+            hits = intentReranker.rerank(hits, question);
         }
         return hits;
     }

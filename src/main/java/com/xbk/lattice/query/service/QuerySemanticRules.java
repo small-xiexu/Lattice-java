@@ -69,6 +69,10 @@ public class QuerySemanticRules {
             "和"
     );
 
+    private List<String> numericValueIntentSignals = List.of(
+            "多少", "最大", "最小", "最长", "最短", "上限", "下限"
+    );
+
     private List<String> boilerplateSectionSignals = List.of(
             "附录"
     );
@@ -367,6 +371,34 @@ public class QuerySemanticRules {
      */
     public boolean containsAnyMultiFocusSeparator(String question) {
         return containsAnySignal(question, multiFocusSignals);
+    }
+
+    /**
+     * 获取数值意图信号列表。
+     *
+     * @return 数值意图信号
+     */
+    public List<String> getNumericValueIntentSignals() {
+        return numericValueIntentSignals;
+    }
+
+    /**
+     * 设置数值意图信号列表。
+     *
+     * @param numericValueIntentSignals 数值意图信号
+     */
+    public void setNumericValueIntentSignals(List<String> numericValueIntentSignals) {
+        this.numericValueIntentSignals = numericValueIntentSignals == null ? List.of() : numericValueIntentSignals;
+    }
+
+    /**
+     * 判断问题是否包含任意数值意图信号。
+     *
+     * @param question 查询问题
+     * @return 包含则返回 true
+     */
+    public boolean containsAnyNumericValueIntentSignal(String question) {
+        return containsAnySignal(question, numericValueIntentSignals);
     }
 
     /**

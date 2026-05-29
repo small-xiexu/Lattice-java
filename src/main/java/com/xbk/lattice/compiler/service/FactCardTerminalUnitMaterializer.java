@@ -45,6 +45,10 @@ public class FactCardTerminalUnitMaterializer {
 
     private static final Pattern DATE_LIKE_PATTERN = Pattern.compile("^\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}$");
 
+    private static final Pattern BRACKET_CONTENT_PATTERN = Pattern.compile("[（(][^）)]*[）)]");
+
+    private static final Pattern CJK_RUN_PATTERN = Pattern.compile("[\\u4E00-\\u9FFF\\u3400-\\u4DBF]{2,}");
+
     /**
      * 从事实证据卡展开终端字段证据单元。
      *
@@ -257,6 +261,8 @@ public class FactCardTerminalUnitMaterializer {
         }
         addSplitAliases(aliases, fieldLabel);
         addSplitAliases(aliases, keyPath);
+        addChineseNgramAliases(aliases, fieldLabel);
+        addChineseNgramAliases(aliases, keyPath);
         return new ArrayList<String>(aliases);
     }
 
@@ -315,6 +321,36 @@ public class FactCardTerminalUnitMaterializer {
         }
         aliases.add(normalized);
         aliases.add(normalized.toLowerCase(Locale.ROOT));
+    }
+
+    /**
+     * 对包含中文字符的文本生成 bigram + trigram 别名。
+     *
+     * 只对 2-8 个中文字符的纯中文片段做 N-gram，跳过单字和超长句子。
+     * 括号内内容（如 "(天)"）会先被移除。
+     *
+     * @param aliases 别名集合
+     * @param value 候选文本
+     */
+    private void addChineseNgramAliases(Set<String> aliases, String value) {
+        if (!hasText(value)) {
+            return;
+        }
+        String cleaned = BRACKET_CONTENT_PATTERN.matcher(value).replaceAll("");
+        Matcher cjkRunMatcher = CJK_RUN_PATTERN.matcher(cleaned);
+        while (cjkRunMatcher.find()) {
+            String cjkRun = cjkRunMatcher.group();
+            if (cjkRun.length() < 2 || cjkRun.length() > 8) {
+                continue;
+            }
+            aliases.add(cjkRun);
+            for (int i = 0; i + 2 <= cjkRun.length(); i++) {
+                aliases.add(cjkRun.substring(i, i + 2));
+            }
+            for (int i = 0; i + 3 <= cjkRun.length(); i++) {
+                aliases.add(cjkRun.substring(i, i + 3));
+            }
+        }
     }
 
     /**

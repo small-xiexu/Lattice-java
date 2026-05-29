@@ -179,6 +179,150 @@ class FactCardTerminalUnitMaterializerTests {
     }
 
     /**
+     * 验证中文 fieldLabel "维护周期(天)" 生成 N-gram 别名。
+     */
+    @Test
+    void shouldGenerateChineseNgramAliasesFromChineseFieldLabel() {
+        FactCardRecord factCardRecord = factCardRecord(
+                """
+                        {
+                          "structure": "key_value_list",
+                          "pathAware": false,
+                          "items": [
+                            {
+                              "key": "维护周期(天)",
+                              "value": "30",
+                              "raw": "维护周期(天)=30",
+                              "keyPath": "维护周期(天)",
+                              "displayText": "维护周期(天) = 30",
+                              "pathSegments": ["维护周期(天)"]
+                            }
+                          ]
+                        }
+                        """
+        );
+
+        List<FactCardTerminalUnitRecord> records = materializer.materialize(factCardRecord);
+
+        assertThat(records).hasSize(1);
+        String aliasesJson = records.get(0).getFieldAliasesJson();
+        assertThat(aliasesJson).as("full segment").contains("\"维护周期\"");
+        assertThat(aliasesJson).as("bigram 维护").contains("\"维护\"");
+        assertThat(aliasesJson).as("bigram 周期").contains("\"周期\"");
+        assertThat(aliasesJson).as("trigram 维护周").contains("\"维护周\"");
+        assertThat(aliasesJson).as("trigram 护周期").contains("\"护周期\"");
+        assertThat(aliasesJson).as("bracket content excluded").doesNotContain("\"天\"");
+    }
+
+    /**
+     * 验证中文 N-gram 逻辑不会从单字中文字符生成 bigram/trigram。
+     * fieldLabel 本身通过 addAlias 进入别名集合，但 addChineseNgramAliases 应跳过单字。
+     */
+    @Test
+    void shouldNotGenerateNgramAliasesFromSingleCjkChar() {
+        FactCardRecord factCardRecord = factCardRecord(
+                """
+                        {
+                          "structure": "key_value_list",
+                          "pathAware": false,
+                          "items": [
+                            {
+                              "key": "x_单_y",
+                              "value": "ok",
+                              "raw": "x_单_y=ok",
+                              "keyPath": "x_单_y",
+                              "displayText": "x_单_y = ok",
+                              "pathSegments": ["x_单_y"]
+                            }
+                          ]
+                        }
+                        """
+        );
+
+        List<FactCardTerminalUnitRecord> records = materializer.materialize(factCardRecord);
+
+        assertThat(records).hasSize(1);
+        String aliasesJson = records.get(0).getFieldAliasesJson();
+        assertThat(aliasesJson).as("fieldLabel itself is preserved by addAlias")
+                .contains("\"x_单_y\"");
+        assertThat(aliasesJson).as("CJK_RUN_PATTERN requires 2+ chars, single CJK '单' generates no N-gram")
+                .doesNotContain("\"单\"");
+    }
+
+    /**
+     * 验证英文 fieldLabel / camelCase 的原有别名逻辑不退化。
+     */
+    @Test
+    void shouldNotDegradeEnglishFieldLabelAliases() {
+        FactCardRecord factCardRecord = factCardRecord(
+                """
+                        {
+                          "structure": "key_value_list",
+                          "pathAware": true,
+                          "items": [
+                            {
+                              "key": "maxRetryCount",
+                              "value": "5",
+                              "parentPath": "service.policy",
+                              "keyPath": "service.policy.maxRetryCount",
+                              "pathSegments": ["service", "policy", "maxRetryCount"]
+                            }
+                          ]
+                        }
+                        """
+        );
+
+        List<FactCardTerminalUnitRecord> records = materializer.materialize(factCardRecord);
+
+        assertThat(records).hasSize(1);
+        String aliasesJson = records.get(0).getFieldAliasesJson();
+        assertThat(aliasesJson).contains("maxRetryCount");
+        assertThat(aliasesJson).contains("maxretrycount");
+        assertThat(aliasesJson).contains("Retry");
+        assertThat(aliasesJson).contains("retry");
+        assertThat(aliasesJson).contains("Count");
+        assertThat(aliasesJson).as("no Chinese N-gram pollution on English fieldLabel")
+                .doesNotContain("一");
+    }
+
+    /**
+     * 验证超长中文文本（>8 字）不会通过 addChineseNgramAliases 生成 N-gram 子串。
+     * fieldLabel 本身仍由 addAlias 加入，但不应有子串别名。
+     */
+    @Test
+    void shouldNotGenerateNgramAliasesForVeryLongChineseText() {
+        FactCardRecord factCardRecord = factCardRecord(
+                """
+                        {
+                          "structure": "key_value_list",
+                          "pathAware": false,
+                          "items": [
+                            {
+                              "key": "这是一个非常长的中文字段名称不适合做检索别名",
+                              "value": "ignored",
+                              "raw": "这是一个非常长的中文字段名称不适合做检索别名=ignored",
+                              "keyPath": "这是一个非常长的中文字段名称不适合做检索别名",
+                              "displayText": "这是一个非常长的中文字段名称不适合做检索别名 = ignored",
+                              "pathSegments": ["这是一个非常长的中文字段名称不适合做检索别名"]
+                            }
+                          ]
+                        }
+                        """
+        );
+
+        List<FactCardTerminalUnitRecord> records = materializer.materialize(factCardRecord);
+
+        assertThat(records).hasSize(1);
+        String aliasesJson = records.get(0).getFieldAliasesJson();
+        assertThat(aliasesJson).as("fieldLabel itself preserved by addAlias")
+                .contains("\"这是一个非常长的中文字段名称不适合做检索别名\"");
+        assertThat(aliasesJson).as("CJK run > 8 chars: no bigram '这是' from N-gram")
+                .doesNotContain("\"这是\"");
+        assertThat(aliasesJson).as("CJK run > 8 chars: no bigram '中文' from N-gram")
+                .doesNotContain("\"中文\"");
+    }
+
+    /**
      * 构造测试事实卡。
      *
      * @param itemsJson 结构化条目 JSON
