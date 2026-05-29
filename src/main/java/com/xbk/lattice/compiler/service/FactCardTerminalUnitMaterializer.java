@@ -16,9 +16,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -71,13 +73,15 @@ public class FactCardTerminalUnitMaterializer {
         if (!itemsNode.isArray()) {
             return List.of();
         }
+        Map<String, List<String>> parentPathDescriptors = collectParentPathDescriptors(itemsNode);
         List<FactCardTerminalUnitRecord> records = new ArrayList<FactCardTerminalUnitRecord>();
         for (int index = 0; index < itemsNode.size(); index++) {
             JsonNode itemNode = itemsNode.get(index);
             if (!itemNode.isObject()) {
                 continue;
             }
-            FactCardTerminalUnitRecord record = materializeItem(factCardRecord, structure, itemNode, index);
+            FactCardTerminalUnitRecord record = materializeItem(factCardRecord, structure, itemNode, index,
+                    parentPathDescriptors);
             if (record != null) {
                 records.add(record);
             }
@@ -112,7 +116,8 @@ public class FactCardTerminalUnitMaterializer {
             FactCardRecord factCardRecord,
             String structure,
             JsonNode itemNode,
-            int itemIndex
+            int itemIndex,
+            Map<String, List<String>> parentPathDescriptors
     ) {
         String valueText = normalizeValue(textValue(itemNode, "value"));
         if (shouldSkipValue(valueText)) {
@@ -135,7 +140,9 @@ public class FactCardTerminalUnitMaterializer {
         String fieldLabel = terminalKey;
         List<String> fieldAliases = buildFieldAliases(fieldLabel, keyPath, parentPath, pathSegments);
         String fieldAliasesJson = writeJsonArray(fieldAliases);
-        String fieldDescription = buildFieldDescription(parentPath, fieldLabel, valueType);
+        List<String> siblingDescriptors = parentPathDescriptors.getOrDefault(parentPath, List.of());
+        String fieldDescription = buildFieldDescription(parentPath, fieldLabel, valueType,
+                siblingDescriptors, normalizedValue);
         String sourceRefsJson = buildSourceRefsJson(factCardRecord, itemNode, itemIndex);
         String ftsText = buildFtsText(
                 factCardRecord,
@@ -372,6 +379,62 @@ public class FactCardTerminalUnitMaterializer {
     }
 
     /**
+     * 收集每个 parentPath 下的中文 string sibling descriptor。
+     *
+     * 形态规则：valueType=string、含 CJK、长度 2-20、排除自身。
+     * 每个 parentPath 最多保留 2 个 descriptor，保持原始顺序去重。
+     *
+     * @param itemsNode items JSON 数组
+     * @return parentPath → descriptor 列表
+     */
+    private Map<String, List<String>> collectParentPathDescriptors(JsonNode itemsNode) {
+        Map<String, List<String>> descriptors = new LinkedHashMap<String, List<String>>();
+        for (int i = 0; i < itemsNode.size(); i++) {
+            JsonNode itemNode = itemsNode.get(i);
+            if (!itemNode.isObject()) {
+                continue;
+            }
+            String parentPath = textValue(itemNode, "parentPath");
+            if (!hasText(parentPath)) {
+                continue;
+            }
+            String valueText = normalizeValue(textValue(itemNode, "value"));
+            if (!hasText(valueText)) {
+                continue;
+            }
+            if (valueText.length() > MAX_VALUE_LENGTH) {
+                continue;
+            }
+            if ("{}".equals(valueText) || "[]".equals(valueText)
+                    || valueText.startsWith("{") || valueText.startsWith("[")) {
+                continue;
+            }
+            if (valueText.length() < 2 || valueText.length() > 20) {
+                continue;
+            }
+            if (!"string".equals(inferValueType(valueText))) {
+                continue;
+            }
+            if (!CJK_RUN_PATTERN.matcher(valueText).find()) {
+                continue;
+            }
+            descriptors.computeIfAbsent(parentPath, k -> new ArrayList<String>()).add(valueText);
+        }
+        for (Map.Entry<String, List<String>> entry : descriptors.entrySet()) {
+            List<String> original = entry.getValue();
+            Set<String> seen = new LinkedHashSet<String>();
+            List<String> limited = new ArrayList<String>();
+            for (String v : original) {
+                if (seen.add(v) && limited.size() < 2) {
+                    limited.add(v);
+                }
+            }
+            entry.setValue(limited);
+        }
+        return descriptors;
+    }
+
+    /**
      * 构建字段上下文描述。
      *
      * @param parentPath 父路径
@@ -379,7 +442,8 @@ public class FactCardTerminalUnitMaterializer {
      * @param valueType 值形态
      * @return 字段上下文描述
      */
-    private String buildFieldDescription(String parentPath, String fieldLabel, String valueType) {
+    private String buildFieldDescription(String parentPath, String fieldLabel, String valueType,
+                                          List<String> siblingDescriptors, String ownValueText) {
         List<String> parts = new ArrayList<String>();
         if (hasText(parentPath)) {
             parts.add("parentPath: " + parentPath);
@@ -389,6 +453,17 @@ public class FactCardTerminalUnitMaterializer {
         }
         if (hasText(valueType)) {
             parts.add("valueType: " + valueType);
+        }
+        if (siblingDescriptors != null && !siblingDescriptors.isEmpty()) {
+            List<String> contextParts = new ArrayList<String>();
+            for (String d : siblingDescriptors) {
+                if (!d.equals(ownValueText)) {
+                    contextParts.add(d);
+                }
+            }
+            if (!contextParts.isEmpty()) {
+                parts.add("context: " + String.join(", ", contextParts));
+            }
         }
         return String.join("; ", parts);
     }

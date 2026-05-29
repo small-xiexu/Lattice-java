@@ -323,6 +323,322 @@ class FactCardTerminalUnitMaterializerTests {
     }
 
     /**
+     * 验证同 parentPath 的 CJK sibling value 进入其他 terminal unit 的 fieldDescription。
+     */
+    @Test
+    void shouldAddSiblingContextToFieldDescription() {
+        FactCardRecord factCardRecord = factCardRecord(
+                """
+                        {
+                          "structure": "key_value_list",
+                          "pathAware": true,
+                          "items": [
+                            {
+                              "key": "type",
+                              "value": "精密仪器",
+                              "parentPath": "equipment_types[1]",
+                              "keyPath": "equipment_types[1].type",
+                              "pathSegments": ["equipment_types[1]", "type"]
+                            },
+                            {
+                              "key": "max_borrow_days",
+                              "value": "7",
+                              "parentPath": "equipment_types[1]",
+                              "keyPath": "equipment_types[1].max_borrow_days",
+                              "pathSegments": ["equipment_types[1]", "max_borrow_days"]
+                            },
+                            {
+                              "key": "approval_required",
+                              "value": "实验室主任",
+                              "parentPath": "equipment_types[1]",
+                              "keyPath": "equipment_types[1].approval_required",
+                              "pathSegments": ["equipment_types[1]", "approval_required"]
+                            }
+                          ]
+                        }
+                        """
+        );
+
+        List<FactCardTerminalUnitRecord> records = materializer.materialize(factCardRecord);
+
+        assertThat(records).hasSize(3);
+        FactCardTerminalUnitRecord numberRecord = records.stream()
+                .filter(r -> "max_borrow_days".equals(r.getTerminalKey()))
+                .findFirst().orElseThrow();
+        assertThat(numberRecord.getFieldDescription())
+                .as("number type unit should receive CJK sibling context")
+                .contains("context: 精密仪器, 实验室主任");
+        assertThat(numberRecord.getFtsText())
+                .as("ftsText should contain sibling context for LIKE matching")
+                .contains("精密仪器")
+                .contains("实验室主任");
+        assertThat(records.get(0).getFieldDescription())
+                .as("first sibling should get other sibling as context but not self")
+                .contains("context: 实验室主任")
+                .doesNotContain("精密仪器, 实验室主任");
+    }
+
+    /**
+     * 验证自身 value 不会作为自己的 context。
+     */
+    @Test
+    void shouldExcludeOwnValueFromSelfContext() {
+        FactCardRecord factCardRecord = factCardRecord(
+                """
+                        {
+                          "structure": "key_value_list",
+                          "pathAware": true,
+                          "items": [
+                            {
+                              "key": "name",
+                              "value": "校园预约系统",
+                              "parentPath": "borrowing_system",
+                              "keyPath": "borrowing_system.name",
+                              "pathSegments": ["borrowing_system", "name"]
+                            },
+                            {
+                              "key": "version",
+                              "value": "v2.3.1",
+                              "parentPath": "borrowing_system",
+                              "keyPath": "borrowing_system.version",
+                              "pathSegments": ["borrowing_system", "version"]
+                            }
+                          ]
+                        }
+                        """
+        );
+
+        List<FactCardTerminalUnitRecord> records = materializer.materialize(factCardRecord);
+
+        assertThat(records).hasSize(2);
+        FactCardTerminalUnitRecord nameRecord = records.stream()
+                .filter(r -> "name".equals(r.getTerminalKey()))
+                .findFirst().orElseThrow();
+        assertThat(nameRecord.getFieldDescription())
+                .as("CJK string item should not contain its own value as context")
+                .doesNotContain("校园预约系统");
+        assertThat(nameRecord.getFtsText())
+                .as("ftsText should still contain own valueText directly")
+                .contains("校园预约系统");
+    }
+
+    /**
+     * 验证非 CJK、过长、空值不会进入 context。
+     */
+    @Test
+    void shouldFilterNonCjkLongAndEmptyFromContext() {
+        FactCardRecord factCardRecord = factCardRecord(
+                """
+                        {
+                          "structure": "key_value_list",
+                          "pathAware": true,
+                          "items": [
+                            {
+                              "key": "config_name",
+                              "value": "有效配置",
+                              "parentPath": "settings",
+                              "keyPath": "settings.config_name",
+                              "pathSegments": ["settings", "config_name"]
+                            },
+                            {
+                              "key": "max_connections",
+                              "value": "1000",
+                              "parentPath": "settings",
+                              "keyPath": "settings.max_connections",
+                              "pathSegments": ["settings", "max_connections"]
+                            },
+                            {
+                              "key": "api_endpoint",
+                              "value": "https://api.example.com/v5",
+                              "parentPath": "settings",
+                              "keyPath": "settings.api_endpoint",
+                              "pathSegments": ["settings", "api_endpoint"]
+                            },
+                            {
+                              "key": "enabled",
+                              "value": "true",
+                              "parentPath": "settings",
+                              "keyPath": "settings.enabled",
+                              "pathSegments": ["settings", "enabled"]
+                            },
+                            {
+                              "key": "empty_field",
+                              "value": "   ",
+                              "parentPath": "settings",
+                              "keyPath": "settings.empty_field",
+                              "pathSegments": ["settings", "empty_field"]
+                            }
+                          ]
+                        }
+                        """
+        );
+
+        List<FactCardTerminalUnitRecord> records = materializer.materialize(factCardRecord);
+
+        assertThat(records).hasSize(4); // empty_field is skipped
+        for (FactCardTerminalUnitRecord record : records) {
+            String description = record.getFieldDescription();
+            assertThat(description)
+                    .as("context must not contain number value")
+                    .doesNotContain("1000");
+            assertThat(description)
+                    .as("context must not contain URL")
+                    .doesNotContain("api.example.com");
+            assertThat(description)
+                    .as("context must not contain boolean")
+                    .doesNotContain("true");
+            if (!"有效配置".equals(record.getValueText())) {
+                assertThat(description)
+                        .as("non-CJK-sibling should get CJK sibling context")
+                        .contains("context: 有效配置");
+            }
+        }
+    }
+
+    /**
+     * 验证每个 parentPath descriptor 数量上限为 2。
+     */
+    @Test
+    void shouldLimitDescriptorsPerParentPath() {
+        FactCardRecord factCardRecord = factCardRecord(
+                """
+                        {
+                          "structure": "key_value_list",
+                          "pathAware": true,
+                          "items": [
+                            {
+                              "key": "label_a",
+                              "value": "第一个",
+                              "parentPath": "group_x",
+                              "keyPath": "group_x.label_a",
+                              "pathSegments": ["group_x", "label_a"]
+                            },
+                            {
+                              "key": "label_b",
+                              "value": "第二个",
+                              "parentPath": "group_x",
+                              "keyPath": "group_x.label_b",
+                              "pathSegments": ["group_x", "label_b"]
+                            },
+                            {
+                              "key": "label_c",
+                              "value": "第三个",
+                              "parentPath": "group_x",
+                              "keyPath": "group_x.label_c",
+                              "pathSegments": ["group_x", "label_c"]
+                            },
+                            {
+                              "key": "target_metric",
+                              "value": "42",
+                              "parentPath": "group_x",
+                              "keyPath": "group_x.target_metric",
+                              "pathSegments": ["group_x", "target_metric"]
+                            }
+                          ]
+                        }
+                        """
+        );
+
+        List<FactCardTerminalUnitRecord> records = materializer.materialize(factCardRecord);
+
+        assertThat(records).hasSize(4);
+        FactCardTerminalUnitRecord target = records.stream()
+                .filter(r -> "target_metric".equals(r.getTerminalKey()))
+                .findFirst().orElseThrow();
+        String description = target.getFieldDescription();
+        assertThat(description).contains("context:");
+        // 最多 2 个 descriptor: "第一个", "第二个" (保持原始顺序)
+        assertThat(description).contains("第一个").contains("第二个");
+        assertThat(description).doesNotContain("第三个");
+        // 验证 description 中只出现一次 "context:"
+        int contextCount = 0;
+        int idx = 0;
+        while ((idx = description.indexOf("context:", idx)) != -1) {
+            contextCount++;
+            idx++;
+        }
+        assertThat(contextCount).as("only one context entry").isEqualTo(1);
+    }
+
+    /**
+     * 验证 fieldAliases 不包含 sibling descriptor。
+     */
+    @Test
+    void shouldNotAddSiblingDescriptorsToFieldAliases() {
+        FactCardRecord factCardRecord = factCardRecord(
+                """
+                        {
+                          "structure": "key_value_list",
+                          "pathAware": true,
+                          "items": [
+                            {
+                              "key": "display_name",
+                              "value": "中文显示名",
+                              "parentPath": "group_y",
+                              "keyPath": "group_y.display_name",
+                              "pathSegments": ["group_y", "display_name"]
+                            },
+                            {
+                              "key": "timeout_seconds",
+                              "value": "30",
+                              "parentPath": "group_y",
+                              "keyPath": "group_y.timeout_seconds",
+                              "pathSegments": ["group_y", "timeout_seconds"]
+                            }
+                          ]
+                        }
+                        """
+        );
+
+        List<FactCardTerminalUnitRecord> records = materializer.materialize(factCardRecord);
+
+        assertThat(records).hasSize(2);
+        FactCardTerminalUnitRecord numberRecord = records.stream()
+                .filter(r -> "timeout_seconds".equals(r.getTerminalKey()))
+                .findFirst().orElseThrow();
+        String aliasesJson = numberRecord.getFieldAliasesJson();
+        assertThat(aliasesJson)
+                .as("fieldAliases must not contain sibling descriptor value")
+                .doesNotContain("中文显示名");
+        assertThat(numberRecord.getFieldDescription())
+                .as("fieldDescription should contain sibling context")
+                .contains("context: 中文显示名");
+    }
+
+    /**
+     * 验证无 parentPath 或只有一个 item 时不产生 context。
+     */
+    @Test
+    void shouldNotAddContextWhenNoSharedParentPathOrSingleItem() {
+        FactCardRecord factCardRecord = factCardRecord(
+                """
+                        {
+                          "structure": "key_value_list",
+                          "pathAware": false,
+                          "items": [
+                            {
+                              "key": "isolated_field",
+                              "value": "孤立值",
+                              "keyPath": "isolated_field",
+                              "pathSegments": ["isolated_field"]
+                            }
+                          ]
+                        }
+                        """
+        );
+
+        List<FactCardTerminalUnitRecord> records = materializer.materialize(factCardRecord);
+
+        assertThat(records).hasSize(1);
+        assertThat(records.get(0).getFieldDescription())
+                .as("single CJK value with no parentPath should not get sibling context")
+                .doesNotContain("context:");
+        assertThat(records.get(0).getFieldAliasesJson())
+                .as("fieldAliases should contain English fieldLabel aliases")
+                .contains("isolated_field");
+    }
+
+    /**
      * 构造测试事实卡。
      *
      * @param itemsJson 结构化条目 JSON
