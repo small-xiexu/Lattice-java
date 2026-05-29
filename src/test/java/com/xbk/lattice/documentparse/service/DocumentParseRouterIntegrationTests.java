@@ -545,8 +545,10 @@ class DocumentParseRouterIntegrationTests {
         assertThat(wordRecord.getMetadataJson()).contains("\"paragraphCount\"");
         assertThat(wordRecord.getContentText()).contains("Payment timeout recovery");
         assertThat(excelRecord.getMetadataJson()).contains("\"structuredContentJson\"");
-        assertThat(excelRecord.getContentText()).contains("sheet=Codes; row=2");
-        assertThat(excelRecord.getContentText()).contains("businessSubTypeCode=1210");
+        assertThat(excelRecord.getContentText()).contains("- sheet=Codes");
+        assertThat(excelRecord.getContentText()).contains("- row=2");
+        assertThat(excelRecord.getContentText()).contains("- businessSubTypeCode=1210");
+        assertThat(excelRecord.getContentText()).contains("- meaning=refund");
         assertThat(csvRecord.getMetadataJson()).contains("\"structuredContentJson\"");
         assertThat(csvRecord.getContentText()).contains("businessSubTypeCode,meaning");
 

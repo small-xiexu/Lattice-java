@@ -148,7 +148,8 @@ class IngestNodeTests {
         assertThat(excelSource.getFormat()).isEqualTo("xlsx");
         assertThat(excelSource.getContent().length()).isGreaterThan(80);
         assertThat(excelSource.getContent()).contains("case-100997");
-        assertThat(excelSource.getContent()).contains("sheet=Steps; row=42");
+        assertThat(excelSource.getContent()).contains("- sheet=Steps");
+        assertThat(excelSource.getContent()).contains("- row=42");
         assertThat(excelSource.getContent()).contains("step_index=9");
         assertThat(excelSource.getContent()).contains("name=10张券异常解锁");
         assertThat(excelSource.getContent()).contains("expected=9张券全部正常解锁");
@@ -290,7 +291,8 @@ class IngestNodeTests {
         assertThat(excelSource.getContent()).contains("=== Sheet: Codes ===");
         assertThat(excelSource.getContent()).contains("businessSubTypeCode,meaning");
         assertThat(excelSource.getContent()).contains("1210,refund");
-        assertThat(excelSource.getContent()).contains("sheet=Codes; row=2");
+        assertThat(excelSource.getContent()).contains("- sheet=Codes");
+        assertThat(excelSource.getContent()).contains("- row=2");
         assertThat(excelSource.getContent()).contains("businessSubTypeCode=1210");
         assertThat(excelSource.getContent()).contains("meaning=refund");
         assertThat(excelSource.getContent()).contains("=== Sheet: Settings ===");

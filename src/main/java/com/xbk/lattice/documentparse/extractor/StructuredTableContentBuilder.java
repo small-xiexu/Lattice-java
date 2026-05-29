@@ -25,6 +25,52 @@ public class StructuredTableContentBuilder {
     private static final int MAX_CELL_TEXT_LENGTH = 5000;
 
     /**
+     * 将表格行数据转为每 cell 一行的结构化文本，供 fact card 生成与 terminal unit 物化消费。
+     *
+     * @param rows 行数据（第一行为表头）
+     * @param metadataKey 元数据 key（如 "sheet"、"table"）
+     * @param metadataValue 元数据 value（如 sheet 名称、文件名）
+     * @param maxCellChars cell 最大字符数
+     * @return 结构化行文本；rows 不足 2 行时返回空字符串
+     */
+    public static String toStructuredRowsText(
+            List<List<String>> rows,
+            String metadataKey,
+            String metadataValue,
+            int maxCellChars) {
+        if (rows == null || rows.size() <= 1) {
+            return "";
+        }
+        List<String> headers = rows.get(0);
+        StringBuilder builder = new StringBuilder();
+        for (int rowIndex = 1; rowIndex < rows.size(); rowIndex++) {
+            List<String> row = rows.get(rowIndex);
+            if (isBlankRow(row)) {
+                continue;
+            }
+            int rowNumber = rowIndex + 1;
+            builder.append("- ").append(metadataKey).append("=").append(metadataValue).append("\n");
+            builder.append("- row=").append(rowNumber);
+            int columnCount = Math.max(headers.size(), row.size());
+            for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+                String value = columnIndex < row.size() ? row.get(columnIndex) : "";
+                if (value == null || value.isBlank()) {
+                    continue;
+                }
+                String header = columnIndex < headers.size() ? headers.get(columnIndex) : "";
+                String normalizedHeader = normalizeHeader(header, columnIndex);
+                String compactValue = compactCellValue(value, maxCellChars);
+                builder.append("\n- ").append(normalizedHeader).append("=").append(compactValue);
+            }
+            builder.append("\n");
+        }
+        if (builder.length() > 0 && builder.charAt(builder.length() - 1) == '\n') {
+            builder.setLength(builder.length() - 1);
+        }
+        return builder.toString();
+    }
+
+    /**
      * 构建结构化表格 JSON。
      *
      * @param tables 表格列表
@@ -144,7 +190,7 @@ public class StructuredTableContentBuilder {
         return rowNode;
     }
 
-    private boolean isBlankRow(List<String> row) {
+    private static boolean isBlankRow(List<String> row) {
         if (row == null || row.isEmpty()) {
             return true;
         }
@@ -156,11 +202,22 @@ public class StructuredTableContentBuilder {
         return true;
     }
 
-    private String normalizeHeader(String header, int columnIndex) {
+    private static String normalizeHeader(String header, int columnIndex) {
         if (header == null || header.isBlank()) {
             return "column_" + (columnIndex + 1);
         }
         return header.trim();
+    }
+
+    private static String compactCellValue(String value, int maxCellChars) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        String compacted = value.replace('\n', ' ').replace('\r', ' ').trim();
+        if (compacted.length() <= maxCellChars) {
+            return compacted;
+        }
+        return compacted.substring(0, maxCellChars) + "...";
     }
 
     private String normalizeValue(String value) {

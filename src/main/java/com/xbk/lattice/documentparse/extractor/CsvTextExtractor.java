@@ -48,7 +48,15 @@ public class CsvTextExtractor {
         String structuredContentJson = structuredTableContentBuilder.buildJson(List.of(
                 new StructuredTableContentBuilder.TableContent(tableName, tableName, "csv", rows)
         ));
-        return new SourceExtractionResult(normalizedContent, buildMetadataJson(rows), structuredContentJson, false);
+        String baseName = tableName.contains(".")
+                ? tableName.substring(0, tableName.lastIndexOf('.'))
+                : tableName;
+        String structuredRowsText = StructuredTableContentBuilder.toStructuredRowsText(
+                rows, "table", baseName, 500);
+        String fullContent = structuredRowsText.isBlank()
+                ? normalizedContent
+                : normalizedContent + "\n\n--- Structured Rows ---\n" + structuredRowsText;
+        return new SourceExtractionResult(fullContent, buildMetadataJson(rows), structuredContentJson, false);
     }
 
     private List<List<String>> readRows(Path csvPath) throws IOException {
