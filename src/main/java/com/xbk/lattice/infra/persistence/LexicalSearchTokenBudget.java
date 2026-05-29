@@ -16,7 +16,7 @@ import java.util.Set;
  */
 public final class LexicalSearchTokenBudget {
 
-    private static final int MAX_LIKE_TOKENS = 8;
+    private static final int MAX_LIKE_TOKENS = 32;
 
     private LexicalSearchTokenBudget() {
     }
@@ -100,7 +100,7 @@ public final class LexicalSearchTokenBudget {
             return baseScore + Math.min(token.length(), 40);
         }
         if (isCjkToken(token)) {
-            return token.length() >= 2 ? 220 + Math.min(token.length(), 20) : 0;
+            return token.length() >= 2 ? 230 - Math.min(token.length(), 8) : 0;
         }
         return token.length() >= 3 ? 100 + Math.min(token.length(), 20) : 0;
     }

@@ -1,6 +1,6 @@
 # 项目质量打磨进度与踩坑台账
 
-更新时间：2026-05-28（agentC 同步 fresh eval 2 三轮失败实验与 terminal unit 物化方向，写入长期路线策略与 Query 复杂度治理独立线）
+更新时间：2026-05-29（agentC 同步 terminal unit Phase 1C LIKE token budget fix 验证结果，更新 fresh eval 2 与 terminal unit 当前状态）
 
 本台账记录质量打磨、Query/SWIP eval、baseline 修复与多 agent 协作的当前状态。后续推进前先读本文件；阶段结论变化后必须回写。
 
@@ -37,8 +37,11 @@
   | `e286c79` | fix(query): 保留结构化事实卡片作为 fallback 证据 | Q6 fallback fact card |
   | `4d5e8bc` | fix(query): 配置化 exact path terminal field alias | Q6 terminal field |
   | `be4d216` | fix(llm): apiKey 解密失败优雅降级，deep_research 保持 fail-closed | LLM infrastructure |
+  | `711eafe` | feat(query): add terminal unit FTS retrieval infrastructure | terminal unit Phase 1A |
+  | `2fee343` | feat(query): 增加 terminal unit 字段意图重排与中文字段别名 | terminal unit Phase 1B + 1C Layer 1 |
+  | `03ae48c` | fix(documentparse): 输出表格结构化行以生成 terminal unit | terminal unit Phase 1C Extractor |
 
-  上述 7 个 commit 均已按各自范围完成 redline、全量 Maven、定向测试或端到端验证闭环（Q6 terminal field alias 有真实 API 端到端验证；title-generation、documentparse、admin、LLM snapshot 为 redline + 全量 Maven + 定向测试/scoped verification）。剩余未提交项仅为 docs/report 审计归档，详见未提交文档收口计划 `docs/test/remaining_docs_reports_commit_plan.md`。
+  上述 10 个 commit 均已按各自范围完成 redline、全量 Maven、定向测试或端到端验证闭环。Phase 1C LIKE Token Budget Fix 验证通过但尚未提交（建议作为第 11 个 commit）。
 - **长期路线（2026-05-28 agentC 写入）**：
 
   长期目标为 **5 套 public eval + 1-2 套 hidden eval**，形成持续泛化验收闭环：
@@ -51,12 +54,21 @@
 
   详见 `docs/test/knowledge-base-e2e/eval-validation-roadmap.md`。
 
+- **terminal unit Phase 1B/1C 当前状态（2026-05-29）**：
+  - Phase 1B Reranker（字段意图重排）+ redline fix（数值问法信号配置化）+ config binding fix（Spring DI 链路修正）已提交 `2fee343`。reranker 算法正确（定向测试 13/0/0），但在中文 query + 英文 field key 场景下匹配通道为零，YAML 5 题无收益。
+  - Phase 1C Layer 1（中文 N-gram alias 物化）已提交 `2fee343`。XLSX/CSV 中文列头字段名现在可生成 bigram/trigram 别名并被 FTS LIKE 匹配。
+  - Phase 1C Extractor Fix（XLSX/CSV 结构化行输出）已提交 `03ae48c`。
+  - Phase 1C LIKE Token Budget Fix：`MAX_LIKE_TOKENS 8→32` + CJK 评分倒置（bigram 最高优先级），clean schema 验证已通过。**FQ7 XLSX `fact_card_terminal_fts` 从 0 hit → 16 hits，5 个进入 fused topK**。FQ11 CSV 保护通过（terminal hits 6→16，目标 rank 3 不变）。redline BLOCKER=0，定向测试 9/0/0，全量 mvn test 965/0/0。Fresh Eval 19 题答案质量无退化。尚未提交。
+  - YAML 5 题 FQ3/FQ4/FQ6/FG1/FG2 仍 FAIL（英文字段名→中文语义匹配通道仍未建立），下一步应进入 terminal unit Layer 2 sibling context / field alias materialization 分析，不是 query fallback。
+  - Public Eval 1 Q6/S2 本轮未执行保护回归（当前库仅含 Public Eval 2 资料），不得写成已通过。
+- **fresh eval 2 当前正式基线**仍以 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/acceptance-report.md` 为准：Answer Accuracy `10/15`，Search Accuracy `1/4`，Recall@10 `13/15`，Citation Accuracy `2/15`，Abstain Accuracy `2/2`，Hallucination Count `5`，结论为未通过。
+
 ## 当前 Gate
 
 | 项 | 当前状态 | 说明 |
 |---|---|---|
-| redline | `BLOCKER=0` | Q6 terminal field alias 配置化修复后：`bash scripts/scan-redline.sh special_cases_report.md` 通过，汇总为 `BLOCKER=0`、`REVIEW=2028`、`ALLOWLIST=259`。 |
-| mvn test | `已恢复` | 2026-05-27 Q6 terminal field alias 配置化修复阶段全量 `mvn test=915/0/0`；LLM snapshot 测试补强后最新全量 `mvn test=917/0/0` 通过。 |
+| redline | `BLOCKER=0` | 最新：`bash scripts/scan-redline.sh special_cases_report.md` 通过，汇总为 `BLOCKER=0`、`REVIEW=2059`、`ALLOWLIST=259`。 |
+| mvn test | `965/0/0` | Phase 1C LIKE token budget fix 验证后全量 `mvn test=965/0/0` 通过。 |
 | main baseline | 阶段 gate 已通过 | `final_query_baseline_gate_report.md` 为 `9/10` 且 gate 通过；`phase12_final_clean_rebuild_gate_report.md` 为 `8/10` 且 6 项 gate 通过。 |
 | SWIP strict eval | 稳定区间 `15-17/23` | focus snippet patch 副作用复核三轮：16/23、17/23、15/23；BANK-SETTLEMENT-001 三轮稳定 PASS；保护 case 三轮稳定 PASS。详见 `swip_focus_snippet_patch_side_effect_review_report.md`。 |
 | 当前数据库状态 | Q6 验收 clean 库 | agentD 已重建 `ai-rag-knowledge.lattice` 并导入完整知识库验收资料；用户要求确认的 2 条 `needs_human_review` 已 approve 发布。当前计数：`source_files=6`、`articles=6`、`article_chunks=13`、`fact_cards=11`、`article_vector_index=6`、`article_chunk_vector_index=13`。该库用于 Q6 复验，不代表 SWIP clean 库或主 baseline 库。 |
@@ -71,7 +83,12 @@
 | compile review 人工确认后入库 | 代码实现 + runtime 验证 + pre-commit 复核通过 + 已提交 | agentA 实现：后端 publish flow + 后台 list/detail/approve/reject API + 前端入口。agentD runtime 验证通过：后端全链路、approve 向量刷新、前端主流程。agentD pre-commit 复核通过：redline BLOCKER=0，mvn test=844/0/0，无主链误改。已提交（`8fe7001` + `b453627`）。详见 `compile_human_review_queue_pre_commit_quality_report.md`。 |
 | 知识库验收 Q6 fact card 路径 | Q6 query/fallback 修复已闭环；整体最小验收仍因 S2 标题/anchor 搜索失败未完全通过 | redline `BLOCKER=0`，`AnswerGenerationServiceTests=77/0/0`，`AnswerFallbackEvidenceSelectorTests + FactCardGenerationServiceTests=27/0/0`，全量 `mvn test=915/0/0`。agentD 已完成真实 API 验证：`spec.containers[0].readinessProbe.tcpSocket.port = 8080`，`periodSeconds=10` 未被抢占，endpoint / URL / image / version / ordinary numeric 字段保护场景均通过。 |
 | 知识库验收 S2 chunk/anchor identity | 代码层修复 + 待 agentD 端到端验收 | agentA 完成 chunk identity 最小修复：article chunk FTS / chunk vector 保留 chunk 级身份，RRF 不再把带 `chunkIdentity` 的 chunk hit 与整篇 article hit 按 articleKey 折叠；展示标题通用保留 section anchor。redline `BLOCKER=0`，定向测试 `13/0/0`，全量 `mvn test=921/0/0`。 |
-| fresh eval 2 | 未通过；正式基线仍以 `acceptance-report.md` 为准 | 结构化 terminal value 题 `FQ3/FQ4/FQ6/FG1/FG2` 三轮 query fallback 实验后仍 `0/5 PASS`；FACT_CARD 已召回但整卡 evidence unit 粒度导致 sibling 抢答。下一步进入 terminal unit 第一阶段：生成 terminal units 并进入 FTS 检索。 |
+| fresh eval 2 | 未通过；正式基线仍以 `acceptance-report.md` 为准 | Phase 1C XLSX FQ7 terminal unit 检索从 0→16 hits（LIKE token budget fix），YAML 5 题 FQ3/FQ4/FQ6/FG1/FG2 仍 0/5 FAIL。下一步进入 Layer 2 sibling context。 |
+| terminal unit Phase 1B | 已提交 `2fee343` | Reranker + redline fix + config binding fix。算法正确，但中文 query + 英文 field key 场景下匹配通道为零。 |
+| terminal unit Phase 1C Layer 1 | 已提交 `2fee343` | 中文 N-gram alias 物化。XLSX/CSV 中文列头可生成 bigram/trigram。 |
+| terminal unit Phase 1C Extractor | 已提交 `03ae48c` | XLSX/CSV 结构化行输出修复。 |
+| terminal unit Phase 1C LIKE Token | 工程+服务验证通过，建议提交 | `MAX_LIKE_TOKENS 8→32` + CJK 评分倒置。FQ7 XLSX 0→16 hits，FQ11 CSV 保护通过。redline BLOCKER=0，全量 965/0/0。 |
+| Public Eval 1 Q6/S2 | 本轮未执行保护回归 | 当前库仅含 Public Eval 2 资料，Q6 terminal field alias + S2 chunk identity 待后续单独验证。 |
 
 ## 多 Agent 当前职责
 
@@ -126,6 +143,11 @@
 - structured terminal unit 的 `fieldLabel`、`fieldAliases`、`fieldDescription` 只能来自源文件内容与通用结构规则，不得来自 public/hidden 题集、标准答案、expected citation、case id 或 query 日志；hidden eval 仍不得被 AI 读取。
 - 长期路线已确立（2026-05-28 agentC）：5 套 public eval + 1-2 套 hidden eval 闭环；短期 terminal unit Phase 1A（evidence 粒度建设），中期 Query 主链复杂度治理（独立线），长期 5+2 eval 持续泛化验收。详见 `docs/test/knowledge-base-e2e/eval-validation-roadmap.md`。
 - Query 复杂度治理必须独立开线，不与 terminal unit Phase 1A 并行改代码；两条线串行执行，治理线待 Phase 1A agentD 验收通过后单开。
+- terminal unit Phase 1B Reranker 算法正确但依赖 query token 与英文字段名的精确匹配，中文 query + 英文 field key 场景下匹配通道为零。Reranker 是 Phase 1C 的消费者：Phase 1C 生产中文别名，Phase 1B 消费中文别名。详见 `terminal_unit_phase1b_ranking_clean_verification_report.md`。
+- terminal unit Phase 1C Layer 1（中文 N-gram alias）已在 XLSX 上首次确认生效："存储条件" 的 fieldAliases 包含 "存储"、"储条"、"条件" 等 CJK bigram/trigram，被 LIKE 匹配消费。详见 `terminal_unit_phase1c_layer1_clean_verification_report.md`。
+- Phase 1C LIKE Token Budget Fix（`MAX_LIKE_TOKENS 8→32` + CJK 评分倒置 bigram 优先）是通用 lexical token 预算/排序修复，不是 FQ7/XLSX/文件名/业务词特判。修复前 XLSX 的 CJK bigram 被文件名前缀 token 和长 N-gram 挤出 LIKE top-8 候选，修复后 XLSX terminal unit 命中从 0→16。修复使所有中文表格查询受益（FQ11 CSV 也从 6→16 hits）。详见 `terminal_unit_phase1c_xlsx_like_token_budget_fix_result_report.md` 和 `terminal_unit_phase1c_xlsx_like_token_budget_clean_verification_report.md`。
+- YAML 5 题（FQ3/FQ4/FQ6/FG1/FG2）在 Phase 1C Layer 1 + LIKE token fix 后仍 FAIL。根因仍是英文字段名→中文语义匹配通道缺失。下一步应进入 Layer 2 sibling context（Materializer 中为同 parentPath terminal unit 补充 sibling descriptor），不是 query fallback、不是调 reranker 权重、不是逐题特判。详见 `terminal_unit_phase1c_xlsx_like_token_budget_clean_verification_report.md` 第 12 节。
+- 本轮未执行 Public Eval 1 Q6/S2 保护回归，当前数据库仅含 Public Eval 2 资料。Q6 terminal field alias + S2 chunk identity 保护需在后续单独验证。不得将 Q6/S2 写成已通过。
 
 ## 踩坑记录
 
@@ -162,6 +184,7 @@
 | terminal unit alias 来源存在 eval 污染风险 | field label/alias/description 若从题集、答案或 query 日志派生，会把 public/hidden eval 泄漏进索引规则 | alias 必须来自源文件和通用结构规则；hidden eval 只允许记录指标与失败类型 | 生成 terminal unit 时不得读取 hidden eval；不得把题面、case id、expected citation、答案值写入代码、prompt、配置或 SQL。 |
 | `compile_article_review_queue` 不区分 compile job | 多次 compile 产生的 `needs_human_review` 草稿混在同一队列，无 jobId 过滤 | 当前接受这种简化——人工确认场景本身就是低频率、逐条处理的 | 后续若需要按 job 维度管理人工确认，需给 `compile_article_review_queue` 增加 `job_id` 字段并支持筛选。 |
 | 前端编译进度卡片语义与轮次展示仍有缺口 | 前端进度卡片展示的步骤数、审查轮次、fix 轮次仍不完全反映 StateGraph 实际执行轮数 | 后端步骤和轮次信息已写入 job steps，前端尚未完全接入 | 不阻断当前提交。后续状态摘要和轮次展示迭代时统一接入。 |
+| LIKE token 预算不足导致中文 bigram 被挤出候选集 | 文件名前缀 token（"chemical-storage-grading.xlsx"）和 CJK 长 N-gram（quadgram "级危险化"等）消耗 `MAX_LIKE_TOKENS=8` 预算，导致 "存储"、"条件" 等真正能命中 terminal unit fts_text 的 CJK bigram 全部被挤出 LIKE 候选集，XLSX terminal unit 命中为 0 | 问题不在 dispatch、extractor、Materializer、Reranker——只在 `MAX_LIKE_TOKENS` 常量。CJK token 评分应优先短 N-gram（bigram > trigram > quadgram），因为 LIKE 子串匹配天然覆盖长串。详见 `terminal_unit_phase1c_xlsx_terminal_unit_root_cause_analysis_report.md` | 中文检索场景下，CJK token 的 LIKE 预算应充足（≥32），且短 N-gram 优先级应高于长 N-gram。文件名和其他结构化 token 不应挤占 CJK LIKE 候选预算。 |
 
 ## 当前禁止事项
 
@@ -230,14 +253,21 @@
 37. （已完成，FAIL）fresh eval 2 selector gate 实验：FACT_CARD 仍未进入最终 answer/citation，服务级 `0/5 PASS`，不建议提交对应代码。
 38. （已完成，FAIL）fresh eval 2 conclusion gate 实验：FACT_CARD 已召回但仍选错 sibling，服务级 `0/5 PASS`，不建议提交对应代码。
 39. （已完成）fresh eval 2 terminal unit 设计：已明确下一步转向 compile/index 层 structured terminal assignment evidence unit materialization；第一阶段先生成 terminal units 并进入 FTS 检索，禁止继续叠 query fallback gate。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/structured_terminal_evidence_unit_materialization_design_report.md`。
-40. （后续）fresh eval 2 terminal unit 第一阶段实现：展开 FACT_ENUM / key_value_list / path-aware items 为 terminal units，接入 FTS，使用 unit identity 避免 sibling 折叠；field label/alias/description 只能来自源文件与通用结构规则。
-41. （后续）terminal unit agentD 验证：先验证 `FQ3/FQ4/FQ6/FG1/FG2` 是否命中目标 unit 且 answer claim 命中；通过后再跑完整 Public Eval 2、Q6 terminal field alias 保护和 S2 chunk/anchor identity 保护。
-42. （后续，独立线）Query 主链复杂度治理：terminal unit Phase 1A 验收通过后单开一轮，降低 AnswerGeneration 继承链深度，治理 `.contains()` 规则分流，冻结 query fallback 主链不再接受新 gate 式补丁。此线不与 terminal unit Phase 1A 并行改代码。详见 `docs/test/knowledge-base-e2e/eval-validation-roadmap.md`。
-43. （后续）状态摘要接入人工确认队列：Dashboard 摘要展示 `compile_article_review_queue` 待处理计数。
-44. （后续）SWIP 两文档重建验收：验证 clean rebuild 全链路在人工确认队列就位后的正确性。
-45. （后续）审查/修复轮次展示：前端进度卡片接入 StateGraph 实际执行轮数。
-46. （后续）LLM approved 正向 canary 观察。
-47. （后续）Fixer→Re-reviewer loop runtime 验证。
+40. （已完成）fresh eval 2 terminal unit Phase 1A 实现：FACT_ENUM / key_value_list / path-aware items 展开为 terminal units，接入 FTS，使用 unit identity。已提交 `711eafe`。详见 `terminal_unit_phase1b_ranking_fix_result_report.md`。
+41. （已完成）terminal unit Phase 1B：Reranker + redline fix + config binding fix。已提交 `2fee343`。
+42. （已完成）terminal unit Phase 1C Layer 1：中文 N-gram alias 物化。已提交 `2fee343`。
+43. （已完成）terminal unit Phase 1C Extractor Fix：XLSX/CSV 结构化行输出。已提交 `03ae48c`。
+44. （待提交）terminal unit Phase 1C LIKE Token Budget Fix：`MAX_LIKE_TOKENS 8→32` + CJK 评分倒置。工程+服务验证通过。redline BLOCKER=0，全量 965/0/0。建议作为 commit 4 提交。
+45. （后续）terminal unit Phase 1C Layer 2 sibling context：在 Materializer 中利用同 parentPath sibling descriptor（如 type="精密仪器"）为英文字段 terminal unit 补充中文上下文 alias/description。目标是让 "精密仪器" token 能匹配到 equipment_types[1].max_borrow_days。详见 `terminal_unit_phase1c_xlsx_like_token_budget_clean_verification_report.md` 第 12 节。
+46. （后续）terminal unit Phase 1C Layer 3 LLM alias（可选，视 Layer 2 效果决定）：调用 compile-stage LLM 为英文字段名生成中文别名。详见 `terminal_unit_phase1c_field_alias_materialization_design_report.md` 第 5.1 节 Layer 3。
+47. （后续）YAML 5 题 agentD 验证：Layer 2 实现后，验证 FQ3/FQ4/FQ6/FG1/FG2 目标 terminal unit 是否进入 topK。
+48. （后续）Public Eval 1 Q6/S2 保护回归：当前库仅含 Public Eval 2 资料，后续需在完整库上单独验证 Q6 terminal field alias + S2 chunk identity。
+49. （后续，独立线）Query 主链复杂度治理：terminal unit Phase 1 验收通过后单开一轮，降低 AnswerGeneration 继承链深度，治理 `.contains()` 规则分流，冻结 query fallback 主链不再接受新 gate 式补丁。此线不与 terminal unit Phase 1 并行改代码。详见 `docs/test/knowledge-base-e2e/eval-validation-roadmap.md`。
+50. （后续）状态摘要接入人工确认队列：Dashboard 摘要展示 `compile_article_review_queue` 待处理计数。
+51. （后续）SWIP 两文档重建验收：验证 clean rebuild 全链路在人工确认队列就位后的正确性。
+52. （后续）审查/修复轮次展示：前端进度卡片接入 StateGraph 实际执行轮数。
+53. （后续）LLM approved 正向 canary 观察。
+54. （后续）Fixer→Re-reviewer loop runtime 验证。
 
 ## 更新规则
 
