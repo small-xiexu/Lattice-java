@@ -1,6 +1,6 @@
 # 项目质量打磨进度与踩坑台账
 
-更新时间：2026-05-31（agentC 同步 2888796 QueryResponse 构造器收敛与 DTO 审计提交后的状态）
+更新时间：2026-05-31（新增模型契约注释与 Lombok 治理计划）
 
 本台账记录质量打磨、Query/SWIP eval、baseline 修复与多 agent 协作的当前状态。后续推进前先读本文件；阶段结论变化后必须回写。
 
@@ -14,8 +14,8 @@
 - SWIP BANK-SETTLEMENT focus snippet 主线：副作用复核已通过，结论为可保留。`swip_focus_snippet_patch_side_effect_review_report.md` 确认：redline BLOCKER=0，BANK-SETTLEMENT-001 三轮稳定 PASS，保护 case 三轮稳定 PASS，无新增稳定回归。
 - 报告 cleanup：本轮按 `report_cleanup_plan_after_bank_settlement_focus_snippet.md` 执行清理，删除 4 个过期中间报告，详见 `report_cleanup_after_bank_settlement_focus_snippet_result.md`。
 - 拆分提交与最终门禁（2026-05-31）：四个主题拆分提交（Phase 1I fused order + field alias enricher + SERVER_DIR source 移除 + admin SERVER_DIR 移除）已完成。最终门禁报告 `post_split_commits_final_gate_report.md` 确认：redline `BLOCKER=0`、mvn test `995/0/0/0`、四个拆分 commit 后工程基线 PASS。详见该报告。
-- 当前工作区剩余未提交：`docs/模型绑定配置参考.md`（私有配置，永远排除）、`special_cases_report.md`（redline 输出，不提交）、Phase 1D/1E/1F/1G 历史报告 22 个（untracked，全部建议归档提交，详见 `phase1d_1g_report_archive_review_report.md`）、`current_remaining_work_and_report_archive_status.md`（untracked，状态台账）、`phase1d_1g_report_archive_review_report.md`（untracked，本轮归档审查）。
-- QueryResponse 构造器收敛与字段契约注释已提交 `2888796`：类级 `@Getter`、唯一 `@JsonCreator` 全参构造器、`@Builder`、删除历史短构造器、所有调用点迁移为 builder。定向测试 34/0/0/0。DTO 分析报告 `dto_field_javadoc_lombok_refactor_analysis_report.md` 已随提交归档。下一步推广到 `QuerySourceResponse` / `QueryArticleResponse`。
+- 当前工作区剩余未提交：`docs/模型绑定配置参考.md`（私有配置，永远排除）、`special_cases_report.md`（redline 输出，不提交）、`docs/plans/2026-05-31-模型契约注释与Lombok治理计划.md`、`docs/reports/model_contract_javadoc_lombok_plan_review_analysis_report.md`、`docs/reports/model_contract_javadoc_lombok_plan_review_analysis_report_v2.md`。
+- QueryResponse 构造器收敛与字段契约注释已提交 `2888796`：类级 `@Getter`、唯一 `@JsonCreator` 全参构造器、`@Builder`、删除历史短构造器、所有调用点迁移为 builder。定向测试 34/0/0/0。DTO 分析报告 `dto_field_javadoc_lombok_refactor_analysis_report.md` 已随提交归档。`QuerySourceResponse` / `QueryArticleResponse` 已提交 `b38acdc`，后续全项目 DTO/domain/entity/config 契约治理统一按 `docs/plans/2026-05-31-模型契约注释与Lombok治理计划.md` 分批推进并回写。
 - compile review observability：后台可观测性改动已完成，API 与后台 UI 均已验证通过。验证报告见 `compile_review_observability_verification_report.md`，fix result report 见 `compile_review_observability_fix_result_report.md`。
 - compile review persist gate：`PersistArticlesNode` 已修复，不再合并 `needsHumanReviewArticlesRef`，只允许 `review_status=passed` 的 article 进入正式 persist。测试补强已完成，新增 `PersistArticlesNodeTests` 覆盖混合 status 旧风险路径。详见 `compile_review_persist_gate_fix_result_report.md`、`compile_review_persist_gate_runtime_verification_report.md`、`compile_review_persist_gate_test_result_report.md`。
 - compile review query visibility hard filter：5 条 article-backed 通道 SQL 已增加 `review_status='passed' AND lifecycle='ACTIVE'` 条件，RefKey/ArticleChunk 的 OR 条件已用括号包裹防止绕过。source/source_chunk/fact_card 未修改。最终验证通过：redline BLOCKER=0、article-backed 定向测试 8/0/0、source/fact card 定向测试 33/0/0、全量 mvn test=814/0/0。详见 `compile_review_query_visibility_filter_verification_report.md`。
@@ -299,14 +299,15 @@
 53. （后续）LLM approved 正向 canary 观察。
 54. （后续）Fixer→Re-reviewer loop runtime 验证。
 55. （后续）S2 agentD 完整知识库端到端验收：清库/重建/导入资料后，至少回归 Q1-Q12、S1-S4、S2 搜索展示与 Q6 保护场景。
-56. （已完成，QueryResponse 试点）DTO 字段注释/Lombok 改造审计：分析报告已随 `2888796` 提交归档。QueryResponse 试点已完成（@Getter + @JsonCreator + @Builder）。下一步推广到 `QuerySourceResponse` / `QueryArticleResponse`。
-57. （已完成评估，待提交）Phase 1D/1E/1F/1G 历史报告归档：22 个 untracked 报告已完成只读审计，全部建议归档提交（无敏感内容、无 eval 污染）。详见 `phase1d_1g_report_archive_review_report.md`。建议单次提交 22+2 个文档。
+56. （已完成）DTO 字段注释/Lombok B0 试点：`QueryResponse` 已提交 `2888796`；`QuerySourceResponse` / `QueryArticleResponse` 已提交 `b38acdc`。当前后续治理以 `docs/plans/2026-05-31-模型契约注释与Lombok治理计划.md` 为唯一推进台账。
+57. （已完成）Phase 1D/1E/1F/1G 历史报告归档：22 个历史报告与归档审计已提交 `306e37c`。详见 `phase1d_1g_report_archive_review_report.md`。
 58. （已完成）Phase 1I fused order conclusion fix：已提交 `56b0274`。pre-commit 质量复核通过。YAML 5 题 0/5→4/5，Answer Accuracy 10→12/15，Hallucination 5→2。
 59. （已完成）Field alias enricher（LLM 别名增强器）：已提交 `90ad165`。
 60. （已完成）SERVER_DIR 移除：已提交 `fa8b883`（source）+ `35bf769`（admin）。
 61. （已完成）拆分后最终门禁报告：已提交 `305bfc6`。redline BLOCKER=0，mvn test 995/0/0/0，工程基线 PASS。
 62. （已完成）拆分提交 pre-commit 质量复核：已输出 `terminal_unit_phase1i_pre_commit_quality_review_report.md`，确认无 case 特判/业务词硬编码/eval 污染，当前工作区 7 组变更需拆分为 4 个独立 commit。该复核建议已被采纳执行。
-63. （已完成）QueryResponse 构造器收敛与字段契约注释：已提交 `2888796`。DTO 分析报告已归档。下一步推广 QuerySourceResponse / QueryArticleResponse。
+63. （已完成）Query source/article 响应 DTO 契约收敛：已提交 `b38acdc`，B0 pre-commit 质量审查 PASS。
+64. （二审 PASS，已定稿）模型契约注释与 Lombok 全项目治理计划：已新增 `docs/plans/2026-05-31-模型契约注释与Lombok治理计划.md`，覆盖 API DTO、domain model、entity-like model、config/properties、graph/state 类。agentB 二审报告 `model_contract_javadoc_lombok_plan_review_analysis_report_v2.md` 结论为 PASS；计划已按非阻塞建议完成微调，后续作为唯一推进台账，按 B0.5-B20 批次推进并回写。
 
 ## 更新规则
 
