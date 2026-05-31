@@ -169,7 +169,6 @@ class AdminPageControllerTests {
                 .andExpect(content().string(containsString("data-tab-scroll=\"true\"")))
                 .andExpect(content().string(containsString("id=\"settings-overview-board\"")))
                 .andExpect(content().string(containsString("id=\"vector-maintenance-card\"")))
-                .andExpect(content().string(containsString("id=\"create-server-source\"")))
                 .andExpect(content().string(containsString("id=\"rebuild-chunks\"")))
                 .andExpect(content().string(containsString("id=\"refresh-vector-status\"")))
                 .andExpect(content().string(containsString("id=\"vector-status-summary\"")))

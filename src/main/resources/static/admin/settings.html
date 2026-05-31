@@ -463,12 +463,12 @@
                             <div class="panel-title-row">
                                 <div>
                                     <h2>高级维护</h2>
-                                    <p>Git 仓库导入和私有凭据选择都放到工作台。这里收敛低频运维动作：问答检索调参、服务器目录资料源和知识切片重建。</p>
+                                    <p>Git 仓库导入和私有凭据选择都放到工作台。这里收敛低频运维动作：问答检索调参和知识切片重建。</p>
                                 </div>
                             </div>
                             <div class="help-inline-note top-gap">
                                 <strong>这里只放低频动作</strong>
-                                <p>只有在你明确要微调检索、接部署机目录，或者切片策略发生变化时，才需要使用这里。普通文件上传、Git 导入、向量配置和日常问答，都不应该从这里开始。</p>
+                                <p>只有在你明确要微调检索，或者切片策略发生变化时，才需要使用这里。普通文件上传、Git 导入、向量配置和日常问答，都不应该从这里开始。</p>
                             </div>
 
                             <div class="sub-panel top-gap">
@@ -539,35 +539,12 @@
                         <section class="panel">
                             <div class="panel-title-row">
                                 <div>
-                                    <h2>服务器目录与知识切片</h2>
-                                    <p>这些属于更偏运维的维护入口。只有在要接部署机目录，或者切片策略发生变化时，才需要使用。</p>
+                                    <h2>知识切片重建</h2>
+                                    <p>只有在切片策略发生变化时，才需要手动触发知识切片重建。</p>
                                 </div>
                             </div>
 
                             <div class="compile-layout settings-sources-layout top-gap">
-                                <div class="sub-panel">
-                                    <h3>服务器目录资料源</h3>
-                                    <p class="muted">把一个固定目录注册成资料源，并立即触发一次同步。适合长期维护的部署机目录或挂载目录，不是终端用户电脑本地文件夹。</p>
-                                    <div class="form-grid top-gap">
-                                        <label>
-                                            <span>资料源名称</span>
-                                            <input id="server-source-name" type="text" placeholder="Payments Docs">
-                                        </label>
-                                        <label>
-                                            <span>资料源编码（可选）</span>
-                                            <input id="server-source-code" type="text" placeholder="payments-docs">
-                                        </label>
-                                        <label class="field-span-2">
-                                            <span>服务器目录</span>
-                                            <input id="server-source-dir" type="text" placeholder="/path/to/source-dir">
-                                        </label>
-                                    </div>
-                                    <div class="button-row wrap top-gap">
-                                        <button id="create-server-source" class="primary-btn" type="button">创建并立即同步</button>
-                                        <a class="ghost-link" href="/admin">回工作台</a>
-                                    </div>
-                                </div>
-
                                 <div class="sub-panel">
                                     <h3>知识切片重建</h3>
                                     <p class="muted">只有在资料结构变化明显、切片策略调整，或者向量索引需要整体重做时，才需要人工触发。</p>
@@ -592,7 +569,7 @@
                             <details class="advanced-panel" data-help-faq-key="default-warning">
                                 <summary>哪些配置不要随便改</summary>
                                 <div class="advanced-panel-body">
-                                <p class="muted">如果你现在只是想导资料、看结果、直接提问，通常不要动这里。系统配置主要给模型与向量、OCR、服务器目录资料源和后台维护使用；看不懂某个字段时，先保持默认值，不要为了“试试”去改生产配置。</p>
+                                <p class="muted">如果你现在只是想导资料、看结果、直接提问，通常不要动这里。系统配置主要给模型与向量、OCR 和后台维护使用；看不懂某个字段时，先保持默认值，不要为了”试试”去改生产配置。</p>
                                 <div class="help-action-row">
                                         <a class="secondary-btn" href="/admin">返回工作台</a>
                                 </div>
@@ -652,9 +629,9 @@
                             </details>
 
                             <details class="advanced-panel" data-help-faq-key="sources-maintenance">
-                                <summary>服务器目录资料源和知识切片重建什么时候才需要用</summary>
+                                <summary>知识切片重建什么时候才需要用</summary>
                                 <div class="advanced-panel-body">
-                                    <p class="muted">这两项都属于偏运维动作。只有在你明确要接部署机目录，或者切片策略、资料结构发生大变化时，才需要使用；普通文件上传、Git 导入和日常问答，都不应该从这里开始。</p>
+                                    <p class="muted">只有在切片策略、资料结构发生大变化时，才需要使用知识切片重建；普通文件上传、Git 导入和日常问答，都不应该从这里开始。</p>
                                     <div class="help-action-row">
                                         <button class="secondary-btn" type="button" data-tab-open="settings-sources">去高级资料源与维护</button>
                                     </div>

@@ -42,7 +42,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.query.cache.store=in-memory",
         "lattice.compiler.jobs.worker-enabled=false",
-        "lattice.source.admin.allowed-server-dirs[0]=${java.io.tmpdir}"
 })
 @AutoConfigureMockMvc
 class AdminProcessingTaskControllerTests {
@@ -258,69 +257,6 @@ class AdminProcessingTaskControllerTests {
         assertThat(rootNode.path("summary").path("cards").get(1).path("note").asText())
                 .isEqualTo("涉及 1 个处理任务，请打开下方任务继续人工确认");
         assertThat(rootNode.path("summary").path("succeededCount").asInt()).isZero();
-    }
-
-    /**
-     * 验证目录资料源同步会进入统一处理任务列表。
-     *
-     * @param tempDir 临时目录
-     * @throws Exception 测试异常
-     */
-    @Test
-    void shouldExposeServerDirSyncInProcessingTasks(@TempDir Path tempDir) throws Exception {
-        resetTables();
-        Path serverDir = Files.createDirectories(tempDir.resolve("server-reference"));
-        Files.writeString(
-                serverDir.resolve("guide.md"),
-                "# Guide\n\nruntime config",
-                StandardCharsets.UTF_8
-        );
-
-        String sourceResponseBody = mockMvc.perform(post("/api/v1/admin/sources/server-dir")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "sourceCode": "server-reference",
-                                  "name": "Server Reference",
-                                  "contentProfile": "DOCUMENT",
-                                  "serverDir": "%s"
-                                }
-                                """.formatted(serverDir.toString().replace("\\", "\\\\"))))
-                .andExpect(status().isOk())
-                .andReturn()
-                .getResponse()
-                .getContentAsString(StandardCharsets.UTF_8);
-        Long sourceId = readLong(sourceResponseBody, "id");
-
-        String syncResponseBody = mockMvc.perform(post("/api/v1/admin/sources/" + sourceId + "/sync"))
-                .andExpect(status().isOk())
-                .andReturn()
-                .getResponse()
-                .getContentAsString(StandardCharsets.UTF_8);
-        Long runId = readLong(syncResponseBody, "runId");
-        String compileJobId = readText(syncResponseBody, "compileJobId");
-
-        String responseBody = mockMvc.perform(get("/api/v1/admin/processing-tasks?limit=10"))
-                .andExpect(status().isOk())
-                .andReturn()
-                .getResponse()
-                .getContentAsString(StandardCharsets.UTF_8);
-        JsonNode rootNode = OBJECT_MAPPER.readTree(responseBody);
-
-        assertThat(rootNode.path("summary").path("runningCount").asInt()).isEqualTo(1);
-        assertThat(rootNode.path("items").size()).isEqualTo(1);
-        JsonNode sourceSyncTask = findTaskByType(rootNode.path("items"), "SOURCE_SYNC");
-        assertThat(sourceSyncTask).isNotNull();
-        assertThat(sourceSyncTask.path("runId").asLong()).isEqualTo(runId.longValue());
-        assertThat(sourceSyncTask.path("sourceId").asLong()).isEqualTo(sourceId.longValue());
-        assertThat(sourceSyncTask.path("sourceName").asText()).isEqualTo("Server Reference");
-        assertThat(sourceSyncTask.path("sourceType").asText()).isEqualTo("SERVER_DIR");
-        assertThat(sourceSyncTask.path("status").asText()).isEqualTo("COMPILE_QUEUED");
-        assertThat(sourceSyncTask.path("compileDerivedStatus").asText()).isEqualTo("QUEUED");
-        assertThat(sourceSyncTask.path("compileJobId").asText()).isEqualTo(compileJobId);
-        assertThat(sourceSyncTask.path("displayStatus").asText()).isEqualTo("QUEUED");
-        assertThat(sourceSyncTask.path("processingActive").asBoolean()).isTrue();
-        assertThat(rootNode.path("items").findValuesAsText("compileJobId")).containsExactly(compileJobId);
     }
 
     /**

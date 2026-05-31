@@ -20,7 +20,6 @@
     }
 
     function bindEvents() {
-        bindIfPresent("create-server-source", "click", createServerSourceAndSync);
         bindIfPresent("rebuild-chunks", "click", rebuildChunks);
     }
 
@@ -30,35 +29,6 @@
             return;
         }
         element.addEventListener(eventName, handler);
-    }
-
-    async function createServerSourceAndSync() {
-        const name = document.getElementById("server-source-name").value.trim();
-        const sourceCode = document.getElementById("server-source-code").value.trim();
-        const serverDir = document.getElementById("server-source-dir").value.trim();
-        if (!name || !serverDir) {
-            setStatus("请先填写资料源名称和服务器目录", "warning");
-            return;
-        }
-        try {
-            const source = await fetchJson("/api/v1/admin/sources/server-dir", {
-                method: "POST",
-                body: JSON.stringify({
-                    sourceCode: sourceCode || null,
-                    name: name,
-                    contentProfile: "DOCUMENT",
-                    serverDir: serverDir
-                })
-            });
-            await fetchJson("/api/v1/admin/sources/" + encodeURIComponent(source.id) + "/sync", {
-                method: "POST"
-            });
-            clearServerSourceForm();
-            redirectToKnowledgeManagement(source.id);
-        }
-        catch (error) {
-            showError("创建服务器目录资料源失败", error);
-        }
     }
 
     async function rebuildChunks() {
@@ -78,21 +48,4 @@
         }
     }
 
-    function clearServerSourceForm() {
-        document.getElementById("server-source-name").value = "";
-        document.getElementById("server-source-code").value = "";
-        document.getElementById("server-source-dir").value = "";
-    }
-
-    function redirectToKnowledgeManagement(sourceId) {
-        if (!sourceId) {
-            window.location.assign("/admin");
-            return;
-        }
-        const params = new URLSearchParams();
-        params.set("tab", "knowledge-runs");
-        params.set("sourceId", String(sourceId));
-        params.set("notice", "server-dir-created");
-        window.location.assign("/admin?" + params.toString());
-    }
 })();

@@ -130,6 +130,10 @@ class SettingsPageJsRuntimeTests {
                     "synthesizer role should expose localized summary");
                 assert(settingsPage.getBindingRoleOptions("deep_research").length === 4,
                     "deep research scene should expose four role options");
+                const compileRoles = settingsPage.getBindingRoleOptions("compile")
+                    .map(function (role) { return role.value; });
+                assert(compileRoles.indexOf("field-alias-enricher") >= 0,
+                    "compile scene should expose field alias enricher role option");
                 settingsPage.activateSettingsTab("settings-parse", { scroll: true });
                 assert(adminTabsCalls.length === 1,
                     "settings page should delegate tab activation to AdminTabs");

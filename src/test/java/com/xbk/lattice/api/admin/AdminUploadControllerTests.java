@@ -729,7 +729,7 @@ class AdminUploadControllerTests {
                 null,
                 "docs-source",
                 "Docs Source",
-                "SERVER_DIR",
+                "GIT",
                 "DOCUMENT",
                 "ACTIVE",
                 "NORMAL",
