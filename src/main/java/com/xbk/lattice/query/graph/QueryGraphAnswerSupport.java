@@ -282,21 +282,21 @@ abstract class QueryGraphAnswerSupport extends QueryGraphRetrievalSupport {
         return queryGraphConditions.routeAfterCitationCheck(state, report);
     }
     protected QueryResponse withQueryId(QueryResponse queryResponse, String queryId) {
-        return new QueryResponse(
-                queryResponse.getAnswer(),
-                queryResponse.getSources(),
-                queryResponse.getArticles(),
-                queryId,
-                queryResponse.getReviewStatus(),
-                queryResponse.getAnswerOutcome(),
-                queryResponse.getGenerationMode(),
-                queryResponse.getModelExecutionStatus(),
-                queryResponse.getCitationCheck(),
-                queryResponse.getDeepResearch(),
-                queryResponse.getFallbackReason(),
-                queryResponse.getCitationMarkers(),
-                queryResponse.getStructuredEvidence()
-        );
+        return QueryResponse.builder()
+                .answer(queryResponse.getAnswer())
+                .sources(queryResponse.getSources())
+                .articles(queryResponse.getArticles())
+                .queryId(queryId)
+                .reviewStatus(queryResponse.getReviewStatus())
+                .answerOutcome(queryResponse.getAnswerOutcome())
+                .generationMode(queryResponse.getGenerationMode())
+                .modelExecutionStatus(queryResponse.getModelExecutionStatus())
+                .citationCheck(queryResponse.getCitationCheck())
+                .deepResearch(queryResponse.getDeepResearch())
+                .fallbackReason(queryResponse.getFallbackReason())
+                .citationMarkers(queryResponse.getCitationMarkers())
+                .structuredEvidence(queryResponse.getStructuredEvidence())
+                .build();
     }
     protected boolean isCacheableOutcome(AnswerOutcome answerOutcome) {
         return answerOutcome == AnswerOutcome.SUCCESS;

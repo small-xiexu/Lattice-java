@@ -68,18 +68,16 @@ class RedisQueryWorkingSetStoreTests {
                 new LinkedHashMap<String, Double>(Map.of(RetrievalStrategyResolver.CHANNEL_FTS, 1.1D)),
                 new LinkedHashSet<String>(List.of(RetrievalStrategyResolver.CHANNEL_FTS))
         );
-        QueryResponse queryResponse = new QueryResponse(
-                "retry=3 [[payment-timeout]]",
-                List.of(),
-                List.of(),
-                "query-1",
-                "PASSED",
-                AnswerOutcome.SUCCESS,
-                GenerationMode.LLM,
-                ModelExecutionStatus.SUCCESS,
-                null,
-                null
-        );
+        QueryResponse queryResponse = QueryResponse.builder()
+                .answer("retry=3 [[payment-timeout]]")
+                .sources(List.of())
+                .articles(List.of())
+                .queryId("query-1")
+                .reviewStatus("PASSED")
+                .answerOutcome(AnswerOutcome.SUCCESS)
+                .generationMode(GenerationMode.LLM)
+                .modelExecutionStatus(ModelExecutionStatus.SUCCESS)
+                .build();
         Citation citation = new Citation(
                 1,
                 "[[payment-timeout]]",

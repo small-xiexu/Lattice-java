@@ -104,7 +104,13 @@ class AdminVectorConfigControllerTests {
     @Test
     void shouldPersistVectorConfigAndApplyToRuntimeImmediately() throws Exception {
         resetTables();
-        queryCacheStore.put("cached-question", new QueryResponse("cached", List.of(), List.of(), null, "PASSED"));
+        QueryResponse cachedResponse = QueryResponse.builder()
+                .answer("cached")
+                .sources(List.of())
+                .articles(List.of())
+                .reviewStatus("PASSED")
+                .build();
+        queryCacheStore.put("cached-question", cachedResponse);
 
         mockMvc.perform(put("/api/v1/admin/vector/config")
                         .contentType(APPLICATION_JSON)

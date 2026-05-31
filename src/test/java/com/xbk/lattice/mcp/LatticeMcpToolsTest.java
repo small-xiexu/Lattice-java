@@ -60,13 +60,13 @@ class LatticeMcpToolsTest {
     @Test
     void queryShouldReturnJsonWithAnswerAndQueryId() {
         QuerySourceResponse source = new QuerySourceResponse("concept-1", "Payment Timeout", List.of("payment/analyze.json"));
-        QueryResponse response = new QueryResponse(
-                "retry=3",
-                List.of(source),
-                List.of(new QueryArticleResponse("concept-1", "Payment Timeout")),
-                "query-id-001",
-                "PASSED"
-        );
+        QueryResponse response = QueryResponse.builder()
+                .answer("retry=3")
+                .sources(List.of(source))
+                .articles(List.of(new QueryArticleResponse("concept-1", "Payment Timeout")))
+                .queryId("query-id-001")
+                .reviewStatus("PASSED")
+                .build();
         LatticeMcpTools tools = new LatticeMcpTools(
                 new FixedQueryFacadeService(response),
                 new UnsupportedPendingQueryManager()
@@ -160,13 +160,13 @@ class LatticeMcpToolsTest {
      */
     @Test
     void queryShouldEscapeSpecialCharsInAnswer() {
-        QueryResponse response = new QueryResponse(
-                "配置为 \"retry=3\"",
-                List.of(),
-                List.of(),
-                "query-id-002",
-                "PASSED"
-        );
+        QueryResponse response = QueryResponse.builder()
+                .answer("配置为 \"retry=3\"")
+                .sources(List.of())
+                .articles(List.of())
+                .queryId("query-id-002")
+                .reviewStatus("PASSED")
+                .build();
         LatticeMcpTools tools = new LatticeMcpTools(
                 new FixedQueryFacadeService(response),
                 new UnsupportedPendingQueryManager()

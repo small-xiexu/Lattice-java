@@ -40,11 +40,15 @@ class RedisQueryCacheStoreTests {
                 new ObjectMapper(),
                 properties
         );
-        QueryResponse queryResponse = new QueryResponse(
-                "Payment Timeout：retry=3",
-                List.of(new QuerySourceResponse("payment-timeout", "Payment Timeout", List.of("payment/analyze.json"))),
-                List.of(new QueryArticleResponse("payment-timeout", "Payment Timeout"))
-        );
+        QueryResponse queryResponse = QueryResponse.builder()
+                .answer("Payment Timeout：retry=3")
+                .sources(List.of(new QuerySourceResponse(
+                        "payment-timeout",
+                        "Payment Timeout",
+                        List.of("payment/analyze.json")
+                )))
+                .articles(List.of(new QueryArticleResponse("payment-timeout", "Payment Timeout")))
+                .build();
 
         redisQueryCacheStore.put(CACHE_KEY, queryResponse);
         Optional<QueryResponse> cachedResponse = redisQueryCacheStore.get(CACHE_KEY);
@@ -72,13 +76,12 @@ class RedisQueryCacheStoreTests {
                 new ObjectMapper(),
                 properties
         );
-        QueryResponse queryResponse = new QueryResponse(
-                "cached",
-                List.of(),
-                List.of(),
-                null,
-                "PASSED"
-        );
+        QueryResponse queryResponse = QueryResponse.builder()
+                .answer("cached")
+                .sources(List.of())
+                .articles(List.of())
+                .reviewStatus("PASSED")
+                .build();
 
         redisQueryCacheStore.put("question-a", queryResponse);
         redisQueryCacheStore.put("question-b", queryResponse);

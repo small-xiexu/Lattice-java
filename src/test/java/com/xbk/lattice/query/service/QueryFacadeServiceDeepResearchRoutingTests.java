@@ -135,7 +135,11 @@ class QueryFacadeServiceDeepResearchRoutingTests {
 
         private FixedQueryGraphOrchestrator(String answer) {
             super(null, null, null, null, new QueryReviewProperties(), null);
-            this.queryResponse = new QueryResponse(answer, List.of(), List.of());
+            this.queryResponse = QueryResponse.builder()
+                    .answer(answer)
+                    .sources(List.of())
+                    .articles(List.of())
+                    .build();
         }
 
         @Override
@@ -162,7 +166,11 @@ class QueryFacadeServiceDeepResearchRoutingTests {
 
         private FixedDeepResearchOrchestrator(String answer) {
             super(new DeepResearchRouter(), null, null, null, null, null, null, null, null, null);
-            this.queryResponse = new QueryResponse(answer, List.of(), List.of());
+            this.queryResponse = QueryResponse.builder()
+                    .answer(answer)
+                    .sources(List.of())
+                    .articles(List.of())
+                    .build();
         }
 
         @Override
