@@ -42,6 +42,15 @@ final class AnswerFallbackConclusionBuilder {
             List<QueryArticleHit> fallbackHits,
             List<String> queryTokens
     ) {
+        return buildEvidenceConclusionLines(question, fallbackHits, queryTokens, null);
+    }
+
+    List<String> buildEvidenceConclusionLines(
+            String question,
+            List<QueryArticleHit> fallbackHits,
+            List<String> queryTokens,
+            List<QueryArticleHit> queryArticleHits
+    ) {
         List<String> comparisonOptions = support.extractComparisonOptions(question);
         if (comparisonOptions.size() >= 2) {
             List<String> comparisonLines = buildComparisonFallbackConclusionLines(
@@ -54,7 +63,7 @@ final class AnswerFallbackConclusionBuilder {
                 return comparisonLines;
             }
         }
-        return buildGeneralFallbackConclusionLines(question, fallbackHits, queryTokens);
+        return buildGeneralFallbackConclusionLines(question, fallbackHits, queryTokens, queryArticleHits);
     }
 
     /**
@@ -198,7 +207,8 @@ final class AnswerFallbackConclusionBuilder {
     private List<String> buildGeneralFallbackConclusionLines(
             String question,
             List<QueryArticleHit> fallbackHits,
-            List<String> queryTokens
+            List<String> queryTokens,
+            List<QueryArticleHit> queryArticleHits
     ) {
         List<String> conclusionLines = new ArrayList<String>();
         if (fallbackHits == null || fallbackHits.isEmpty()) {
@@ -234,6 +244,10 @@ final class AnswerFallbackConclusionBuilder {
         List<String> exactStructuredListLines = support.buildExactStructuredListConclusionLines(question, fallbackHits);
         if (!exactStructuredListLines.isEmpty()) {
             return exactStructuredListLines;
+        }
+        List<String> terminalUnitLines = buildTerminalUnitExactConclusionLines(fallbackHits, queryTokens, queryArticleHits);
+        if (!terminalUnitLines.isEmpty()) {
+            return terminalUnitLines;
         }
         List<String> aggregatedConclusionLines = support.buildAggregatedEvidenceConclusionLines(question, fallbackHits, queryTokens);
         if (!aggregatedConclusionLines.isEmpty()
@@ -294,6 +308,152 @@ final class AnswerFallbackConclusionBuilder {
                     + support.joinConclusionCitations(List.of(secondaryHit)));
         }
         return conclusionLines;
+    }
+
+    /**
+     * 从 fallback hits 中提取 terminal unit 的 displayText exact line 作为结论。
+     *
+     * 扫描所有 fallback hits，找到第一个 query-focused terminal unit，
+     * 从其 content 中提取 keyPath = value 格式的精确行。
+     */
+    private List<String> buildTerminalUnitExactConclusionLines(
+            List<QueryArticleHit> fallbackHits,
+            List<String> queryTokens,
+            List<QueryArticleHit> queryArticleHits
+    ) {
+        double bestScore = Double.NEGATIVE_INFINITY;
+        QueryArticleHit bestCandidate = null;
+        String bestExactLine = "";
+        for (QueryArticleHit fallbackHit : fallbackHits) {
+            if (!isTerminalUnitChannelHit(fallbackHit)) {
+                continue;
+            }
+            String exactLine = extractTerminalUnitExactLine(fallbackHit);
+            if (exactLine.isEmpty()) {
+                continue;
+            }
+            if (!isTerminalHitQueryFocused(fallbackHit, queryTokens)) {
+                continue;
+            }
+            double score = fusedOrderScore(fallbackHit, queryArticleHits);
+            if (bestCandidate == null || score > bestScore) {
+                bestScore = score;
+                bestCandidate = fallbackHit;
+                bestExactLine = exactLine;
+            }
+        }
+        if (bestCandidate == null) {
+            return List.of();
+        }
+        return List.of("Confirmed evidence: "
+                + bestExactLine
+                + " "
+                + support.joinConclusionCitations(List.of(bestCandidate)));
+    }
+
+    /**
+     * 将原始 fused order 转换为排序分数：order 越靠前分数越高。
+     * 无 queryArticleHits 时回退到 QueryArticleHit.getScore()。
+     */
+    private static double fusedOrderScore(QueryArticleHit hit, List<QueryArticleHit> queryArticleHits) {
+        if (queryArticleHits == null || queryArticleHits.isEmpty()) {
+            return hit.getScore();
+        }
+        int index = queryArticleHits.indexOf(hit);
+        if (index < 0) {
+            return -1.0D;
+        }
+        return (double) (queryArticleHits.size() - index);
+    }
+
+    /**
+     * 判断 terminal unit hit 与 query 是否相关。
+     *
+     * 检查 hit 的 content、metadata（fieldAliases、fieldDescription、displayText）
+     * 等通用证据文本是否包含 query token，而非只检查 displayText exact line。
+     * 这允许中文 query 匹配英文字段 terminal unit——中文 alias/description
+     * 提供相关性信号，而最终结论仍输出 exact displayText。
+     */
+    private static boolean isTerminalHitQueryFocused(
+            QueryArticleHit hit,
+            List<String> queryTokens
+    ) {
+        if (queryTokens == null || queryTokens.isEmpty()) {
+            return true;
+        }
+        String haystack = buildTerminalHitEvidenceHaystack(hit);
+        for (String token : queryTokens) {
+            if (token.length() >= 2 && haystack.contains(token.toLowerCase())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String buildTerminalHitEvidenceHaystack(QueryArticleHit hit) {
+        StringBuilder sb = new StringBuilder();
+        String content = hit.getContent();
+        if (content != null) {
+            sb.append(content.toLowerCase());
+        }
+        String metadataJson = hit.getMetadataJson();
+        if (metadataJson != null) {
+            sb.append(' ');
+            sb.append(metadataJson.toLowerCase());
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 从 terminal unit hit 的 content 中提取 keyPath = value 格式的精确行。
+     */
+    private static String extractTerminalUnitExactLine(QueryArticleHit hit) {
+        if (hit == null) {
+            return "";
+        }
+        String metadataJson = hit.getMetadataJson();
+        if (metadataJson != null) {
+            String displayText = extractJsonStringValue(metadataJson, "\"displayText\":");
+            if (!displayText.isBlank() && displayText.contains("=")) {
+                return displayText;
+            }
+        }
+        String content = hit.getContent();
+        if (content != null) {
+            for (String line : content.split("\n")) {
+                String trimmed = line.trim();
+                if (trimmed.contains(" = ") && !trimmed.startsWith("[") && !trimmed.startsWith("{")) {
+                    return trimmed;
+                }
+            }
+        }
+        return "";
+    }
+
+    /**
+     * 从 JSON 字符串中提取指定键的字符串值。
+     */
+    private static String extractJsonStringValue(String json, String marker) {
+        int markerIndex = json.indexOf(marker);
+        if (markerIndex < 0) {
+            return "";
+        }
+        int quoteStart = json.indexOf('"', markerIndex + marker.length());
+        if (quoteStart < 0) {
+            return "";
+        }
+        int quoteEnd = json.indexOf('"', quoteStart + 1);
+        if (quoteEnd < 0) {
+            return "";
+        }
+        return json.substring(quoteStart + 1, quoteEnd);
+    }
+
+    /**
+     * 判断命中是否来自 terminal unit FTS channel。
+     */
+    private static boolean isTerminalUnitChannelHit(QueryArticleHit hit) {
+        return TerminalUnitHitMetadataSupport.isTerminalUnitChannelHit(hit);
     }
 
     /**

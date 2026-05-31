@@ -68,12 +68,22 @@ String buildEvidenceMarkdown(String question, List<QueryArticleHit> queryArticle
             List<QueryArticleHit> fallbackHits,
             List<String> queryTokens
     ) {
+        return buildEvidenceConclusionLines(question, fallbackHits, queryTokens, null);
+    }
+
+    List<String> buildEvidenceConclusionLines(
+            String question,
+            List<QueryArticleHit> fallbackHits,
+            List<String> queryTokens,
+            List<QueryArticleHit> queryArticleHits
+    ) {
         List<String> terminalFieldExactPathLines =
                 buildTerminalFieldExactPathConclusionLines(question, fallbackHits, queryTokens);
         if (!terminalFieldExactPathLines.isEmpty()) {
             return terminalFieldExactPathLines;
         }
-        return answerFallbackConclusionBuilder.buildEvidenceConclusionLines(question, fallbackHits, queryTokens);
+        return answerFallbackConclusionBuilder.buildEvidenceConclusionLines(
+                question, fallbackHits, queryTokens, queryArticleHits);
     }
 
     /**

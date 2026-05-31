@@ -488,6 +488,9 @@ final class AnswerFallbackEvidenceSelector {
             boolean preferArticleEvidence
     ) {
         List<QueryArticleHit> filteredHits = new ArrayList<QueryArticleHit>();
+        List<String> highSignalTokens = preferArticleEvidence
+                ? QueryEvidenceRelevanceSupport.extractHighSignalTokens(question)
+                : List.of();
         for (QueryArticleHit queryArticleHit : QueryEvidenceRelevanceSupport.filterRelevantHits(question, queryArticleHits)) {
             if (queryArticleHit == null) {
                 continue;
@@ -495,6 +498,11 @@ final class AnswerFallbackEvidenceSelector {
             if (preferArticleEvidence
                     && queryArticleHit.getEvidenceType() != QueryEvidenceType.ARTICLE
                     && queryArticleHit.getEvidenceType() != QueryEvidenceType.CONTRIBUTION) {
+                if (queryArticleHit.getEvidenceType() == QueryEvidenceType.FACT_CARD
+                        && isTerminalUnitChannelHit(queryArticleHit)
+                        && isTerminalUnitQueryFocused(queryArticleHit, highSignalTokens)) {
+                    filteredHits.add(queryArticleHit);
+                }
                 continue;
             }
             filteredHits.add(queryArticleHit);
@@ -503,6 +511,56 @@ final class AnswerFallbackEvidenceSelector {
             filteredHits.addAll(selectQuestionScoredFallbackEvidenceHits(queryArticleHits, question, preferArticleEvidence));
         }
         return filteredHits;
+    }
+
+    /**
+     * 判断 terminal unit hit 是否与 query 高信号 token 相关。
+     *
+     * 检查 terminal hit 的 content、metadata displayText、fieldDescription
+     * 是否包含 query 高信号 token，作为 structed fact/exact lookup
+     * 问题类型检测之外的第二层终端 unit 聚焦判断。
+     */
+    private static boolean isTerminalUnitQueryFocused(
+            QueryArticleHit hit,
+            List<String> highSignalTokens
+    ) {
+        if (highSignalTokens == null || highSignalTokens.isEmpty()) {
+            return false;
+        }
+        String haystack = buildTerminalUnitEvidenceHaystack(hit);
+        for (String token : highSignalTokens) {
+            if (token.length() >= 2 && haystack.contains(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 构建 terminal unit hit 的通用证据文本，用于 query token 匹配。
+     */
+    private static String buildTerminalUnitEvidenceHaystack(QueryArticleHit hit) {
+        StringBuilder sb = new StringBuilder();
+        String content = hit.getContent();
+        if (content != null) {
+            sb.append(content.toLowerCase());
+        }
+        String metadataJson = hit.getMetadataJson();
+        if (metadataJson != null) {
+            sb.append(' ');
+            sb.append(metadataJson.toLowerCase());
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 判断命中是否来自 terminal unit FTS channel。
+     *
+     * 委托到 {@link TerminalUnitHitMetadataSupport} 做结构化 JSON 解析，
+     * 避免 JSONB 文本格式（compact vs spaced）导致 contains 匹配失败。
+     */
+    private static boolean isTerminalUnitChannelHit(QueryArticleHit hit) {
+        return TerminalUnitHitMetadataSupport.isTerminalUnitChannelHit(hit);
     }
 
     /**
@@ -530,7 +588,12 @@ final class AnswerFallbackEvidenceSelector {
             if (preferArticleEvidence
                     && queryArticleHit.getEvidenceType() != QueryEvidenceType.ARTICLE
                     && queryArticleHit.getEvidenceType() != QueryEvidenceType.CONTRIBUTION) {
-                continue;
+                if (queryArticleHit.getEvidenceType() != QueryEvidenceType.FACT_CARD
+                        || !isTerminalUnitChannelHit(queryArticleHit)
+                        || !isTerminalUnitQueryFocused(queryArticleHit,
+                                QueryEvidenceRelevanceSupport.extractHighSignalTokens(question))) {
+                    continue;
+                }
             }
             if (requiresRequestedIdentifierCoverage(question)
                     && !hitContainsRequestedIdentifier(question, queryArticleHit)) {
