@@ -503,7 +503,7 @@ public class AdminLlmConfigController {
 
     private static Map<String, List<String>> createSceneRoleOptions() {
         Map<String, List<String>> options = new LinkedHashMap<String, List<String>>();
-        options.put("compile", List.of("writer", "reviewer", "fixer"));
+        options.put("compile", List.of("writer", "reviewer", "fixer", "field-alias-enricher"));
         options.put("query", List.of("answer", "reviewer", "rewrite"));
         options.put("deep_research", List.of("planner", "researcher", "synthesizer", "reviewer"));
         return options;

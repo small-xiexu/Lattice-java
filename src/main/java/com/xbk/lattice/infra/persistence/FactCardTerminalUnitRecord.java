@@ -285,6 +285,69 @@ public class FactCardTerminalUnitRecord {
     }
 
     /**
+     * 创建仅替换 fieldAliasesJson 和 ftsText 的新记录，其余字段完全透传。
+     *
+     * @param newFieldAliasesJson 新字段别名 JSON
+     * @param newFtsText 新检索文本
+     * @return 新记录
+     */
+    public FactCardTerminalUnitRecord withFieldAliasesAndFtsText(
+            String newFieldAliasesJson,
+            String newFtsText
+    ) {
+        return withFieldAliasesFtsTextAndMetadata(newFieldAliasesJson, newFtsText, this.metadataJson);
+    }
+
+    /**
+     * 创建替换 fieldAliasesJson、ftsText 和 metadataJson 的新记录，其余字段完全透传。
+     *
+     * @param newFieldAliasesJson 新字段别名 JSON
+     * @param newFtsText 新检索文本
+     * @param newMetadataJson 新 metadata JSON
+     * @return 新记录
+     */
+    public FactCardTerminalUnitRecord withFieldAliasesFtsTextAndMetadata(
+            String newFieldAliasesJson,
+            String newFtsText,
+            String newMetadataJson
+    ) {
+        return new FactCardTerminalUnitRecord(
+                this.id,
+                this.unitId,
+                this.terminalUnitIdentity,
+                this.factCardId,
+                this.cardId,
+                this.sourceId,
+                this.sourceFileId,
+                this.sourceChunkIds,
+                this.articleIds,
+                this.cardType,
+                this.answerShape,
+                this.structure,
+                this.itemIndex,
+                this.keyPath,
+                this.parentPath,
+                this.terminalKey,
+                this.pathSegmentsJson,
+                this.fieldLabel,
+                newFieldAliasesJson,
+                this.fieldDescription,
+                this.displayText,
+                this.valueText,
+                this.normalizedValue,
+                this.valueType,
+                this.sourceRefsJson,
+                newFtsText,
+                newMetadataJson,
+                this.reviewStatus,
+                this.confidence,
+                this.contentHash,
+                this.createdAt,
+                this.updatedAt
+        );
+    }
+
+    /**
      * 获取主键。
      *
      * @return 主键

@@ -518,6 +518,66 @@ public class FactCardTerminalUnitMaterializer {
     }
 
     /**
+     * 基于已有 record 和新别名重建 ftsText。
+     *
+     * 在现有 ftsText 中定位旧别名段并替换为新别名段，保持其余部分不变。
+     * 由 FieldAliasEnricher 在修改别名后调用。
+     *
+     * @param record     现存 terminal unit record
+     * @param newAliases 新别名列表
+     * @return 新 ftsText
+     */
+    public String rebuildFtsText(FactCardTerminalUnitRecord record, List<String> newAliases) {
+        List<String> oldAliases = parseAliasesFromJson(record.getFieldAliasesJson());
+        String oldSegment = String.join(" ", oldAliases);
+        String newSegment = String.join(" ", newAliases);
+        String currentFtsText = record.getFtsText();
+        if (currentFtsText == null) {
+            currentFtsText = "";
+        }
+        if (oldSegment.isEmpty()) {
+            String trimmed = currentFtsText.trim();
+            return newSegment.isEmpty() ? trimmed : (trimmed + " " + newSegment).trim();
+        }
+        int idx = currentFtsText.indexOf(oldSegment);
+        if (idx < 0) {
+            return currentFtsText;
+        }
+        return (currentFtsText.substring(0, idx) + newSegment
+                + currentFtsText.substring(idx + oldSegment.length())).trim();
+    }
+
+    /**
+     * 从 fieldAliasesJson 中解析别名列表。
+     *
+     * @param fieldAliasesJson JSON 别名数组
+     * @return 别名列表
+     */
+    private List<String> parseAliasesFromJson(String fieldAliasesJson) {
+        if (!hasText(fieldAliasesJson)) {
+            return List.of();
+        }
+        try {
+            JsonNode node = OBJECT_MAPPER.readTree(fieldAliasesJson);
+            if (!node.isArray()) {
+                return List.of();
+            }
+            List<String> aliases = new ArrayList<String>();
+            for (JsonNode item : node) {
+                if (!item.isNull()) {
+                    String text = item.asText("");
+                    if (hasText(text)) {
+                        aliases.add(text);
+                    }
+                }
+            }
+            return aliases;
+        } catch (JsonProcessingException e) {
+            return List.of();
+        }
+    }
+
+    /**
      * 构建来源回指 JSON。
      *
      * @param factCardRecord 事实卡

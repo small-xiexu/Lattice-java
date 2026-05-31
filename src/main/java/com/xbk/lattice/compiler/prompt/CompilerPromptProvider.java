@@ -30,6 +30,8 @@ public class CompilerPromptProvider {
 
     private final String fixerPrompt;
 
+    private final String fieldAliasEnricherPrompt;
+
     /**
      * 创建 Compiler Prompt 外置提供者。
      *
@@ -70,6 +72,11 @@ public class CompilerPromptProvider {
                 loadRequiredResource(promptResourceLoader, "prompts/compiler/fixer.md"),
                 groundingRules,
                 "fixer.md"
+        );
+        this.fieldAliasEnricherPrompt = resolveIncludes(
+                loadRequiredResource(promptResourceLoader, "prompts/compiler/field-alias-enricher.md"),
+                groundingRules,
+                "field-alias-enricher.md"
         );
     }
 
@@ -116,6 +123,15 @@ public class CompilerPromptProvider {
      */
     public String fixerPrompt() {
         return fixerPrompt;
+    }
+
+    /**
+     * 返回字段别名增强器 system prompt。
+     *
+     * @return 字段别名增强器 system prompt
+     */
+    public String fieldAliasEnricherPrompt() {
+        return fieldAliasEnricherPrompt;
     }
 
     /**
