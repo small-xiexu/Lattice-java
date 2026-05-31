@@ -3,7 +3,7 @@ package com.xbk.lattice.api.admin;
 /**
  * 资料源校验响应。
  *
- * 职责：对外返回 Git / SERVER_DIR 资料源校验结果
+ * 职责：对外返回 Git 资料源校验结果
  *
  * @author xiexu
  */

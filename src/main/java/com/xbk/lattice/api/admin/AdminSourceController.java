@@ -48,7 +48,7 @@ public class AdminSourceController {
 
     private static final Set<String> ALLOWED_SYNC_MODES = Set.of("AUTO", "FULL", "INCREMENTAL");
 
-    private static final Set<String> ALLOWED_SOURCE_TYPES = Set.of("UPLOAD", "GIT", "SERVER_DIR");
+    private static final Set<String> ALLOWED_SOURCE_TYPES = Set.of("UPLOAD", "GIT");
 
     private final SourceService sourceService;
 
@@ -133,16 +133,6 @@ public class AdminSourceController {
     }
 
     /**
-     * 创建服务器目录资料源。
-     *
-     * @param request 创建请求
-     * @return 资料源详情
-     */
-    @PostMapping("/server-dir")
-    public AdminKnowledgeSourceDetailResponse createServerDirSource(@RequestBody AdminSourceCreateRequest request) {
-        return toDetailResponse(sourceSyncWorkflowService.createServerDirSource(request));
-    }
-
     /**
      * 更新资料源基础信息。
      *

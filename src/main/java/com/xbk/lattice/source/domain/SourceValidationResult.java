@@ -3,7 +3,7 @@ package com.xbk.lattice.source.domain;
 /**
  * 资料源校验结果。
  *
- * 职责：承载管理员校验 Git / SERVER_DIR 资料源配置后的反馈
+ * 职责：承载管理员校验 Git 资料源配置后的反馈
  *
  * @author xiexu
  */

@@ -21,7 +21,7 @@ import java.util.Locale;
 /**
  * 资料源同步工作流服务。
  *
- * 职责：承载 Git / SERVER_DIR 资料源创建、校验与同步编排
+ * 职责：承载 Git 资料源创建、校验与同步编排；UPLOAD 仍由 SourceUploadService 处理
  *
  * @author xiexu
  */
@@ -62,17 +62,6 @@ public class SourceSyncWorkflowService {
     @Transactional(rollbackFor = Exception.class)
     public KnowledgeSource createGitSource(AdminSourceCreateRequest request) {
         return createSource(request, "GIT");
-    }
-
-    /**
-     * 创建服务器目录资料源。
-     *
-     * @param request 请求
-     * @return 资料源详情
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public KnowledgeSource createServerDirSource(AdminSourceCreateRequest request) {
-        return createSource(request, "SERVER_DIR");
     }
 
     /**
@@ -153,9 +142,6 @@ public class SourceSyncWorkflowService {
             if (StringUtils.hasText(request.getCredentialRef())) {
                 configNode.put("credentialRef", request.getCredentialRef().trim());
             }
-        }
-        else if ("SERVER_DIR".equals(sourceType)) {
-            configNode.put("serverDir", requireText(request.getServerDir(), "serverDir"));
         }
         else {
             throw new IllegalArgumentException("unsupported source type: " + sourceType);

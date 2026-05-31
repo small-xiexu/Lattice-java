@@ -3,7 +3,7 @@ package com.xbk.lattice.api.admin;
 /**
  * 资料源创建请求。
  *
- * 职责：承载 Git / SERVER_DIR 资料源创建所需的配置参数
+ * 职责：承载 Git 资料源创建所需的配置参数
  *
  * @author xiexu
  */
@@ -24,8 +24,6 @@ public class AdminSourceCreateRequest {
     private String branch;
 
     private String credentialRef;
-
-    private String serverDir;
 
     public String getSourceCode() {
         return sourceCode;
@@ -89,13 +87,5 @@ public class AdminSourceCreateRequest {
 
     public void setCredentialRef(String credentialRef) {
         this.credentialRef = credentialRef;
-    }
-
-    public String getServerDir() {
-        return serverDir;
-    }
-
-    public void setServerDir(String serverDir) {
-        this.serverDir = serverDir;
     }
 }

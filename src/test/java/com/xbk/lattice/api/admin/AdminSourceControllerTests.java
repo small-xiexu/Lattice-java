@@ -38,8 +38,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.ai.anthropic.api-key=test-anthropic-key",
         "lattice.query.cache.store=in-memory",
         "lattice.compiler.jobs.worker-enabled=false",
-        "lattice.source.admin.allowed-server-dirs[0]=${java.io.tmpdir}"
 })
+
 @AutoConfigureMockMvc
 @Import(ApprovedArticleReviewerTestConfiguration.class)
 class AdminSourceControllerTests {
@@ -181,56 +181,6 @@ class AdminSourceControllerTests {
                 .andExpect(jsonPath("$.valid").value(true))
                 .andExpect(jsonPath("$.sourceType").value("GIT"))
                 .andExpect(jsonPath("$.branch").value("master"));
-    }
-
-    /**
-     * 验证服务器目录资料源可同步并写入源文件清单。
-     *
-     * @param tempDir 临时目录
-     * @throws Exception 测试异常
-     */
-    @Test
-    void shouldCreateSyncAndListServerDirSourceFiles(@TempDir Path tempDir) throws Exception {
-        resetTables();
-        Path serverDir = tempDir.resolve("server-docs");
-        Files.createDirectories(serverDir);
-        Files.writeString(serverDir.resolve("README.md"), "# Server Docs\n\nretry=3\n", StandardCharsets.UTF_8);
-
-        String responseBody = mockMvc.perform(post("/api/v1/admin/sources/server-dir")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "sourceCode": "server-docs",
-                                  "name": "Server Docs",
-                                  "contentProfile": "DOCUMENT",
-                                  "serverDir": "%s"
-                                }
-                                """.formatted(serverDir.toString().replace("\\", "\\\\"))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.sourceType").value("SERVER_DIR"))
-                .andReturn()
-                .getResponse()
-                .getContentAsString(StandardCharsets.UTF_8);
-        Long sourceId = readLong(responseBody, "id");
-
-        String syncBody = mockMvc.perform(post("/api/v1/admin/sources/" + sourceId + "/sync"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("COMPILE_QUEUED"))
-                .andReturn()
-                .getResponse()
-                .getContentAsString(StandardCharsets.UTF_8);
-        Long runId = readLong(syncBody, "runId");
-
-        compileJobService.processNextQueuedJob();
-
-        mockMvc.perform(get("/api/v1/admin/sources/" + sourceId + "/runs/" + runId))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("SUCCEEDED"));
-
-        mockMvc.perform(get("/api/v1/admin/sources/" + sourceId + "/files"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].relativePath").value("README.md"))
-                .andExpect(jsonPath("$[0].contentPreview", containsString("retry=3")));
     }
 
     /**

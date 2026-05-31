@@ -20,17 +20,13 @@ import org.springframework.util.StringUtils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.OffsetDateTime;
 import java.util.Collection;
-import java.util.List;
-import java.util.Locale;
-import java.util.stream.Stream;
 
 /**
  * 资料源物化服务。
  *
- * 职责：负责将 Git / SERVER_DIR 资料源物化到 staging 目录并返回物化元数据
+ * 职责：负责将 Git 资料源物化到 staging 目录并返回物化元数据
  *
  * @author xiexu
  */
@@ -69,9 +65,6 @@ public class SourceMaterializationService {
         if ("GIT".equals(source.getSourceType())) {
             return validateGitSource(configNode);
         }
-        if ("SERVER_DIR".equals(source.getSourceType())) {
-            return validateServerDirSource(configNode);
-        }
         throw new IllegalArgumentException("unsupported source type for materialization: " + source.getSourceType());
     }
 
@@ -89,9 +82,6 @@ public class SourceMaterializationService {
         Path stagingDir = stagingRootDir.resolve(source.getSourceCode() + "-" + System.currentTimeMillis()).normalize();
         if ("GIT".equals(source.getSourceType())) {
             return materializeGitSource(source, configNode, stagingDir);
-        }
-        if ("SERVER_DIR".equals(source.getSourceType())) {
-            return materializeServerDirSource(source, configNode, stagingDir);
         }
         throw new IllegalArgumentException("unsupported source type for materialization: " + source.getSourceType());
     }
@@ -121,14 +111,6 @@ public class SourceMaterializationService {
             }
         }
         return new SourceValidationResult(true, "GIT", "Git 资料源可访问", remoteUrl, branch, gitCommit);
-    }
-
-    private SourceValidationResult validateServerDirSource(JsonNode configNode) throws IOException {
-        Path serverDir = resolveAllowedServerDir(requireText(configNode, "serverDir"));
-        if (!Files.isDirectory(serverDir)) {
-            throw new IllegalArgumentException("serverDir is not a directory: " + serverDir);
-        }
-        return new SourceValidationResult(true, "SERVER_DIR", "服务器目录可访问", serverDir.toString(), null, null);
     }
 
     private SourceMaterializationResult materializeGitSource(
@@ -166,58 +148,6 @@ public class SourceMaterializationService {
         catch (Exception exception) {
             throw new IOException("物化 Git 资料源失败: " + remoteUrl, exception);
         }
-    }
-
-    private SourceMaterializationResult materializeServerDirSource(
-            KnowledgeSource source,
-            JsonNode configNode,
-            Path stagingDir
-    ) throws IOException {
-        Path serverDir = resolveAllowedServerDir(requireText(configNode, "serverDir"));
-        Files.createDirectories(stagingDir);
-        copyDirectory(serverDir, stagingDir);
-        ObjectNode metadataNode = OBJECT_MAPPER.createObjectNode();
-        metadataNode.put("materializationType", "SERVER_DIR");
-        metadataNode.put("serverDir", serverDir.toString());
-        metadataNode.put("materializedAt", OffsetDateTime.now().toString());
-        metadataNode.put("sourceCode", source.getSourceCode());
-        return new SourceMaterializationResult(stagingDir, metadataNode.toString());
-    }
-
-    private void copyDirectory(Path sourceDir, Path targetDir) throws IOException {
-        try (Stream<Path> pathStream = Files.walk(sourceDir)) {
-            for (Path current : (Iterable<Path>) pathStream::iterator) {
-                Path relativePath = sourceDir.relativize(current);
-                Path targetPath = targetDir.resolve(relativePath.toString()).normalize();
-                if (Files.isDirectory(current)) {
-                    Files.createDirectories(targetPath);
-                    continue;
-                }
-                Path parent = targetPath.getParent();
-                if (parent != null) {
-                    Files.createDirectories(parent);
-                }
-                Files.copy(current, targetPath, StandardCopyOption.REPLACE_EXISTING);
-            }
-        }
-    }
-
-    private Path resolveAllowedServerDir(String serverDir) throws IOException {
-        Path normalizedTarget = Path.of(serverDir).toRealPath().normalize();
-        List<String> allowedServerDirs = sourceAdminProperties.getAllowedServerDirs();
-        if (allowedServerDirs == null || allowedServerDirs.isEmpty()) {
-            throw new IllegalStateException("allowedServerDirs is empty");
-        }
-        for (String allowedServerDir : allowedServerDirs) {
-            if (!StringUtils.hasText(allowedServerDir)) {
-                continue;
-            }
-            Path normalizedAllowedDir = Path.of(allowedServerDir).toRealPath().normalize();
-            if (normalizedTarget.startsWith(normalizedAllowedDir)) {
-                return normalizedTarget;
-            }
-        }
-        throw new IllegalArgumentException("serverDir is not allowed: " + serverDir);
     }
 
     private JsonNode readConfig(String configJson) {

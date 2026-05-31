@@ -5,7 +5,7 @@ import java.nio.file.Path;
 /**
  * 资料源物化结果。
  *
- * 职责：承载 Git / SERVER_DIR 资料源被物化后的工作目录与元数据
+ * 职责：承载 Git 资料源被物化后的工作目录与元数据
  *
  * @author xiexu
  */
