@@ -2,6 +2,7 @@ package com.xbk.lattice.api.compiler;
 
 import com.xbk.lattice.compiler.service.CompileApplicationFacade;
 import com.xbk.lattice.compiler.service.CompileResult;
+import com.xbk.lattice.shared.security.PathTraversalGuard;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -43,7 +44,7 @@ public class CompileController {
      */
     @PostMapping
     public CompileResponse compile(@RequestBody CompileRequest compileRequest) throws IOException {
-        Path sourceDir = Path.of(compileRequest.getSourceDir());
+        Path sourceDir = PathTraversalGuard.validateAndNormalize(compileRequest.getSourceDir(), "sourceDir");
         log.info("Compile request received sourceDir: {}", sourceDir);
         CompileResult compileResult = compileApplicationFacade.compile(sourceDir, compileRequest.isIncremental(), null);
         return new CompileResponse(compileResult.getPersistedCount(), compileResult.getJobId());

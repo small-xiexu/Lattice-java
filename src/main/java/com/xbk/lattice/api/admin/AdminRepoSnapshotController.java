@@ -4,6 +4,7 @@ import com.xbk.lattice.governance.repo.RepoBaselineResult;
 import com.xbk.lattice.governance.repo.RepoRollbackResult;
 import com.xbk.lattice.governance.repo.RepoHistoryReport;
 import com.xbk.lattice.governance.repo.RepoSnapshotService;
+import com.xbk.lattice.shared.security.PathTraversalGuard;
 import com.xbk.lattice.vault.snapshot.VaultGitService;
 import com.xbk.lattice.vault.snapshot.VaultSnapshotService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -67,10 +68,9 @@ public class AdminRepoSnapshotController {
      */
     @PostMapping("/api/v1/admin/snapshot/repo/baseline")
     public RepoBaselineResult createBaseline(@RequestBody AdminRepoBaselineRequest request) throws IOException {
-        if (request == null || request.getVaultDir() == null || request.getVaultDir().isBlank()) {
-            throw new IllegalArgumentException("vaultDir 不能为空");
-        }
-        return vaultSnapshotService.createBaselineSnapshot(Path.of(request.getVaultDir()), request.getDescription());
+        Path vaultDir = PathTraversalGuard.validateAndNormalize(
+                request == null ? null : request.getVaultDir(), "vaultDir");
+        return vaultSnapshotService.createBaselineSnapshot(vaultDir, request.getDescription());
     }
 
     /**
@@ -86,13 +86,14 @@ public class AdminRepoSnapshotController {
             @PathVariable long snapshotId,
             @RequestParam String vaultDir
     ) throws IOException {
+        Path validatedVaultDir = PathTraversalGuard.validateAndNormalize(vaultDir, "vaultDir");
         String targetCommitId = vaultSnapshotService.getSnapshot(snapshotId).getGitCommit();
-        String currentCommitId = vaultGitService.headCommitId(Path.of(vaultDir));
+        String currentCommitId = vaultGitService.headCommitId(validatedVaultDir);
         return new AdminRepoDiffResponse(
                 snapshotId,
                 targetCommitId,
                 currentCommitId,
-                vaultSnapshotService.diff(Path.of(vaultDir), snapshotId)
+                vaultSnapshotService.diff(validatedVaultDir, snapshotId)
         );
     }
 
@@ -105,6 +106,7 @@ public class AdminRepoSnapshotController {
      */
     @PostMapping("/api/v1/admin/rollback/repo")
     public RepoRollbackResult rollback(@RequestBody AdminRepoRollbackRequest request) throws IOException {
-        return vaultSnapshotService.rollback(Path.of(request.getVaultDir()), request.getSnapshotId());
+        Path vaultDir = PathTraversalGuard.validateAndNormalize(request.getVaultDir(), "vaultDir");
+        return vaultSnapshotService.rollback(vaultDir, request.getSnapshotId());
     }
 }

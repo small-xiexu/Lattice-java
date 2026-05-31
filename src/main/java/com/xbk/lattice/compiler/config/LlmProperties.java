@@ -22,7 +22,7 @@ public class LlmProperties {
 
     private boolean bootstrapEnabled = true;
 
-    private String secretEncryptionKey = "lattice-phase8-bootstrap-key-change-me";
+    private String secretEncryptionKey = "";
 
     private double budgetUsd = 10.0D;
 
