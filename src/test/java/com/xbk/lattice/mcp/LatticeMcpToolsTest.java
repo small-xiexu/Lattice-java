@@ -59,11 +59,18 @@ class LatticeMcpToolsTest {
      */
     @Test
     void queryShouldReturnJsonWithAnswerAndQueryId() {
-        QuerySourceResponse source = new QuerySourceResponse("concept-1", "Payment Timeout", List.of("payment/analyze.json"));
+        QuerySourceResponse source = QuerySourceResponse.builder()
+                .conceptId("concept-1")
+                .title("Payment Timeout")
+                .sourcePaths(List.of("payment/analyze.json"))
+                .build();
         QueryResponse response = QueryResponse.builder()
                 .answer("retry=3")
                 .sources(List.of(source))
-                .articles(List.of(new QueryArticleResponse("concept-1", "Payment Timeout")))
+                .articles(List.of(QueryArticleResponse.builder()
+                        .conceptId("concept-1")
+                        .title("Payment Timeout")
+                        .build()))
                 .queryId("query-id-001")
                 .reviewStatus("PASSED")
                 .build();

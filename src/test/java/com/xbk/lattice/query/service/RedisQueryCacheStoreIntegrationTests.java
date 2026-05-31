@@ -65,12 +65,15 @@ class RedisQueryCacheStoreIntegrationTests {
         );
         QueryResponse queryResponse = QueryResponse.builder()
                 .answer("Payment Timeout：retry=3")
-                .sources(List.of(new QuerySourceResponse(
-                        "payment-timeout",
-                        "Payment Timeout",
-                        List.of("payment/analyze.json")
-                )))
-                .articles(List.of(new QueryArticleResponse("payment-timeout", "Payment Timeout")))
+                .sources(List.of(QuerySourceResponse.builder()
+                        .conceptId("payment-timeout")
+                        .title("Payment Timeout")
+                        .sourcePaths(List.of("payment/analyze.json"))
+                        .build()))
+                .articles(List.of(QueryArticleResponse.builder()
+                        .conceptId("payment-timeout")
+                        .title("Payment Timeout")
+                        .build()))
                 .reviewStatus("PASSED")
                 .build();
 
