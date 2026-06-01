@@ -277,6 +277,38 @@ class LlmConfigCenterIntegrationTests {
     }
 
     /**
+     * 验证 compile 场景允许配置字段别名增强器角色绑定。
+     *
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldAllowCompileFieldAliasEnricherBinding() throws Exception {
+        resetTables();
+        Long connectionId = createConnection("alias-main", "openai", "http://localhost:8888", "sk-alias-123456");
+        Long modelId = createModel("alias-model", connectionId, "gpt-5.4", "0.1", "1024", "120");
+
+        String bindingResponseBody = mockMvc.perform(post("/api/v1/admin/llm/bindings")
+                        .contentType(APPLICATION_JSON)
+                        .content("{"
+                                + "\"scene\":\"compile\","
+                                + "\"agentRole\":\"field-alias-enricher\","
+                                + "\"primaryModelProfileId\":" + modelId + ","
+                                + "\"routeLabel\":\"compile.field-alias-enricher.gpt54\","
+                                + "\"operator\":\"admin\","
+                                + "\"enabled\":true"
+                                + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scene").value("compile"))
+                .andExpect(jsonPath("$.agentRole").value("field-alias-enricher"))
+                .andExpect(jsonPath("$.routeLabel").value("compile.field-alias-enricher.gpt54"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+
+        assertThat(readLong(bindingResponseBody, "id")).isPositive();
+    }
+
+    /**
      * 验证 AI 接入页可直接测试未保存的 OpenAI 连接。
      *
      * @throws Exception 测试异常

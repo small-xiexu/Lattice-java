@@ -175,7 +175,12 @@ class AdminVectorIndexControllerTests {
         articleJdbcRepository.upsert(createArticleRecord("payment-timeout"));
         queryCacheStore.put(
                 "为什么订单服务不直接同步调用库存服务，而要走消息队列？",
-                new QueryResponse("旧缓存答案", List.of(), List.of(), null, "PASSED")
+                QueryResponse.builder()
+                        .answer("旧缓存答案")
+                        .sources(List.of())
+                        .articles(List.of())
+                        .reviewStatus("PASSED")
+                        .build()
         );
 
         mockMvc.perform(get("/api/v1/admin/vector/status"))

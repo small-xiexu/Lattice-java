@@ -1,18 +1,34 @@
 package com.xbk.lattice.api.admin;
 
+import lombok.Getter;
+
 /**
- * 管理侧 pending 条目响应
+ * 管理侧 pending 条目响应。
  *
- * 职责：承载 admin overview 中单条待确认查询摘要
+ * <p>承载 admin overview Dashboard 中单条待确认查询的摘要信息。
+ * 禁止引入 {@code @Data}：{@code question} 为用户查询内容。
  *
  * @author xiexu
  */
+@Getter
 public class AdminOverviewPendingItemResponse {
 
+    /** 查询会话标识。 */
     private final String queryId;
 
+    /**
+     * 用户原始问题文本。
+     *
+     * <p>用于 Dashboard 快速预览，可能含 PII。禁止参与 {@code toString()}。</p>
+     */
     private final String question;
 
+    /**
+     * 审查状态。
+     *
+     * <p>驱动前端展示待处理标签颜色和操作入口。
+     * 如 {@code needs_human_review} / {@code pending_review}。</p>
+     */
     private final String reviewStatus;
 
     /**
@@ -26,32 +42,5 @@ public class AdminOverviewPendingItemResponse {
         this.queryId = queryId;
         this.question = question;
         this.reviewStatus = reviewStatus;
-    }
-
-    /**
-     * 获取查询标识。
-     *
-     * @return 查询标识
-     */
-    public String getQueryId() {
-        return queryId;
-    }
-
-    /**
-     * 获取问题。
-     *
-     * @return 问题
-     */
-    public String getQuestion() {
-        return question;
-    }
-
-    /**
-     * 获取审查状态。
-     *
-     * @return 审查状态
-     */
-    public String getReviewStatus() {
-        return reviewStatus;
     }
 }

@@ -199,16 +199,15 @@ public class QueryFinalizationGraphFragment {
         }
         QueryResponse queryResponse;
         if (!state.isHasFusedHits()) {
-            queryResponse = new QueryResponse(
-                    "当前未找到与该问题直接相关的知识。",
-                    List.of(),
-                    List.of(),
-                    state.getQueryId(),
-                    null,
-                    AnswerOutcome.NO_RELEVANT_KNOWLEDGE,
-                    GenerationMode.RULE_BASED,
-                    ModelExecutionStatus.SKIPPED
-            );
+            queryResponse = QueryResponse.builder()
+                    .answer("当前未找到与该问题直接相关的知识。")
+                    .sources(List.of())
+                    .articles(List.of())
+                    .queryId(state.getQueryId())
+                    .answerOutcome(AnswerOutcome.NO_RELEVANT_KNOWLEDGE)
+                    .generationMode(GenerationMode.RULE_BASED)
+                    .modelExecutionStatus(ModelExecutionStatus.SKIPPED)
+                    .build();
         }
         else {
             queryResponse = buildSuccessResponse(state);
@@ -224,20 +223,19 @@ public class QueryFinalizationGraphFragment {
         AnswerProjectionBundle answerProjectionBundle = queryWorkingSetStore.loadAnswerProjectionBundle(
                 state.getAnswerProjectionBundleRef()
         );
-        return new QueryResponse(
-                answer,
-                QueryResponseCitationAssembler.toSourceResponses(answerProjectionBundle, fusedHits, true),
-                QueryResponseCitationAssembler.toArticleResponses(answerProjectionBundle, fusedHits, true),
-                state.getQueryId(),
-                state.getReviewStatus(),
-                readAnswerOutcome(state.getAnswerOutcome()),
-                readGenerationMode(state.getGenerationMode()),
-                readModelExecutionStatus(state.getModelExecutionStatus()),
-                report == null ? null : report.toSummary(),
-                null,
-                state.getFallbackReason(),
-                QueryResponseCitationAssembler.toCitationMarkerResponses(report, answerProjectionBundle, fusedHits)
-        );
+        return QueryResponse.builder()
+                .answer(answer)
+                .sources(QueryResponseCitationAssembler.toSourceResponses(answerProjectionBundle, fusedHits, true))
+                .articles(QueryResponseCitationAssembler.toArticleResponses(answerProjectionBundle, fusedHits, true))
+                .queryId(state.getQueryId())
+                .reviewStatus(state.getReviewStatus())
+                .answerOutcome(readAnswerOutcome(state.getAnswerOutcome()))
+                .generationMode(readGenerationMode(state.getGenerationMode()))
+                .modelExecutionStatus(readModelExecutionStatus(state.getModelExecutionStatus()))
+                .citationCheck(report == null ? null : report.toSummary())
+                .fallbackReason(state.getFallbackReason())
+                .citationMarkers(QueryResponseCitationAssembler.toCitationMarkerResponses(report, answerProjectionBundle, fusedHits))
+                .build();
     }
 
     private AnswerProjectionBundle resolveAnswerProjectionBundle(QueryGraphState state, String answer) {
@@ -420,20 +418,19 @@ public class QueryFinalizationGraphFragment {
     }
 
     private QueryResponse withoutQueryId(QueryResponse queryResponse) {
-        return new QueryResponse(
-                queryResponse.getAnswer(),
-                queryResponse.getSources(),
-                queryResponse.getArticles(),
-                null,
-                queryResponse.getReviewStatus(),
-                queryResponse.getAnswerOutcome(),
-                queryResponse.getGenerationMode(),
-                queryResponse.getModelExecutionStatus(),
-                queryResponse.getCitationCheck(),
-                queryResponse.getDeepResearch(),
-                queryResponse.getFallbackReason(),
-                queryResponse.getCitationMarkers()
-        );
+        return QueryResponse.builder()
+                .answer(queryResponse.getAnswer())
+                .sources(queryResponse.getSources())
+                .articles(queryResponse.getArticles())
+                .reviewStatus(queryResponse.getReviewStatus())
+                .answerOutcome(queryResponse.getAnswerOutcome())
+                .generationMode(queryResponse.getGenerationMode())
+                .modelExecutionStatus(queryResponse.getModelExecutionStatus())
+                .citationCheck(queryResponse.getCitationCheck())
+                .deepResearch(queryResponse.getDeepResearch())
+                .fallbackReason(queryResponse.getFallbackReason())
+                .citationMarkers(queryResponse.getCitationMarkers())
+                .build();
     }
 
     private boolean isCacheableOutcome(AnswerOutcome answerOutcome) {

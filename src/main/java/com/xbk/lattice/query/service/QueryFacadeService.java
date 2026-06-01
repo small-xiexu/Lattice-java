@@ -142,7 +142,12 @@ public class QueryFacadeService {
             return finalResponse;
         }
         catch (RuntimeException exception) {
-            logQueryCompleted(new QueryResponse(null, List.of(), List.of(), queryId, null, null, null, null), "FAILED", exception);
+            QueryResponse failedResponse = QueryResponse.builder()
+                    .sources(List.of())
+                    .articles(List.of())
+                    .queryId(queryId)
+                    .build();
+            logQueryCompleted(failedResponse, "FAILED", exception);
             throw exception;
         }
     }
@@ -241,21 +246,21 @@ public class QueryFacadeService {
      */
     private QueryResponse attachPendingQuery(String question, QueryResponse baseResponse) {
         String queryId = pendingQueryManager.createPendingQuery(question, baseResponse).getQueryId();
-        return new QueryResponse(
-                baseResponse.getAnswer(),
-                baseResponse.getSources(),
-                baseResponse.getArticles(),
-                queryId,
-                baseResponse.getReviewStatus(),
-                baseResponse.getAnswerOutcome(),
-                baseResponse.getGenerationMode(),
-                baseResponse.getModelExecutionStatus(),
-                baseResponse.getCitationCheck(),
-                baseResponse.getDeepResearch(),
-                baseResponse.getFallbackReason(),
-                baseResponse.getCitationMarkers(),
-                baseResponse.getStructuredEvidence()
-        );
+        return QueryResponse.builder()
+                .answer(baseResponse.getAnswer())
+                .sources(baseResponse.getSources())
+                .articles(baseResponse.getArticles())
+                .queryId(queryId)
+                .reviewStatus(baseResponse.getReviewStatus())
+                .answerOutcome(baseResponse.getAnswerOutcome())
+                .generationMode(baseResponse.getGenerationMode())
+                .modelExecutionStatus(baseResponse.getModelExecutionStatus())
+                .citationCheck(baseResponse.getCitationCheck())
+                .deepResearch(baseResponse.getDeepResearch())
+                .fallbackReason(baseResponse.getFallbackReason())
+                .citationMarkers(baseResponse.getCitationMarkers())
+                .structuredEvidence(baseResponse.getStructuredEvidence())
+                .build();
     }
 
     /**

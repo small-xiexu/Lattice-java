@@ -14,32 +14,70 @@ import java.math.BigDecimal;
 @ConfigurationProperties(prefix = "lattice.llm")
 public class LlmProperties {
 
+    /** 编译模型标识。默认 {@code "openai"}。 */
     private String compileModel = "openai";
 
+    /** 审查模型标识。默认 {@code "anthropic"}。 */
     private String reviewerModel = "anthropic";
 
+    /**
+     * LLM 配置源模式。
+     *
+     * <p>默认 {@code "hybrid"}——优先使用数据库持久化配置，回退到本地 bootstrap。</p>
+     */
     private String configSource = "hybrid";
 
+    /**
+     * 是否允许使用本地 bootstrap 配置兜底。
+     *
+     * <p>默认 {@code true}（fail-open）。数据库配置不可用时不会启动失败，
+     * 以本地配置运行。生产环境建议设为 {@code false} 以避免配置漂移。</p>
+     */
     private boolean bootstrapEnabled = true;
 
+    /**
+     * 密钥加密种子。
+     *
+     * <p><b>安全警告：</b>默认值为空，未通过环境变量设置时应用启动将 fail-fast。
+     * 此值用于派生 {@code LlmSecretCryptoService} 的加密密钥。</p>
+     */
     private String secretEncryptionKey = "";
 
+    /**
+     * LLM 调用预算上限（美元）。
+     *
+     * <p>默认 10.0。超预算后停止 LLM 调用（fail-closed），所有需要 LLM 的编译步骤中止。
+     * 设为 0 表示不限制。</p>
+     */
     private double budgetUsd = 10.0D;
 
+    /** LLM 响应缓存 TTL 秒数。默认 86400（24 小时）。 */
     private long cacheTtlSeconds = 86400L;
 
+    /** 缓存 Redis Key 前缀。默认 {@code "llm:cache:"}。 */
     private String cacheKeyPrefix = "llm:cache:";
 
+    /**
+     * 是否启用真实 LLM 审查。
+     *
+     * <p>默认 {@code false}（安全默认）。{@code true} 时编译流程会调用 LLM
+     * 进行审查和自动修复，增加成本和延迟。</p>
+     */
     private boolean reviewEnabled = false;
 
+    /** 单次 LLM 调用的最大输入字符数。默认 64000。 */
     private int maxInputChars = 64000;
 
+    /** Admin 密钥加密/脱敏配置。 */
     private final Admin admin = new Admin();
 
+    /** ChatClient 渐进式迁移灰度配置。 */
     private final ChatClient chatClient = new ChatClient();
 
+    /** 编译角色默认超时配置。 */
     private final CompileTimeout compileTimeout = new CompileTimeout();
 
+    /** Bootstrap fallback 定价配置。 */
     private final Pricing pricing = new Pricing();
 
     /**
@@ -267,8 +305,10 @@ public class LlmProperties {
      */
     public static class Admin {
 
+        /** 是否启用密钥加密存储。默认 {@code true}。 */
         private boolean encryptSecrets = true;
 
+        /** 是否启用密钥脱敏展示。默认 {@code true}。 */
         private boolean maskSecrets = true;
 
         /**
@@ -317,16 +357,26 @@ public class LlmProperties {
      */
     public static class ChatClient {
 
+        /** ChatClient 路径总开关。默认 {@code true}。{@code false} 时全部回退旧栈。 */
         private boolean enabled = true;
 
+        /**
+         * Query answer 灰度开关。
+         *
+         * <p>默认 {@code true}。{@code false} 时 answer 场景回退到旧执行栈。</p>
+         */
         private boolean queryAnswerEnabled = true;
 
+        /** Query rewrite 灰度开关。默认 {@code true}。 */
         private boolean queryRewriteEnabled = true;
 
+        /** Query review 灰度开关。默认 {@code true}。 */
         private boolean queryReviewEnabled = true;
 
+        /** Compile review 灰度开关。默认 {@code true}。 */
         private boolean compileReviewEnabled = true;
 
+        /** 治理侧 JSON 处理灰度开关。默认 {@code true}。 */
         private boolean governanceJsonEnabled = true;
 
         /**
@@ -447,10 +497,13 @@ public class LlmProperties {
      */
     public static class CompileTimeout {
 
+        /** writer 角色默认超时秒数。默认 90。 */
         private int writerSeconds = 90;
 
+        /** reviewer 角色默认超时秒数。默认 60。 */
         private int reviewerSeconds = 60;
 
+        /** fixer 角色默认超时秒数。默认 60。 */
         private int fixerSeconds = 60;
 
         /**
@@ -517,12 +570,16 @@ public class LlmProperties {
      */
     public static class Pricing {
 
+        /** 编译输入单价（每千 token）。默认 $0.0025。 */
         private BigDecimal compileInputPricePer1kTokens = new BigDecimal("0.002500");
 
+        /** 编译输出单价（每千 token）。默认 $0.01。 */
         private BigDecimal compileOutputPricePer1kTokens = new BigDecimal("0.010000");
 
+        /** 审查输入单价（每千 token）。默认 $0.003。 */
         private BigDecimal reviewerInputPricePer1kTokens = new BigDecimal("0.003000");
 
+        /** 审查输出单价（每千 token）。默认 $0.015。 */
         private BigDecimal reviewerOutputPricePer1kTokens = new BigDecimal("0.015000");
 
         /**

@@ -12,8 +12,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "lattice.query.review")
 public class QueryReviewProperties {
 
+    /**
+     * Query 重写开关。
+     *
+     * <p>默认 {@code true}。{@code false} 时跳过 LLM 重写步骤，原始 query 直接检索
+     * （fail-open：不影响检索可用性，但召回质量可能下降）。</p>
+     */
     private boolean rewriteEnabled = true;
 
+    /**
+     * 最大重写轮次。
+     *
+     * <p>默认 1。每轮重写后重新评估检索结果质量。每增一轮增加一次 LLM 调用成本。</p>
+     */
     private int maxRewriteRounds = 1;
 
     /**

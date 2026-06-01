@@ -1,61 +1,53 @@
 package com.xbk.lattice.source.domain;
 
+import lombok.Getter;
+
 import java.time.OffsetDateTime;
 
 /**
  * 资料源凭据。
  *
- * 职责：表示 source_credentials 中的单条密钥配置
+ * <p>表示 source_credentials 中的单条密钥配置——含加密存储的凭证密文和脱敏展示值。
+ * 含敏感字段（{@code secretCiphertext}），禁止引入 {@code @Data}。
  *
  * @author xiexu
  */
+@Getter
 public class SourceCredential {
 
+    /** 凭据主键。 */
     private final Long id;
-
+    /** 凭据编码（系统内唯一标识）。 */
     private final String credentialCode;
-
+    /** 凭据类型（如 git_token / api_key）。 */
     private final String credentialType;
-
+    /**
+     * 加密后的凭证密文。
+     *
+     * <p>非明文凭证，但仍属敏感数据——禁止参与 {@code toString()} 或记录到日志。</p>
+     */
     private final String secretCiphertext;
-
+    /**
+     * 凭证脱敏展示值。
+     *
+     * <p>仅用于管理侧脱敏展示，非完整凭证。</p>
+     */
     private final String secretMask;
-
+    /** 是否启用。 */
     private final boolean enabled;
-
+    /** 创建人。 */
     private final String createdBy;
-
+    /** 最后更新人。 */
     private final String updatedBy;
-
+    /** 创建时间。 */
     private final OffsetDateTime createdAt;
-
+    /** 最后更新时间。 */
     private final OffsetDateTime updatedAt;
 
-    /**
-     * 创建资料源凭据。
-     *
-     * @param id 主键
-     * @param credentialCode 凭据编码
-     * @param credentialType 凭据类型
-     * @param secretCiphertext 密文
-     * @param secretMask 脱敏值
-     * @param enabled 是否启用
-     * @param createdBy 创建人
-     * @param updatedBy 更新人
-     * @param createdAt 创建时间
-     * @param updatedAt 更新时间
-     */
     public SourceCredential(
-            Long id,
-            String credentialCode,
-            String credentialType,
-            String secretCiphertext,
-            String secretMask,
-            boolean enabled,
-            String createdBy,
-            String updatedBy,
-            OffsetDateTime createdAt,
-            OffsetDateTime updatedAt
+            Long id, String credentialCode, String credentialType, String secretCiphertext,
+            String secretMask, boolean enabled, String createdBy, String updatedBy,
+            OffsetDateTime createdAt, OffsetDateTime updatedAt
     ) {
         this.id = id;
         this.credentialCode = credentialCode;
@@ -67,95 +59,5 @@ public class SourceCredential {
         this.updatedBy = updatedBy;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
-    }
-
-    /**
-     * 获取主键。
-     *
-     * @return 主键
-     */
-    public Long getId() {
-        return id;
-    }
-
-    /**
-     * 获取凭据编码。
-     *
-     * @return 凭据编码
-     */
-    public String getCredentialCode() {
-        return credentialCode;
-    }
-
-    /**
-     * 获取凭据类型。
-     *
-     * @return 凭据类型
-     */
-    public String getCredentialType() {
-        return credentialType;
-    }
-
-    /**
-     * 获取密文。
-     *
-     * @return 密文
-     */
-    public String getSecretCiphertext() {
-        return secretCiphertext;
-    }
-
-    /**
-     * 获取脱敏值。
-     *
-     * @return 脱敏值
-     */
-    public String getSecretMask() {
-        return secretMask;
-    }
-
-    /**
-     * 返回是否启用。
-     *
-     * @return 是否启用
-     */
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    /**
-     * 获取创建人。
-     *
-     * @return 创建人
-     */
-    public String getCreatedBy() {
-        return createdBy;
-    }
-
-    /**
-     * 获取更新人。
-     *
-     * @return 更新人
-     */
-    public String getUpdatedBy() {
-        return updatedBy;
-    }
-
-    /**
-     * 获取创建时间。
-     *
-     * @return 创建时间
-     */
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    /**
-     * 获取更新时间。
-     *
-     * @return 更新时间
-     */
-    public OffsetDateTime getUpdatedAt() {
-        return updatedAt;
     }
 }

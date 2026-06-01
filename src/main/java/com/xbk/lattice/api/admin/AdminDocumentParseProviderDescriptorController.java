@@ -5,7 +5,7 @@ import com.xbk.lattice.documentparse.domain.model.ProviderDescriptor;
 import com.xbk.lattice.documentparse.domain.model.ProviderFieldDescriptor;
 import com.xbk.lattice.documentparse.service.DocumentParseProviderDescriptorService;
 import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -106,71 +106,100 @@ public class AdminDocumentParseProviderDescriptorController {
     /**
      * Provider Descriptor 列表响应。
      *
-     * 职责：返回管理台可用的 Provider Descriptor 列表
+     * <p>返回管理台可用的 Provider Descriptor 列表，由 {@code listProviders()} 组装。
      *
      * @author xiexu
      */
-    @Data
+    @Getter
     @NoArgsConstructor
     @AllArgsConstructor
     public static class AdminDocumentParseProviderDescriptorListResponse {
 
+        /** 当前返回的 Provider 数量（等于 {@code items.size()}）。 */
         private int count;
 
+        /** Provider Descriptor 列表。 */
         private List<AdminDocumentParseProviderDescriptorResponse> items;
     }
 
     /**
      * Provider Descriptor 响应。
      *
-     * 职责：返回管理台的单个 Provider 元数据
+     * <p>返回管理台的单个 Provider 元数据——含支持的文件类型、探测模式和动态表单字段定义。
      *
      * @author xiexu
      */
-    @Data
+    @Getter
     @NoArgsConstructor
     @AllArgsConstructor
     public static class AdminDocumentParseProviderDescriptorResponse {
 
+        /** Provider 类型标识（如 {@code openai} / {@code local}）。 */
         private String providerType;
 
+        /** Provider 展示名称。 */
         private String displayName;
 
+        /** 默认 API 端点 URL。 */
         private String defaultBaseUrl;
 
+        /** 探测模式（定义连接测试的探测方式）。 */
         private String probeMode;
 
+        /** 支持的文件类型列表（取自 {@code ParseCapability} 枚举）。 */
         private List<String> supportedCapabilities;
 
+        /**
+         * 凭证字段定义列表。
+         *
+         * <p>前端据此动态生成凭证配置表单（如 API Key、Token 等输入框）。</p>
+         */
         private List<AdminDocumentParseProviderFieldResponse> credentialFields;
 
+        /**
+         * 配置字段定义列表。
+         *
+         * <p>前端据此动态生成扩展配置表单（如超时、重试次数等参数）。</p>
+         */
         private List<AdminDocumentParseProviderFieldResponse> configFields;
     }
 
     /**
      * Provider 字段响应。
      *
-     * 职责：返回管理台动态表单的单个字段定义
+     * <p>返回管理台动态表单的单个字段定义——含输入类型、是否必填、默认值和提示文案，
+     * 由 {@code ProviderFieldDescriptor} 映射而来。
      *
      * @author xiexu
      */
-    @Data
+    @Getter
     @NoArgsConstructor
     @AllArgsConstructor
     public static class AdminDocumentParseProviderFieldResponse {
 
+        /** 字段键（表单字段 name 属性）。 */
         private String fieldKey;
 
+        /** 字段展示标签。 */
         private String label;
 
+        /**
+         * 输入控件类型（如 {@code text} / {@code password} / {@code select}）。
+         *
+         * <p>{@code password} 类型时前端应对输入值做脱敏展示。</p>
+         */
         private String inputType;
 
+        /** 是否必填。 */
         private boolean required;
 
+        /** 默认值。可为空。 */
         private String defaultValue;
 
+        /** 占位提示文案。可为空。 */
         private String placeholder;
 
+        /** 字段描述说明。可为空。 */
         private String description;
     }
 }

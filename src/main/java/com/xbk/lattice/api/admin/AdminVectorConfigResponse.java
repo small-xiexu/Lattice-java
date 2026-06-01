@@ -1,36 +1,99 @@
 package com.xbk.lattice.api.admin;
 
+import lombok.Getter;
+
 /**
- * 管理侧向量配置响应
+ * 管理侧向量配置响应。
  *
- * 职责：返回当前有效向量配置、profile 摘要、来源与联动提示
+ * <p>返回当前生效的向量配置、profile 摘要、配置来源与索引重建建议，
+ * 由 {@code AdminVectorIndexController} 从持久化配置与运行态状态组装。
  *
  * @author xiexu
  */
+@Getter
 public class AdminVectorConfigResponse {
 
+    /**
+     * 当前向量检索是否启用。
+     *
+     * <p>{@code false} 时前端应展示禁用态并提示影响范围——召回将退化到非向量模式。</p>
+     */
     private final boolean vectorEnabled;
 
+    /**
+     * 当前生效的 embedding 模型配置主键。
+     *
+     * <p>为 {@code null} 表示未配置 embedding 模型。与索引内实际模型名不一致时
+     * {@code rebuildRecommended} 为 {@code true}。</p>
+     */
     private final Long embeddingModelProfileId;
 
+    /**
+     * 当前 embedding provider 类型（如 {@code openai} / {@code local}）。
+     *
+     * <p>仅用于管理侧展示，不参与检索路径决策。</p>
+     */
     private final String providerType;
 
+    /**
+     * 当前 embedding 模型名称。
+     *
+     * <p>索引内模型名与此不一致时触发 {@code rebuildRecommended=true}。</p>
+     */
     private final String modelName;
 
+    /**
+     * profile 配置的向量维度。
+     *
+     * <p>与 {@code schemaDimensions} 不一致时触发 {@code rebuildRecommended=true}。
+     * 为 {@code null} 表示 profile 未就绪。</p>
+     */
     private final Integer profileDimensions;
 
+    /**
+     * 配置来源标识（如 {@code manual} / {@code auto}）。
+     *
+     * <p>用于管理侧追溯配置变更路径，不参与检索行为。</p>
+     */
     private final String configSource;
 
+    /**
+     * 是否建议重建向量索引。
+     *
+     * <p>维度不匹配或模型切换后为 {@code true}。管理侧可据此展示重建引导，
+     * 但不强制——忽略此建议继续使用不匹配模型将导致检索质量下降。</p>
+     */
     private final boolean rebuildRecommended;
 
+    /**
+     * 建议重建的原因说明。
+     *
+     * <p>{@code rebuildRecommended=false} 时可为空字符串或 {@code null}。</p>
+     */
     private final String rebuildReason;
 
+    /**
+     * 配置创建人。
+     *
+     * <p>用于审计追踪，不参与检索行为。</p>
+     */
     private final String createdBy;
 
+    /**
+     * 配置最后更新人。
+     *
+     * <p>用于审计追踪，不参与检索行为。</p>
+     */
     private final String updatedBy;
 
+    /**
+     * 配置创建时间（ISO-8601 字符串）。
+     */
     private final String createdAt;
 
+    /**
+     * 配置最后更新时间（ISO-8601 字符串）。
+     */
     private final String updatedAt;
 
     /**
@@ -75,113 +138,5 @@ public class AdminVectorConfigResponse {
         this.updatedBy = updatedBy;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
-    }
-
-    /**
-     * 返回是否启用向量检索。
-     *
-     * @return 是否启用
-     */
-    public boolean isVectorEnabled() {
-        return vectorEnabled;
-    }
-
-    /**
-     * 返回 embedding 模型配置主键。
-     *
-     * @return 模型配置主键
-     */
-    public Long getEmbeddingModelProfileId() {
-        return embeddingModelProfileId;
-    }
-
-    /**
-     * 返回 provider 类型。
-     *
-     * @return provider 类型
-     */
-    public String getProviderType() {
-        return providerType;
-    }
-
-    /**
-     * 返回模型名称。
-     *
-     * @return 模型名称
-     */
-    public String getModelName() {
-        return modelName;
-    }
-
-    /**
-     * 返回 profile 维度。
-     *
-     * @return profile 维度
-     */
-    public Integer getProfileDimensions() {
-        return profileDimensions;
-    }
-
-    /**
-     * 返回配置来源。
-     *
-     * @return 配置来源
-     */
-    public String getConfigSource() {
-        return configSource;
-    }
-
-    /**
-     * 返回是否建议重建向量索引。
-     *
-     * @return 是否建议重建
-     */
-    public boolean isRebuildRecommended() {
-        return rebuildRecommended;
-    }
-
-    /**
-     * 返回建议原因。
-     *
-     * @return 建议原因
-     */
-    public String getRebuildReason() {
-        return rebuildReason;
-    }
-
-    /**
-     * 返回创建人。
-     *
-     * @return 创建人
-     */
-    public String getCreatedBy() {
-        return createdBy;
-    }
-
-    /**
-     * 返回更新人。
-     *
-     * @return 更新人
-     */
-    public String getUpdatedBy() {
-        return updatedBy;
-    }
-
-    /**
-     * 返回创建时间。
-     *
-     * @return 创建时间
-     */
-    public String getCreatedAt() {
-        return createdAt;
-    }
-
-    /**
-     * 返回更新时间。
-     *
-     * @return 更新时间
-     */
-    public String getUpdatedAt() {
-        return updatedAt;
     }
 }

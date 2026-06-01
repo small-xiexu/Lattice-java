@@ -1,18 +1,31 @@
 package com.xbk.lattice.api.admin;
 
+import lombok.Getter;
+
 import java.util.List;
 
 /**
- * 管理侧 Fact Card 列表响应
+ * 管理侧 Fact Card 列表响应。
  *
- * 职责：承载结构化证据卡列表
+ * <p>承载结构化证据卡浏览列表，由 {@code AdminFactCardController} 组装返回。
  *
  * @author xiexu
  */
+@Getter
 public class AdminFactCardListResponse {
 
+    /**
+     * 当前返回的 Fact Card 数量。
+     *
+     * <p>等于 {@code items.size()}，受分页参数限制。</p>
+     */
     private final int count;
 
+    /**
+     * Fact Card 条目列表。
+     *
+     * <p>按创建时间倒序排列。</p>
+     */
     private final List<AdminFactCardItemResponse> items;
 
     /**
@@ -24,23 +37,5 @@ public class AdminFactCardListResponse {
     public AdminFactCardListResponse(int count, List<AdminFactCardItemResponse> items) {
         this.count = count;
         this.items = items;
-    }
-
-    /**
-     * 获取数量。
-     *
-     * @return 数量
-     */
-    public int getCount() {
-        return count;
-    }
-
-    /**
-     * 获取条目。
-     *
-     * @return 条目
-     */
-    public List<AdminFactCardItemResponse> getItems() {
-        return items;
     }
 }

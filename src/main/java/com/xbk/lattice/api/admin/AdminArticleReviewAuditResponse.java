@@ -1,34 +1,72 @@
 package com.xbk.lattice.api.admin;
 
+import lombok.Getter;
+
 /**
- * 管理侧文章人工复核审计响应
+ * 管理侧文章人工复核审计响应。
  *
- * 职责：承载单条人工复核历史
+ * <p>承载单条人工复核历史记录——含操作人、动作、状态流转、意见和扩展上下文，
+ * 用于管理侧审计追溯。含审计字段（{@code comment}、{@code reviewedBy}、{@code metadataJson}），
+ * 禁止引入 {@code @Data}。
  *
  * @author xiexu
  */
+@Getter
 public class AdminArticleReviewAuditResponse {
 
+    /** 审计记录主键。 */
     private final long id;
 
+    /** 资料源主键。为 {@code null} 表示多源。 */
     private final Long sourceId;
 
+    /** 文章唯一键。 */
     private final String articleKey;
 
+    /** 概念标识。 */
     private final String conceptId;
 
+    /**
+     * 复核动作。
+     *
+     * <p>可选值：{@code approve} / {@code request_changes}。
+     * 驱动前端展示不同的审计动作标签。</p>
+     */
     private final String action;
 
+    /** 操作前审查状态。 */
     private final String previousReviewStatus;
 
+    /**
+     * 操作后审查状态。
+     *
+     * <p>与 {@code previousReviewStatus} 对比可知本次操作的状态流转路径。</p>
+     */
     private final String nextReviewStatus;
 
+    /**
+     * 复核意见。
+     *
+     * <p>审批或驳回时填写的原因。含人工主观评价，禁止参与 {@code toString()}。</p>
+     */
     private final String comment;
 
+    /**
+     * 复核人标识。
+     *
+     * <p>用于审计追溯和责任认定。禁止参与 {@code toString()}。</p>
+     */
     private final String reviewedBy;
 
+    /** 复核时间（ISO-8601 字符串）。 */
     private final String reviewedAt;
 
+    /**
+     * 扩展上下文 JSON。
+     *
+     * <p>可能包含复核时的附加信息（如页面快照、关联数据）。
+     * 可能较大，禁止参与 {@code toString()}。</p>
+     */
     private final String metadataJson;
 
     /**
@@ -70,104 +108,5 @@ public class AdminArticleReviewAuditResponse {
         this.reviewedBy = reviewedBy;
         this.reviewedAt = reviewedAt;
         this.metadataJson = metadataJson;
-    }
-
-    /**
-     * 获取审计主键。
-     *
-     * @return 审计主键
-     */
-    public long getId() {
-        return id;
-    }
-
-    /**
-     * 获取资料源主键。
-     *
-     * @return 资料源主键
-     */
-    public Long getSourceId() {
-        return sourceId;
-    }
-
-    /**
-     * 获取文章唯一键。
-     *
-     * @return 文章唯一键
-     */
-    public String getArticleKey() {
-        return articleKey;
-    }
-
-    /**
-     * 获取概念标识。
-     *
-     * @return 概念标识
-     */
-    public String getConceptId() {
-        return conceptId;
-    }
-
-    /**
-     * 获取复核动作。
-     *
-     * @return 复核动作
-     */
-    public String getAction() {
-        return action;
-    }
-
-    /**
-     * 获取复核前状态。
-     *
-     * @return 复核前状态
-     */
-    public String getPreviousReviewStatus() {
-        return previousReviewStatus;
-    }
-
-    /**
-     * 获取复核后状态。
-     *
-     * @return 复核后状态
-     */
-    public String getNextReviewStatus() {
-        return nextReviewStatus;
-    }
-
-    /**
-     * 获取复核意见。
-     *
-     * @return 复核意见
-     */
-    public String getComment() {
-        return comment;
-    }
-
-    /**
-     * 获取复核人。
-     *
-     * @return 复核人
-     */
-    public String getReviewedBy() {
-        return reviewedBy;
-    }
-
-    /**
-     * 获取复核时间。
-     *
-     * @return 复核时间
-     */
-    public String getReviewedAt() {
-        return reviewedAt;
-    }
-
-    /**
-     * 获取扩展元数据 JSON。
-     *
-     * @return 扩展元数据 JSON
-     */
-    public String getMetadataJson() {
-        return metadataJson;
     }
 }

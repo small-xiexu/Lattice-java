@@ -27,7 +27,7 @@ public class SourceListCommand extends AbstractCliCommand {
     @CommandLine.Option(names = "--status", description = "按状态过滤，例如 ACTIVE / DISABLED / ARCHIVED")
     private String status;
 
-    @CommandLine.Option(names = "--source-type", description = "按类型过滤，例如 UPLOAD / GIT / SERVER_DIR")
+    @CommandLine.Option(names = "--source-type", description = "按类型过滤，例如 UPLOAD / GIT")
     private String sourceType;
 
     @CommandLine.Option(names = "--page", defaultValue = "1", description = "页码，从 1 开始")

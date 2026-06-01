@@ -2,50 +2,49 @@ package com.xbk.lattice.compiler.domain;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Getter;
 
 import java.util.Collections;
 import java.util.List;
 
 /**
- * 合并后的概念
+ * 合并后的概念。
  *
- * 职责：表示跨批次合并后的最小概念对象
+ * <p>表示跨批次合并后的概念对象，语义为"合并后最终版"——与 {@link AnalyzedConcept} 结构相同，
+ * 但代表经过跨批次去重、合并后的稳定概念，作为后续编译步骤的输入。
  *
  * @author xiexu
  */
+@Getter
 public class MergedConcept {
 
+    /** 概念标识（唯一）。 */
     private final String conceptId;
 
+    /** 概念标题。 */
     private final String title;
 
+    /** 概念描述。 */
     private final String description;
 
+    /** 来源文件路径列表。合并后可能包含多个批次的来源。 */
     private final List<String> sourcePaths;
 
+    /** 概念片段摘要列表。合并后去重。 */
     private final List<String> snippets;
 
+    /** 概念章节列表。合并后去重（基于 equals/hashCode）。 */
     private final List<ConceptSection> sections;
 
+    /** LLM Analyze 概念生成模式。 */
     private final String analysisMode;
 
+    /** LLM Analyze 失败原因。 */
     private final String failureReason;
 
+    /** 标题来源。 */
     private final String titleSource;
 
-    /**
-     * 创建合并后的概念。
-     *
-     * @param conceptId 概念标识
-     * @param title 标题
-     * @param description 描述
-     * @param sourcePaths 来源路径
-     * @param snippets 片段摘要
-     * @param sections 章节列表
-     * @param analysisMode Analyze 概念生成模式
-     * @param failureReason Analyze 失败原因
-     * @param titleSource 标题来源
-     */
     @JsonCreator
     public MergedConcept(
             @JsonProperty("conceptId") String conceptId,
@@ -69,27 +68,10 @@ public class MergedConcept {
         this.titleSource = titleSource;
     }
 
-    /**
-     * 创建合并后的概念。
-     *
-     * @param conceptId 概念标识
-     * @param title 标题
-     * @param sourcePaths 来源路径
-     * @param snippets 片段摘要
-     */
     public MergedConcept(String conceptId, String title, List<String> sourcePaths, List<String> snippets) {
         this(conceptId, title, "", sourcePaths, snippets, Collections.<ConceptSection>emptyList(), null, null, null);
     }
 
-    /**
-     * 创建合并后的概念。
-     *
-     * @param conceptId 概念标识
-     * @param title 标题
-     * @param description 描述
-     * @param sourcePaths 来源路径
-     * @param snippets 片段摘要
-     */
     public MergedConcept(
             String conceptId,
             String title,
@@ -100,16 +82,6 @@ public class MergedConcept {
         this(conceptId, title, description, sourcePaths, snippets, Collections.<ConceptSection>emptyList(), null, null, null);
     }
 
-    /**
-     * 创建合并后的概念。
-     *
-     * @param conceptId 概念标识
-     * @param title 标题
-     * @param description 描述
-     * @param sourcePaths 来源路径
-     * @param snippets 片段摘要
-     * @param sections 章节列表
-     */
     public MergedConcept(
             String conceptId,
             String title,
@@ -119,86 +91,5 @@ public class MergedConcept {
             List<ConceptSection> sections
     ) {
         this(conceptId, title, description, sourcePaths, snippets, sections, null, null, null);
-    }
-
-    /**
-     * 获取概念标识。
-     *
-     * @return 概念标识
-     */
-    public String getConceptId() {
-        return conceptId;
-    }
-
-    /**
-     * 获取标题。
-     *
-     * @return 标题
-     */
-    public String getTitle() {
-        return title;
-    }
-
-    /**
-     * 获取描述。
-     *
-     * @return 描述
-     */
-    public String getDescription() {
-        return description;
-    }
-
-    /**
-     * 获取来源路径。
-     *
-     * @return 来源路径
-     */
-    public List<String> getSourcePaths() {
-        return sourcePaths;
-    }
-
-    /**
-     * 获取片段摘要。
-     *
-     * @return 片段摘要
-     */
-    public List<String> getSnippets() {
-        return snippets;
-    }
-
-    /**
-     * 获取章节列表。
-     *
-     * @return 章节列表
-     */
-    public List<ConceptSection> getSections() {
-        return sections;
-    }
-
-    /**
-     * 获取 Analyze 概念生成模式。
-     *
-     * @return Analyze 模式
-     */
-    public String getAnalysisMode() {
-        return analysisMode;
-    }
-
-    /**
-     * 获取 Analyze 失败原因。
-     *
-     * @return 失败原因
-     */
-    public String getFailureReason() {
-        return failureReason;
-    }
-
-    /**
-     * 获取标题来源。
-     *
-     * @return 标题来源
-     */
-    public String getTitleSource() {
-        return titleSource;
     }
 }

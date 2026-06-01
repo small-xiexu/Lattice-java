@@ -1,342 +1,156 @@
 package com.xbk.lattice.source.domain;
 
 import com.xbk.lattice.api.admin.AdminProcessingTaskStepResponse;
+import lombok.Getter;
 
 import java.util.List;
 
 /**
  * 同步运行详情视图。
  *
- * 职责：承载管理侧上传轮询与人工确认需要展示的运行信息
+ * <p>承载管理侧上传轮询与人工确认需要展示的运行信息——含编译进度、步骤链、展示状态和审查计数。
+ * 双构造器：小构造器委托大构造器，pending/published/rejected 默认 0。
  *
  * @author xiexu
  */
+@Getter
 public class SourceSyncRunDetail {
 
+    /** 运行主键。 */
     private final Long runId;
-
+    /** 资料源主键。 */
     private final Long sourceId;
-
+    /** 资料源名称。 */
     private final String sourceName;
-
+    /** 资料源类型。 */
     private final String sourceType;
-
+    /** 运行状态。 */
     private final String status;
-
+    /** 识别模式。 */
     private final String resolverMode;
-
+    /** 识别决策。 */
     private final String resolverDecision;
-
+    /** 同步动作。 */
     private final String syncAction;
-
+    /** 命中的资料源主键。 */
     private final Long matchedSourceId;
-
+    /** 编译作业主键。 */
     private final String compileJobId;
-
+    /** 编译作业状态。 */
     private final String compileJobStatus;
-
+    /** 编译派生展示状态。 */
     private final String compileDerivedStatus;
-
+    /** 编译当前步骤。 */
     private final String compileCurrentStep;
-
+    /** 编译当前进度。 */
     private final Integer compileProgressCurrent;
-
+    /** 编译总进度。 */
     private final Integer compileProgressTotal;
-
+    /** 编译进度提示。 */
     private final String compileProgressMessage;
-
+    /** 编译最近心跳时间。 */
     private final String compileLastHeartbeatAt;
-
+    /** 编译租约到期时间。 */
     private final String compileRunningExpiresAt;
-
+    /** 编译错误码。 */
     private final String compileErrorCode;
-
+    /** manifest 哈希。 */
     private final String manifestHash;
-
+    /** 提示信息。 */
     private final String message;
-
+    /** 错误信息。可能含异常详情，禁止 toString()。 */
     private final String errorMessage;
-
+    /** 来源文件名列表。 */
     private final List<String> sourceNames;
-
+    /** 可用操作动作。 */
     private final List<com.xbk.lattice.api.admin.AdminProcessingTaskActionResponse> actions;
-
+    /** 展示状态码。 */
     private final String displayStatus;
-
+    /** 展示状态文案。 */
     private final String displayStatusLabel;
-
+    /** 当前步骤文案。 */
     private final String currentStepLabel;
-
+    /** 下一步提示。 */
     private final String nextStepHint;
-
+    /** 进度文案。 */
     private final String progressText;
-
+    /** 原因摘要。 */
     private final String reasonSummary;
-
+    /** 任务线索。 */
     private final String operationalNote;
-
+    /** 完整步骤链。 */
     private final List<AdminProcessingTaskStepResponse> progressSteps;
-
+    /** 展示色调。 */
     private final String displayTone;
-
+    /** 是否仍需轮询。 */
     private final boolean processingActive;
-
+    /** 是否需要人工处理。 */
     private final boolean requiresManualAction;
-
+    /** 通知语气。 */
     private final String noticeTone;
-
+    /** 完成提示。 */
     private final String completionNotice;
-
+    /** 待人工确认数量。 */
     private final int pendingHumanReviewCount;
-
+    /** 已发布数量。 */
     private final int publishedCount;
-
+    /** 已驳回数量。 */
     private final int rejectedCount;
-
+    /** 证据 JSON。可能较大。 */
     private final String evidenceJson;
-
+    /** 请求时间。 */
     private final String requestedAt;
-
+    /** 更新时间。 */
     private final String updatedAt;
-
+    /** 开始时间。 */
     private final String startedAt;
-
+    /** 完成时间。 */
     private final String finishedAt;
 
-    /**
-     * 创建同步运行详情。
-     *
-     * @param runId 运行主键
-     * @param sourceId 资料源主键
-     * @param sourceName 资料源名称
-     * @param sourceType 资料源类型
-     * @param status 运行状态
-     * @param resolverMode 识别模式
-     * @param resolverDecision 识别决策
-     * @param syncAction 同步动作
-     * @param matchedSourceId 命中的资料源主键
-     * @param compileJobId 编译作业主键
-     * @param compileJobStatus 编译作业状态
-     * @param compileDerivedStatus 编译作业派生状态
-     * @param compileCurrentStep 编译当前步骤
-     * @param compileProgressCurrent 编译当前进度
-     * @param compileProgressTotal 编译总进度
-     * @param compileProgressMessage 编译进度提示
-     * @param compileLastHeartbeatAt 编译最近心跳时间
-     * @param compileRunningExpiresAt 编译租约到期时间
-     * @param compileErrorCode 编译错误码
-     * @param manifestHash manifest 哈希
-     * @param message 提示信息
-     * @param errorMessage 错误信息
-     * @param sourceNames 来源文件名
-     * @param actions 可用动作
-     * @param displayStatus 展示状态
-     * @param displayStatusLabel 展示状态文案
-     * @param currentStepLabel 当前步骤文案
-     * @param nextStepHint 下一步提示
-     * @param progressText 当前进度文案
-     * @param reasonSummary 原因摘要
-     * @param operationalNote 任务线索
-     * @param progressSteps 完整步骤链
-     * @param displayTone 展示色调
-     * @param processingActive 是否仍需轮询
-     * @param requiresManualAction 是否需要人工处理
-     * @param noticeTone 通知语气
-     * @param completionNotice 完成提示
-     * @param evidenceJson 证据 JSON
-     * @param requestedAt 请求时间
-     * @param updatedAt 更新时间
-     * @param startedAt 开始时间
-     * @param finishedAt 结束时间
-     */
+    /** 小构造器——委托大构造器，审查计数默认 0。 */
     public SourceSyncRunDetail(
-            Long runId,
-            Long sourceId,
-            String sourceName,
-            String sourceType,
-            String status,
-            String resolverMode,
-            String resolverDecision,
-            String syncAction,
-            Long matchedSourceId,
-            String compileJobId,
-            String compileJobStatus,
-            String compileDerivedStatus,
-            String compileCurrentStep,
-            Integer compileProgressCurrent,
-            Integer compileProgressTotal,
-            String compileProgressMessage,
-            String compileLastHeartbeatAt,
-            String compileRunningExpiresAt,
-            String compileErrorCode,
-            String manifestHash,
-            String message,
-            String errorMessage,
+            Long runId, Long sourceId, String sourceName, String sourceType, String status,
+            String resolverMode, String resolverDecision, String syncAction, Long matchedSourceId,
+            String compileJobId, String compileJobStatus, String compileDerivedStatus,
+            String compileCurrentStep, Integer compileProgressCurrent, Integer compileProgressTotal,
+            String compileProgressMessage, String compileLastHeartbeatAt, String compileRunningExpiresAt,
+            String compileErrorCode, String manifestHash, String message, String errorMessage,
             List<String> sourceNames,
             List<com.xbk.lattice.api.admin.AdminProcessingTaskActionResponse> actions,
-            String displayStatus,
-            String displayStatusLabel,
-            String currentStepLabel,
-            String nextStepHint,
-            String progressText,
-            String reasonSummary,
-            String operationalNote,
-            List<AdminProcessingTaskStepResponse> progressSteps,
-            String displayTone,
-            boolean processingActive,
-            boolean requiresManualAction,
-            String noticeTone,
-            String completionNotice,
-            String evidenceJson,
-            String requestedAt,
-            String updatedAt,
-            String startedAt,
-            String finishedAt
+            String displayStatus, String displayStatusLabel, String currentStepLabel,
+            String nextStepHint, String progressText, String reasonSummary, String operationalNote,
+            List<AdminProcessingTaskStepResponse> progressSteps, String displayTone,
+            boolean processingActive, boolean requiresManualAction, String noticeTone,
+            String completionNotice, String evidenceJson, String requestedAt, String updatedAt,
+            String startedAt, String finishedAt
     ) {
-        this(
-                runId,
-                sourceId,
-                sourceName,
-                sourceType,
-                status,
-                resolverMode,
-                resolverDecision,
-                syncAction,
-                matchedSourceId,
-                compileJobId,
-                compileJobStatus,
-                compileDerivedStatus,
-                compileCurrentStep,
-                compileProgressCurrent,
-                compileProgressTotal,
-                compileProgressMessage,
-                compileLastHeartbeatAt,
-                compileRunningExpiresAt,
-                compileErrorCode,
-                manifestHash,
-                message,
-                errorMessage,
-                sourceNames,
-                actions,
-                displayStatus,
-                displayStatusLabel,
-                currentStepLabel,
-                nextStepHint,
-                progressText,
-                reasonSummary,
-                operationalNote,
-                progressSteps,
-                displayTone,
-                processingActive,
-                requiresManualAction,
-                noticeTone,
-                completionNotice,
-                0,
-                0,
-                0,
-                evidenceJson,
-                requestedAt,
-                updatedAt,
-                startedAt,
-                finishedAt
-        );
+        this(runId, sourceId, sourceName, sourceType, status, resolverMode, resolverDecision,
+                syncAction, matchedSourceId, compileJobId, compileJobStatus, compileDerivedStatus,
+                compileCurrentStep, compileProgressCurrent, compileProgressTotal, compileProgressMessage,
+                compileLastHeartbeatAt, compileRunningExpiresAt, compileErrorCode, manifestHash,
+                message, errorMessage, sourceNames, actions, displayStatus, displayStatusLabel,
+                currentStepLabel, nextStepHint, progressText, reasonSummary, operationalNote,
+                progressSteps, displayTone, processingActive, requiresManualAction, noticeTone,
+                completionNotice, 0, 0, 0, evidenceJson, requestedAt, updatedAt, startedAt, finishedAt);
     }
 
-    /**
-     * 创建同步运行详情。
-     *
-     * @param runId 运行主键
-     * @param sourceId 资料源主键
-     * @param sourceName 资料源名称
-     * @param sourceType 资料源类型
-     * @param status 运行状态
-     * @param resolverMode 识别模式
-     * @param resolverDecision 识别决策
-     * @param syncAction 同步动作
-     * @param matchedSourceId 命中的资料源主键
-     * @param compileJobId 编译作业主键
-     * @param compileJobStatus 编译作业状态
-     * @param compileDerivedStatus 编译作业派生状态
-     * @param compileCurrentStep 编译当前步骤
-     * @param compileProgressCurrent 编译当前进度
-     * @param compileProgressTotal 编译总进度
-     * @param compileProgressMessage 编译进度提示
-     * @param compileLastHeartbeatAt 编译最近心跳时间
-     * @param compileRunningExpiresAt 编译租约到期时间
-     * @param compileErrorCode 编译错误码
-     * @param manifestHash manifest 哈希
-     * @param message 提示信息
-     * @param errorMessage 错误信息
-     * @param sourceNames 来源文件名
-     * @param actions 可用动作
-     * @param displayStatus 展示状态
-     * @param displayStatusLabel 展示状态文案
-     * @param currentStepLabel 当前步骤文案
-     * @param nextStepHint 下一步提示
-     * @param progressText 当前进度文案
-     * @param reasonSummary 原因摘要
-     * @param operationalNote 任务线索
-     * @param progressSteps 完整步骤链
-     * @param displayTone 展示色调
-     * @param processingActive 是否仍需轮询
-     * @param requiresManualAction 是否需要人工处理
-     * @param noticeTone 通知语气
-     * @param completionNotice 完成提示
-     * @param pendingHumanReviewCount 待人工确认数量
-     * @param publishedCount 已发布数量
-     * @param rejectedCount 已驳回数量
-     * @param evidenceJson 证据 JSON
-     * @param requestedAt 请求时间
-     * @param updatedAt 更新时间
-     * @param startedAt 开始时间
-     * @param finishedAt 结束时间
-     */
+    /** 大构造器——完整参数。 */
     public SourceSyncRunDetail(
-            Long runId,
-            Long sourceId,
-            String sourceName,
-            String sourceType,
-            String status,
-            String resolverMode,
-            String resolverDecision,
-            String syncAction,
-            Long matchedSourceId,
-            String compileJobId,
-            String compileJobStatus,
-            String compileDerivedStatus,
-            String compileCurrentStep,
-            Integer compileProgressCurrent,
-            Integer compileProgressTotal,
-            String compileProgressMessage,
-            String compileLastHeartbeatAt,
-            String compileRunningExpiresAt,
-            String compileErrorCode,
-            String manifestHash,
-            String message,
-            String errorMessage,
+            Long runId, Long sourceId, String sourceName, String sourceType, String status,
+            String resolverMode, String resolverDecision, String syncAction, Long matchedSourceId,
+            String compileJobId, String compileJobStatus, String compileDerivedStatus,
+            String compileCurrentStep, Integer compileProgressCurrent, Integer compileProgressTotal,
+            String compileProgressMessage, String compileLastHeartbeatAt, String compileRunningExpiresAt,
+            String compileErrorCode, String manifestHash, String message, String errorMessage,
             List<String> sourceNames,
             List<com.xbk.lattice.api.admin.AdminProcessingTaskActionResponse> actions,
-            String displayStatus,
-            String displayStatusLabel,
-            String currentStepLabel,
-            String nextStepHint,
-            String progressText,
-            String reasonSummary,
-            String operationalNote,
-            List<AdminProcessingTaskStepResponse> progressSteps,
-            String displayTone,
-            boolean processingActive,
-            boolean requiresManualAction,
-            String noticeTone,
-            String completionNotice,
-            int pendingHumanReviewCount,
-            int publishedCount,
-            int rejectedCount,
-            String evidenceJson,
-            String requestedAt,
-            String updatedAt,
-            String startedAt,
-            String finishedAt
+            String displayStatus, String displayStatusLabel, String currentStepLabel,
+            String nextStepHint, String progressText, String reasonSummary, String operationalNote,
+            List<AdminProcessingTaskStepResponse> progressSteps, String displayTone,
+            boolean processingActive, boolean requiresManualAction, String noticeTone,
+            String completionNotice, int pendingHumanReviewCount, int publishedCount,
+            int rejectedCount, String evidenceJson, String requestedAt, String updatedAt,
+            String startedAt, String finishedAt
     ) {
         this.runId = runId;
         this.sourceId = sourceId;
@@ -383,185 +197,5 @@ public class SourceSyncRunDetail {
         this.updatedAt = updatedAt;
         this.startedAt = startedAt;
         this.finishedAt = finishedAt;
-    }
-
-    public Long getRunId() {
-        return runId;
-    }
-
-    public Long getSourceId() {
-        return sourceId;
-    }
-
-    public String getSourceName() {
-        return sourceName;
-    }
-
-    public String getSourceType() {
-        return sourceType;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public String getResolverMode() {
-        return resolverMode;
-    }
-
-    public String getResolverDecision() {
-        return resolverDecision;
-    }
-
-    public String getSyncAction() {
-        return syncAction;
-    }
-
-    public Long getMatchedSourceId() {
-        return matchedSourceId;
-    }
-
-    public String getCompileJobId() {
-        return compileJobId;
-    }
-
-    public String getCompileJobStatus() {
-        return compileJobStatus;
-    }
-
-    public String getCompileDerivedStatus() {
-        return compileDerivedStatus;
-    }
-
-    public String getCompileCurrentStep() {
-        return compileCurrentStep;
-    }
-
-    public Integer getCompileProgressCurrent() {
-        return compileProgressCurrent;
-    }
-
-    public Integer getCompileProgressTotal() {
-        return compileProgressTotal;
-    }
-
-    public String getCompileProgressMessage() {
-        return compileProgressMessage;
-    }
-
-    public String getCompileLastHeartbeatAt() {
-        return compileLastHeartbeatAt;
-    }
-
-    public String getCompileRunningExpiresAt() {
-        return compileRunningExpiresAt;
-    }
-
-    public String getCompileErrorCode() {
-        return compileErrorCode;
-    }
-
-    public String getManifestHash() {
-        return manifestHash;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public String getErrorMessage() {
-        return errorMessage;
-    }
-
-    public List<String> getSourceNames() {
-        return sourceNames;
-    }
-
-    public List<com.xbk.lattice.api.admin.AdminProcessingTaskActionResponse> getActions() {
-        return actions;
-    }
-
-    public String getDisplayStatus() {
-        return displayStatus;
-    }
-
-    public String getDisplayStatusLabel() {
-        return displayStatusLabel;
-    }
-
-    public String getCurrentStepLabel() {
-        return currentStepLabel;
-    }
-
-    public String getNextStepHint() {
-        return nextStepHint;
-    }
-
-    public String getProgressText() {
-        return progressText;
-    }
-
-    public String getReasonSummary() {
-        return reasonSummary;
-    }
-
-    public String getOperationalNote() {
-        return operationalNote;
-    }
-
-    public List<AdminProcessingTaskStepResponse> getProgressSteps() {
-        return progressSteps;
-    }
-
-    public String getDisplayTone() {
-        return displayTone;
-    }
-
-    public boolean isProcessingActive() {
-        return processingActive;
-    }
-
-    public boolean isRequiresManualAction() {
-        return requiresManualAction;
-    }
-
-    public String getNoticeTone() {
-        return noticeTone;
-    }
-
-    public String getCompletionNotice() {
-        return completionNotice;
-    }
-
-    public int getPendingHumanReviewCount() {
-        return pendingHumanReviewCount;
-    }
-
-    public int getPublishedCount() {
-        return publishedCount;
-    }
-
-    public int getRejectedCount() {
-        return rejectedCount;
-    }
-
-    public String getEvidenceJson() {
-        return evidenceJson;
-    }
-
-    public String getRequestedAt() {
-        return requestedAt;
-    }
-
-    public String getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public String getStartedAt() {
-        return startedAt;
-    }
-
-    public String getFinishedAt() {
-        return finishedAt;
     }
 }

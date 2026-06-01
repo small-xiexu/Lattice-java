@@ -1,47 +1,54 @@
 package com.xbk.lattice.documentparse.domain;
 
+import lombok.Getter;
+
 /**
- * 文档解析结果
+ * 文档解析结果。
  *
- * 职责：承载文档解析层输出给标准化器的统一结果
+ * <p>承载文档解析层输出给标准化器的统一结果——解析后的文本、元数据和解析上下文。
+ * 为不可变对象，进入标准化器后不再修改。
  *
  * @author xiexu
  */
+@Getter
 public class DocumentParseResult {
 
+    /** 资料源主键。为 null 表示未关联 source。 */
     private final Long sourceId;
 
+    /** 文件相对路径。 */
     private final String relativePath;
 
+    /** 抽取后的正文文本。可能为大型文本。 */
     private final String extractedText;
 
+    /** 文件格式（如 md / pdf / docx）。 */
     private final String format;
 
+    /** 文件大小（字节）。 */
     private final long fileSize;
 
+    /**
+     * 解析模式。
+     *
+     * <p>驱动下游编译消费路径——不同 parseMode 对应不同的内容标准化策略。</p>
+     */
     private final DocumentParseMode parseMode;
 
+    /** 解析供应商标识（如 filesystem / pdfbox / poi_xwpf）。 */
     private final String parseProvider;
 
+    /** 解析扩展元数据 JSON。 */
     private final String metadataJson;
 
+    /** 是否按原文保留（不解析格式）。 */
     private final boolean verbatim;
 
+    /** 原始文件路径（可能为 Vault 中的绝对路径）。 */
     private final String rawPath;
 
     /**
      * 创建文档解析结果。
-     *
-     * @param sourceId 资料源主键
-     * @param relativePath 相对路径
-     * @param extractedText 抽取正文
-     * @param format 文件格式
-     * @param fileSize 文件大小
-     * @param parseMode 解析模式
-     * @param parseProvider 解析供应商
-     * @param metadataJson 元数据 JSON
-     * @param verbatim 是否按原文保留
-     * @param rawPath 原始路径
      */
     public DocumentParseResult(
             Long sourceId,
@@ -65,95 +72,5 @@ public class DocumentParseResult {
         this.metadataJson = metadataJson;
         this.verbatim = verbatim;
         this.rawPath = rawPath;
-    }
-
-    /**
-     * 返回资料源主键。
-     *
-     * @return 资料源主键
-     */
-    public Long getSourceId() {
-        return sourceId;
-    }
-
-    /**
-     * 返回相对路径。
-     *
-     * @return 相对路径
-     */
-    public String getRelativePath() {
-        return relativePath;
-    }
-
-    /**
-     * 返回抽取正文。
-     *
-     * @return 抽取正文
-     */
-    public String getExtractedText() {
-        return extractedText;
-    }
-
-    /**
-     * 返回文件格式。
-     *
-     * @return 文件格式
-     */
-    public String getFormat() {
-        return format;
-    }
-
-    /**
-     * 返回文件大小。
-     *
-     * @return 文件大小
-     */
-    public long getFileSize() {
-        return fileSize;
-    }
-
-    /**
-     * 返回解析模式。
-     *
-     * @return 解析模式
-     */
-    public DocumentParseMode getParseMode() {
-        return parseMode;
-    }
-
-    /**
-     * 返回解析供应商。
-     *
-     * @return 解析供应商
-     */
-    public String getParseProvider() {
-        return parseProvider;
-    }
-
-    /**
-     * 返回元数据 JSON。
-     *
-     * @return 元数据 JSON
-     */
-    public String getMetadataJson() {
-        return metadataJson;
-    }
-
-    /**
-     * 返回是否按原文保留。
-     *
-     * @return 是否按原文保留
-     */
-    public boolean isVerbatim() {
-        return verbatim;
-    }
-
-    /**
-     * 返回原始路径。
-     *
-     * @return 原始路径
-     */
-    public String getRawPath() {
-        return rawPath;
     }
 }

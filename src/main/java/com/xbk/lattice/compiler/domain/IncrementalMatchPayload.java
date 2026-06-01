@@ -3,30 +3,29 @@ package com.xbk.lattice.compiler.domain;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Getter;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 增量匹配载荷
+ * 增量匹配载荷。
  *
- * 职责：承载 `incremental-match` 结构化输出的最小语义
+ * <p>承载增量编译步骤的结构化输出——增强计划与新建文章计划。
+ * 所有嵌套列表在构造时做防御性拷贝，运行时不可变。
  *
  * @author xiexu
  */
+@Getter
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class IncrementalMatchPayload {
 
+    /** 增强计划列表。不可变（构造时防御性拷贝）。 */
     private final List<EnhancementPayload> enhancements;
 
+    /** 新建文章计划列表。不可变（构造时防御性拷贝）。 */
     private final List<NewArticlePayload> newArticles;
 
-    /**
-     * 创建增量匹配载荷。
-     *
-     * @param enhancements 增强计划列表
-     * @param newArticles 新建文章计划列表
-     */
     @JsonCreator
     public IncrementalMatchPayload(
             @JsonProperty("enhancements") List<EnhancementPayload> enhancements,
@@ -37,46 +36,23 @@ public class IncrementalMatchPayload {
     }
 
     /**
-     * 返回增强计划列表。
+     * 增强计划载荷。
      *
-     * @return 增强计划列表
+     * <p>承载单条增强计划——目标文章、新增信息和来源引用。
      */
-    public List<EnhancementPayload> getEnhancements() {
-        return enhancements;
-    }
-
-    /**
-     * 返回新建文章计划列表。
-     *
-     * @return 新建文章计划列表
-     */
-    public List<NewArticlePayload> getNewArticles() {
-        return newArticles;
-    }
-
-    /**
-     * 增强计划载荷
-     *
-     * 职责：承载单条增强计划的结构化字段
-     *
-     * @author xiexu
-     */
+    @Getter
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class EnhancementPayload {
 
+        /** 目标文章标识。为空时取 {@code ""}。 */
         private final String targetArticleId;
 
+        /** 新增信息摘要。为空时取 {@code ""}。 */
         private final String newInfoSummary;
 
+        /** 来源引用列表。不可变（构造时防御性拷贝）。 */
         private final List<String> sourceRefs;
 
-        /**
-         * 创建增强计划载荷。
-         *
-         * @param targetArticleId 目标文章标识
-         * @param newInfoSummary 新增信息摘要
-         * @param sourceRefs 来源引用
-         */
         @JsonCreator
         public EnhancementPayload(
                 @JsonProperty("target_article_id") String targetArticleId,
@@ -87,64 +63,32 @@ public class IncrementalMatchPayload {
             this.newInfoSummary = newInfoSummary == null ? "" : newInfoSummary.trim();
             this.sourceRefs = sourceRefs == null ? List.of() : new ArrayList<String>(sourceRefs);
         }
-
-        /**
-         * 返回目标文章标识。
-         *
-         * @return 目标文章标识
-         */
-        public String getTargetArticleId() {
-            return targetArticleId;
-        }
-
-        /**
-         * 返回新增信息摘要。
-         *
-         * @return 新增信息摘要
-         */
-        public String getNewInfoSummary() {
-            return newInfoSummary;
-        }
-
-        /**
-         * 返回来源引用。
-         *
-         * @return 来源引用
-         */
-        public List<String> getSourceRefs() {
-            return sourceRefs;
-        }
     }
 
     /**
-     * 新建文章计划载荷
+     * 新建文章计划载荷。
      *
-     * 职责：承载单条新建文章计划的结构化字段
-     *
-     * @author xiexu
+     * <p>承载单条新建文章计划——标识、标题、来源和关联关系。
      */
+    @Getter
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class NewArticlePayload {
 
+        /** 文章标识。为空时取 {@code ""}。 */
         private final String id;
 
+        /** 文章标题。为空时取 {@code ""}。 */
         private final String title;
 
+        /** 文章描述。为空时取 {@code ""}。 */
         private final String description;
 
+        /** 来源引用列表。不可变（构造时防御性拷贝）。 */
         private final List<String> sourceRefs;
 
+        /** 关联文章列表。不可变（构造时防御性拷贝）。 */
         private final List<String> relatedTo;
 
-        /**
-         * 创建新建文章计划载荷。
-         *
-         * @param id 文章标识
-         * @param title 标题
-         * @param description 描述
-         * @param sourceRefs 来源引用
-         * @param relatedTo 关联文章
-         */
         @JsonCreator
         public NewArticlePayload(
                 @JsonProperty("id") String id,
@@ -158,51 +102,6 @@ public class IncrementalMatchPayload {
             this.description = description == null ? "" : description.trim();
             this.sourceRefs = sourceRefs == null ? List.of() : new ArrayList<String>(sourceRefs);
             this.relatedTo = relatedTo == null ? List.of() : new ArrayList<String>(relatedTo);
-        }
-
-        /**
-         * 返回文章标识。
-         *
-         * @return 文章标识
-         */
-        public String getId() {
-            return id;
-        }
-
-        /**
-         * 返回标题。
-         *
-         * @return 标题
-         */
-        public String getTitle() {
-            return title;
-        }
-
-        /**
-         * 返回描述。
-         *
-         * @return 描述
-         */
-        public String getDescription() {
-            return description;
-        }
-
-        /**
-         * 返回来源引用。
-         *
-         * @return 来源引用
-         */
-        public List<String> getSourceRefs() {
-            return sourceRefs;
-        }
-
-        /**
-         * 返回关联文章列表。
-         *
-         * @return 关联文章列表
-         */
-        public List<String> getRelatedTo() {
-            return relatedTo;
         }
     }
 }

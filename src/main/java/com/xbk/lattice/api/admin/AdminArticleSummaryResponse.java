@@ -1,52 +1,121 @@
 package com.xbk.lattice.api.admin;
 
+import lombok.AccessLevel;
+import lombok.Getter;
+
 import java.util.List;
 
 /**
- * 管理侧文章摘要响应
+ * 管理侧文章摘要响应。
  *
- * 职责：承载管理侧文章列表中的单篇文章摘要
+ * <p>承载管理侧文章列表中单篇文章的摘要信息——含标识、审查状态、风险等级、
+ * 热点标记与标题画像。不含正文全文（与 {@link AdminArticleDetailResponse} 区分）。
+ * {@code hotspot} 和 {@code requiresResultVerification} 的 getter 保留手写命名，
+ * 避免 JSON 序列化属性名变化。
  *
  * @author xiexu
  */
+@Getter
 public class AdminArticleSummaryResponse {
 
+    /** 资料源主键。为 {@code null} 表示多源或无固定 source。 */
     private final Long sourceId;
 
+    /** 文章唯一键（编译生成，跨 source 稳定）。 */
     private final String articleKey;
 
+    /** 概念标识（编译输入，用于跨 source 去重）。 */
     private final String conceptId;
 
+    /** 文章标题。 */
     private final String title;
 
+    /**
+     * 文章生命周期状态。
+     *
+     * <p>可选值：{@code active} / {@code deprecated} / {@code archived}。
+     * 影响列表中的状态标签展示和可用操作（如纠错、回滚）。</p>
+     */
     private final String lifecycle;
 
+    /**
+     * 审查状态。
+     *
+     * <p>可选值：{@code accepted} / {@code needs_human_review} / {@code published}。
+     * 驱动列表中的审查标签颜色和批量操作按钮。</p>
+     */
     private final String reviewStatus;
 
+    /**
+     * 风险等级。
+     *
+     * <p>可选值：{@code low} / {@code medium} / {@code high}。
+     * 影响列表中文章行的警示颜色。</p>
+     */
     private final String riskLevel;
 
+    /**
+     * 风险原因列表。
+     *
+     * <p>与 {@code riskLevel} 配合解释风险来源。</p>
+     */
     private final List<String> riskReasons;
 
+    /**
+     * 是否热点文章。
+     *
+     * <p>基于 usage stats 热度分动态计算。getter 保留手写 {@code getIsHotspot()}，
+     * Lombok 已排除此字段以防止 JSON 属性名从 {@code "isHotspot"} 变为 {@code "hotspot"}。</p>
+     */
+    @Getter(AccessLevel.NONE)
     private final boolean hotspot;
 
+    /**
+     * 是否需要结果抽检。
+     *
+     * <p>由质量抽检策略决定。getter 保留手写 {@code getRequiresResultVerification()}，
+     * Lombok 已排除此字段。</p>
+     */
+    @Getter(AccessLevel.NONE)
     private final boolean requiresResultVerification;
 
+    /** 最近编译时间（ISO-8601 字符串）。为 {@code null} 表示原始录入。 */
     private final String compiledAt;
 
+    /** 首次入库时间（ISO-8601 字符串）。 */
     private final String createdAt;
 
+    /** 最近入库时间（ISO-8601 字符串）。 */
     private final String updatedAt;
 
+    /**
+     * 文章摘要。
+     *
+     * <p>为 {@code null} 表示未生成摘要。</p>
+     */
     private final String summary;
 
+    /** 来源文件数（由 sourcePaths.size() 计算）。 */
     private final int sourceCount;
 
+    /** 首个来源文件路径。 */
     private final String primarySourcePath;
 
+    /** 全部来源文件路径列表。 */
     private final List<String> sourcePaths;
 
+    /**
+     * 首个来源文件名。
+     *
+     * <p>仅 Summary 中有此字段，Detail 中无。用于列表中快速展示来源信息。</p>
+     */
     private final String primarySourceName;
 
+    /**
+     * 标题画像。
+     *
+     * <p>为 {@code null} 时前端降级展示 {@code title} 字段。</p>
+     */
     private final AdminArticleTitleProfile titleProfile;
 
     /**
@@ -115,173 +184,26 @@ public class AdminArticleSummaryResponse {
     }
 
     /**
-     * 获取资料源主键。
+     * 返回是否热点文章。
      *
-     * @return 资料源主键
-     */
-    public Long getSourceId() {
-        return sourceId;
-    }
-
-    /**
-     * 获取文章唯一键。
+     * <p>getter 命名为 {@code getIsHotspot()} 以保持
+     * JSON 序列化属性名 {@code "isHotspot"} 不变。</p>
      *
-     * @return 文章唯一键
-     */
-    public String getArticleKey() {
-        return articleKey;
-    }
-
-    /**
-     * 获取概念标识。
-     *
-     * @return 概念标识
-     */
-    public String getConceptId() {
-        return conceptId;
-    }
-
-    /**
-     * 获取标题。
-     *
-     * @return 标题
-     */
-    public String getTitle() {
-        return title;
-    }
-
-    /**
-     * 获取生命周期。
-     *
-     * @return 生命周期
-     */
-    public String getLifecycle() {
-        return lifecycle;
-    }
-
-    /**
-     * 获取审查状态。
-     *
-     * @return 审查状态
-     */
-    public String getReviewStatus() {
-        return reviewStatus;
-    }
-
-    /**
-     * 获取风险等级。
-     *
-     * @return 风险等级
-     */
-    public String getRiskLevel() {
-        return riskLevel;
-    }
-
-    /**
-     * 获取风险原因。
-     *
-     * @return 风险原因
-     */
-    public List<String> getRiskReasons() {
-        return riskReasons;
-    }
-
-    /**
-     * 获取是否热点内容。
-     *
-     * @return 是否热点内容
+     * @return 是否热点文章
      */
     public boolean getIsHotspot() {
         return hotspot;
     }
 
     /**
-     * 获取是否需要结果抽检。
+     * 返回是否需要结果抽检。
+     *
+     * <p>getter 命名为 {@code getRequiresResultVerification()} 以保持
+     * JSON 序列化属性名 {@code "requiresResultVerification"} 不变。</p>
      *
      * @return 是否需要结果抽检
      */
     public boolean getRequiresResultVerification() {
         return requiresResultVerification;
-    }
-
-    /**
-     * 获取编译时间。
-     *
-     * @return 编译时间
-     */
-    public String getCompiledAt() {
-        return compiledAt;
-    }
-
-    /**
-     * 获取首次入库时间。
-     *
-     * @return 首次入库时间
-     */
-    public String getCreatedAt() {
-        return createdAt;
-    }
-
-    /**
-     * 获取最近入库时间。
-     *
-     * @return 最近入库时间
-     */
-    public String getUpdatedAt() {
-        return updatedAt;
-    }
-
-    /**
-     * 获取摘要。
-     *
-     * @return 摘要
-     */
-    public String getSummary() {
-        return summary;
-    }
-
-    /**
-     * 获取来源数量。
-     *
-     * @return 来源数量
-     */
-    public int getSourceCount() {
-        return sourceCount;
-    }
-
-    /**
-     * 获取首个来源路径。
-     *
-     * @return 首个来源路径
-     */
-    public String getPrimarySourcePath() {
-        return primarySourcePath;
-    }
-
-    /**
-     * 获取完整来源路径列表。
-     *
-     * @return 完整来源路径列表
-     */
-    public List<String> getSourcePaths() {
-        return sourcePaths;
-    }
-
-    /**
-     * 获取首个来源文件名。
-     *
-     * @return 首个来源文件名
-     */
-    public String getPrimarySourceName() {
-        return primarySourceName;
-    }
-
-    /**
-     * 获取标题画像。
-     *
-     * @return 标题画像
-     */
-    public AdminArticleTitleProfile getTitleProfile() {
-        return titleProfile;
     }
 }

@@ -5,8 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xbk.lattice.documentparse.domain.model.ParseRoutePolicy;
 import com.xbk.lattice.documentparse.service.DocumentParseRoutePolicyAdminService;
 import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -150,60 +151,82 @@ public class AdminDocumentParsePolicyController {
     /**
      * 文档解析路由策略请求。
      *
-     * 职责：承载管理侧默认路由策略保存参数
+     * <p>承载管理侧默认路由策略保存参数，由 Spring MVC 从 JSON 请求体绑定。
      *
      * @author xiexu
      */
-    @Data
+    @Getter
+    @Setter
     @NoArgsConstructor
     @AllArgsConstructor
     public static class AdminDocumentParsePolicyRequest {
 
+        /** 图片类型文档的解析连接主键。为 {@code null} 时不对图片做解析路由。 */
         private Long imageConnectionId;
 
+        /** 扫描 PDF 类型文档的解析连接主键。为 {@code null} 时不对扫描 PDF 做解析路由。 */
         private Long scannedPdfConnectionId;
 
+        /** 是否启用文档清理（cleanup）步骤。为 {@code null} 时按 {@code false} 处理。 */
         private Boolean cleanupEnabled;
 
+        /** cleanup 步骤使用的 LLM 模型配置主键。仅 cleanupEnabled=true 时生效。 */
         private Long cleanupModelProfileId;
 
+        /**
+         * 降级路由策略 JSON。
+         *
+         * <p>定义无法匹配到明确连接时的兜底行为。可为空，默认 {@code "{}"}。服务端做 JSON 对象格式校验。</p>
+         */
         private String fallbackPolicyJson;
 
+        /** 操作人标识。为空时默认 {@code "admin"}。 */
         private String operator;
     }
 
     /**
      * 文档解析路由策略响应。
      *
-     * 职责：返回默认路由策略展示信息
+     * <p>返回默认路由策略展示信息，由 {@code toResponse()} 组装。
      *
      * @author xiexu
      */
-    @Data
+    @Getter
     @NoArgsConstructor
     @AllArgsConstructor
     public static class AdminDocumentParsePolicyResponse {
 
+        /** 策略主键。 */
         private Long id;
 
+        /** 策略范围标识（固定为 {@code "default"}）。 */
         private String policyScope;
 
+        /** 图片文档解析连接主键。 */
         private Long imageConnectionId;
 
+        /** 扫描 PDF 文档解析连接主键。 */
         private Long scannedPdfConnectionId;
 
+        /** 是否启用文档清理。 */
         private boolean cleanupEnabled;
 
+        /** cleanup 模型配置主键。 */
         private Long cleanupModelProfileId;
 
+        /** 降级路由策略 JSON。 */
         private String fallbackPolicyJson;
 
+        /** 创建人。 */
         private String createdBy;
 
+        /** 最后更新人。 */
         private String updatedBy;
 
+        /** 创建时间（ISO-8601 字符串）。 */
         private String createdAt;
 
+        /** 最后更新时间（ISO-8601 字符串）。 */
         private String updatedAt;
     }
 }

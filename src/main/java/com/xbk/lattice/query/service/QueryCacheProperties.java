@@ -12,8 +12,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "lattice.query.cache")
 public class QueryCacheProperties {
 
+    /**
+     * LLM 查询缓存 Redis Key 前缀。
+     *
+     * <p>默认 {@code "llm:query:cache:"}。</p>
+     */
     private String keyPrefix = "llm:query:cache:";
 
+    /**
+     * 缓存 TTL 秒数。
+     *
+     * <p>默认 3600（1 小时）。过期后相同 query 重新调用 LLM，增加成本和延迟。
+     * 过长导致答案陈旧；过短导致 LLM 调用频率和成本上升。</p>
+     */
     private long ttlSeconds = 3600L;
 
     /**

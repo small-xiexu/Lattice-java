@@ -67,21 +67,19 @@ public class StructuredQueryService {
         if (!isEvidenceConsistent(result)) {
             return Optional.empty();
         }
-        QueryResponse queryResponse = new QueryResponse(
-                structuredQueryAnswerRenderer.renderAnswer(result),
-                structuredQueryAnswerRenderer.renderSources(result),
-                List.of(),
-                queryId,
-                result.hasResult() ? "PASSED" : "NEEDS_REVIEW",
-                result.hasResult() ? AnswerOutcome.SUCCESS : AnswerOutcome.NO_RELEVANT_KNOWLEDGE,
-                GenerationMode.RULE_BASED,
-                ModelExecutionStatus.SKIPPED,
-                null,
-                null,
-                "STRUCTURED_QUERY",
-                List.of(),
-                structuredQueryAnswerRenderer.renderStructuredEvidence(result)
-        );
+        QueryResponse queryResponse = QueryResponse.builder()
+                .answer(structuredQueryAnswerRenderer.renderAnswer(result))
+                .sources(structuredQueryAnswerRenderer.renderSources(result))
+                .articles(List.of())
+                .queryId(queryId)
+                .reviewStatus(result.hasResult() ? "PASSED" : "NEEDS_REVIEW")
+                .answerOutcome(result.hasResult() ? AnswerOutcome.SUCCESS : AnswerOutcome.NO_RELEVANT_KNOWLEDGE)
+                .generationMode(GenerationMode.RULE_BASED)
+                .modelExecutionStatus(ModelExecutionStatus.SKIPPED)
+                .fallbackReason("STRUCTURED_QUERY")
+                .citationMarkers(List.of())
+                .structuredEvidence(structuredQueryAnswerRenderer.renderStructuredEvidence(result))
+                .build();
         return Optional.of(queryResponse);
     }
 

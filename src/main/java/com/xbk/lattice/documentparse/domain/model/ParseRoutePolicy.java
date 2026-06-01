@@ -1,67 +1,58 @@
 package com.xbk.lattice.documentparse.domain.model;
 
+import lombok.Getter;
+
 import java.time.OffsetDateTime;
 
 /**
- * 文档解析路由策略
+ * 文档解析路由策略。
  *
- * 职责：定义图片 OCR、扫描 PDF OCR 与后整理能力的默认路由
+ * <p>定义图片 OCR、扫描 PDF OCR 与后整理能力的默认路由——确定各文档类型对应的解析连接和清理模型。
  *
  * @author xiexu
  */
+@Getter
 public class ParseRoutePolicy {
 
     public static final String DEFAULT_SCOPE = "default";
 
+    /** 策略主键。为 null 时表示默认空策略。 */
     private final Long id;
 
+    /** 策略作用域标识（固定为 {@code "default"}）。 */
     private final String policyScope;
 
+    /** 图片 OCR 的默认解析连接主键。为 null 时不对图片做 OCR 路由。 */
     private final Long imageConnectionId;
 
+    /** 扫描 PDF OCR 的默认解析连接主键。为 null 时不对扫描 PDF 做 OCR 路由。 */
     private final Long scannedPdfConnectionId;
 
+    /** 是否启用后整理（cleanup）步骤。 */
     private final boolean cleanupEnabled;
 
+    /** 后整理使用的 LLM 模型配置主键。仅 cleanupEnabled=true 时生效。 */
     private final Long cleanupModelProfileId;
 
+    /** 降级路由规则 JSON。为空 {@code "{}"} 时不执行降级路由。 */
     private final String fallbackPolicyJson;
 
+    /** 创建人。 */
     private final String createdBy;
 
+    /** 最后更新人。 */
     private final String updatedBy;
 
+    /** 创建时间。为 null 时表示尚未持久化。 */
     private final OffsetDateTime createdAt;
 
+    /** 最后更新时间。为 null 时表示尚未持久化。 */
     private final OffsetDateTime updatedAt;
 
-    /**
-     * 创建文档解析路由策略。
-     *
-     * @param id 主键
-     * @param policyScope 策略作用域
-     * @param imageConnectionId 图片 OCR 默认连接
-     * @param scannedPdfConnectionId 扫描 PDF OCR 默认连接
-     * @param cleanupEnabled 是否启用后整理
-     * @param cleanupModelProfileId 后整理模型主键
-     * @param fallbackPolicyJson 降级策略 JSON
-     * @param createdBy 创建人
-     * @param updatedBy 更新人
-     * @param createdAt 创建时间
-     * @param updatedAt 更新时间
-     */
     public ParseRoutePolicy(
-            Long id,
-            String policyScope,
-            Long imageConnectionId,
-            Long scannedPdfConnectionId,
-            boolean cleanupEnabled,
-            Long cleanupModelProfileId,
-            String fallbackPolicyJson,
-            String createdBy,
-            String updatedBy,
-            OffsetDateTime createdAt,
-            OffsetDateTime updatedAt
+            Long id, String policyScope, Long imageConnectionId, Long scannedPdfConnectionId,
+            boolean cleanupEnabled, Long cleanupModelProfileId, String fallbackPolicyJson,
+            String createdBy, String updatedBy, OffsetDateTime createdAt, OffsetDateTime updatedAt
     ) {
         this.id = id;
         this.policyScope = policyScope;
@@ -76,123 +67,7 @@ public class ParseRoutePolicy {
         this.updatedAt = updatedAt;
     }
 
-    /**
-     * 返回默认空策略。
-     *
-     * @return 默认空策略
-     */
     public static ParseRoutePolicy defaultPolicy() {
-        return new ParseRoutePolicy(
-                null,
-                DEFAULT_SCOPE,
-                null,
-                null,
-                false,
-                null,
-                "{}",
-                "system",
-                "system",
-                null,
-                null
-        );
-    }
-
-    /**
-     * 返回主键。
-     *
-     * @return 主键
-     */
-    public Long getId() {
-        return id;
-    }
-
-    /**
-     * 返回策略作用域。
-     *
-     * @return 策略作用域
-     */
-    public String getPolicyScope() {
-        return policyScope;
-    }
-
-    /**
-     * 返回图片 OCR 默认连接。
-     *
-     * @return 图片 OCR 默认连接
-     */
-    public Long getImageConnectionId() {
-        return imageConnectionId;
-    }
-
-    /**
-     * 返回扫描 PDF OCR 默认连接。
-     *
-     * @return 扫描 PDF OCR 默认连接
-     */
-    public Long getScannedPdfConnectionId() {
-        return scannedPdfConnectionId;
-    }
-
-    /**
-     * 返回是否启用后整理。
-     *
-     * @return 是否启用后整理
-     */
-    public boolean isCleanupEnabled() {
-        return cleanupEnabled;
-    }
-
-    /**
-     * 返回后整理模型主键。
-     *
-     * @return 后整理模型主键
-     */
-    public Long getCleanupModelProfileId() {
-        return cleanupModelProfileId;
-    }
-
-    /**
-     * 返回降级策略 JSON。
-     *
-     * @return 降级策略 JSON
-     */
-    public String getFallbackPolicyJson() {
-        return fallbackPolicyJson;
-    }
-
-    /**
-     * 返回创建人。
-     *
-     * @return 创建人
-     */
-    public String getCreatedBy() {
-        return createdBy;
-    }
-
-    /**
-     * 返回更新人。
-     *
-     * @return 更新人
-     */
-    public String getUpdatedBy() {
-        return updatedBy;
-    }
-
-    /**
-     * 返回创建时间。
-     *
-     * @return 创建时间
-     */
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    /**
-     * 返回更新时间。
-     *
-     * @return 更新时间
-     */
-    public OffsetDateTime getUpdatedAt() {
-        return updatedAt;
+        return new ParseRoutePolicy(null, DEFAULT_SCOPE, null, null, false, null, "{}", "system", "system", null, null);
     }
 }

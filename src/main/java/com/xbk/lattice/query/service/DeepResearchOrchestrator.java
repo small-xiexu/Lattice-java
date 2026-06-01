@@ -166,17 +166,16 @@ public class DeepResearchOrchestrator {
             );
             finalState.setAnswerAuditRef(deepResearchWorkingSetStore.saveDeepResearchAudit(queryId, deepResearchAuditSnapshot));
             List<QueryArticleHit> rootHits = knowledgeSearchService.search(question, 8);
-            return new QueryResponse(
-                    answerMarkdown,
-                    QueryResponseCitationAssembler.toSourceResponses(answerProjectionBundle, rootHits, false),
-                    QueryResponseCitationAssembler.toArticleResponses(answerProjectionBundle, rootHits, false),
-                    queryId,
-                    null,
-                    finalState.isPartialAnswer() ? AnswerOutcome.PARTIAL_ANSWER : AnswerOutcome.SUCCESS,
-                    GenerationMode.LLM,
-                    ModelExecutionStatus.SUCCESS,
-                    citationCheckReport == null ? null : citationCheckReport.toSummary(),
-                    new DeepResearchSummary(
+            return QueryResponse.builder()
+                    .answer(answerMarkdown)
+                    .sources(QueryResponseCitationAssembler.toSourceResponses(answerProjectionBundle, rootHits, false))
+                    .articles(QueryResponseCitationAssembler.toArticleResponses(answerProjectionBundle, rootHits, false))
+                    .queryId(queryId)
+                    .answerOutcome(finalState.isPartialAnswer() ? AnswerOutcome.PARTIAL_ANSWER : AnswerOutcome.SUCCESS)
+                    .generationMode(GenerationMode.LLM)
+                    .modelExecutionStatus(ModelExecutionStatus.SUCCESS)
+                    .citationCheck(citationCheckReport == null ? null : citationCheckReport.toSummary())
+                    .deepResearch(new DeepResearchSummary(
                             true,
                             plan.layerCount(),
                             plan.taskCount(),
@@ -185,10 +184,14 @@ public class DeepResearchOrchestrator {
                             citationCheckReport == null ? 0.0D : citationCheckReport.getCoverageRate(),
                             finalState.isPartialAnswer(),
                             finalState.isHasConflicts()
-                        ),
-                    "",
-                    QueryResponseCitationAssembler.toCitationMarkerResponses(citationCheckReport, answerProjectionBundle, rootHits)
-                );
+                    ))
+                    .fallbackReason("")
+                    .citationMarkers(QueryResponseCitationAssembler.toCitationMarkerResponses(
+                            citationCheckReport,
+                            answerProjectionBundle,
+                            rootHits
+                    ))
+                    .build();
         }
         catch (Exception exception) {
             log.warn(
@@ -198,18 +201,25 @@ public class DeepResearchOrchestrator {
                     executionContext.llmCallCount(),
                     exception
             );
-            return new QueryResponse(
-                    "Deep Research 执行中断，当前仅能返回部分结果。",
-                    List.of(),
-                    List.of(),
-                    queryId,
-                    null,
-                    AnswerOutcome.PARTIAL_ANSWER,
-                    GenerationMode.FALLBACK,
-                    ModelExecutionStatus.FAILED,
-                    null,
-                    new DeepResearchSummary(true, 0, 0, 0, executionContext.llmCallCount(), 0.0D, true, false)
-            );
+            return QueryResponse.builder()
+                    .answer("Deep Research 执行中断，当前仅能返回部分结果。")
+                    .sources(List.of())
+                    .articles(List.of())
+                    .queryId(queryId)
+                    .answerOutcome(AnswerOutcome.PARTIAL_ANSWER)
+                    .generationMode(GenerationMode.FALLBACK)
+                    .modelExecutionStatus(ModelExecutionStatus.FAILED)
+                    .deepResearch(new DeepResearchSummary(
+                            true,
+                            0,
+                            0,
+                            0,
+                            executionContext.llmCallCount(),
+                            0.0D,
+                            true,
+                            false
+                    ))
+                    .build();
         }
         finally {
             deepResearchExecutionRegistry.remove(queryId);

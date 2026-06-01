@@ -494,6 +494,10 @@ public final class QueryEvidenceRelevanceSupport {
         String marker = "\"description\":";
         int markerIndex = metadataJson.indexOf(marker);
         if (markerIndex < 0) {
+            marker = "\"fieldDescription\":";
+            markerIndex = metadataJson.indexOf(marker);
+        }
+        if (markerIndex < 0) {
             return "";
         }
         int quoteStart = metadataJson.indexOf('"', markerIndex + marker.length());

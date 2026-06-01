@@ -48,6 +48,8 @@ private final FactCardGenerationMapper factCardGenerationMapper;
 
     private final FactCardTerminalUnitMaterializer factCardTerminalUnitMaterializer;
 
+    private final FactCardTerminalUnitFieldAliasEnricher fieldAliasEnricher;
+
     /**
      * 创建事实证据卡生成服务。
      *
@@ -62,7 +64,8 @@ private final FactCardGenerationMapper factCardGenerationMapper;
                 factCardGenerationMapper,
                 factCardJdbcRepository,
                 null,
-                new FactCardTerminalUnitMaterializer()
+                new FactCardTerminalUnitMaterializer(),
+                null
         );
     }
 
@@ -79,7 +82,8 @@ private final FactCardGenerationMapper factCardGenerationMapper;
             FactCardGenerationMapper factCardGenerationMapper,
             FactCardJdbcRepository factCardJdbcRepository,
             FactCardTerminalUnitJdbcRepository factCardTerminalUnitJdbcRepository,
-            FactCardTerminalUnitMaterializer factCardTerminalUnitMaterializer
+            FactCardTerminalUnitMaterializer factCardTerminalUnitMaterializer,
+            @Autowired(required = false) FactCardTerminalUnitFieldAliasEnricher fieldAliasEnricher
     ) {
         this.factCardGenerationMapper = factCardGenerationMapper;
         this.factCardJdbcRepository = factCardJdbcRepository;
@@ -87,6 +91,7 @@ private final FactCardGenerationMapper factCardGenerationMapper;
         this.factCardTerminalUnitMaterializer = factCardTerminalUnitMaterializer == null
                 ? new FactCardTerminalUnitMaterializer()
                 : factCardTerminalUnitMaterializer;
+        this.fieldAliasEnricher = fieldAliasEnricher;
     }
 
     /**
@@ -97,6 +102,18 @@ private final FactCardGenerationMapper factCardGenerationMapper;
      */
     @Transactional(rollbackFor = Exception.class)
     public List<FactCardRecord> rebuildForSourceFile(Long sourceFileId) {
+        return rebuildForSourceFile(sourceFileId, null);
+    }
+
+    /**
+     * 在 compile job scope 下重建指定源文件的全部事实证据卡。
+     *
+     * @param sourceFileId 源文件主键
+     * @param scopeId      compile job scope，null 表示无 scope
+     * @return 新生成并已持久化的事实证据卡
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public List<FactCardRecord> rebuildForSourceFile(Long sourceFileId, String scopeId) {
         if (sourceFileId == null || factCardGenerationMapper == null || factCardJdbcRepository == null) {
             return List.of();
         }
@@ -105,7 +122,7 @@ private final FactCardGenerationMapper factCardGenerationMapper;
         factCardJdbcRepository.deleteBySourceFileId(sourceFileId);
         for (FactCardRecord factCardRecord : factCardRecords) {
             FactCardRecord savedFactCardRecord = factCardJdbcRepository.upsert(factCardRecord);
-            materializeTerminalUnits(savedFactCardRecord);
+            materializeTerminalUnits(savedFactCardRecord, scopeId);
         }
         return factCardRecords;
     }
@@ -169,11 +186,22 @@ private final FactCardGenerationMapper factCardGenerationMapper;
      * @param factCardRecord 已保存事实卡
      */
     private void materializeTerminalUnits(FactCardRecord factCardRecord) {
+        materializeTerminalUnits(factCardRecord, null);
+    }
+
+    private void materializeTerminalUnits(FactCardRecord factCardRecord, String scopeId) {
         if (factCardTerminalUnitJdbcRepository == null || factCardTerminalUnitMaterializer == null) {
             return;
         }
         List<FactCardTerminalUnitRecord> terminalUnitRecords =
                 factCardTerminalUnitMaterializer.materialize(factCardRecord);
+        if (fieldAliasEnricher != null) {
+            if (scopeId != null && !scopeId.isBlank()) {
+                terminalUnitRecords = fieldAliasEnricher.enrich(terminalUnitRecords, factCardRecord, scopeId);
+            } else {
+                terminalUnitRecords = fieldAliasEnricher.enrich(terminalUnitRecords, factCardRecord);
+            }
+        }
         factCardTerminalUnitJdbcRepository.upsertAll(terminalUnitRecords);
     }
 }

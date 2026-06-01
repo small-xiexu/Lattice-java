@@ -3,5 +3,3 @@ lattice:
   source:
     admin:
       staging-root-dir: ${LATTICE_SOURCE_ADMIN_STAGING_ROOT_DIR:${java.io.tmpdir}/lattice-source-sync}
-      allowed-server-dirs:
-        - ${LATTICE_SOURCE_ADMIN_ALLOWED_SERVER_DIR_1:${java.io.tmpdir}}

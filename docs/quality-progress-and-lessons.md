@@ -1,6 +1,6 @@
 # 项目质量打磨进度与踩坑台账
 
-更新时间：2026-05-29（agentC 同步 terminal unit Phase 1C LIKE token budget fix 验证结果，更新 fresh eval 2 与 terminal unit 当前状态）
+更新时间：2026-05-31（新增模型契约注释与 Lombok 治理计划）
 
 本台账记录质量打磨、Query/SWIP eval、baseline 修复与多 agent 协作的当前状态。后续推进前先读本文件；阶段结论变化后必须回写。
 
@@ -13,6 +13,9 @@
 - SWIP answer grounding 主线：patch 已完成提交前质量复核，代码可保留，详见 `swip_answer_grounding_pre_commit_quality_review_report.md`。
 - SWIP BANK-SETTLEMENT focus snippet 主线：副作用复核已通过，结论为可保留。`swip_focus_snippet_patch_side_effect_review_report.md` 确认：redline BLOCKER=0，BANK-SETTLEMENT-001 三轮稳定 PASS，保护 case 三轮稳定 PASS，无新增稳定回归。
 - 报告 cleanup：本轮按 `report_cleanup_plan_after_bank_settlement_focus_snippet.md` 执行清理，删除 4 个过期中间报告，详见 `report_cleanup_after_bank_settlement_focus_snippet_result.md`。
+- 拆分提交与最终门禁（2026-05-31）：四个主题拆分提交（Phase 1I fused order + field alias enricher + SERVER_DIR source 移除 + admin SERVER_DIR 移除）已完成。最终门禁报告 `post_split_commits_final_gate_report.md` 确认：redline `BLOCKER=0`、mvn test `995/0/0/0`、四个拆分 commit 后工程基线 PASS。详见该报告。
+- 当前工作区剩余未提交：`docs/模型绑定配置参考.md`（私有配置，永远排除）、`special_cases_report.md`（redline 输出，不提交）、`docs/plans/2026-05-31-模型契约注释与Lombok治理计划.md`、`docs/reports/model_contract_javadoc_lombok_plan_review_analysis_report.md`、`docs/reports/model_contract_javadoc_lombok_plan_review_analysis_report_v2.md`。
+- QueryResponse 构造器收敛与字段契约注释已提交 `2888796`：类级 `@Getter`、唯一 `@JsonCreator` 全参构造器、`@Builder`、删除历史短构造器、所有调用点迁移为 builder。定向测试 34/0/0/0。DTO 分析报告 `dto_field_javadoc_lombok_refactor_analysis_report.md` 已随提交归档。`QuerySourceResponse` / `QueryArticleResponse` 已提交 `b38acdc`，后续全项目 DTO/domain/entity/config 契约治理统一按 `docs/plans/2026-05-31-模型契约注释与Lombok治理计划.md` 分批推进并回写。
 - compile review observability：后台可观测性改动已完成，API 与后台 UI 均已验证通过。验证报告见 `compile_review_observability_verification_report.md`，fix result report 见 `compile_review_observability_fix_result_report.md`。
 - compile review persist gate：`PersistArticlesNode` 已修复，不再合并 `needsHumanReviewArticlesRef`，只允许 `review_status=passed` 的 article 进入正式 persist。测试补强已完成，新增 `PersistArticlesNodeTests` 覆盖混合 status 旧风险路径。详见 `compile_review_persist_gate_fix_result_report.md`、`compile_review_persist_gate_runtime_verification_report.md`、`compile_review_persist_gate_test_result_report.md`。
 - compile review query visibility hard filter：5 条 article-backed 通道 SQL 已增加 `review_status='passed' AND lifecycle='ACTIVE'` 条件，RefKey/ArticleChunk 的 OR 条件已用括号包裹防止绕过。source/source_chunk/fact_card 未修改。最终验证通过：redline BLOCKER=0、article-backed 定向测试 8/0/0、source/fact card 定向测试 33/0/0、全量 mvn test=814/0/0。详见 `compile_review_query_visibility_filter_verification_report.md`。
@@ -23,8 +26,8 @@
 - compile review 人工确认后入库链路：`needs_human_review` 编译草稿持久化到 `compile_article_review_queue`，后台 API 支持 list/detail/approve/reject，approve 后以 `review_status=passed` + `lifecycle=ACTIVE` 写入 articles/chunks/vector index，reject 后不入库。前端"待人工确认"入口可用。pre-commit 复核通过：redline BLOCKER=0，mvn test=844/0/0。已分两个提交：`8fe7001`（publish flow）+ `b453627`（admin API）。详见 `compile_human_review_queue_pre_commit_quality_report.md`。
 - 知识库验收 Q6 结构化 fact card 路径修复：fact card 生成层已通过，已保留 YAML/JSON/缩进式结构化字段路径，兼容旧 `key/value/raw`，新增 `keyPath/parentPath/pathSegments/contextPath/displayText` 并增强结构化证据文本。fallback structured evidence、path shape gate、complementary selector、exact path terminal field alias 已全部收口。2026-05-27 agentD 端到端验证通过，Q6 query/fallback 修复已闭环：redline `BLOCKER=0`、全量 `mvn test=915/0/0`、Query Java 主链未见中文字段语义硬编码 / Q6 特判 / 端口值特判 / Kubernetes 特判；真实 API 返回 `fieldPath: spec.containers[0].readinessProbe.tcpSocket.port = 8080`，citation 能支撑该事实，`periodSeconds=10` sibling 未被抢占；endpoint / URL / image / version / ordinary numeric 字段保护场景均通过。Q1-Q12 为 `12/12 PASS`，S1-S4 为 `3/4 PASS`，其中 S2 `下一步计划` 仍 FAIL。最终口径只能写成 `Q6 query/fallback 修复已闭环，整体最小验收仍因 S2 标题/anchor 搜索失败未完全通过`。下一步只应进入 Q6 terminal field alias scoped commit，然后把 S2 作为独立标题/anchor 搜索问题分析，禁止继续在 Q6/fallback 主链叠加规则。详见 `docs/test/knowledge-base-e2e/q6_fallback_structured_evidence_verification_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_second_root_cause_analysis_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_path_shape_gate_fix_result_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_path_shape_gate_verification_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_runtime_trace_analysis_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_complementary_evidence_gate_fix_result_report.md`、`docs/test/knowledge-base-e2e/q6_fallback_complementary_evidence_gate_verification_report.md`、`docs/test/knowledge-base-e2e/q6_exact_path_terminal_field_fix_result_report.md`。
 - 知识库验收 S2 标题/anchor 搜索身份修复：agentB 已只读归因为 article chunk FTS 召回后被 ARTICLE articleKey 身份折叠，导致 chunk/anchor 独立席位丢失；agentA 已完成最小通用修复，chunk 级命中写入 `chunkIdentity/chunkIndex/sectionAnchor/channel`，RRF 对带 `chunkIdentity` 的 ARTICLE hit 使用 chunk 级 key，普通 article hit 仍按 articleKey/conceptId 融合。代码层验证通过：redline `BLOCKER=0`、定向测试 `13/0/0`、全量 `mvn test=921/0/0`；本轮未清库、未重建、未导入资料，仍需 agentD 做完整知识库验收，覆盖 Q1-Q12、S1-S4 与 Q6 保护场景。详见 `docs/test/knowledge-base-e2e/s2_title_anchor_search_root_cause_analysis_report.md`、`docs/test/knowledge-base-e2e/s2_chunk_anchor_identity_fix_result_report.md`。
-- fresh eval 2 当前正式基线仍以 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/acceptance-report.md` 为准：Answer Accuracy `10/15`，Search Accuracy `1/4`，Recall@10 `13/15`，Citation Accuracy `2/15`，Abstain Accuracy `2/2`，Hallucination Count `5`，结论为未通过。
-- fresh eval 2 结构化 terminal value 桶未闭环：`FQ3/FQ4/FQ6/FG1/FG2` 在 structured fact terminal binding、selector gate、conclusion gate 三轮 query fallback 方向实验后仍为 `0/5 PASS`。三轮实验报告只建议归档为失败实验，不建议提交对应代码。
+- fresh eval 2 原始基线以 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/acceptance-report.md` 为准：Answer Accuracy `10/15`，Search Accuracy `1/4`，Recall@10 `13/15`，Citation Accuracy `2/15`，Abstain Accuracy `2/2`，Hallucination Count `5`，结论为未通过。
+- Phase 1I fused order conclusion fix 后最新指标（2026-05-31）：Answer Accuracy **12/15**（+2），YAML 5 题 **4/5**（FQ3/FQ4/FQ6/FG2 PASS，FG1 PARTIAL），Hallucination **2**（-3）。Search Accuracy 仍 **1/4**（FS1/FS2/FS3 未改善），Citation Accuracy 仍 **2/15**。结论仍为**未通过**，不得写成整体通过。
 - fresh eval 2 最新根因判断已从 retrieval 召回转向 evidence unit 粒度：FACT_CARD 已稳定召回且包含目标 terminal assignment，但整卡粒度导致同卡 sibling 共用卡级 identity、score、citation 边界，fallback 容易选中 `type/name/return_policy` 等近邻字段。下一步不再继续叠 query fallback selector/conclusion/snippet gate，应转向 compile/index 层 structured terminal assignment evidence unit materialization，第一阶段先生成 terminal units 并进入 FTS 检索。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/fresh_eval_terminal_assignment_conclusion_gate_verification_report.md`、`docs/test/knowledge-base-e2e/fresh-eval-2026-05/structured_terminal_evidence_unit_materialization_design_report.md`。
 - 已提交 scoped commit 清单（2026-05-27 收口审计）：
 
@@ -40,8 +43,22 @@
   | `711eafe` | feat(query): add terminal unit FTS retrieval infrastructure | terminal unit Phase 1A |
   | `2fee343` | feat(query): 增加 terminal unit 字段意图重排与中文字段别名 | terminal unit Phase 1B + 1C Layer 1 |
   | `03ae48c` | fix(documentparse): 输出表格结构化行以生成 terminal unit | terminal unit Phase 1C Extractor |
+  | `a9b1092` | fix(search): 优化中文 LIKE token 预算与排序 | terminal unit Phase 1C LIKE Token |
 
-  上述 10 个 commit 均已按各自范围完成 redline、全量 Maven、定向测试或端到端验证闭环。Phase 1C LIKE Token Budget Fix 验证通过但尚未提交（建议作为第 11 个 commit）。
+  上述 11 个 commit 均已按各自范围完成 redline、全量 Maven、定向测试或端到端验证闭环。
+
+- **拆分提交（2026-05-31）**：
+
+  | Commit | 描述 | 所属桶 |
+  |---|---|---|
+  | `56b0274` | fix(query): 使用原始 fused order 选择 terminal unit conclusion 候选 | terminal unit Phase 1I |
+  | `90ad165` | feat(compiler): 增加 terminal unit 字段别名增强器 | terminal unit enricher |
+  | `fa8b883` | refactor(source): 移除 SERVER_DIR source 支持 | SERVER_DIR cleanup |
+  | `35bf769` | refactor(admin): 移除管理页 SERVER_DIR 操作入口 | admin SERVER_DIR cleanup |
+  | `305bfc6` | docs(test): 记录拆分提交后的最终门禁结果 | gate report |
+
+  上述 5 个 commit 已完成 redline（BLOCKER=0）、全量 mvn test（995/0/0/0）与最终门禁报告归档。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/post_split_commits_final_gate_report.md`。
+
 - **长期路线（2026-05-28 agentC 写入）**：
 
   长期目标为 **5 套 public eval + 1-2 套 hidden eval**，形成持续泛化验收闭环：
@@ -54,12 +71,15 @@
 
   详见 `docs/test/knowledge-base-e2e/eval-validation-roadmap.md`。
 
-- **terminal unit Phase 1B/1C 当前状态（2026-05-29）**：
+- **terminal unit Phase 1B/1C/1D/1E/1F/1G/1I 当前状态（2026-05-31）**：
   - Phase 1B Reranker（字段意图重排）+ redline fix（数值问法信号配置化）+ config binding fix（Spring DI 链路修正）已提交 `2fee343`。reranker 算法正确（定向测试 13/0/0），但在中文 query + 英文 field key 场景下匹配通道为零，YAML 5 题无收益。
   - Phase 1C Layer 1（中文 N-gram alias 物化）已提交 `2fee343`。XLSX/CSV 中文列头字段名现在可生成 bigram/trigram 别名并被 FTS LIKE 匹配。
   - Phase 1C Extractor Fix（XLSX/CSV 结构化行输出）已提交 `03ae48c`。
-  - Phase 1C LIKE Token Budget Fix：`MAX_LIKE_TOKENS 8→32` + CJK 评分倒置（bigram 最高优先级），clean schema 验证已通过。**FQ7 XLSX `fact_card_terminal_fts` 从 0 hit → 16 hits，5 个进入 fused topK**。FQ11 CSV 保护通过（terminal hits 6→16，目标 rank 3 不变）。redline BLOCKER=0，定向测试 9/0/0，全量 mvn test 965/0/0。Fresh Eval 19 题答案质量无退化。尚未提交。
-  - YAML 5 题 FQ3/FQ4/FQ6/FG1/FG2 仍 FAIL（英文字段名→中文语义匹配通道仍未建立），下一步应进入 terminal unit Layer 2 sibling context / field alias materialization 分析，不是 query fallback。
+  - Phase 1C LIKE Token Budget Fix：已提交 `a9b1092`。`MAX_LIKE_TOKENS 8→32` + CJK 评分倒置（bigram 最高优先级）。**FQ7 XLSX `fact_card_terminal_fts` 从 0 hit → 16 hits，5 个进入 fused topK**。FQ11 CSV 保护通过（terminal hits 6→16，目标 rank 3 不变）。redline BLOCKER=0，定向测试 9/0/0，全量 mvn test 965/0/0。
+  - Phase 1D Materializer sibling context（同 parentPath sibling descriptor）+ Phase 1E terminal content enhancement + Phase 1F alias consumption/metadata sync/conclusion gate correction + Phase 1G candidate precision：多轮实验与验证通过，但最终效果依赖 Phase 1I fused order conclusion fix 才能正确消费。历史报告 22 个（1D/1E/1F/1G），已审计全部建议归档提交（详见 `phase1d_1g_report_archive_review_report.md`）。
+  - Phase 1I fused order conclusion fix：已提交 `56b0274`。在 `AnswerFallbackConclusionBuilder` 中传入原始 `queryArticleHits` fused ordering，多个 query-focused terminal unit 候选时按 fused order 选择最靠前候选。不改 RRF、QueryArticleHit 字段、EvidenceSelector 排序。YAML 5 题从 0/5 提升到 4/5（FQ3/FQ4/FQ6/FG2 首次 PASS），Answer Accuracy 从基线 10/15 提升到 12/15，Hallucination 从 5 降到 2。FG1 仍未完全通过（terminal unit not consumed）。pre-commit 质量复核通过：redline BLOCKER=0，mvn test 995/0/0/0，无 case 特判/业务词硬编码/eval 污染。详见 `terminal_unit_phase1i_pre_commit_quality_review_report.md`。
+  - Field alias enricher（LLM 别名增强器）：已提交 `90ad165`。包含 `FactCardTerminalUnitFieldAliasEnricher` 接口 + LLM 实现 + prompt 外置 + Materializer 集成。
+  - YAML 5 题当前状态：FQ3/FQ4/FQ6/FG2 = 4/5 PASS，FG1 仍 PARTIAL（terminal unit 未被 conclusion 消费）。
   - Public Eval 1 Q6/S2 本轮未执行保护回归（当前库仅含 Public Eval 2 资料），不得写成已通过。
 - **fresh eval 2 当前正式基线**仍以 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/acceptance-report.md` 为准：Answer Accuracy `10/15`，Search Accuracy `1/4`，Recall@10 `13/15`，Citation Accuracy `2/15`，Abstain Accuracy `2/2`，Hallucination Count `5`，结论为未通过。
 
@@ -68,7 +88,7 @@
 | 项 | 当前状态 | 说明 |
 |---|---|---|
 | redline | `BLOCKER=0` | 最新：`bash scripts/scan-redline.sh special_cases_report.md` 通过，汇总为 `BLOCKER=0`、`REVIEW=2059`、`ALLOWLIST=259`。 |
-| mvn test | `965/0/0` | Phase 1C LIKE token budget fix 验证后全量 `mvn test=965/0/0` 通过。 |
+| mvn test | `995/0/0/0` | 四个拆分 commit 后全量 `mvn test=995/0/0/0` 通过。详见 `post_split_commits_final_gate_report.md`。 |
 | main baseline | 阶段 gate 已通过 | `final_query_baseline_gate_report.md` 为 `9/10` 且 gate 通过；`phase12_final_clean_rebuild_gate_report.md` 为 `8/10` 且 6 项 gate 通过。 |
 | SWIP strict eval | 稳定区间 `15-17/23` | focus snippet patch 副作用复核三轮：16/23、17/23、15/23；BANK-SETTLEMENT-001 三轮稳定 PASS；保护 case 三轮稳定 PASS。详见 `swip_focus_snippet_patch_side_effect_review_report.md`。 |
 | 当前数据库状态 | Q6 验收 clean 库 | agentD 已重建 `ai-rag-knowledge.lattice` 并导入完整知识库验收资料；用户要求确认的 2 条 `needs_human_review` 已 approve 发布。当前计数：`source_files=6`、`articles=6`、`article_chunks=13`、`fact_cards=11`、`article_vector_index=6`、`article_chunk_vector_index=13`。该库用于 Q6 复验，不代表 SWIP clean 库或主 baseline 库。 |
@@ -87,7 +107,12 @@
 | terminal unit Phase 1B | 已提交 `2fee343` | Reranker + redline fix + config binding fix。算法正确，但中文 query + 英文 field key 场景下匹配通道为零。 |
 | terminal unit Phase 1C Layer 1 | 已提交 `2fee343` | 中文 N-gram alias 物化。XLSX/CSV 中文列头可生成 bigram/trigram。 |
 | terminal unit Phase 1C Extractor | 已提交 `03ae48c` | XLSX/CSV 结构化行输出修复。 |
-| terminal unit Phase 1C LIKE Token | 工程+服务验证通过，建议提交 | `MAX_LIKE_TOKENS 8→32` + CJK 评分倒置。FQ7 XLSX 0→16 hits，FQ11 CSV 保护通过。redline BLOCKER=0，全量 965/0/0。 |
+| terminal unit Phase 1C LIKE Token | 已提交 `a9b1092` | `MAX_LIKE_TOKENS 8→32` + CJK 评分倒置。FQ7 XLSX 0→16 hits，FQ11 CSV 保护通过。redline BLOCKER=0，全量 965/0/0。 |
+| terminal unit Phase 1D/1E/1F/1G | 多轮实验完成，历史报告待归档 | sibling context、terminal content enhancement、alias consumption、conclusion gate correction、candidate precision 等。22 个报告。 |
+| terminal unit Phase 1I fused order | 已提交 `56b0274` | Fused order conclusion fix。YAML 5 题 0/5→4/5，Answer Accuracy 10→12/15，Hallucination 5→2。pre-commit 复核通过。 |
+| terminal unit field alias enricher | 已提交 `90ad165` | LLM 别名增强器接口+实现+prompt 外置+Materializer 集成。 |
+| SERVER_DIR 移除 | 已提交 `fa8b883` + `35bf769` | source 支持 + 管理页操作入口均已移除。 |
+| fresh eval 2 | 未通过；Phase 1I 后 Answer Accuracy 12/15 | YAML 5 题 4/5 PASS（FG1 PARTIAL），FS1/FS2/FS3 仍 FAIL，Citation Accuracy 仍 2/15。 |
 | Public Eval 1 Q6/S2 | 本轮未执行保护回归 | 当前库仅含 Public Eval 2 资料，Q6 terminal field alias + S2 chunk identity 待后续单独验证。 |
 
 ## 多 Agent 当前职责
@@ -148,6 +173,11 @@
 - Phase 1C LIKE Token Budget Fix（`MAX_LIKE_TOKENS 8→32` + CJK 评分倒置 bigram 优先）是通用 lexical token 预算/排序修复，不是 FQ7/XLSX/文件名/业务词特判。修复前 XLSX 的 CJK bigram 被文件名前缀 token 和长 N-gram 挤出 LIKE top-8 候选，修复后 XLSX terminal unit 命中从 0→16。修复使所有中文表格查询受益（FQ11 CSV 也从 6→16 hits）。详见 `terminal_unit_phase1c_xlsx_like_token_budget_fix_result_report.md` 和 `terminal_unit_phase1c_xlsx_like_token_budget_clean_verification_report.md`。
 - YAML 5 题（FQ3/FQ4/FQ6/FG1/FG2）在 Phase 1C Layer 1 + LIKE token fix 后仍 FAIL。根因仍是英文字段名→中文语义匹配通道缺失。下一步应进入 Layer 2 sibling context（Materializer 中为同 parentPath terminal unit 补充 sibling descriptor），不是 query fallback、不是调 reranker 权重、不是逐题特判。详见 `terminal_unit_phase1c_xlsx_like_token_budget_clean_verification_report.md` 第 12 节。
 - 本轮未执行 Public Eval 1 Q6/S2 保护回归，当前数据库仅含 Public Eval 2 资料。Q6 terminal field alias + S2 chunk identity 保护需在后续单独验证。不得将 Q6/S2 写成已通过。
+- Phase 1I fused order conclusion fix 已通过 pre-commit 质量复核并被拆分为独立提交 `56b0274`：不改 RRF、QueryArticleHit 字段、EvidenceSelector 排序，只把原始 fused order 传入 ConclusionBuilder 用于候选选择。YAML 5 题从 0/5 提升到 4/5，Answer Accuracy 从 10/15 提升到 12/15，Hallucination 从 5 降到 2。无 case 特判/业务词硬编码/eval 污染。详见 `terminal_unit_phase1i_pre_commit_quality_review_report.md`。
+- Field alias enricher（LLM 别名增强器）已提交 `90ad165`：`FactCardTerminalUnitFieldAliasEnricher` 接口 + LLM 实现 + prompt 外置 + Materializer 集成。
+- SERVER_DIR 移除已分两个提交完成：`fa8b883`（source 支持）+ `35bf769`（管理页入口）。纯基础设施清理，与 terminal unit 无关。
+- 四个拆分提交后的最终门禁已由 agentD 验证并归档为 `305bfc6`：redline `BLOCKER=0`、mvn test `995/0/0/0`、工程基线 PASS。
+- Phase 1D/1E/1F/1G 共 22 个历史报告为 untracked 状态，属于中间实验/验证报告，待后续归档评估后决定是否提交或清理。
 
 ## 踩坑记录
 
@@ -243,7 +273,7 @@
 30. （已完成）Q6 terminal field alias scoped commit 已提交（4d5e8bc），不再扩大 Q6/fallback 主链。
 31. （已完成）agentC 剩余文档收口审计：已输出 `docs/test/remaining_docs_reports_commit_plan.md`，判定 5 组建议提交、2 组不建议提交、2 组永远排除、1 组因真实 API 密钥阻塞。详见该报告。
 
-生产代码 scoped commits 已全部收口（item 30 + 已提交 commit 清单）。剩余未提交项主要是 docs/report 归档（见 item 31 审计报告）、私有配置（`docs/模型绑定配置参考.md`，永远排除提交）与 redline 输出（`special_cases_report.md`，不建议提交）。S2 标题/anchor 搜索已完成只读归因与代码层修复，后续应由 agentD 做完整知识库端到端验收。
+生产代码 scoped commits 已全部收口（item 30 + 已提交 commit 清单 + 四个拆分提交）。剩余未提交项主要是：docs/report 归档（Phase 1D/1E/1F/1G 历史报告 22 个，已审计全部建议归档）、私有配置（`docs/模型绑定配置参考.md`，永远排除提交）与 redline 输出（`special_cases_report.md`，不建议提交）。S2 标题/anchor 搜索已完成只读归因与代码层修复，后续应由 agentD 做完整知识库端到端验收。
 
 32. （已完成）S2 标题/anchor 搜索问题独立分析：agentB 单独排查 `下一步计划` 的标题/anchor 命中链路，确认不归因到 Q6 terminal field alias。详见 `docs/test/knowledge-base-e2e/s2_title_anchor_search_root_cause_analysis_report.md`。
 33. （已完成，待验收）S2 chunk/anchor identity 最小通用修复：agentA 保留 chunk 级 identity，避免 article chunk FTS / chunk vector 命中被整篇 article 折叠；redline `BLOCKER=0`，定向测试 `13/0/0`，全量 `mvn test=921/0/0`。详见 `docs/test/knowledge-base-e2e/s2_chunk_anchor_identity_fix_result_report.md`。
@@ -257,10 +287,10 @@
 41. （已完成）terminal unit Phase 1B：Reranker + redline fix + config binding fix。已提交 `2fee343`。
 42. （已完成）terminal unit Phase 1C Layer 1：中文 N-gram alias 物化。已提交 `2fee343`。
 43. （已完成）terminal unit Phase 1C Extractor Fix：XLSX/CSV 结构化行输出。已提交 `03ae48c`。
-44. （待提交）terminal unit Phase 1C LIKE Token Budget Fix：`MAX_LIKE_TOKENS 8→32` + CJK 评分倒置。工程+服务验证通过。redline BLOCKER=0，全量 965/0/0。建议作为 commit 4 提交。
+44. （已完成）terminal unit Phase 1C LIKE Token Budget Fix：已提交 `a9b1092`。`MAX_LIKE_TOKENS 8→32` + CJK 评分倒置（bigram 最高优先级）。redline BLOCKER=0，全量 mvn test=965/0/0。FQ7 XLSX 0→16 hits，FQ11 CSV 保护通过。
 45. （后续）terminal unit Phase 1C Layer 2 sibling context：在 Materializer 中利用同 parentPath sibling descriptor（如 type="精密仪器"）为英文字段 terminal unit 补充中文上下文 alias/description。目标是让 "精密仪器" token 能匹配到 equipment_types[1].max_borrow_days。详见 `terminal_unit_phase1c_xlsx_like_token_budget_clean_verification_report.md` 第 12 节。
-46. （后续）terminal unit Phase 1C Layer 3 LLM alias（可选，视 Layer 2 效果决定）：调用 compile-stage LLM 为英文字段名生成中文别名。详见 `terminal_unit_phase1c_field_alias_materialization_design_report.md` 第 5.1 节 Layer 3。
-47. （后续）YAML 5 题 agentD 验证：Layer 2 实现后，验证 FQ3/FQ4/FQ6/FG1/FG2 目标 terminal unit 是否进入 topK。
+46. （后续）terminal unit Phase 1C Layer 3 LLM alias（可选，视 Layer 2 效果决定）：调用 compile-stage LLM 为英文字段名生成中文别名。注：`90ad165` 已提交 LLM 别名增强器接口+实现，但可能与 Layer 3 方案有重叠，需评估是否已覆盖 Layer 3 目标。详见 `terminal_unit_phase1c_field_alias_materialization_design_report.md` 第 5.1 节 Layer 3。
+47. （后续）FG1 terminal unit 未消费问题独立分析：Phase 1I 后 YAML 5 题中 FG1 仍 PARTIAL，terminal unit 未被 conclusion 消费，需独立归因。
 48. （后续）Public Eval 1 Q6/S2 保护回归：当前库仅含 Public Eval 2 资料，后续需在完整库上单独验证 Q6 terminal field alias + S2 chunk identity。
 49. （后续，独立线）Query 主链复杂度治理：terminal unit Phase 1 验收通过后单开一轮，降低 AnswerGeneration 继承链深度，治理 `.contains()` 规则分流，冻结 query fallback 主链不再接受新 gate 式补丁。此线不与 terminal unit Phase 1 并行改代码。详见 `docs/test/knowledge-base-e2e/eval-validation-roadmap.md`。
 50. （后续）状态摘要接入人工确认队列：Dashboard 摘要展示 `compile_article_review_queue` 待处理计数。
@@ -268,6 +298,16 @@
 52. （后续）审查/修复轮次展示：前端进度卡片接入 StateGraph 实际执行轮数。
 53. （后续）LLM approved 正向 canary 观察。
 54. （后续）Fixer→Re-reviewer loop runtime 验证。
+55. （后续）S2 agentD 完整知识库端到端验收：清库/重建/导入资料后，至少回归 Q1-Q12、S1-S4、S2 搜索展示与 Q6 保护场景。
+56. （已完成）DTO 字段注释/Lombok B0 试点：`QueryResponse` 已提交 `2888796`；`QuerySourceResponse` / `QueryArticleResponse` 已提交 `b38acdc`。当前后续治理以 `docs/plans/2026-05-31-模型契约注释与Lombok治理计划.md` 为唯一推进台账。
+57. （已完成）Phase 1D/1E/1F/1G 历史报告归档：22 个历史报告与归档审计已提交 `306e37c`。详见 `phase1d_1g_report_archive_review_report.md`。
+58. （已完成）Phase 1I fused order conclusion fix：已提交 `56b0274`。pre-commit 质量复核通过。YAML 5 题 0/5→4/5，Answer Accuracy 10→12/15，Hallucination 5→2。
+59. （已完成）Field alias enricher（LLM 别名增强器）：已提交 `90ad165`。
+60. （已完成）SERVER_DIR 移除：已提交 `fa8b883`（source）+ `35bf769`（admin）。
+61. （已完成）拆分后最终门禁报告：已提交 `305bfc6`。redline BLOCKER=0，mvn test 995/0/0/0，工程基线 PASS。
+62. （已完成）拆分提交 pre-commit 质量复核：已输出 `terminal_unit_phase1i_pre_commit_quality_review_report.md`，确认无 case 特判/业务词硬编码/eval 污染，当前工作区 7 组变更需拆分为 4 个独立 commit。该复核建议已被采纳执行。
+63. （已完成）Query source/article 响应 DTO 契约收敛：已提交 `b38acdc`，B0 pre-commit 质量审查 PASS。
+64. （二审 PASS，已定稿）模型契约注释与 Lombok 全项目治理计划：已新增 `docs/plans/2026-05-31-模型契约注释与Lombok治理计划.md`，覆盖 API DTO、domain model、entity-like model、config/properties、graph/state 类。agentB 二审报告 `model_contract_javadoc_lombok_plan_review_analysis_report_v2.md` 结论为 PASS；计划已按非阻塞建议完成微调，后续作为唯一推进台账，按 B0.5-B20 批次推进并回写。
 
 ## 更新规则
 

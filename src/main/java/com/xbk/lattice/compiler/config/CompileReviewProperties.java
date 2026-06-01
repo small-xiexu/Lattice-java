@@ -12,12 +12,36 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "lattice.compiler.review")
 public class CompileReviewProperties {
 
+    /**
+     * 自动修复总开关。
+     *
+     * <p>默认 {@code true}。{@code false} 时所有审查问题直接进入人工复核队列，
+     * review queue 可能快速积压。</p>
+     */
     private boolean autoFixEnabled = true;
 
+    /**
+     * 自动修复最大轮次。
+     *
+     * <p>默认 1。每轮修复后重新审查。过大（如 10+）可能导致修复死循环，
+     * LLM 成本激增。</p>
+     */
     private int maxFixRounds = 1;
 
+    /**
+     * 是否允许"需人工复核"状态的文章落库。
+     *
+     * <p>默认 {@code false}（fail-closed）。{@code false} 时阻止所有
+     * {@code needs_human_review} 文章写入，编译产出可能为零。</p>
+     */
     private boolean allowPersistNeedsHumanReview = false;
 
+    /**
+     * 人工复核严重度阈值。
+     *
+     * <p>默认 {@code "HIGH"}。审查问题严重度 {@code >=} 此阈值时触发人工复核。
+     * 设置为最低级别时几乎所有问题都需人工处理。</p>
+     */
     private String humanReviewSeverityThreshold = "HIGH";
 
     /**

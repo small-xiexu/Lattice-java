@@ -1,30 +1,70 @@
 package com.xbk.lattice.api.admin;
 
+import lombok.Getter;
+
 /**
- * 管理侧向量索引重建响应
+ * 管理侧向量索引重建响应。
  *
- * 职责：承载向量索引全量重建后的关键统计结果
+ * <p>承载向量索引全量重建后的关键统计结果，由 {@code AdminVectorIndexController} 在重建完成后返回。
  *
  * @author xiexu
  */
+@Getter
 public class AdminVectorIndexRebuildResponse {
 
+    /**
+     * 本次重建目标文章数。
+     *
+     * <p>重建启动时快照的文章总量，不代表实际完成索引的数量。</p>
+     */
     private final int targetArticleCount;
 
+    /**
+     * 重建前已索引文章数。
+     *
+     * <p>与 {@code indexedArticleCount} 对比可知本次重建的增量或减量。</p>
+     */
     private final int previousIndexedArticleCount;
 
+    /**
+     * 重建后已索引文章数。
+     *
+     * <p>重建完成时刻的实际索引文章数。</p>
+     */
     private final int indexedArticleCount;
 
+    /**
+     * 重建前已索引分块数。
+     */
     private final int previousIndexedChunkCount;
 
+    /**
+     * 重建后已索引分块数。
+     *
+     * <p>与 {@code previousIndexedChunkCount} 对比可知分块粒度变化（如分块策略调整后的差异）。</p>
+     */
     private final int indexedChunkCount;
 
+    /**
+     * 是否先清空旧索引。
+     *
+     * <p>回显请求中的 {@code truncateFirst} 值，便于管理侧确认实际执行模式。</p>
+     */
     private final boolean truncateFirst;
 
+    /**
+     * 重建使用的 embedding 模型名。
+     */
     private final String configuredModelName;
 
+    /**
+     * 操作人。
+     */
     private final String operator;
 
+    /**
+     * 重建完成时间（ISO-8601 字符串）。
+     */
     private final String rebuiltAt;
 
     /**
@@ -60,86 +100,5 @@ public class AdminVectorIndexRebuildResponse {
         this.configuredModelName = configuredModelName;
         this.operator = operator;
         this.rebuiltAt = rebuiltAt;
-    }
-
-    /**
-     * 返回本次目标文章数。
-     *
-     * @return 本次目标文章数
-     */
-    public int getTargetArticleCount() {
-        return targetArticleCount;
-    }
-
-    /**
-     * 返回重建前向量索引数。
-     *
-     * @return 重建前向量索引数
-     */
-    public int getPreviousIndexedArticleCount() {
-        return previousIndexedArticleCount;
-    }
-
-    /**
-     * 返回重建后向量索引数。
-     *
-     * @return 重建后向量索引数
-     */
-    public int getIndexedArticleCount() {
-        return indexedArticleCount;
-    }
-
-    /**
-     * 返回重建前分块向量索引数。
-     *
-     * @return 重建前分块向量索引数
-     */
-    public int getPreviousIndexedChunkCount() {
-        return previousIndexedChunkCount;
-    }
-
-    /**
-     * 返回重建后分块向量索引数。
-     *
-     * @return 重建后分块向量索引数
-     */
-    public int getIndexedChunkCount() {
-        return indexedChunkCount;
-    }
-
-    /**
-     * 返回是否先清空旧索引。
-     *
-     * @return 是否先清空旧索引
-     */
-    public boolean isTruncateFirst() {
-        return truncateFirst;
-    }
-
-    /**
-     * 返回当前配置模型名。
-     *
-     * @return 当前配置模型名
-     */
-    public String getConfiguredModelName() {
-        return configuredModelName;
-    }
-
-    /**
-     * 返回操作人。
-     *
-     * @return 操作人
-     */
-    public String getOperator() {
-        return operator;
-    }
-
-    /**
-     * 返回重建完成时间。
-     *
-     * @return 重建完成时间
-     */
-    public String getRebuiltAt() {
-        return rebuiltAt;
     }
 }

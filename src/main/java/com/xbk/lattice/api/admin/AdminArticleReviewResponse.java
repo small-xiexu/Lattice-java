@@ -1,28 +1,52 @@
 package com.xbk.lattice.api.admin;
 
+import lombok.Getter;
+
 /**
- * 管理侧文章人工复核响应
+ * 管理侧文章人工复核响应。
  *
- * 职责：承载人工复核后的状态变化
+ * <p>返回人工复核操作后的文章状态变更与审计标识，
+ * 由 {@code AdminArticleController} 组装返回。
  *
  * @author xiexu
  */
+@Getter
 public class AdminArticleReviewResponse {
 
+    /** 资料源主键。为 {@code null} 表示多源。 */
     private final Long sourceId;
 
+    /** 文章唯一键。 */
     private final String articleKey;
 
+    /** 概念标识。 */
     private final String conceptId;
 
+    /**
+     * 操作前审查状态。
+     *
+     * <p>与请求中的 {@code expectedReviewStatus} 一致时操作成功。</p>
+     */
     private final String previousReviewStatus;
 
+    /**
+     * 操作后审查状态。
+     *
+     * <p>与 {@code previousReviewStatus} 对比可知本次操作的状态流转路径。</p>
+     */
     private final String reviewStatus;
 
+    /** 操作人标识。 */
     private final String reviewedBy;
 
+    /** 操作时间（ISO-8601 字符串）。 */
     private final String reviewedAt;
 
+    /**
+     * 审计记录主键。
+     *
+     * <p>可用于查询完整审计历史（{@link AdminArticleReviewAuditResponse}）。</p>
+     */
     private final long auditId;
 
     /**
@@ -55,77 +79,5 @@ public class AdminArticleReviewResponse {
         this.reviewedBy = reviewedBy;
         this.reviewedAt = reviewedAt;
         this.auditId = auditId;
-    }
-
-    /**
-     * 获取资料源主键。
-     *
-     * @return 资料源主键
-     */
-    public Long getSourceId() {
-        return sourceId;
-    }
-
-    /**
-     * 获取文章唯一键。
-     *
-     * @return 文章唯一键
-     */
-    public String getArticleKey() {
-        return articleKey;
-    }
-
-    /**
-     * 获取概念标识。
-     *
-     * @return 概念标识
-     */
-    public String getConceptId() {
-        return conceptId;
-    }
-
-    /**
-     * 获取复核前状态。
-     *
-     * @return 复核前状态
-     */
-    public String getPreviousReviewStatus() {
-        return previousReviewStatus;
-    }
-
-    /**
-     * 获取复核后状态。
-     *
-     * @return 复核后状态
-     */
-    public String getReviewStatus() {
-        return reviewStatus;
-    }
-
-    /**
-     * 获取复核人。
-     *
-     * @return 复核人
-     */
-    public String getReviewedBy() {
-        return reviewedBy;
-    }
-
-    /**
-     * 获取复核时间。
-     *
-     * @return 复核时间
-     */
-    public String getReviewedAt() {
-        return reviewedAt;
-    }
-
-    /**
-     * 获取审计主键。
-     *
-     * @return 审计主键
-     */
-    public long getAuditId() {
-        return auditId;
     }
 }

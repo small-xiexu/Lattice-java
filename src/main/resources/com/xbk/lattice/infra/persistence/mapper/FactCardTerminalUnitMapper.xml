@@ -199,7 +199,8 @@
                unit.terminal_unit_identity as item_key,
                unit.terminal_unit_identity as concept_id,
                concat_ws(' / ', nullif(fc.title, ''), nullif(unit.key_path, '')) as title,
-               trim(concat_ws(E'\n', unit.display_text, unit.field_description)) as content,
+               trim(concat_ws(E'\n', unit.display_text, unit.field_description,
+                   unit.field_aliases_json::text)) as content,
                (
                    unit.metadata_json
                    || jsonb_build_object(

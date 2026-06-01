@@ -15,16 +15,47 @@ import java.util.List;
 @ConfigurationProperties(prefix = "lattice.compiler")
 public class CompilerProperties {
 
+    /**
+     * 单文件最大采集字符数。
+     *
+     * <p>默认 65536。超过此大小的文件被截断，影响大文档的内容完整性。</p>
+     */
     private int ingestMaxChars = 65536;
 
+    /**
+     * LLM 批处理最大字符数。
+     *
+     * <p>默认 40000。超过此大小的内容分批发送给 LLM，影响编译并发度和调用次数。</p>
+     */
     private int batchMaxChars = 40000;
 
+    /**
+     * 默认分组名。
+     *
+     * <p>默认 {@code "defaultGroup"}。未匹配分组规则的文件的归属分组。</p>
+     */
     private String defaultGroup = "defaultGroup";
 
+    /**
+     * 显式分组规则列表。
+     *
+     * <p>按顺序匹配文件路径，命中后使用对应 {@code groupKey} 分组。
+     * 未命中任何规则的文件归入 {@code defaultGroup}。</p>
+     */
     private List<GroupingRule> groupingRules = new ArrayList<GroupingRule>();
 
+    /**
+     * 文件优先级排序配置。
+     *
+     * <p>通过 glob 模式匹配文件并分配优先级分数，影响编译处理顺序。</p>
+     */
     private FileRanking fileRanking = new FileRanking();
 
+    /**
+     * 长文档专题拆分配置。
+     *
+     * <p>控制文档结构切分的通用阈值，不绑定具体领域。</p>
+     */
     private DocumentTopics documentTopics = new DocumentTopics();
 
     /**
@@ -144,60 +175,97 @@ public class CompilerProperties {
      */
     public static class DocumentTopics {
 
+        /**
+         * 长文档专题拆分总开关。
+         *
+         * <p>默认 {@code true}。{@code false} 时（fail-closed）所有文档不再拆分，
+         * 整份文档作为单个概念处理，LLM 上下文可能超限导致编译失败。</p>
+         */
         private boolean enabled = true;
 
+        /** 触发拆分的文档最小字符数。默认 12000。 */
         private int longDocumentMinChars = 12000;
 
+        /** 中等结构化文档最小字符数。需同时满足 minHeadingsForMediumDocument。默认 6000。 */
         private int mediumDocumentMinChars = 6000;
 
+        /** 中等文档触发拆分所需的最少标题数。默认 5。 */
         private int minHeadingsForMediumDocument = 5;
 
+        /** 拆出专题的最小字符数。过小产生碎片。默认 700。 */
         private int minTopicChars = 700;
 
+        /** 拆出专题的最大字符数。过大导致 LLM 上下文超限。默认 22000。 */
         private int maxTopicChars = 22000;
 
+        /** 片段最大字符数。默认 2400。 */
         private int maxSnippetChars = 2400;
 
+        /** 章节最大行数。默认 80。 */
         private int maxSectionLines = 80;
 
+        /** 单行最大字符数。默认 280。 */
         private int maxLineChars = 280;
 
+        /** 标题最小字符数。默认 2。 */
         private int minHeadingChars = 2;
 
+        /** 标题最大字符数。默认 90。 */
         private int maxHeadingChars = 90;
 
+        /** 版式短标题最大字符数。默认 42。 */
         private int maxLayoutHeadingChars = 42;
 
+        /** 版式标题最少有效字符数。默认 2。 */
         private int minLayoutHeadingLetters = 2;
 
+        /** 相邻重复标题判定行距。默认 2。 */
         private int nearbyHeadingLineDistance = 2;
 
+        /** 超大专题下钻允许的最大标题层级。默认 3。 */
         private int childHeadingMaxLevel = 3;
 
+        /**
+         * 页码标记识别正则。
+         *
+         * <p>为 {@code null} 时不识别页码，页眉页脚可能混入正文。</p>
+         */
         private String pageMarkerPattern;
 
+        /** 小资料轻量概念最少总字符数。默认 80。 */
         private int lightweightMinTotalChars = 80;
 
+        /** 小资料轻量概念最少有效行数。默认 2。 */
         private int lightweightMinLineCount = 2;
 
+        /** 多行轻量概念最少总字符数。默认 40。 */
         private int lightweightMinMultiLineChars = 40;
 
+        /** 小资料最多保留的内容行数。默认 8。 */
         private int lightweightMaxContentLines = 8;
 
+        /** 小资料最多扫描的正文行数。默认 60。 */
         private int lightweightMaxContentScanLines = 60;
 
+        /** 小资料描述最大字符数。默认 220。 */
         private int lightweightMaxDescriptionChars = 220;
 
+        /** 小资料单行最大字符数。默认 240。 */
         private int lightweightMaxLineChars = 240;
 
+        /** 标题识别规则列表。 */
         private List<HeadingPatternRule> headingPatterns = new ArrayList<HeadingPatternRule>();
 
+        /** 忽略行前缀列表。匹配前缀的行不被识别为正文。 */
         private List<String> ignoredLinePrefixes = new ArrayList<String>();
 
+        /** 标题结尾排除标点列表。 */
         private List<String> headingTerminalPunctuations = new ArrayList<String>();
 
+        /** 正文结尾标点列表。 */
         private List<String> bodyTerminalPunctuations = new ArrayList<String>();
 
+        /** 标题边界清理正则。用于从标题行中移除编号/前缀/后缀。 */
         private String headingBoundaryPattern;
 
         /**
@@ -714,16 +782,35 @@ public class CompilerProperties {
      */
     public static class HeadingPatternRule {
 
+        /** 规则名称。用于日志和调试标识。 */
         private String name;
 
+        /** 标题行匹配正则。 */
         private String pattern;
 
+        /** 正则中标题文本所在的捕获分组编号。默认 1。 */
         private int titleGroup = 1;
 
+        /**
+         * 固定标题层级。
+         *
+         * <p>默认 1。{@code levelStrategy=fixed} 时直接使用此值作为标题层级。</p>
+         */
         private int fixedLevel = 1;
 
+        /**
+         * 层级计算分组编号。
+         *
+         * <p>默认 1。{@code levelStrategy} 非 fixed 时从该分组提取层级数值。</p>
+         */
         private int levelGroup = 1;
 
+        /**
+         * 层级计算策略。
+         *
+         * <p>默认 {@code "fixed"}。{@code "fixed"} 时使用 fixedLevel 作为层级；
+         * 其他值时从 levelGroup 匹配的分组计算层级。</p>
+         */
         private String levelStrategy = "fixed";
 
         /**
@@ -876,8 +963,10 @@ public class CompilerProperties {
      */
     public static class GroupingRule {
 
+        /** 文件路径匹配模式（glob）。命中此模式的文件归入对应分组。 */
         private String pattern;
 
+        /** 分组键。同一 groupKey 的文件在同一批次中处理。 */
         private String groupKey;
 
         /**
@@ -926,6 +1015,7 @@ public class CompilerProperties {
      */
     public static class FileRanking {
 
+        /** 文件优先级规则列表。按顺序匹配，命中后使用对应 score 排序。 */
         private List<FileRankingRule> rules = new ArrayList<FileRankingRule>();
 
         public List<FileRankingRule> getRules() {
@@ -946,8 +1036,10 @@ public class CompilerProperties {
      */
     public static class FileRankingRule {
 
+        /** 文件 glob 匹配模式。 */
         private String pattern;
 
+        /** 优先级分值。分数越高的文件越优先编译。 */
         private int score;
 
         public String getPattern() {

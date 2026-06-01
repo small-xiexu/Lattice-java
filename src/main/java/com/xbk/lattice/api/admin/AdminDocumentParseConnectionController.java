@@ -7,8 +7,10 @@ import com.xbk.lattice.documentparse.service.DocumentParseConnectionAdminService
 import com.xbk.lattice.documentparse.service.DocumentParseProviderDescriptorService;
 import com.xbk.lattice.llm.service.LlmSecretCryptoService;
 import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -308,98 +310,132 @@ public class AdminDocumentParseConnectionController {
     /**
      * 文档解析连接请求。
      *
-     * 职责：承载管理侧文档解析连接新增与更新参数
+     * <p>承载管理侧文档解析连接新增与更新参数，由 Spring MVC 从 JSON 请求体绑定。
      *
      * @author xiexu
      */
-    @Data
+    @Getter
+    @Setter
     @NoArgsConstructor
     @AllArgsConstructor
     public static class AdminDocumentParseConnectionRequest {
 
+        /** 连接编码。管理侧唯一标识。 */
         private String connectionCode;
 
+        /** Provider 类型（由 {@code DocumentParseProviderDescriptorService.requireProviderType()} 校验）。 */
         private String providerType;
 
+        /** Provider API 端点 URL。尾部斜杠会被规范化移除。 */
         private String baseUrl;
 
+        /**
+         * Provider 连接凭证 JSON。
+         *
+         * <p>提交后由 {@code LlmSecretCryptoService.encrypt()} 加密存储，禁止记录到日志。
+         * 更新时为空字符串表示沿用旧凭证，新增时必填。已加 {@code @ToString.Exclude} 防御性排除。</p>
+         */
+        @ToString.Exclude
         private String credentialJson;
 
+        /** Provider 扩展配置 JSON。为空时沿用旧配置。 */
         private String configJson;
 
+        /** 是否启用。为 {@code null} 时按 {@code true} 处理。 */
         private Boolean enabled;
 
+        /** 操作人标识。为空时默认 {@code "admin"}。 */
         private String operator;
     }
 
     /**
      * 文档解析连接响应。
      *
-     * 职责：返回管理侧文档解析连接展示信息
+     * <p>返回管理侧文档解析连接展示信息，由 {@code toConnectionResponse()} 组装。
      *
      * @author xiexu
      */
-    @Data
+    @Getter
     @NoArgsConstructor
     @AllArgsConstructor
     public static class AdminDocumentParseConnectionResponse {
 
+        /** 连接配置主键。 */
         private Long id;
 
+        /** 连接编码。 */
         private String connectionCode;
 
+        /** Provider 类型。 */
         private String providerType;
 
+        /** 端点 URL。 */
         private String baseUrl;
 
+        /**
+         * 凭证脱敏展示。
+         *
+         * <p>已配置时显示 {@code "已配置 JSON 凭证"}，非实际的凭证内容。</p>
+         */
         private String credentialMask;
 
+        /** 是否已配置凭证。 */
         private boolean credentialConfigured;
 
+        /** Provider 扩展配置 JSON。 */
         private String configJson;
 
+        /** 是否启用。 */
         private boolean enabled;
 
+        /** 创建人。 */
         private String createdBy;
 
+        /** 最后更新人。 */
         private String updatedBy;
 
+        /** 创建时间（ISO-8601 字符串）。 */
         private String createdAt;
 
+        /** 最后更新时间（ISO-8601 字符串）。 */
         private String updatedAt;
     }
 
     /**
      * 文档解析连接列表响应。
      *
-     * 职责：返回管理侧文档解析连接列表
+     * <p>返回管理侧文档解析连接列表，由 {@code listConnections()} 组装。
      *
      * @author xiexu
      */
-    @Data
+    @Getter
     @NoArgsConstructor
     @AllArgsConstructor
     public static class AdminDocumentParseConnectionListResponse {
 
+        /** 当前返回的连接数（等于 {@code items.size()}）。 */
         private int count;
 
+        /** 连接列表。 */
         private List<AdminDocumentParseConnectionResponse> items;
     }
 
     /**
      * 通用变更响应。
      *
-     * 职责：返回管理侧删除操作结果
+     * <p>返回管理侧删除操作结果（如 deleteConnection）。
      *
      * @author xiexu
      */
-    @Data
+    @Getter
     @NoArgsConstructor
     @AllArgsConstructor
     public static class AdminMutationResponse {
 
+        /** 受影响记录主键。 */
         private Long id;
 
+        /** 操作结果（如 {@code "deleted"}）。 */
         private String status;
     }
 }

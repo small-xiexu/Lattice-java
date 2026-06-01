@@ -12,10 +12,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "lattice.query.search")
 public class QuerySearchProperties {
 
+    /** FTS 增强配置。 */
     private FtsProperties fts = new FtsProperties();
 
+    /** 向量检索配置。 */
     private VectorProperties vector = new VectorProperties();
 
+    /** 召回调度配置（并发、超时预算）。 */
     private RetrievalDispatchProperties retrievalDispatch = new RetrievalDispatchProperties();
 
     /**
@@ -83,10 +86,18 @@ public class QuerySearchProperties {
      */
     public static class FtsProperties {
 
+        /**
+         * FTS 增强开关。
+         *
+         * <p>默认 {@code true}。{@code false} 时回退到 PostgreSQL 默认分词
+         * （fail-open：降级但不阻塞检索，中文分词质量下降）。</p>
+         */
         private boolean enabled = true;
 
+        /** 首选文本搜索配置。默认 {@code "jiebacfg"}。不可用时回退到 fallbackTsConfig。 */
         private String preferredTsConfig = "jiebacfg";
 
+        /** 回退文本搜索配置。默认 {@code "simple"}。 */
         private String fallbackTsConfig = "simple";
 
         /**
@@ -153,12 +164,26 @@ public class QuerySearchProperties {
      */
     public static class VectorProperties {
 
+        /**
+         * 向量检索开关。
+         *
+         * <p>默认 {@code false}（安全默认，需显式开启）。开启前需确保 pgvector 扩展已安装、
+         * embedding 模型已配置、向量索引已创建。</p>
+         */
         private boolean enabled = false;
 
+        /** embedding 模型配置主键。为 {@code null} 时使用默认模型。 */
         private Long embeddingModelProfileId;
 
+        /** 默认 embedding 模型名。默认 {@code "embedding-3"}。 */
         private String embeddingModel = "embedding-3";
 
+        /**
+         * 期望向量维度。
+         *
+         * <p>默认 2000。与实际模型维度不一致时向量检索异常（维度不匹配）。
+         * 切换模型后需重建向量索引以匹配新维度。</p>
+         */
         private int expectedDimensions = 2000;
 
         /**
@@ -243,12 +268,30 @@ public class QuerySearchProperties {
      */
     public static class RetrievalDispatchProperties {
 
+        /**
+         * 检索最大并发数。
+         *
+         * <p>默认 4。控制同时执行的检索通道数。过大增加数据库连接池压力。</p>
+         */
         private int maxConcurrency = 4;
 
+        /** 单组最大并发数。默认 2。同一通道组内的并发上限。 */
         private int maxConcurrencyPerGroup = 2;
 
+        /**
+         * 单通道超时（毫秒）。
+         *
+         * <p>默认 8000。超时通道结果被丢弃，该通道不参与 RRF 融合。
+         * 过小导致正常慢通道被误杀，召回不足。</p>
+         */
         private long channelTimeoutMillis = 8_000L;
 
+        /**
+         * 总截止时间（毫秒）。
+         *
+         * <p>默认 12000。超时后未完成的通道被取消，已完成的通道结果参与 RRF。
+         * 过小导致多数通道未完成即被截断；应显著大于 channelTimeoutMillis。</p>
+         */
         private long totalDeadlineMillis = 12_000L;
 
         /**

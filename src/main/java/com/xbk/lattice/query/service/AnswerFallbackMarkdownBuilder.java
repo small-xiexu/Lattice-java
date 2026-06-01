@@ -55,7 +55,7 @@ final class AnswerFallbackMarkdownBuilder {
         builder.append(H1_QUERY_ANSWER).append("\n\n");
         builder.append(H2_QUESTION).append("\n");
         builder.append(question.trim()).append("\n\n");
-        appendEvidenceConclusion(builder, question, fallbackHits, queryTokens);
+        appendEvidenceConclusion(builder, question, fallbackHits, queryTokens, queryArticleHits);
         appendEvidenceReferenceSection(builder, question, fallbackHits, queryTokens);
         return builder.toString().trim();
     }
@@ -140,10 +140,11 @@ final class AnswerFallbackMarkdownBuilder {
             StringBuilder builder,
             String question,
             List<QueryArticleHit> fallbackHits,
-            List<String> queryTokens
+            List<String> queryTokens,
+            List<QueryArticleHit> queryArticleHits
     ) {
         builder.append(H2_EVIDENCE).append("\n");
-        List<String> conclusionLines = support.buildEvidenceConclusionLines(question, fallbackHits, queryTokens);
+        List<String> conclusionLines = support.buildEvidenceConclusionLines(question, fallbackHits, queryTokens, queryArticleHits);
         if (conclusionLines.isEmpty()) {
             builder.append(LABEL_NO_KNOWLEDGE).append("\n\n");
             return;

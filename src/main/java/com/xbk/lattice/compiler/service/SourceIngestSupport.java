@@ -367,6 +367,19 @@ public class SourceIngestSupport {
      */
     @Transactional(rollbackFor = Exception.class)
     public void persistSourceFileChunks(List<RawSource> rawSources, Map<String, Long> sourceFileIdsByPath) {
+        persistSourceFileChunks(rawSources, sourceFileIdsByPath, null);
+    }
+
+    /**
+     * 在 compile job scope 下落盘源文件分块。
+     *
+     * @param rawSources          原始源文件集合
+     * @param sourceFileIdsByPath 相对路径到源文件主键映射
+     * @param compileJobId        compile job scope
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void persistSourceFileChunks(List<RawSource> rawSources, Map<String, Long> sourceFileIdsByPath,
+                                        String compileJobId) {
         if (sourceFileChunkJdbcRepository == null) {
             return;
         }
@@ -384,7 +397,7 @@ public class SourceIngestSupport {
                     rawSource.getContent(),
                     rawSource.isVerbatim()
             );
-            rebuildFactCards(sourceFileId);
+            rebuildFactCards(sourceFileId, compileJobId);
         }
     }
 
@@ -394,10 +407,18 @@ public class SourceIngestSupport {
      * @param sourceFileId 源文件主键
      */
     private void rebuildFactCards(Long sourceFileId) {
+        rebuildFactCards(sourceFileId, null);
+    }
+
+    private void rebuildFactCards(Long sourceFileId, String compileJobId) {
         if (factCardGenerationService == null || sourceFileId == null) {
             return;
         }
-        factCardGenerationService.rebuildForSourceFile(sourceFileId);
+        if (compileJobId != null && !compileJobId.isBlank()) {
+            factCardGenerationService.rebuildForSourceFile(sourceFileId, compileJobId);
+        } else {
+            factCardGenerationService.rebuildForSourceFile(sourceFileId);
+        }
     }
 
     private Long resolveSourceFileId(RawSource rawSource) {
