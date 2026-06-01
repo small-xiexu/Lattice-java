@@ -12,8 +12,9 @@ import com.xbk.lattice.source.domain.SourceValidationResult;
 import com.xbk.lattice.source.service.SourceService;
 import com.xbk.lattice.source.service.SourceSyncWorkflowService;
 import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -459,134 +460,202 @@ public class AdminSourceController {
     /**
      * 资料源分页响应。
      *
-     * 职责：承载资料源列表页的分页信息与数据项
+     * <p>承载资料源列表页的分页信息与数据项，由 {@code listSources()} 组装。
      *
      * @author xiexu
      */
-    @Data
+    @Getter
     @NoArgsConstructor
     @AllArgsConstructor
     public static class AdminKnowledgeSourcePageResponse {
 
+        /** 当前页码（1-based）。 */
         private Integer page;
 
+        /** 每页大小。 */
         private Integer size;
 
+        /** 符合条件的总记录数。 */
         private Long total;
 
+        /** 资料源摘要列表。 */
         private List<AdminKnowledgeSourceSummaryResponse> items;
     }
 
     /**
      * 资料源摘要响应。
      *
-     * 职责：承载资料源列表页的最小展示字段
+     * <p>承载资料源列表页的最小展示字段，由 {@code toSummaryResponse()} 组装。
      *
      * @author xiexu
      */
-    @Data
+    @Getter
     @NoArgsConstructor
     @AllArgsConstructor
     public static class AdminKnowledgeSourceSummaryResponse {
 
+        /** 资料源主键。 */
         private Long id;
 
+        /** 资料源编码（系统内唯一标识）。 */
         private String sourceCode;
 
+        /** 资料源原始名称。 */
         private String name;
 
+        /**
+         * 管理台展示名称。
+         *
+         * <p>由 controller 从 {@code metadataJson} 中的 {@code bundleSummary} 计算：
+         * 优先使用 displayName → 文件/目录名 → 回退到 name。</p>
+         */
         private String displayName;
 
+        /**
+         * 主要文档标题。
+         *
+         * <p>从 {@code metadataJson.bundleSummary.titleHints} 提取。
+         * 为 {@code null} 表示未提取到标题。</p>
+         */
         private String primaryDocumentTitle;
 
+        /** 资料源类型（{@code UPLOAD} / {@code GIT}）。 */
         private String sourceType;
 
+        /** 内容画像（如 {@code code} / {@code document} / {@code mixed}）。 */
         private String contentProfile;
 
+        /** 生命周期状态（{@code ACTIVE} / {@code DISABLED} / {@code ARCHIVED}）。 */
         private String status;
 
+        /** 可见性（{@code NORMAL} / {@code ADMIN_ONLY}）。 */
         private String visibility;
 
+        /** 默认同步模式（{@code AUTO} / {@code FULL} / {@code INCREMENTAL}）。 */
         private String defaultSyncMode;
 
+        /** 最近一次同步运行主键。为 {@code null} 表示从未同步。 */
         private Long lastSyncRunId;
 
+        /** 最近一次同步状态。为 {@code null} 表示从未同步。 */
         private String lastSyncStatus;
 
+        /** 最近一次同步时间（ISO-8601）。为 {@code null} 表示从未同步。 */
         private String lastSyncAt;
 
+        /** 最后更新时间（ISO-8601）。 */
         private String updatedAt;
     }
 
     /**
      * 资料源详情响应。
      *
-     * 职责：承载资料源详情页的完整基础字段
+     * <p>承载资料源详情页的完整基础字段——含配置 JSON、元数据 JSON 和同步信息，
+     * 由 {@code toDetailResponse()} 组装。
      *
      * @author xiexu
      */
-    @Data
+    @Getter
     @NoArgsConstructor
     @AllArgsConstructor
     public static class AdminKnowledgeSourceDetailResponse {
 
+        /** 资料源主键。 */
         private Long id;
 
+        /** 资料源编码。 */
         private String sourceCode;
 
+        /** 资料源原始名称。 */
         private String name;
 
+        /** 管理台展示名称（由 controller 从 metadataJson 计算）。 */
         private String displayName;
 
+        /** 主要文档标题（从 metadataJson.bundleSummary.titleHints 提取）。 */
         private String primaryDocumentTitle;
 
+        /** 资料源类型（{@code UPLOAD} / {@code GIT}）。 */
         private String sourceType;
 
+        /** 内容画像。 */
         private String contentProfile;
 
+        /** 生命周期状态（{@code ACTIVE} / {@code DISABLED} / {@code ARCHIVED}）。 */
         private String status;
 
+        /** 可见性（{@code NORMAL} / {@code ADMIN_ONLY}）。 */
         private String visibility;
 
+        /** 默认同步模式（{@code AUTO} / {@code FULL} / {@code INCREMENTAL}）。 */
         private String defaultSyncMode;
 
+        /**
+         * 资料源配置 JSON。
+         *
+         * <p>可能含 repo 路径、Vault 引用、文件路径等配置信息。可能为大型 JSON 字符串。</p>
+         */
         private String configJson;
 
+        /**
+         * 资料源扩展元数据 JSON。
+         *
+         * <p>含 bundleSummary（displayName、titleHints、relativePathsSample）等信息。
+         * 可能为大型 JSON 字符串。</p>
+         */
         private String metadataJson;
 
+        /** 最近一次 manifest 哈希（用于检测输入变更）。 */
         private String latestManifestHash;
 
+        /** 最近一次同步运行主键。 */
         private Long lastSyncRunId;
 
+        /** 最近一次同步状态。 */
         private String lastSyncStatus;
 
+        /** 最近一次同步时间（ISO-8601）。 */
         private String lastSyncAt;
 
+        /** 创建时间（ISO-8601）。 */
         private String createdAt;
 
+        /** 最后更新时间（ISO-8601）。 */
         private String updatedAt;
     }
 
     /**
      * 资料源更新请求。
      *
-     * 职责：承载资料源名称、状态与配置的最小 PATCH 字段
+     * <p>承载资料源名称、状态与配置的最小 PATCH 字段，由 Spring MVC 从 JSON 请求体绑定。
+     * 各字段为空时 controller 沿用现有值，不做覆盖。
      *
      * @author xiexu
      */
-    @Data
+    @Getter
+    @Setter
     @NoArgsConstructor
     @AllArgsConstructor
     public static class AdminKnowledgeSourcePatchRequest {
 
+        /** 资料源名称。为空时沿用现有名称。 */
         private String name;
 
+        /** 生命周期状态。为空时沿用现有状态。必须为 {@code ACTIVE/DISABLED/ARCHIVED} 之一。 */
         private String status;
 
+        /** 可见性。为空时沿用现有可见性。必须为 {@code NORMAL/ADMIN_ONLY} 之一。 */
         private String visibility;
 
+        /** 默认同步模式。为空时沿用现有模式。必须为 {@code AUTO/FULL/INCREMENTAL} 之一。 */
         private String defaultSyncMode;
 
+        /**
+         * 目标配置 JSON 对象。
+         *
+         * <p>为 {@code null} 时沿用现有配置。controller 负责序列化为 JSON 字符串存储。
+         * 该字段可能是大型 JSON 树（含 repo 路径、认证引用等），禁止参与 {@code toString()}。</p>
+         */
         private JsonNode configJson;
     }
 }

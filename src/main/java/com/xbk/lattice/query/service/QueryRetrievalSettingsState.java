@@ -1,12 +1,15 @@
 package com.xbk.lattice.query.service;
 
+import lombok.Getter;
+
 /**
- * Query 检索配置状态
+ * Query 检索配置状态。
  *
- * 职责：承载并行召回与加权 RRF 运行时配置
+ * <p>承载并行召回与加权 RRF 的运行时配置快照，用于 query 检索链中的通道选择与排序。
  *
  * @author xiexu
  */
+@Getter
 public class QueryRetrievalSettingsState {
 
     public static final boolean DEFAULT_REWRITE_ENABLED = true;
@@ -35,45 +38,69 @@ public class QueryRetrievalSettingsState {
 
     public static final int DEFAULT_RRF_K = 60;
 
+    /**
+     * 并行召回开关。
+     *
+     * <p>{@code true} 时多通道并行执行，降低延迟但增加 DB 连接压力。
+     * {@code false} 时串行执行，延迟叠加但资源消耗可控。</p>
+     */
     private final boolean parallelEnabled;
 
+    /**
+     * 查询改写开关。
+     *
+     * <p>{@code true} 时对原始 query 做 LLM 改写/扩展后再检索，
+     * 召回结果与原始 query 可能存在语义偏移。</p>
+     */
     private final boolean rewriteEnabled;
 
+    /**
+     * 意图感知向量通道开关。
+     *
+     * <p>{@code true} 时根据 query 意图动态选择向量通道组合，策略准确性依赖意图识别模型。</p>
+     */
     private final boolean intentAwareVectorEnabled;
 
+    /** 全文检索通道 RRF 融合权重。0=关闭该通道。默认 1.0。 */
     private final double ftsWeight;
 
+    /** RefKey 引用键通道 RRF 融合权重。0=关闭。默认 1.45。 */
     private final double refkeyWeight;
 
+    /** 文章分块 lexical 通道 RRF 融合权重。0=关闭。默认 1.25。 */
     private final double articleChunkWeight;
 
+    /** Source 文件级通道 RRF 融合权重。0=关闭。默认 1.0。 */
     private final double sourceWeight;
 
+    /** Source Chunk lexical 通道 RRF 融合权重。0=关闭。默认 1.30。 */
     private final double sourceChunkWeight;
 
+    /** Fact Card lexical 通道 RRF 融合权重。0=关闭。默认 1.40。 */
     private final double factCardWeight;
 
+    /** Contribution 贡献度通道 RRF 融合权重。0=关闭。默认 1.0。 */
     private final double contributionWeight;
 
+    /** Graph 知识图谱通道 RRF 融合权重。0=关闭。默认 1.20。 */
     private final double graphWeight;
 
+    /** 文章向量通道 RRF 融合权重。0=关闭。默认 1.0。 */
     private final double articleVectorWeight;
 
+    /** 分块向量通道 RRF 融合权重。0=关闭。默认 1.35。 */
     private final double chunkVectorWeight;
 
+    /**
+     * RRF K 参数。
+     *
+     * <p>控制排名平滑度：值越大排名越平滑但区分度越低。默认 60。
+     * 过小（如 1）→排名断层；过大（如 120+）→排名趋同失去区分。</p>
+     */
     private final int rrfK;
 
     /**
-     * 创建 Query 检索配置状态。
-     *
-     * @param parallelEnabled 是否启用并行召回
-     * @param ftsWeight FTS 权重
-     * @param sourceWeight Source 权重
-     * @param contributionWeight Contribution 权重
-     * @param graphWeight Graph 权重
-     * @param articleVectorWeight 文章向量权重
-     * @param chunkVectorWeight Chunk 向量权重
-     * @param rrfK RRF K 值
+     * 创建 Query 检索配置状态（精简构造器——rewrite/vector 使用默认值）。
      */
     public QueryRetrievalSettingsState(
             boolean parallelEnabled,
@@ -104,20 +131,7 @@ public class QueryRetrievalSettingsState {
     }
 
     /**
-     * 创建 Query 检索配置状态。
-     *
-     * @param parallelEnabled 是否启用并行召回
-     * @param ftsWeight FTS 权重
-     * @param refkeyWeight RefKey 权重
-     * @param articleChunkWeight Article Chunk lexical 权重
-     * @param sourceWeight Source 文件级权重
-     * @param sourceChunkWeight Source Chunk lexical 权重
-     * @param factCardWeight Fact Card lexical 权重
-     * @param contributionWeight Contribution 权重
-     * @param graphWeight Graph 权重
-     * @param articleVectorWeight 文章向量权重
-     * @param chunkVectorWeight Chunk 向量权重
-     * @param rrfK RRF K 值
+     * 创建 Query 检索配置状态（中等构造器——rewrite/vector 使用默认值）。
      */
     public QueryRetrievalSettingsState(
             boolean parallelEnabled,
@@ -152,22 +166,7 @@ public class QueryRetrievalSettingsState {
     }
 
     /**
-     * 创建 Query 检索配置状态。
-     *
-     * @param parallelEnabled 是否启用并行召回
-     * @param rewriteEnabled 是否启用查询改写
-     * @param intentAwareVectorEnabled 是否启用意图感知向量通道
-     * @param ftsWeight FTS 权重
-     * @param refkeyWeight RefKey 权重
-     * @param articleChunkWeight Article Chunk lexical 权重
-     * @param sourceWeight Source 文件级权重
-     * @param sourceChunkWeight Source Chunk lexical 权重
-     * @param factCardWeight Fact Card lexical 权重
-     * @param contributionWeight Contribution 权重
-     * @param graphWeight Graph 权重
-     * @param articleVectorWeight 文章向量权重
-     * @param chunkVectorWeight Chunk 向量权重
-     * @param rrfK RRF K 值
+     * 创建 Query 检索配置状态（完整构造器——所有参数显式指定）。
      */
     public QueryRetrievalSettingsState(
             boolean parallelEnabled,
@@ -199,61 +198,5 @@ public class QueryRetrievalSettingsState {
         this.articleVectorWeight = articleVectorWeight;
         this.chunkVectorWeight = chunkVectorWeight;
         this.rrfK = rrfK;
-    }
-
-    public boolean isParallelEnabled() {
-        return parallelEnabled;
-    }
-
-    public boolean isRewriteEnabled() {
-        return rewriteEnabled;
-    }
-
-    public boolean isIntentAwareVectorEnabled() {
-        return intentAwareVectorEnabled;
-    }
-
-    public double getFtsWeight() {
-        return ftsWeight;
-    }
-
-    public double getRefkeyWeight() {
-        return refkeyWeight;
-    }
-
-    public double getArticleChunkWeight() {
-        return articleChunkWeight;
-    }
-
-    public double getSourceWeight() {
-        return sourceWeight;
-    }
-
-    public double getSourceChunkWeight() {
-        return sourceChunkWeight;
-    }
-
-    public double getFactCardWeight() {
-        return factCardWeight;
-    }
-
-    public double getContributionWeight() {
-        return contributionWeight;
-    }
-
-    public double getGraphWeight() {
-        return graphWeight;
-    }
-
-    public double getArticleVectorWeight() {
-        return articleVectorWeight;
-    }
-
-    public double getChunkVectorWeight() {
-        return chunkVectorWeight;
-    }
-
-    public int getRrfK() {
-        return rrfK;
     }
 }

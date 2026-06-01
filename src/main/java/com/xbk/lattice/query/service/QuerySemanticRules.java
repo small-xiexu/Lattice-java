@@ -16,63 +16,77 @@ import java.util.List;
 @ConfigurationProperties(prefix = "lattice.query.semantic")
 public class QuerySemanticRules {
 
+    /** 计数信号。用于识别用户意图为统计/计数的 query。 */
     private List<String> countSignals = List.of(
             "多少条", "多少个", "数量", "计数", "几条", "几行", "几条数据", "多少行", "行数"
     );
 
+    /** 对比信号。用于识别用户意图为对比/比较的 query。 */
     private List<String> comparisonSignals = List.of(
             "比较", "对比", "区别", "差异", "有何不同", "有什么不同"
     );
 
+    /** 深度研究触发信号。用于路由到 deep research 流程（排查/调用链/影响分析/原因探究）。 */
     private List<String> deepResearchSignals = List.of(
             "排查", "调用链", "影响", "为什么"
     );
 
+    /** 精确配置标识信号。用于路由到配置查询流程（接口路径/配置项/取值）。 */
     private List<String> configIdentifierSignals = List.of(
             "接口路径", "配置项", "取值为", "在哪里配置", "配置文件", "路径是什么", "什么路径", "配置在哪里"
     );
 
+    /** 顺序/步骤信号。用于识别用户意图为流程/步骤的 query。 */
     private List<String> sequenceSignals = List.of(
             "步骤", "流程", "顺序", "先后", "阶段", "第一步", "第二步", "第三步", "执行顺序", "怎么走", "如何推进",
             "sequence", "step", "steps", "process", "workflow", "timeline"
     );
 
+    /** 架构信号。用于路由到架构分析流程（组件职责/服务边界/技术选型）。 */
     private List<String> architectureSignals = List.of(
             "架构", "消息队列", "解耦", "同步调用", "异步通信", "组件职责",
             "服务边界", "系统设计", "技术选型", "交互方式", "为什么不直接"
     );
 
+    /** 枚举信号。用于识别用户意图为列出/枚举的 query。 */
     private List<String> enumSignals = List.of(
             "有哪些", "哪些", "清单", "列表", "包括什么", "包含什么", "列出", "枚举", "包括哪些", "包含哪些",
             "list", "items", "options", "types", "categories"
     );
 
+    /** 状态信号。用于识别用户意图为查询当前状态/进展的 query。 */
     private List<String> statusSignals = List.of(
             "状态", "现状", "是否启用", "是否生效", "是否完成", "结论", "结果", "进展", "被调整", "调整",
             "修正", "降级", "status", "state", "current", "enabled", "disabled", "done", "pending"
     );
 
+    /** 规则信号。用于识别用户意图为查询规则/约束/政策的 query。 */
     private List<String> policySignals = List.of(
             "规则", "原则", "约束", "要求", "必须", "禁止", "不得", "不允许", "适用范围", "边界",
             "必须遵守", "policy", "rule", "constraint", "requirement", "must", "forbid", "forbidden", "allowed"
     );
 
+    /** 能力/接入信号。用于识别用户意图为查询接入方式的 query。 */
     private List<String> capabilitySignals = List.of(
             "接入方式", "哪些入口", "开发接入", "支持哪些", "集成方式", "接入能力", "入口方式"
     );
 
+    /** 流程/流转信号。用于识别用户意图为查询运行流程的 query。 */
     private List<String> flowSignals = List.of(
             "运行流程", "流程是什么", "流程", "链路", "流转", "怎么走"
     );
 
+    /** 多焦点分隔信号。用于识别 query 中含多个独立子问题（如"和"分隔的多主题）。 */
     private List<String> multiFocusSignals = List.of(
             "和"
     );
 
+    /** 数值意图信号。用于识别 query 中含极值/边界查询意图。 */
     private List<String> numericValueIntentSignals = List.of(
             "多少", "最大", "最小", "最长", "最短", "上限", "下限"
     );
 
+    /** 文档附录/结构标记信号。用于识别文本行是否为附录标记（如"附录A"），在解析时跳过。 */
     private List<String> boilerplateSectionSignals = List.of(
             "附录"
     );

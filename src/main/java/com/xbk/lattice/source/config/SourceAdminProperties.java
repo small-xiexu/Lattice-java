@@ -12,6 +12,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "lattice.source.admin")
 public class SourceAdminProperties {
 
+    /**
+     * source sync staging 根目录。
+     *
+     * <p>默认 {@code /tmp/lattice-source-sync}。source 同步时在此目录下创建临时工作区。
+     * 应确保有足够磁盘空间，且不被其他进程误删。路径遍历风险——用户可控的 source 配置
+     * 可能影响实际写入路径。</p>
+     */
     private String stagingRootDir = System.getProperty("java.io.tmpdir") + "/lattice-source-sync";
 
     /**
