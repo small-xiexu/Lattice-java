@@ -1,49 +1,38 @@
 package com.xbk.lattice.governance.domain;
 
+import lombok.Getter;
+
 /**
- * 生命周期切换结果
+ * 生命周期切换结果。
  *
- * 职责：返回单篇文章生命周期变更后的最小结果
+ * <p>返回单篇文章生命周期变更后的最小结果——含变更后的生命周期和审计信息。
+ * 这是变更操作的结果对象，非列表状态条目。
  *
  * @author xiexu
  */
+@Getter
 public class LifecycleTransitionResult {
 
+    /** 资料源主键。为 null 表示多源。 */
     private final Long sourceId;
-
+    /** 文章唯一键。6 参数构造器中回退为 conceptId。 */
     private final String articleKey;
-
+    /** 概念标识。 */
     private final String conceptId;
-
+    /** 文章标题。 */
     private final String title;
-
+    /** 变更后的目标生命周期。 */
     private final String lifecycle;
-
+    /** 变更原因。可为空，表示本次变更没有额外原因说明。 */
     private final String reason;
-
+    /** 变更操作人。用于审计本次变更。 */
     private final String updatedBy;
-
+    /** 变更时间。用于审计本次变更。 */
     private final String updatedAt;
 
-    /**
-     * 创建生命周期切换结果。
-     *
-     * @param conceptId 概念标识
-     * @param title 标题
-     * @param lifecycle 生命周期
-     * @param reason 原因
-     * @param updatedBy 更新人
-     * @param updatedAt 更新时间
-     */
     public LifecycleTransitionResult(
-            Long sourceId,
-            String articleKey,
-            String conceptId,
-            String title,
-            String lifecycle,
-            String reason,
-            String updatedBy,
-            String updatedAt
+            Long sourceId, String articleKey, String conceptId, String title,
+            String lifecycle, String reason, String updatedBy, String updatedAt
     ) {
         this.sourceId = sourceId;
         this.articleKey = articleKey;
@@ -55,86 +44,10 @@ public class LifecycleTransitionResult {
         this.updatedAt = updatedAt;
     }
 
-    /**
-     * 创建生命周期切换结果。
-     *
-     * @param conceptId 概念标识
-     * @param title 标题
-     * @param lifecycle 生命周期
-     * @param reason 原因
-     * @param updatedBy 更新人
-     * @param updatedAt 更新时间
-     */
+    /** 6 参数构造器——articleKey 回退为 conceptId。 */
     public LifecycleTransitionResult(
-            String conceptId,
-            String title,
-            String lifecycle,
-            String reason,
-            String updatedBy,
-            String updatedAt
+            String conceptId, String title, String lifecycle, String reason, String updatedBy, String updatedAt
     ) {
         this(null, conceptId, conceptId, title, lifecycle, reason, updatedBy, updatedAt);
-    }
-
-    public Long getSourceId() {
-        return sourceId;
-    }
-
-    public String getArticleKey() {
-        return articleKey;
-    }
-
-    /**
-     * 获取概念标识。
-     *
-     * @return 概念标识
-     */
-    public String getConceptId() {
-        return conceptId;
-    }
-
-    /**
-     * 获取标题。
-     *
-     * @return 标题
-     */
-    public String getTitle() {
-        return title;
-    }
-
-    /**
-     * 获取生命周期。
-     *
-     * @return 生命周期
-     */
-    public String getLifecycle() {
-        return lifecycle;
-    }
-
-    /**
-     * 获取原因。
-     *
-     * @return 原因
-     */
-    public String getReason() {
-        return reason;
-    }
-
-    /**
-     * 获取更新人。
-     *
-     * @return 更新人
-     */
-    public String getUpdatedBy() {
-        return updatedBy;
-    }
-
-    /**
-     * 获取更新时间。
-     *
-     * @return 更新时间
-     */
-    public String getUpdatedAt() {
-        return updatedAt;
     }
 }

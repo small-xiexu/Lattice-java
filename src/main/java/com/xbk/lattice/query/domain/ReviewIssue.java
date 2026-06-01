@@ -2,29 +2,25 @@ package com.xbk.lattice.query.domain;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Getter;
 
 /**
- * 审查问题
+ * 审查问题。
  *
- * 职责：承载单条审查问题的类别、严重度与描述
+ * <p>承载单条审查问题的类别、严重度与描述——由 LLM reviewer 输出后反序列化。
  *
  * @author xiexu
  */
+@Getter
 public class ReviewIssue {
 
+    /** 严重度（如 HIGH / MEDIUM / LOW）。驱动 auto-fix 优先级和人工复核阈值。 */
     private final String severity;
-
+    /** 问题类别（如 accuracy / completeness / citation）。 */
     private final String category;
-
+    /** 问题描述。 */
     private final String description;
 
-    /**
-     * 创建审查问题。
-     *
-     * @param severity 严重度
-     * @param category 类别
-     * @param description 描述
-     */
     @JsonCreator
     public ReviewIssue(
             @JsonProperty("severity") String severity,
@@ -34,32 +30,5 @@ public class ReviewIssue {
         this.severity = severity;
         this.category = category;
         this.description = description;
-    }
-
-    /**
-     * 获取严重度。
-     *
-     * @return 严重度
-     */
-    public String getSeverity() {
-        return severity;
-    }
-
-    /**
-     * 获取类别。
-     *
-     * @return 类别
-     */
-    public String getCategory() {
-        return category;
-    }
-
-    /**
-     * 获取描述。
-     *
-     * @return 描述
-     */
-    public String getDescription() {
-        return description;
     }
 }

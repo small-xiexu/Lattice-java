@@ -1,53 +1,44 @@
 package com.xbk.lattice.governance.domain;
 
+import lombok.Getter;
+
 /**
- * 生命周期条目
+ * 生命周期条目。
  *
- * 职责：描述单篇知识文章当前的生命周期状态与留痕信息
+ * <p>描述单篇知识文章当前的生命周期状态与审计留痕信息——用于治理列表展示和筛选。
  *
  * @author xiexu
  */
+@Getter
 public class LifecycleItem {
 
+    /** 资料源主键。为 null 表示多源或无固定 source。 */
     private final Long sourceId;
-
+    /** 文章唯一键。7 参数构造器中回退为 conceptId。 */
     private final String articleKey;
-
+    /** 概念标识。 */
     private final String conceptId;
-
+    /** 文章标题。 */
     private final String title;
-
+    /**
+     * 生命周期状态。
+     *
+     * <p>可选值：{@code active} / {@code deprecated} / {@code archived}。
+     * 驱动前端展示状态标签和治理筛选条件。</p>
+     */
     private final String lifecycle;
-
+    /** 审查状态。 */
     private final String reviewStatus;
-
+    /** 生命周期变更原因。可为空，表示当前状态没有额外治理说明。 */
     private final String reason;
-
+    /** 最后更新人。审计追踪字段。 */
     private final String updatedBy;
-
+    /** 最后更新时间。审计追踪字段。 */
     private final String updatedAt;
 
-    /**
-     * 创建生命周期条目。
-     *
-     * @param conceptId 概念标识
-     * @param title 标题
-     * @param lifecycle 生命周期
-     * @param reviewStatus 审查状态
-     * @param reason 生命周期原因
-     * @param updatedBy 更新人
-     * @param updatedAt 更新时间
-     */
     public LifecycleItem(
-            Long sourceId,
-            String articleKey,
-            String conceptId,
-            String title,
-            String lifecycle,
-            String reviewStatus,
-            String reason,
-            String updatedBy,
-            String updatedAt
+            Long sourceId, String articleKey, String conceptId, String title,
+            String lifecycle, String reviewStatus, String reason, String updatedBy, String updatedAt
     ) {
         this.sourceId = sourceId;
         this.articleKey = articleKey;
@@ -60,97 +51,11 @@ public class LifecycleItem {
         this.updatedAt = updatedAt;
     }
 
-    /**
-     * 创建生命周期条目。
-     *
-     * @param conceptId 概念标识
-     * @param title 标题
-     * @param lifecycle 生命周期
-     * @param reviewStatus 审查状态
-     * @param reason 生命周期原因
-     * @param updatedBy 更新人
-     * @param updatedAt 更新时间
-     */
+    /** 7 参数构造器——articleKey 回退为 conceptId。 */
     public LifecycleItem(
-            String conceptId,
-            String title,
-            String lifecycle,
-            String reviewStatus,
-            String reason,
-            String updatedBy,
-            String updatedAt
+            String conceptId, String title, String lifecycle, String reviewStatus,
+            String reason, String updatedBy, String updatedAt
     ) {
         this(null, conceptId, conceptId, title, lifecycle, reviewStatus, reason, updatedBy, updatedAt);
-    }
-
-    public Long getSourceId() {
-        return sourceId;
-    }
-
-    public String getArticleKey() {
-        return articleKey;
-    }
-
-    /**
-     * 获取概念标识。
-     *
-     * @return 概念标识
-     */
-    public String getConceptId() {
-        return conceptId;
-    }
-
-    /**
-     * 获取标题。
-     *
-     * @return 标题
-     */
-    public String getTitle() {
-        return title;
-    }
-
-    /**
-     * 获取生命周期。
-     *
-     * @return 生命周期
-     */
-    public String getLifecycle() {
-        return lifecycle;
-    }
-
-    /**
-     * 获取审查状态。
-     *
-     * @return 审查状态
-     */
-    public String getReviewStatus() {
-        return reviewStatus;
-    }
-
-    /**
-     * 获取生命周期原因。
-     *
-     * @return 生命周期原因
-     */
-    public String getReason() {
-        return reason;
-    }
-
-    /**
-     * 获取更新人。
-     *
-     * @return 更新人
-     */
-    public String getUpdatedBy() {
-        return updatedBy;
-    }
-
-    /**
-     * 获取更新时间。
-     *
-     * @return 更新时间
-     */
-    public String getUpdatedAt() {
-        return updatedAt;
     }
 }
