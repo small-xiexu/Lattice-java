@@ -1,89 +1,61 @@
 package com.xbk.lattice.source.domain;
 
+import lombok.Getter;
+
 import java.time.OffsetDateTime;
 
 /**
- * 资料源同步运行
+ * 资料源同步运行。
  *
- * 职责：表示单次资料源同步任务的阶段状态与上下文
+ * <p>表示单次资料源同步任务的阶段状态与上下文——含触发类型、识别决策、编译关联和错误信息。
+ * 为不可变领域对象。
  *
  * @author xiexu
  */
+@Getter
 public class SourceSyncRun {
 
+    /** 运行主键。 */
     private final Long id;
-
+    /** 资料源主键。 */
     private final Long sourceId;
-
+    /** 资料源类型。 */
     private final String sourceType;
-
+    /** 本次同步的 manifest 哈希。 */
     private final String manifestHash;
-
+    /** 触发方式（如 manual / auto / webhook）。 */
     private final String triggerType;
-
+    /** 识别模式。 */
     private final String resolverMode;
-
+    /** 识别决策。 */
     private final String resolverDecision;
-
+    /** 同步动作（sync / skip / confirm）。 */
     private final String syncAction;
-
+    /** 运行状态（如 QUEUED / RUNNING / SUCCESS / FAILED）。 */
     private final String status;
-
+    /** 命中的资料源主键。 */
     private final Long matchedSourceId;
-
+    /** 关联的编译作业主键。为 null 表示未触发编译。 */
     private final String compileJobId;
-
+    /** 证据 JSON。可能较大。 */
     private final String evidenceJson;
-
+    /** 错误信息。可能含异常详情，禁止参与 toString()。 */
     private final String errorMessage;
-
+    /** 请求时间。 */
     private final OffsetDateTime requestedAt;
-
+    /** 最后更新时间。 */
     private final OffsetDateTime updatedAt;
-
+    /** 开始时间。为 null 表示尚未开始。 */
     private final OffsetDateTime startedAt;
-
+    /** 完成时间。为 null 表示未完成。 */
     private final OffsetDateTime finishedAt;
 
-    /**
-     * 创建同步运行。
-     *
-     * @param id 主键
-     * @param sourceId 资料源主键
-     * @param sourceType 资料源类型
-     * @param manifestHash manifest 哈希
-     * @param triggerType 触发方式
-     * @param resolverMode 识别模式
-     * @param resolverDecision 识别决策
-     * @param syncAction 同步动作
-     * @param status 状态
-     * @param matchedSourceId 命中的资料源
-     * @param compileJobId 编译作业
-     * @param evidenceJson 证据 JSON
-     * @param errorMessage 错误信息
-     * @param requestedAt 请求时间
-     * @param updatedAt 更新时间
-     * @param startedAt 开始时间
-     * @param finishedAt 完成时间
-     */
     public SourceSyncRun(
-            Long id,
-            Long sourceId,
-            String sourceType,
-            String manifestHash,
-            String triggerType,
-            String resolverMode,
-            String resolverDecision,
-            String syncAction,
-            String status,
-            Long matchedSourceId,
-            String compileJobId,
-            String evidenceJson,
-            String errorMessage,
-            OffsetDateTime requestedAt,
-            OffsetDateTime updatedAt,
-            OffsetDateTime startedAt,
-            OffsetDateTime finishedAt
+            Long id, Long sourceId, String sourceType, String manifestHash, String triggerType,
+            String resolverMode, String resolverDecision, String syncAction, String status,
+            Long matchedSourceId, String compileJobId, String evidenceJson, String errorMessage,
+            OffsetDateTime requestedAt, OffsetDateTime updatedAt,
+            OffsetDateTime startedAt, OffsetDateTime finishedAt
     ) {
         this.id = id;
         this.sourceId = sourceId;
@@ -102,73 +74,5 @@ public class SourceSyncRun {
         this.updatedAt = updatedAt;
         this.startedAt = startedAt;
         this.finishedAt = finishedAt;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public Long getSourceId() {
-        return sourceId;
-    }
-
-    public String getSourceType() {
-        return sourceType;
-    }
-
-    public String getManifestHash() {
-        return manifestHash;
-    }
-
-    public String getTriggerType() {
-        return triggerType;
-    }
-
-    public String getResolverMode() {
-        return resolverMode;
-    }
-
-    public String getResolverDecision() {
-        return resolverDecision;
-    }
-
-    public String getSyncAction() {
-        return syncAction;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public Long getMatchedSourceId() {
-        return matchedSourceId;
-    }
-
-    public String getCompileJobId() {
-        return compileJobId;
-    }
-
-    public String getEvidenceJson() {
-        return evidenceJson;
-    }
-
-    public String getErrorMessage() {
-        return errorMessage;
-    }
-
-    public OffsetDateTime getRequestedAt() {
-        return requestedAt;
-    }
-
-    public OffsetDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public OffsetDateTime getStartedAt() {
-        return startedAt;
-    }
-
-    public OffsetDateTime getFinishedAt() {
-        return finishedAt;
     }
 }
