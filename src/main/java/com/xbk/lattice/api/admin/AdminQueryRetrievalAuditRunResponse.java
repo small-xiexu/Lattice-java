@@ -1,56 +1,113 @@
 package com.xbk.lattice.api.admin;
 
+import lombok.Getter;
+
 import java.util.List;
 
 /**
- * 管理侧 Query 检索审计 run 响应
+ * 管理侧 Query 检索审计 run 响应。
  *
- * 职责：承载一次检索 run 的摘要信息
+ * <p>承载一次检索 run 的完整摘要——含 query 处理链、检索模式、命中统计与通道详情，
+ * 由 {@code AdminQueryRetrievalAuditController} 组装返回。
+ * 构造器含 {@code List.copyOf} 防御性拷贝（{@code channelRuns}），不可变。
+ * 禁止引入 {@code @Data}：{@code question} 为用户查询内容，{@code channelRunSummaryJson} 可能很大。
  *
  * @author xiexu
  */
+@Getter
 public class AdminQueryRetrievalAuditRunResponse {
 
+    /** run 主键。为 {@code null} 表示无记录。 */
     private final Long runId;
 
+    /** 查询标识。 */
     private final String queryId;
 
+    /**
+     * 用户原始问题文本。
+     *
+     * <p>可能含 PII，禁止参与 {@code toString()}。</p>
+     */
     private final String question;
 
+    /** query 归一化后的文本。 */
     private final String normalizedQuestion;
 
+    /**
+     * 实际发送给检索引擎的文本。
+     *
+     * <p>可能经过 LLM 改写或扩展，与原始 {@code question} 不同。</p>
+     */
     private final String retrievalQuestion;
 
+    /** 版本标签——标识检索使用的代码/配置版本。 */
     private final String versionTag;
 
+    /** 策略标签——标识检索策略组合。 */
     private final String strategyTag;
 
+    /** 问题类型分类标签（如 {@code factual} / {@code reasoning} / {@code comparison}）。 */
     private final String questionTypeTag;
 
+    /** 答案形态（如 {@code text} / {@code table} / {@code mixed}）。 */
     private final String answerShape;
 
+    /** 检索模式（如 {@code parallel} / {@code sequential}）。 */
     private final String retrievalMode;
 
+    /**
+     * 是否对 query 执行了 LLM 改写。
+     *
+     * <p>{@code true} 时 {@code retrievalQuestion} 与 {@code question} 不同，
+     * {@code rewriteAuditRef} 可追溯到具体改写记录。</p>
+     */
     private final boolean rewriteApplied;
 
+    /** 改写审计引用——可追溯到具体改写记录。 */
     private final String rewriteAuditRef;
 
+    /** 检索策略引用——可追溯策略配置版本。 */
     private final String retrievalStrategyRef;
 
+    /**
+     * RRF 融合后的最终命中数。
+     *
+     * <p>0 表示检索未产生有效结果（{@code coverageStatus=empty}）。</p>
+     */
     private final int fusedHitCount;
 
+    /** 实际参与检索的通道数。 */
     private final int channelCount;
 
+    /** Fact Card 通道命中数。 */
     private final int factCardHitCount;
 
+    /** Source Chunk 通道命中数。 */
     private final int sourceChunkHitCount;
 
+    /**
+     * 检索覆盖状态。
+     *
+     * <p>可选值：{@code sufficient} / {@code partial} / {@code empty}。
+     * 驱动诊断展示——{@code empty} 时检索完全失败，需排查通道配置或数据完整性。</p>
+     */
     private final String coverageStatus;
 
+    /**
+     * 通道运行摘要原始 JSON。
+     *
+     * <p>可能较大，禁止参与 {@code toString()}。</p>
+     */
     private final String channelRunSummaryJson;
 
+    /**
+     * 各通道运行详情列表。
+     *
+     * <p>不可变（构造器中通过 {@code List.copyOf} 防御性拷贝）。</p>
+     */
     private final List<AdminQueryRetrievalChannelRunResponse> channelRuns;
 
+    /** run 创建时间（ISO-8601 字符串）。 */
     private final String createdAt;
 
     /**
@@ -75,7 +132,7 @@ public class AdminQueryRetrievalAuditRunResponse {
      * @param sourceChunkHitCount Source Chunk 命中数
      * @param coverageStatus 覆盖状态
      * @param channelRunSummaryJson 通道运行摘要 JSON
-     * @param channelRuns 通道运行摘要
+     * @param channelRuns 通道运行摘要（构造器中做防御性拷贝）
      * @param createdAt 创建时间
      */
     public AdminQueryRetrievalAuditRunResponse(
@@ -122,194 +179,5 @@ public class AdminQueryRetrievalAuditRunResponse {
         this.channelRunSummaryJson = channelRunSummaryJson;
         this.channelRuns = channelRuns == null ? List.of() : List.copyOf(channelRuns);
         this.createdAt = createdAt;
-    }
-
-    /**
-     * 获取主键。
-     *
-     * @return 主键
-     */
-    public Long getRunId() {
-        return runId;
-    }
-
-    /**
-     * 获取查询标识。
-     *
-     * @return 查询标识
-     */
-    public String getQueryId() {
-        return queryId;
-    }
-
-    /**
-     * 获取原始问题。
-     *
-     * @return 原始问题
-     */
-    public String getQuestion() {
-        return question;
-    }
-
-    /**
-     * 获取归一化问题。
-     *
-     * @return 归一化问题
-     */
-    public String getNormalizedQuestion() {
-        return normalizedQuestion;
-    }
-
-    /**
-     * 获取实际检索问题。
-     *
-     * @return 实际检索问题
-     */
-    public String getRetrievalQuestion() {
-        return retrievalQuestion;
-    }
-
-    /**
-     * 获取版本标签。
-     *
-     * @return 版本标签
-     */
-    public String getVersionTag() {
-        return versionTag;
-    }
-
-    /**
-     * 获取策略标签。
-     *
-     * @return 策略标签
-     */
-    public String getStrategyTag() {
-        return strategyTag;
-    }
-
-    /**
-     * 获取问题类型标签。
-     *
-     * @return 问题类型标签
-     */
-    public String getQuestionTypeTag() {
-        return questionTypeTag;
-    }
-
-    /**
-     * 获取答案形态。
-     *
-     * @return 答案形态
-     */
-    public String getAnswerShape() {
-        return answerShape;
-    }
-
-    /**
-     * 获取检索模式。
-     *
-     * @return 检索模式
-     */
-    public String getRetrievalMode() {
-        return retrievalMode;
-    }
-
-    /**
-     * 获取是否改写。
-     *
-     * @return 是否改写
-     */
-    public boolean isRewriteApplied() {
-        return rewriteApplied;
-    }
-
-    /**
-     * 获取改写审计引用。
-     *
-     * @return 改写审计引用
-     */
-    public String getRewriteAuditRef() {
-        return rewriteAuditRef;
-    }
-
-    /**
-     * 获取检索策略引用。
-     *
-     * @return 检索策略引用
-     */
-    public String getRetrievalStrategyRef() {
-        return retrievalStrategyRef;
-    }
-
-    /**
-     * 获取融合命中数。
-     *
-     * @return 融合命中数
-     */
-    public int getFusedHitCount() {
-        return fusedHitCount;
-    }
-
-    /**
-     * 获取通道数。
-     *
-     * @return 通道数
-     */
-    public int getChannelCount() {
-        return channelCount;
-    }
-
-    /**
-     * 获取 Fact Card 命中数。
-     *
-     * @return Fact Card 命中数
-     */
-    public int getFactCardHitCount() {
-        return factCardHitCount;
-    }
-
-    /**
-     * 获取 Source Chunk 命中数。
-     *
-     * @return Source Chunk 命中数
-     */
-    public int getSourceChunkHitCount() {
-        return sourceChunkHitCount;
-    }
-
-    /**
-     * 获取覆盖状态。
-     *
-     * @return 覆盖状态
-     */
-    public String getCoverageStatus() {
-        return coverageStatus;
-    }
-
-    /**
-     * 获取通道运行摘要 JSON。
-     *
-     * @return 通道运行摘要 JSON
-     */
-    public String getChannelRunSummaryJson() {
-        return channelRunSummaryJson;
-    }
-
-    /**
-     * 获取通道运行摘要。
-     *
-     * @return 通道运行摘要
-     */
-    public List<AdminQueryRetrievalChannelRunResponse> getChannelRuns() {
-        return channelRuns;
-    }
-
-    /**
-     * 获取创建时间。
-     *
-     * @return 创建时间
-     */
-    public String getCreatedAt() {
-        return createdAt;
     }
 }

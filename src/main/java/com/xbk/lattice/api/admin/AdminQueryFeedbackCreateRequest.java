@@ -1,173 +1,75 @@
 package com.xbk.lattice.api.admin;
 
+import lombok.Getter;
+import lombok.Setter;
+
 import java.util.List;
 
 /**
- * 管理侧答案反馈创建请求
+ * 管理侧答案反馈创建请求。
  *
- * 职责：承载问答页提交的结果反馈上下文
+ * <p>承载问答页提交的结果反馈上下文，由 Spring MVC 从 JSON 请求体绑定。
+ * 含用户数据（{@code question}、{@code answerSummary}、{@code comment}、{@code reportedBy}），
+ * 禁止引入 {@code @Data} 以防止用户内容泄露到日志。
  *
  * @author xiexu
  */
+@Getter
+@Setter
 public class AdminQueryFeedbackCreateRequest {
 
+    /**
+     * 关联的查询会话标识。
+     *
+     * <p>用于回溯原始问答上下文，定位产生该反馈的查询。</p>
+     */
     private String queryId;
 
+    /**
+     * 用户原始问题文本。
+     *
+     * <p>可能含 PII 或敏感查询内容，禁止参与 {@code toString()}。</p>
+     */
     private String question;
 
+    /**
+     * 系统给出的答案摘要文本。
+     *
+     * <p>可能与完整答案不同，仅用于管理侧快速了解被反馈的答案内容。禁止参与 {@code toString()}。</p>
+     */
     private String answerSummary;
 
+    /**
+     * 反馈类型。
+     *
+     * <p>可选值：{@code positive} / {@code negative} / {@code correction}。
+     * 驱动反馈分类、处理优先级和前端展示样式。</p>
+     */
     private String feedbackType;
 
+    /**
+     * 用户提交的反馈说明文本。
+     *
+     * <p>可能含主观评价或具体纠错内容，为不可控的用户输入。禁止参与 {@code toString()}。</p>
+     */
     private String comment;
 
+    /**
+     * 反馈关联的文章唯一键列表。
+     *
+     * <p>用于快速定位问题文章，帮助处理人定位反馈来源。</p>
+     */
     private List<String> articleKeys;
 
+    /**
+     * 反馈关联的来源文件路径列表。
+     */
     private List<String> sourcePaths;
 
+    /**
+     * 反馈提交人标识。
+     *
+     * <p>用于审计追踪记录反馈来源。禁止参与 {@code toString()}。</p>
+     */
     private String reportedBy;
-
-    /**
-     * 获取查询 ID。
-     *
-     * @return 查询 ID
-     */
-    public String getQueryId() {
-        return queryId;
-    }
-
-    /**
-     * 设置查询 ID。
-     *
-     * @param queryId 查询 ID
-     */
-    public void setQueryId(String queryId) {
-        this.queryId = queryId;
-    }
-
-    /**
-     * 获取用户问题。
-     *
-     * @return 用户问题
-     */
-    public String getQuestion() {
-        return question;
-    }
-
-    /**
-     * 设置用户问题。
-     *
-     * @param question 用户问题
-     */
-    public void setQuestion(String question) {
-        this.question = question;
-    }
-
-    /**
-     * 获取答案摘要。
-     *
-     * @return 答案摘要
-     */
-    public String getAnswerSummary() {
-        return answerSummary;
-    }
-
-    /**
-     * 设置答案摘要。
-     *
-     * @param answerSummary 答案摘要
-     */
-    public void setAnswerSummary(String answerSummary) {
-        this.answerSummary = answerSummary;
-    }
-
-    /**
-     * 获取反馈类型。
-     *
-     * @return 反馈类型
-     */
-    public String getFeedbackType() {
-        return feedbackType;
-    }
-
-    /**
-     * 设置反馈类型。
-     *
-     * @param feedbackType 反馈类型
-     */
-    public void setFeedbackType(String feedbackType) {
-        this.feedbackType = feedbackType;
-    }
-
-    /**
-     * 获取反馈说明。
-     *
-     * @return 反馈说明
-     */
-    public String getComment() {
-        return comment;
-    }
-
-    /**
-     * 设置反馈说明。
-     *
-     * @param comment 反馈说明
-     */
-    public void setComment(String comment) {
-        this.comment = comment;
-    }
-
-    /**
-     * 获取关联文章唯一键。
-     *
-     * @return 关联文章唯一键
-     */
-    public List<String> getArticleKeys() {
-        return articleKeys;
-    }
-
-    /**
-     * 设置关联文章唯一键。
-     *
-     * @param articleKeys 关联文章唯一键
-     */
-    public void setArticleKeys(List<String> articleKeys) {
-        this.articleKeys = articleKeys;
-    }
-
-    /**
-     * 获取关联来源路径。
-     *
-     * @return 关联来源路径
-     */
-    public List<String> getSourcePaths() {
-        return sourcePaths;
-    }
-
-    /**
-     * 设置关联来源路径。
-     *
-     * @param sourcePaths 关联来源路径
-     */
-    public void setSourcePaths(List<String> sourcePaths) {
-        this.sourcePaths = sourcePaths;
-    }
-
-    /**
-     * 获取反馈提交人。
-     *
-     * @return 反馈提交人
-     */
-    public String getReportedBy() {
-        return reportedBy;
-    }
-
-    /**
-     * 设置反馈提交人。
-     *
-     * @param reportedBy 反馈提交人
-     */
-    public void setReportedBy(String reportedBy) {
-        this.reportedBy = reportedBy;
-    }
 }

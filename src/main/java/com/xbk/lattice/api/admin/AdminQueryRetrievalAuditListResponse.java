@@ -1,18 +1,31 @@
 package com.xbk.lattice.api.admin;
 
+import lombok.Getter;
+
 import java.util.List;
 
 /**
- * 管理侧 Query 检索审计列表响应
+ * 管理侧 Query 检索审计列表响应。
  *
- * 职责：承载 recent retrieval audit runs 列表
+ * <p>承载最近的 retrieval audit run 列表，由 {@code AdminQueryRetrievalAuditController} 组装返回。
  *
  * @author xiexu
  */
+@Getter
 public class AdminQueryRetrievalAuditListResponse {
 
+    /**
+     * 当前返回的 run 数量。
+     *
+     * <p>等于 {@code items.size()}，受分页参数限制。</p>
+     */
     private final int count;
 
+    /**
+     * retrieval audit run 列表。
+     *
+     * <p>按创建时间倒序排列。</p>
+     */
     private final List<AdminQueryRetrievalAuditRunResponse> items;
 
     /**
@@ -24,23 +37,5 @@ public class AdminQueryRetrievalAuditListResponse {
     public AdminQueryRetrievalAuditListResponse(int count, List<AdminQueryRetrievalAuditRunResponse> items) {
         this.count = count;
         this.items = items;
-    }
-
-    /**
-     * 获取数量。
-     *
-     * @return 数量
-     */
-    public int getCount() {
-        return count;
-    }
-
-    /**
-     * 获取条目。
-     *
-     * @return 条目
-     */
-    public List<AdminQueryRetrievalAuditRunResponse> getItems() {
-        return items;
     }
 }

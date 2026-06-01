@@ -1,18 +1,32 @@
 package com.xbk.lattice.api.admin;
 
+import lombok.Getter;
+
 import java.util.List;
 
 /**
- * 管理侧 pending 列表响应
+ * 管理侧 pending 列表响应。
  *
- * 职责：承载管理侧 pending 管理列表
+ * <p>承载管理侧 pending 管理的完整列表（非截断），
+ * 与 Dashboard 中的 {@link AdminOverviewPendingResponse}（截断摘要）不同。
  *
  * @author xiexu
  */
+@Getter
 public class AdminPendingResponse {
 
+    /**
+     * 当前返回的 pending 记录数。
+     *
+     * <p>等于 {@code items.size()}，受分页参数限制。</p>
+     */
     private final int count;
 
+    /**
+     * pending 条目列表。
+     *
+     * <p>按创建时间倒序排列。</p>
+     */
     private final List<AdminPendingItemResponse> items;
 
     /**
@@ -24,23 +38,5 @@ public class AdminPendingResponse {
     public AdminPendingResponse(int count, List<AdminPendingItemResponse> items) {
         this.count = count;
         this.items = items;
-    }
-
-    /**
-     * 获取数量。
-     *
-     * @return 数量
-     */
-    public int getCount() {
-        return count;
-    }
-
-    /**
-     * 获取条目。
-     *
-     * @return 条目
-     */
-    public List<AdminPendingItemResponse> getItems() {
-        return items;
     }
 }
