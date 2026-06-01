@@ -1,58 +1,130 @@
 package com.xbk.lattice.api.admin;
 
+import lombok.Getter;
+
 import java.util.List;
 
 /**
- * 管理侧编译人工确认队列条目响应
+ * 管理侧编译审查人工确认队列条目响应。
  *
- * 职责：返回草稿队列的列表与详情字段
+ * <p>返回草稿队列的详情字段——包含文章内容、审查问题、自动修复状态与人工复核信息，
+ * 由 {@code AdminCompileReviewQueueController} 从队列记录组装返回。
+ * 含大文本字段（{@code content}、{@code metadataJson}、{@code reviewIssuesJson}），
+ * 禁止引入 {@code @Data} 以防止 {@code toString()} 输出巨量内容。
  *
  * @author xiexu
  */
+@Getter
 public class AdminCompileReviewQueueItemResponse {
 
+    /** 队列记录主键。 */
     private final long id;
 
+    /** 所属编译作业标识。 */
     private final String jobId;
 
+    /**
+     * 资料源主键。
+     *
+     * <p>为 {@code null} 表示无关联 source。</p>
+     */
     private final Long sourceId;
 
+    /** 资料源编码。 */
     private final String sourceCode;
 
+    /** 被编译的概念标识。 */
     private final String conceptId;
 
+    /** 文章唯一键（编译生成）。 */
     private final String articleKey;
 
+    /** 文章标题。 */
     private final String title;
 
+    /**
+     * 文章正文。
+     *
+     * <p>可能为长文本，仅用于管理侧预览。不应参与 {@code toString()}。</p>
+     */
     private final String content;
 
+    /**
+     * 文章元数据 JSON 字符串。
+     *
+     * <p>可能较大，仅用于管理侧展示。</p>
+     */
     private final String metadataJson;
 
+    /**
+     * 当前队列状态。
+     *
+     * <p>可选值：{@code needs_human_review} / {@code accepted} / {@code published} / {@code rejected}。</p>
+     */
     private final String reviewStatus;
 
+    /**
+     * 审查模型路由（如 {@code auto} / {@code manual} / {@code hybrid}）。
+     */
     private final String reviewRoute;
 
+    /** 执行审查的 LLM 模型标识。 */
     private final String reviewerModel;
 
+    /**
+     * 审查发现的全部问题 JSON。
+     *
+     * <p>可能较大，包含每个问题的严重度、位置、建议修复方案。</p>
+     */
     private final String reviewIssuesJson;
 
+    /** 自动修复已执行轮数。 */
     private final int fixAttemptCount;
 
+    /**
+     * 自动修复最大轮次上限。
+     *
+     * <p>从 compile review 配置快照而来，与运行时的实时配置可能不同。</p>
+     */
     private final int maxFixRounds;
 
+    /**
+     * 编译输入文件的相对路径列表。
+     */
     private final List<String> sourcePaths;
 
+    /** 队列记录创建时间（ISO-8601 字符串）。 */
     private final String createdAt;
 
+    /** 队列记录最后更新时间（ISO-8601 字符串）。 */
     private final String updatedAt;
 
+    /**
+     * 人工复核人标识。
+     *
+     * <p>为 {@code null} 表示尚未人工处理。</p>
+     */
     private final String reviewedBy;
 
+    /**
+     * 人工复核时间（ISO-8601 字符串）。
+     *
+     * <p>为 {@code null} 表示尚未人工处理。</p>
+     */
     private final String reviewedAt;
 
+    /**
+     * 人工复核意见。
+     *
+     * <p>为 {@code null} 表示未填写。含人工主观评价，不应参与 {@code toString()}。</p>
+     */
     private final String reviewComment;
 
+    /**
+     * 人工确认发布后生成的文章唯一键。
+     *
+     * <p>为 {@code null} 表示尚未发布。</p>
+     */
     private final String publishedArticleKey;
 
     /**
@@ -127,203 +199,5 @@ public class AdminCompileReviewQueueItemResponse {
         this.reviewedAt = reviewedAt;
         this.reviewComment = reviewComment;
         this.publishedArticleKey = publishedArticleKey;
-    }
-
-    /**
-     * 获取队列主键。
-     *
-     * @return 队列主键
-     */
-    public long getId() {
-        return id;
-    }
-
-    /**
-     * 获取编译作业标识。
-     *
-     * @return 编译作业标识
-     */
-    public String getJobId() {
-        return jobId;
-    }
-
-    /**
-     * 获取资料源主键。
-     *
-     * @return 资料源主键
-     */
-    public Long getSourceId() {
-        return sourceId;
-    }
-
-    /**
-     * 获取资料源编码。
-     *
-     * @return 资料源编码
-     */
-    public String getSourceCode() {
-        return sourceCode;
-    }
-
-    /**
-     * 获取概念标识。
-     *
-     * @return 概念标识
-     */
-    public String getConceptId() {
-        return conceptId;
-    }
-
-    /**
-     * 获取文章唯一键。
-     *
-     * @return 文章唯一键
-     */
-    public String getArticleKey() {
-        return articleKey;
-    }
-
-    /**
-     * 获取标题。
-     *
-     * @return 标题
-     */
-    public String getTitle() {
-        return title;
-    }
-
-    /**
-     * 获取正文。
-     *
-     * @return 正文
-     */
-    public String getContent() {
-        return content;
-    }
-
-    /**
-     * 获取元数据 JSON。
-     *
-     * @return 元数据 JSON
-     */
-    public String getMetadataJson() {
-        return metadataJson;
-    }
-
-    /**
-     * 获取队列状态。
-     *
-     * @return 队列状态
-     */
-    public String getReviewStatus() {
-        return reviewStatus;
-    }
-
-    /**
-     * 获取审查路由。
-     *
-     * @return 审查路由
-     */
-    public String getReviewRoute() {
-        return reviewRoute;
-    }
-
-    /**
-     * 获取审查模型。
-     *
-     * @return 审查模型
-     */
-    public String getReviewerModel() {
-        return reviewerModel;
-    }
-
-    /**
-     * 获取审查问题 JSON。
-     *
-     * @return 审查问题 JSON
-     */
-    public String getReviewIssuesJson() {
-        return reviewIssuesJson;
-    }
-
-    /**
-     * 获取已修复轮数。
-     *
-     * @return 已修复轮数
-     */
-    public int getFixAttemptCount() {
-        return fixAttemptCount;
-    }
-
-    /**
-     * 获取最大修复轮数。
-     *
-     * @return 最大修复轮数
-     */
-    public int getMaxFixRounds() {
-        return maxFixRounds;
-    }
-
-    /**
-     * 获取来源路径。
-     *
-     * @return 来源路径
-     */
-    public List<String> getSourcePaths() {
-        return sourcePaths;
-    }
-
-    /**
-     * 获取创建时间。
-     *
-     * @return 创建时间
-     */
-    public String getCreatedAt() {
-        return createdAt;
-    }
-
-    /**
-     * 获取更新时间。
-     *
-     * @return 更新时间
-     */
-    public String getUpdatedAt() {
-        return updatedAt;
-    }
-
-    /**
-     * 获取复核人。
-     *
-     * @return 复核人
-     */
-    public String getReviewedBy() {
-        return reviewedBy;
-    }
-
-    /**
-     * 获取复核时间。
-     *
-     * @return 复核时间
-     */
-    public String getReviewedAt() {
-        return reviewedAt;
-    }
-
-    /**
-     * 获取复核意见。
-     *
-     * @return 复核意见
-     */
-    public String getReviewComment() {
-        return reviewComment;
-    }
-
-    /**
-     * 获取发布后的文章唯一键。
-     *
-     * @return 发布后的文章唯一键
-     */
-    public String getPublishedArticleKey() {
-        return publishedArticleKey;
     }
 }

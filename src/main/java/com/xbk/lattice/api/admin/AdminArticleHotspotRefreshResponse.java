@@ -1,24 +1,56 @@
 package com.xbk.lattice.api.admin;
 
+import lombok.Getter;
+
 import java.util.List;
 
 /**
- * 管理侧文章热点刷新响应
+ * 管理侧文章热点刷新响应。
  *
- * 职责：返回热点统计刷新结果和候选文章摘要
+ * <p>返回热点统计刷新的执行结果和候选文章热度详情，
+ * 由 {@code AdminArticleController} 在热点刷新完成后组装返回。
+ * 构造器含 {@code List.copyOf} 防御性拷贝以保证不可变性。
  *
  * @author xiexu
  */
+@Getter
 public class AdminArticleHotspotRefreshResponse {
 
+    /**
+     * 本次重建的 usage stats 数量。
+     *
+     * <p>反映热点刷新时实际重新计算的统计记录数。</p>
+     */
     private final int rebuiltStatsCount;
 
+    /**
+     * 满足热度阈值的候选数量。
+     *
+     * <p>heatScore {@code >=} heatScoreThreshold 的文章数。
+     * 可能大于 {@code updatedArticleCount}（部分候选可能因其他条件被过滤）。</p>
+     */
     private final int hotspotCandidateCount;
 
+    /**
+     * 实际更新 hotspot 标记的文章数。
+     *
+     * <p>等于最终被标记为热点的文章数，小于等于 {@code hotspotCandidateCount}。</p>
+     */
     private final int updatedArticleCount;
 
+    /**
+     * 本次刷新使用的热度阈值。
+     *
+     * <p>回显请求中的阈值或 controller 使用的默认值。</p>
+     */
     private final int heatScoreThreshold;
 
+    /**
+     * 热点候选列表。
+     *
+     * <p>包含满足阈值条件的 usage stats 详情，按热度分降序排列。
+     * 不可变（构造器中通过 {@code List.copyOf} 防御性拷贝）。</p>
+     */
     private final List<AdminArticleUsageStatsResponse> candidates;
 
     /**
@@ -28,7 +60,7 @@ public class AdminArticleHotspotRefreshResponse {
      * @param hotspotCandidateCount 热点候选数量
      * @param updatedArticleCount 更新文章数量
      * @param heatScoreThreshold 热度阈值
-     * @param candidates 热点候选
+     * @param candidates 热点候选（构造器中做防御性拷贝）
      */
     public AdminArticleHotspotRefreshResponse(
             int rebuiltStatsCount,
@@ -42,50 +74,5 @@ public class AdminArticleHotspotRefreshResponse {
         this.updatedArticleCount = updatedArticleCount;
         this.heatScoreThreshold = heatScoreThreshold;
         this.candidates = candidates == null ? List.of() : List.copyOf(candidates);
-    }
-
-    /**
-     * 获取重建统计数量。
-     *
-     * @return 重建统计数量
-     */
-    public int getRebuiltStatsCount() {
-        return rebuiltStatsCount;
-    }
-
-    /**
-     * 获取热点候选数量。
-     *
-     * @return 热点候选数量
-     */
-    public int getHotspotCandidateCount() {
-        return hotspotCandidateCount;
-    }
-
-    /**
-     * 获取更新文章数量。
-     *
-     * @return 更新文章数量
-     */
-    public int getUpdatedArticleCount() {
-        return updatedArticleCount;
-    }
-
-    /**
-     * 获取热度阈值。
-     *
-     * @return 热度阈值
-     */
-    public int getHeatScoreThreshold() {
-        return heatScoreThreshold;
-    }
-
-    /**
-     * 获取热点候选。
-     *
-     * @return 热点候选
-     */
-    public List<AdminArticleUsageStatsResponse> getCandidates() {
-        return candidates;
     }
 }

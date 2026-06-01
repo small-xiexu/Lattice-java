@@ -1,42 +1,94 @@
 package com.xbk.lattice.api.admin;
 
+import lombok.Getter;
+
 /**
  * 管理侧编译审查摘要响应。
  *
- * 职责：承载 compile job 审查步骤、路由与自动修复触发情况的可观测字段
+ * <p>承载 compile job 审查步骤、路由、自动修复触发情况与统计计数的可观测字段，
+ * 由 compile job service 在编译完成后组装，嵌套于 {@link AdminCompileJobResponse} 中返回。
  *
  * @author xiexu
  */
+@Getter
 public class AdminCompileReviewSummaryResponse {
 
+    /**
+     * 编译编排中是否包含 review 步骤。
+     *
+     * <p>{@code false} 时后续所有审查字段均为占位值。</p>
+     */
     private final boolean reviewStepPresent;
 
+    /** review 步骤名称。 */
     private final String reviewStepName;
 
+    /** 执行审查的 Agent 角色（如 {@code reviewer} / {@code auditor}）。 */
     private final String reviewAgentRole;
 
+    /** 编译请求时指定的审查模式。 */
     private final String requestedReviewMode;
 
+    /** 实际审查模型路由。 */
     private final String reviewRoute;
 
+    /** 审查模式前端展示文案。 */
     private final String reviewModeLabel;
 
+    /**
+     * 审查通过的文章数。
+     *
+     * <p>为 {@code null} 表示审查步骤未执行或统计不可用。</p>
+     */
     private final Integer acceptedCount;
 
+    /**
+     * 待审查的文章数。
+     *
+     * <p>为 {@code null} 表示无统计。</p>
+     */
     private final Integer pendingReviewCount;
 
+    /**
+     * 需要人工复核的文章数。
+     *
+     * <p>{@code > 0} 时前端应展示醒目的待处理提示，引导用户进入 review queue 处理。</p>
+     */
     private final Integer needsHumanReviewCount;
 
+    /**
+     * 编译编排中是否包含 auto-fix 步骤。
+     *
+     * <p>{@code false} 时后续所有 auto-fix 字段均为占位值。</p>
+     */
     private final boolean fixStepPresent;
 
+    /** auto-fix 步骤名称。 */
     private final String fixStepName;
 
+    /**
+     * 自动修复实际尝试次数。
+     *
+     * <p>为 {@code null} 表示无修复步骤或统计不可用。</p>
+     */
     private final Integer fixAttemptCount;
 
+    /** 自动修复使用的模型路由。 */
     private final String fixRoute;
 
+    /**
+     * 自动修复展示文案。
+     *
+     * <p>由服务端生成，前端直接展示。</p>
+     */
     private final String fixDisplayMessage;
 
+    /**
+     * 审查展示警示文案。
+     *
+     * <p>含 {@code needsHumanReviewCount > 0} 时的警告信息。
+     * 为 {@code null} 表示无警示。</p>
+     */
     private final String reviewDisplayWarning;
 
     /**
@@ -90,140 +142,5 @@ public class AdminCompileReviewSummaryResponse {
         this.fixRoute = fixRoute;
         this.fixDisplayMessage = fixDisplayMessage;
         this.reviewDisplayWarning = reviewDisplayWarning;
-    }
-
-    /**
-     * 判断是否记录审查步骤。
-     *
-     * @return 是否记录审查步骤
-     */
-    public boolean isReviewStepPresent() {
-        return reviewStepPresent;
-    }
-
-    /**
-     * 获取审查步骤名称。
-     *
-     * @return 审查步骤名称
-     */
-    public String getReviewStepName() {
-        return reviewStepName;
-    }
-
-    /**
-     * 获取审查 Agent 角色。
-     *
-     * @return 审查 Agent 角色
-     */
-    public String getReviewAgentRole() {
-        return reviewAgentRole;
-    }
-
-    /**
-     * 获取请求审查模式。
-     *
-     * @return 请求审查模式
-     */
-    public String getRequestedReviewMode() {
-        return requestedReviewMode;
-    }
-
-    /**
-     * 获取审查模型路由。
-     *
-     * @return 审查模型路由
-     */
-    public String getReviewRoute() {
-        return reviewRoute;
-    }
-
-    /**
-     * 获取审查模式展示文案。
-     *
-     * @return 审查模式展示文案
-     */
-    public String getReviewModeLabel() {
-        return reviewModeLabel;
-    }
-
-    /**
-     * 获取审查通过数量。
-     *
-     * @return 审查通过数量
-     */
-    public Integer getAcceptedCount() {
-        return acceptedCount;
-    }
-
-    /**
-     * 获取待审查数量。
-     *
-     * @return 待审查数量
-     */
-    public Integer getPendingReviewCount() {
-        return pendingReviewCount;
-    }
-
-    /**
-     * 获取需要人工复核数量。
-     *
-     * @return 需要人工复核数量
-     */
-    public Integer getNeedsHumanReviewCount() {
-        return needsHumanReviewCount;
-    }
-
-    /**
-     * 判断是否记录自动修复步骤。
-     *
-     * @return 是否记录自动修复步骤
-     */
-    public boolean isFixStepPresent() {
-        return fixStepPresent;
-    }
-
-    /**
-     * 获取自动修复步骤名称。
-     *
-     * @return 自动修复步骤名称
-     */
-    public String getFixStepName() {
-        return fixStepName;
-    }
-
-    /**
-     * 获取自动修复尝试次数。
-     *
-     * @return 自动修复尝试次数
-     */
-    public Integer getFixAttemptCount() {
-        return fixAttemptCount;
-    }
-
-    /**
-     * 获取自动修复模型路由。
-     *
-     * @return 自动修复模型路由
-     */
-    public String getFixRoute() {
-        return fixRoute;
-    }
-
-    /**
-     * 获取自动修复展示文案。
-     *
-     * @return 自动修复展示文案
-     */
-    public String getFixDisplayMessage() {
-        return fixDisplayMessage;
-    }
-
-    /**
-     * 获取审查展示警示文案。
-     *
-     * @return 审查展示警示文案
-     */
-    public String getReviewDisplayWarning() {
-        return reviewDisplayWarning;
     }
 }

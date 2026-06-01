@@ -1,18 +1,37 @@
 package com.xbk.lattice.api.admin;
 
+import lombok.Getter;
+
 /**
- * 管理侧编译人工确认动作响应
+ * 管理侧编译审查人工确认动作响应。
  *
- * 职责：返回队列状态变更与审计标识
+ * <p>返回队列状态变更结果与审计标识，由 {@code AdminCompileReviewQueueController} 组装返回。
  *
  * @author xiexu
  */
+@Getter
 public class AdminCompileReviewQueueActionResponse {
 
+    /**
+     * 操作后的队列条目当前快照。
+     *
+     * <p>包含人工确认后的最新状态和所有关联字段。</p>
+     */
     private final AdminCompileReviewQueueItemResponse item;
 
+    /**
+     * 操作前队列状态。
+     *
+     * <p>与请求中的 {@code expectedReviewStatus} 一致时操作成功，
+     * 用于前端确认状态流转路径。</p>
+     */
     private final String previousReviewStatus;
 
+    /**
+     * 操作审计记录主键。
+     *
+     * <p>可用于追溯本次人工确认的完整审计链路（谁、何时、从什么状态变更到什么状态）。</p>
+     */
     private final long auditId;
 
     /**
@@ -30,32 +49,5 @@ public class AdminCompileReviewQueueActionResponse {
         this.item = item;
         this.previousReviewStatus = previousReviewStatus;
         this.auditId = auditId;
-    }
-
-    /**
-     * 获取队列条目。
-     *
-     * @return 队列条目
-     */
-    public AdminCompileReviewQueueItemResponse getItem() {
-        return item;
-    }
-
-    /**
-     * 获取变更前状态。
-     *
-     * @return 变更前状态
-     */
-    public String getPreviousReviewStatus() {
-        return previousReviewStatus;
-    }
-
-    /**
-     * 获取审计主键。
-     *
-     * @return 审计主键
-     */
-    public long getAuditId() {
-        return auditId;
     }
 }

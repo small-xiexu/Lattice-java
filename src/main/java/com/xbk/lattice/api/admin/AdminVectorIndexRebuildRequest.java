@@ -1,51 +1,32 @@
 package com.xbk.lattice.api.admin;
 
+import lombok.Getter;
+import lombok.Setter;
+
 /**
- * 管理侧向量索引重建请求
+ * 管理侧向量索引重建请求。
  *
- * 职责：承载向量索引重建模式与操作人
+ * <p>承载向量索引重建模式与操作人，由 Spring MVC 从 JSON 请求体绑定（{@code required=false}）。
  *
  * @author xiexu
  */
+@Getter
+@Setter
 public class AdminVectorIndexRebuildRequest {
 
+    /**
+     * 是否先清空旧向量索引再重建。
+     *
+     * <p>{@code true} 时先删除全部现有向量索引再逐条重建，期间存在索引空窗期——
+     * 线上检索暂时无向量通道，退回纯 lexical/图谱模式。
+     * {@code false} 时增量追加，旧索引保留，但切换模型后旧维度向量残留可能导致混合维度索引。</p>
+     */
     private boolean truncateFirst;
 
+    /**
+     * 操作人标识。
+     *
+     * <p>用于审计日志记录重建操作者。</p>
+     */
     private String operator;
-
-    /**
-     * 返回是否先清空旧向量索引。
-     *
-     * @return 是否先清空旧向量索引
-     */
-    public boolean isTruncateFirst() {
-        return truncateFirst;
-    }
-
-    /**
-     * 设置是否先清空旧向量索引。
-     *
-     * @param truncateFirst 是否先清空旧向量索引
-     */
-    public void setTruncateFirst(boolean truncateFirst) {
-        this.truncateFirst = truncateFirst;
-    }
-
-    /**
-     * 返回操作人。
-     *
-     * @return 操作人
-     */
-    public String getOperator() {
-        return operator;
-    }
-
-    /**
-     * 设置操作人。
-     *
-     * @param operator 操作人
-     */
-    public void setOperator(String operator) {
-        this.operator = operator;
-    }
 }
