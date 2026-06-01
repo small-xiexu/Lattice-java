@@ -1,55 +1,57 @@
 package com.xbk.lattice.documentparse.domain.model;
 
 import com.xbk.lattice.documentparse.domain.DocumentParseMode;
+import lombok.Getter;
 
 /**
- * 文档解析输出
+ * 文档解析输出。
  *
- * 职责：承载解析编排层输出给标准化器和兼容包装层的统一结果
+ * <p>承载解析编排层输出给标准化器和兼容包装层的统一结果——含多种格式的文本
+ * （plainText / markdown / structuredContentJson）和内容解析方法。
  *
  * @author xiexu
  */
+@Getter
 public class ParseOutput {
 
+    /** 资料源主键。 */
     private final Long sourceId;
 
+    /** 文件相对路径。 */
     private final String relativePath;
 
+    /** 纯文本正文。可能为大型文本。 */
     private final String plainText;
 
+    /** Markdown 格式正文。可能为大型文本。 */
     private final String markdown;
 
+    /** 结构化内容 JSON。可能为大型 JSON。 */
     private final String structuredContentJson;
 
+    /** 文件格式。 */
     private final String format;
 
+    /** 文件大小（字节）。 */
     private final long fileSize;
 
+    /** 解析模式。驱动下游编译消费路径。 */
     private final DocumentParseMode parseMode;
 
+    /** 解析供应商标识。 */
     private final String parseProvider;
 
+    /** 解析扩展元数据 JSON。 */
     private final String metadataJson;
 
+    /** 是否按原文保留。 */
     private final boolean verbatim;
 
+    /** 原始文件路径。 */
     private final String rawPath;
 
     /**
      * 创建文档解析输出。
-     *
-     * @param sourceId 资料源主键
-     * @param relativePath 相对路径
-     * @param plainText 纯文本正文
-     * @param markdown Markdown 正文
-     * @param structuredContentJson 结构化内容
-     * @param format 文件格式
-     * @param fileSize 文件大小
-     * @param parseMode 解析模式
-     * @param parseProvider 解析供应商
-     * @param metadataJson 元数据 JSON
-     * @param verbatim 是否按原文保留
-     * @param rawPath 原始路径
      */
     public ParseOutput(
             Long sourceId,
@@ -80,126 +82,14 @@ public class ParseOutput {
     }
 
     /**
-     * 返回资料源主键。
-     *
-     * @return 资料源主键
-     */
-    public Long getSourceId() {
-        return sourceId;
-    }
-
-    /**
-     * 返回相对路径。
-     *
-     * @return 相对路径
-     */
-    public String getRelativePath() {
-        return relativePath;
-    }
-
-    /**
-     * 返回纯文本正文。
-     *
-     * @return 纯文本正文
-     */
-    public String getPlainText() {
-        return plainText;
-    }
-
-    /**
-     * 返回 Markdown 正文。
-     *
-     * @return Markdown 正文
-     */
-    public String getMarkdown() {
-        return markdown;
-    }
-
-    /**
-     * 返回结构化内容 JSON。
-     *
-     * @return 结构化内容 JSON
-     */
-    public String getStructuredContentJson() {
-        return structuredContentJson;
-    }
-
-    /**
-     * 返回文件格式。
-     *
-     * @return 文件格式
-     */
-    public String getFormat() {
-        return format;
-    }
-
-    /**
-     * 返回文件大小。
-     *
-     * @return 文件大小
-     */
-    public long getFileSize() {
-        return fileSize;
-    }
-
-    /**
-     * 返回解析模式。
-     *
-     * @return 解析模式
-     */
-    public DocumentParseMode getParseMode() {
-        return parseMode;
-    }
-
-    /**
-     * 返回解析供应商。
-     *
-     * @return 解析供应商
-     */
-    public String getParseProvider() {
-        return parseProvider;
-    }
-
-    /**
-     * 返回元数据 JSON。
-     *
-     * @return 元数据 JSON
-     */
-    public String getMetadataJson() {
-        return metadataJson;
-    }
-
-    /**
-     * 返回是否按原文保留。
-     *
-     * @return 是否按原文保留
-     */
-    public boolean isVerbatim() {
-        return verbatim;
-    }
-
-    /**
-     * 返回原始路径。
-     *
-     * @return 原始路径
-     */
-    public String getRawPath() {
-        return rawPath;
-    }
-
-    /**
      * 返回当前输出是否包含可用正文。
-     *
-     * @return 是否包含正文
      */
     public boolean hasResolvedContent() {
         return hasText(plainText) || hasText(markdown);
     }
 
     /**
-     * 返回当前输出的统一正文。
-     *
-     * @return 统一正文
+     * 返回当前输出的统一正文（优先 plainText，其次 markdown）。
      */
     public String resolveContent() {
         if (hasText(plainText)) {
@@ -212,9 +102,7 @@ public class ParseOutput {
     }
 
     /**
-     * 返回统一内容格式。
-     *
-     * @return 内容格式
+     * 返回统一内容格式（plain_text / markdown / empty）。
      */
     public String resolveContentFormat() {
         if (hasText(plainText)) {
@@ -226,12 +114,6 @@ public class ParseOutput {
         return "empty";
     }
 
-    /**
-     * 判断给定文本是否有效。
-     *
-     * @param text 文本
-     * @return 是否有效
-     */
     private boolean hasText(String text) {
         return text != null && !text.trim().isEmpty();
     }

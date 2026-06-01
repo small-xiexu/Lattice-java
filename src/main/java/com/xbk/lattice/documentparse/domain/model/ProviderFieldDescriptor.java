@@ -1,47 +1,46 @@
 package com.xbk.lattice.documentparse.domain.model;
 
+import lombok.Getter;
+
 /**
- * Provider 字段描述
+ * Provider 字段描述。
  *
- * 职责：定义后台动态表单中的单个凭证或配置字段
+ * <p>定义后台动态表单中的单个凭证或配置字段——含输入类型、必填约束、默认值和提示文案。
+ * 由前端据此渲染表单控件。
  *
  * @author xiexu
  */
+@Getter
 public class ProviderFieldDescriptor {
 
+    /** 字段键（表单 name 属性）。 */
     private final String fieldKey;
 
+    /** 字段展示标签。 */
     private final String label;
 
+    /**
+     * 输入控件类型（如 {@code text} / {@code password} / {@code select}）。
+     *
+     * <p>{@code password} 类型时前端应对输入值做脱敏展示。</p>
+     */
     private final String inputType;
 
+    /** 是否必填。 */
     private final boolean required;
 
+    /** 默认值。可为空。 */
     private final String defaultValue;
 
+    /** 占位提示文案。可为空。 */
     private final String placeholder;
 
+    /** 字段描述说明。可为空。 */
     private final String description;
 
-    /**
-     * 创建 Provider 字段描述。
-     *
-     * @param fieldKey 字段键
-     * @param label 展示标签
-     * @param inputType 输入类型
-     * @param required 是否必填
-     * @param defaultValue 默认值
-     * @param placeholder 占位提示
-     * @param description 字段说明
-     */
     public ProviderFieldDescriptor(
-            String fieldKey,
-            String label,
-            String inputType,
-            boolean required,
-            String defaultValue,
-            String placeholder,
-            String description
+            String fieldKey, String label, String inputType, boolean required,
+            String defaultValue, String placeholder, String description
     ) {
         this.fieldKey = fieldKey;
         this.label = label;
@@ -50,68 +49,5 @@ public class ProviderFieldDescriptor {
         this.defaultValue = defaultValue;
         this.placeholder = placeholder;
         this.description = description;
-    }
-
-    /**
-     * 返回字段键。
-     *
-     * @return 字段键
-     */
-    public String getFieldKey() {
-        return fieldKey;
-    }
-
-    /**
-     * 返回展示标签。
-     *
-     * @return 展示标签
-     */
-    public String getLabel() {
-        return label;
-    }
-
-    /**
-     * 返回输入类型。
-     *
-     * @return 输入类型
-     */
-    public String getInputType() {
-        return inputType;
-    }
-
-    /**
-     * 返回是否必填。
-     *
-     * @return 是否必填
-     */
-    public boolean isRequired() {
-        return required;
-    }
-
-    /**
-     * 返回默认值。
-     *
-     * @return 默认值
-     */
-    public String getDefaultValue() {
-        return defaultValue;
-    }
-
-    /**
-     * 返回占位提示。
-     *
-     * @return 占位提示
-     */
-    public String getPlaceholder() {
-        return placeholder;
-    }
-
-    /**
-     * 返回字段说明。
-     *
-     * @return 字段说明
-     */
-    public String getDescription() {
-        return description;
     }
 }
