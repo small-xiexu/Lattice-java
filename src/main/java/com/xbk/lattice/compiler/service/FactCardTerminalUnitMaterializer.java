@@ -185,7 +185,8 @@ public class FactCardTerminalUnitMaterializer {
                 normalizedValue,
                 valueType,
                 displayText,
-                sourceRefsJson
+                sourceRefsJson,
+                siblingDescriptors
         );
         FactCardReviewStatus reviewStatus = factCardRecord.getReviewStatus() == null
                 ? FactCardReviewStatus.LOW_CONFIDENCE
@@ -626,6 +627,7 @@ public class FactCardTerminalUnitMaterializer {
      * @param valueType 值形态
      * @param displayText 展示文本
      * @param sourceRefsJson 来源回指 JSON
+     * @param siblingDescriptors 同 parentPath 下的中文实体展示描述符
      * @return metadata JSON
      */
     private String buildMetadataJson(
@@ -645,7 +647,8 @@ public class FactCardTerminalUnitMaterializer {
             String normalizedValue,
             String valueType,
             String displayText,
-            String sourceRefsJson
+            String sourceRefsJson,
+            List<String> siblingDescriptors
     ) {
         ObjectNode rootNode = OBJECT_MAPPER.createObjectNode();
         rootNode.put("channel", "fact_card_terminal_fts");
@@ -671,6 +674,14 @@ public class FactCardTerminalUnitMaterializer {
         ArrayNode pathSegmentsNode = rootNode.putArray("pathSegments");
         for (String pathSegment : pathSegments) {
             pathSegmentsNode.add(pathSegment);
+        }
+        ArrayNode contextValuesNode = rootNode.putArray("contextDisplayValues");
+        if (siblingDescriptors != null) {
+            for (String descriptor : siblingDescriptors) {
+                if (hasText(descriptor)) {
+                    contextValuesNode.add(descriptor.trim());
+                }
+            }
         }
         ArrayNode fieldAliasesNode = rootNode.putArray("fieldAliases");
         for (String fieldAlias : fieldAliases) {

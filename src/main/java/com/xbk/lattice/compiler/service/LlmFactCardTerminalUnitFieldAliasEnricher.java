@@ -186,9 +186,6 @@ public class LlmFactCardTerminalUnitFieldAliasEnricher implements FactCardTermin
             if (routeResolution == null) {
                 return false;
             }
-            if (routeResolution.getBindingId() == null && !routeResolution.isSnapshotBacked()) {
-                return false;
-            }
             String modelName = routeResolution.getModelName();
             return hasText(modelName)
                     && !"fallback".equalsIgnoreCase(modelName.trim())

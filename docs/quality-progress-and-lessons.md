@@ -1,6 +1,6 @@
 # 项目质量打磨进度与踩坑台账
 
-更新时间：2026-05-31（新增模型契约注释与 Lombok 治理计划）
+更新时间：2026-06-04（agentA 已完成 pre-commit cleanup；建议进入 /code-commit）
 
 本台账记录质量打磨、Query/SWIP eval、baseline 修复与多 agent 协作的当前状态。后续推进前先读本文件；阶段结论变化后必须回写。
 
@@ -82,12 +82,13 @@
   - YAML 5 题当前状态：FQ3/FQ4/FQ6/FG2 = 4/5 PASS，FG1 仍 PARTIAL（terminal unit 未被 conclusion 消费）。
   - Public Eval 1 Q6/S2 本轮未执行保护回归（当前库仅含 Public Eval 2 资料），不得写成已通过。
 - **fresh eval 2 当前正式基线**仍以 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/acceptance-report.md` 为准：Answer Accuracy `10/15`，Search Accuracy `1/4`，Recall@10 `13/15`，Citation Accuracy `2/15`，Abstain Accuracy `2/2`，Hallucination Count `5`，结论为未通过。
+- **两套 public eval 清库端到端验证（2026-06-02 agentD）**：详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/two_public_eval_clean_schema_gate_report.md`。Public Eval 1: Answer Accuracy `11/12` (Q1 PARTIAL), Search Accuracy `3/4` (S2 FAIL)。Public Eval 2: Answer Accuracy `11/15` (FQ1 PARTIAL, FQ4 FAIL, FG1 FAIL), Search Accuracy `1.5/4`。FG1 从 Phase 1I 后的 PARTIAL 倒退为 FAIL，根因确认为 **结论构建器未消费 terminal unit**（field-alias-enricher 已生效、别名已生成、值正确，但 fallback conclusion builder 选中了 api_endpoint 而非 late_fee_per_day）。Hallucination 从 5 降至 0（本轮 FAIL 均为 sibling 字段误选，非编造）。两套题集均**未通过**。
 
 ## 当前 Gate
 
 | 项 | 当前状态 | 说明 |
 |---|---|---|
-| redline | `BLOCKER=0` | 最新：`bash scripts/scan-redline.sh special_cases_report.md` 通过，汇总为 `BLOCKER=0`、`REVIEW=2059`、`ALLOWLIST=259`。 |
+| redline | `BLOCKER=0` | 最新：`bash scripts/scan-redline.sh special_cases_report.md` 通过，汇总为 `BLOCKER=0`、`REVIEW=2077`、`ALLOWLIST=262`。 |
 | mvn test | `995/0/0/0` | 四个拆分 commit 后全量 `mvn test=995/0/0/0` 通过。详见 `post_split_commits_final_gate_report.md`。 |
 | main baseline | 阶段 gate 已通过 | `final_query_baseline_gate_report.md` 为 `9/10` 且 gate 通过；`phase12_final_clean_rebuild_gate_report.md` 为 `8/10` 且 6 项 gate 通过。 |
 | SWIP strict eval | 稳定区间 `15-17/23` | focus snippet patch 副作用复核三轮：16/23、17/23、15/23；BANK-SETTLEMENT-001 三轮稳定 PASS；保护 case 三轮稳定 PASS。详见 `swip_focus_snippet_patch_side_effect_review_report.md`。 |
@@ -113,7 +114,18 @@
 | terminal unit field alias enricher | 已提交 `90ad165` | LLM 别名增强器接口+实现+prompt 外置+Materializer 集成。 |
 | SERVER_DIR 移除 | 已提交 `fa8b883` + `35bf769` | source 支持 + 管理页操作入口均已移除。 |
 | fresh eval 2 | 未通过；Phase 1I 后 Answer Accuracy 12/15 | YAML 5 题 4/5 PASS（FG1 PARTIAL），FS1/FS2/FS3 仍 FAIL，Citation Accuracy 仍 2/15。 |
-| Public Eval 1 Q6/S2 | 本轮未执行保护回归 | 当前库仅含 Public Eval 2 资料，Q6 terminal field alias + S2 chunk identity 待后续单独验证。 |
+| Public Eval 1 Q6/S2 | Q6 PASS, S2 仍 FAIL | agentD 两套 public eval 清库验证确认：Q6 terminal field alias 保护通过（spec.containers[0].readinessProbe.tcpSocket.port=8080，citation 正确）；S2 标题/anchor 搜索仍 FAIL（chunk identity 修复代码已就绪但本轮未生效，因为 agentD 未做代码变更）。 |
+| Public Eval 1 清库验证 | Answer Accuracy 11/12, Search Accuracy 3/4 | Q1 PARTIAL (answer 方向正确但 citations 为空)，S2 FAIL（anchorTitle 搜索未命中目标 chunk 条目），其余通过。 |
+| Public Eval 2 清库验证 | Answer Accuracy 11/15, Search Accuracy 1.5/4, 不通过 | FQ4 FAIL（sibling 字段误选：deposit_amount→approval_required），FG1 FAIL（conclusion builder 未消费 late_fee_per_day terminal unit），FS2/FS4a/FS4b 检索未命中。Hallucination 从 5 降至 0。 |
+| FG1 清库验证断点 | conclusion builder 未消费 terminal unit | field-alias-enricher 已生效（中文别名"每日逾期费""逾期日费"已生成），terminal unit 值正确（5/20/50），但 fallback conclusion builder 选中了 api_endpoint 而非 late_fee_per_day。不是 alias 缺失、不是 binding 缺失。 |
+| FG1/FQ4 修复验证 | FG1 PASS, FQ4 FAIL | FG1 经 LLM 路径通过（精密仪器=20, 常规设备=5）。FQ4 FALLBACK 路径仍选错 sibling（approval_required 而非 deposit_amount）。根因：`countFieldLevelTokenMatches` 未正确消费 fieldAliases JSON 数组中的中文别名。不可标记修复为验证通过。 |
+| FQ4/FG1 受控 FALLBACK trace | 已完成；根因转向候选供给侧 | 目标 terminal units 已落库，但 FQ4 runtime fallbackHits 未包含 `deposit_amount`，FG1 runtime fallbackHits 未包含 `late_fee_per_day`。结论构建器只能在已有候选内排序，不能选择未进入候选池的目标字段。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/fq4_fg1_controlled_fallback_candidate_score_trace_report.md`。 |
+| Public Eval 1 compile_article_review_queue | 2 篇 needs_human_review | 本轮编译中 PDF 和 XLSX 文章进入 needs_human_review 队列（上轮全部 passed），导致 Q12 回归（INSUFFICIENT_EVIDENCE）。不是 conclusion builder 修复导致。 |
+| FQ4/FG1 terminal channel limit | 新断点：目标字段被每通道 top10 截断 | 只读 SQL 复算确认：field-alias-enricher 正常，中文别名已在 `field_aliases_json` / `metadataJson` / `fts_text`；LIKE token 预算也包含 `押金`、`逾期`、`罚金`。但 mapper 等价评分下，FQ4 `deposit_amount` 排 14/15，FG1 `late_fee_per_day` 排 15/17，`FactCardTerminalUnitFtsSearchService` 每通道只取 limit=10，目标字段进入 Java reranker / RRF / conclusion builder 前已被截断。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/fq4_fg1_terminal_channel_limit_root_cause_analysis_report.md`。 |
+| terminal channel candidate supply 修订 | 代码层修订已完成，runtime gate 已跑但 candidate supply 修订未修复 FALLBACK 路径 | agentA 修订。agentD runtime gate 确认：FQ4/FG1 FALLBACK 路径仍 FAIL，candidate supply 修订未修复。详见 `fq4_fg1_terminal_channel_candidate_supply_runtime_gate_report.md`。 |
+| FQ4/FG1 SLF4J [TU_TRACE] runtime gate | **断点确认在 builder 内，非 retrieval/reranker/candidate supply** | agentD 已抓取 `[TU_TRACE]` 日志。FQ4：`deposit_amount` 已进入 builder 候选池（cand#4/#5，qf=true, ftmc=3），但与 `approval_required`（ftmc=3, fs=10.0）打平，fusedScore tie-break 选中 `approval_required`（10.0 > 9.0）。FG1：`late_fee_per_day` 已进入 builder 候选池（cand#5/#6），但 qf=false（tuQfPassed=0），CJK 碎片 token（"器的逾期"）无法匹配 fieldAliases（"逾期日费"），`isTerminalHitQueryFocused` 全池淘汰。两个题断点均不在 retrieval/reranker/candidate supply。详见 `fq4_fg1_terminal_builder_slf4j_trace_runtime_gate_report.md`。 |
+| FG1 qf=false builder 修复 | **runtime 验证通过；但 FG1 最终未收口** | agentD 已验证：`late_fee_per_day` 候选 qf 从 false 变 true，`tuQfPassed` 从 0 升到 4，说明 CJK bigram 重叠匹配已生效。残留问题是 FG1 场景下多个 terminal unit 候选 `ftmc=0`，最终仍由更高 fusedScore 的 `equipment_types[1].type = 精密仪器` 胜出。该断点属于 **FG1 的 fieldTokenMatchCount 对 CJK 碎片 token 不敏感**，与 FQ4 的正向 `ftmc` 平局 + fusedScore tie-break 仍是独立根因。详见 `fg1_qf_false_builder_fix_result_report.md`、`fg1_qf_false_builder_runtime_gate_report.md`。 |
+| FG1 ftmc=0 builder runtime gate | **未验证到目标候选；builder 路径本轮不可收口** | agentD 针对 `countFieldLevelTokenMatches()` 的 CJK bigram 修复做 runtime gate 后发现：`equipment_types[1].type = 精密仪器` 的 `ftmc` 从 0 升到 2，说明修复本身已生效；但 `late_fee_per_day` 本轮完全未进入 builder 候选池（tuTotal=4，无任何 `late_fee_per_day` 候选），因此无法判断目标候选 `ftmc` 是否从 0 升到 >=1。更关键的是，本轮 118 个 terminal units 中未生成中文 field aliases（"逾期"/"押金" 等均为 0 条），与上一轮 runtime 现场不一致。当前不能继续把 FG1 归因为 builder 内排序；最高优先级应转为 **field-alias-enricher / terminal unit 候选供给侧只读审计**。详见 `fg1_ftmc_zero_builder_runtime_gate_report.md`。 |
 
 ## 多 Agent 当前职责
 
@@ -308,6 +320,28 @@
 62. （已完成）拆分提交 pre-commit 质量复核：已输出 `terminal_unit_phase1i_pre_commit_quality_review_report.md`，确认无 case 特判/业务词硬编码/eval 污染，当前工作区 7 组变更需拆分为 4 个独立 commit。该复核建议已被采纳执行。
 63. （已完成）Query source/article 响应 DTO 契约收敛：已提交 `b38acdc`，B0 pre-commit 质量审查 PASS。
 64. （二审 PASS，已定稿）模型契约注释与 Lombok 全项目治理计划：已新增 `docs/plans/2026-05-31-模型契约注释与Lombok治理计划.md`，覆盖 API DTO、domain model、entity-like model、config/properties、graph/state 类。agentB 二审报告 `model_contract_javadoc_lombok_plan_review_analysis_report_v2.md` 结论为 PASS；计划已按非阻塞建议完成微调，后续作为唯一推进台账，按 B0.5-B20 批次推进并回写。
+65. （已完成）两套 public eval 清库端到端验证：agentD 已输出 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/two_public_eval_clean_schema_gate_report.md`。Public Eval 1: Answer Accuracy 11/12, Search Accuracy 3/4。Public Eval 2: Answer Accuracy 11/15, Search Accuracy 1.5/4。两套均未通过。FG1 断点为 conclusion builder 未消费 terminal unit。
+66. （下一轮最高优先级）FG1/FQ4 conclusion builder terminal unit 消费修复：terminal unit 已正确生成且含中文别名，需在 fallback conclusion builder 中优先消费 question-focused terminal unit 候选，而非误选其他 sibling 字段或无关 fact card 字段。
+67. （已完成，部分通过）agentD FG1/FQ4 conclusion builder 修复端到端验证：FG1 **PASS**（LLM 路径正确回答 20/5），FQ4 **仍 FAIL**（FALLBACK 路径仍选错 sibling）。根因收敛为 `countFieldLevelTokenMatches()` 中 fieldAliases JSON 数组解析粒度问题——deposit_amount 的 fieldAliases 包含"押金"但未被有效匹配。agentA 修复**不可标记为 runtime 验证通过**。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/fg1_fq4_conclusion_builder_terminal_unit_consumption_verification_report.md`。
+68. （下一轮）agentA 修复 `countFieldLevelTokenMatches` 的 fieldAliases JSON 数组解析：确认是逐元素遍历还是整体字符串匹配，如为整体匹配则改为结构化 JSON 解析后逐元素匹配。不改排序算法、不改候选池准入条件。
+69. （已完成，FAIL）agentD FQ4 fieldAliases JSON 数组消费修复验证：Jackson JsonNode 逐元素遍历修复已在源码中，但 **FQ4 仍 FAIL**（FALLBACK 路径选 approval_required），**FG1 从上轮 PASS 倒退为 FAIL**（FALLBACK 路径选 api_endpoint）。上轮 FG1 PASS 走 LLM 路径，不能证明 fallback 修复生效。根因收敛为 FALLBACK 路径中 `QueryArticleHit.metadataJson` 可能未填充，导致无论用字符串切片还是 Jackson 解析都无法消费 fieldAliases。agentA 修复**不可标记为 runtime 验证通过**。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/fq4_field_alias_json_array_consumption_verification_report.md`。
+70. （下一轮最高优先级）agentA 验证 FALLBACK 路径中 QueryArticleHit 的 `metadataJson` 字段是否在 terminal unit hit 构建时被填充。如果为空，修复应在数据填充层（检索→QueryArticleHit 转换），而非在 conclusion builder 中调整解析逻辑。
+71. （已完成，仍 FAIL）agentD 强制重启复验：`mvn clean compile`（class=10:23）+ `pkill -9` + 重启（PID=88833），javap 确认 Jackson 代码已加载。FQ4 FALLBACK 路径**仍 FAIL**（选 approval_required），FG1 LLM 路径 PASS。**排除"类加载未刷新"假说。** agentA 修复仍不可标记为 runtime 验证通过。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/fq4_fg1_forced_restart_runtime_verification_report.md`。
+72. （下一轮）不再改 `buildFieldLevelHaystack`（代码已正确）。需要运行时 trace：在 `buildTerminalUnitExactConclusionLines` 中加 log 打印每个候选的 `fieldTokenMatchCount`/`fusedScore`，观察 FQ4 场景下 deposit_amount 的计数是否真的高于 approval_required。
+73. （已完成）agentD 完整端到端 gate 验证：Jackson fieldAliases 修复在 **LLM 自然链路通过**（Answer Accuracy **13/15**）。FQ4 FALLBACK 路径仍 FAIL（选 approval_required），FG1 FALLBACK 路径 PARTIAL（raw dump 不可读）。Q6 保护通过，Q12 通过，S2 仍 FAIL。agentA 修复可标记为**自然链路 gate 通过但 FALLBACK 分支未修复**。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/fq4_field_alias_fix_full_public_eval_gate_report.md`。
+74. （下一轮）FALLBACK 路径 sibling 竞争问题：需要 runtime trace 确认 FQ4 场景下 deposit_amount 的 fieldTokenMatchCount/fusedScore 实际值。不混修搜索中文关键词召回。
+75. （已完成）agentD 默认 reviewMode=LLM 编译后完整 gate：两套 eval LLM reviewer 本轮全部 passed（persistedCount=5），review queue 为空，无需人工确认。FQ4/FG1 在 terminal unit 完整存在（deposit_amount=100/500/1000, late_fee_per_day=5/20/50）的情况下 **仍 FAIL**（FALLBACK 选错 sibling）。不是数据缺失，不是 reviewer queue 阻塞。Jackson 修复保留，但 FALLBACK sibling 竞争需要在 `buildTerminalUnitExactConclusionLines` 做运行时 trace。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/public_eval_gate_after_human_review_approval_report.md`。
+76. （已完成）agentD 最终 runtime gate 验证：Jackson 修复代码确认存在（readTree+isArray+for），注释中业务词已清理。Public Eval 2：Answer Accuracy **13/15**（FQ4/FG1 FALLBACK 仍 FAIL）。Public Eval 1：Q6 PASS, Q12 PASS (approve 后), S2 FAIL。Jackson 修复**可标记为代码逻辑正确并保留，LLM 路径通过，但 FALLBACK 分支未 runtime 验证通过**。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/fq4_field_alias_fix_final_runtime_gate_report.md`。
+77. （已完成）agentA 受控 FALLBACK runtime trace：已在 `AnswerFallbackConclusionBuilder` 临时加入 trace 并在取证后移除。Fresh Eval 2 + `reviewMode=none` 诊断编译后确认 terminal units 已落库（articles=5, fact_cards=13, fact_card_terminal_units=123），但 FQ4 的 `deposit_amount` 与 FG1 的 `late_fee_per_day` 均未进入 runtime fallbackHits。结论构建器的字段级排序不是单独根因；根因转向 fallback 候选供给侧/召回侧。最终门禁：redline `BLOCKER=0`，`mvn test` 为 `Tests=995 Failures=0 Errors=0 Skipped=0`。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/fq4_fg1_controlled_fallback_candidate_score_trace_report.md`。
+78. （下一轮最高优先级）围绕 terminal unit 候选供给侧做只读归因或最小功能修复：检查 terminal unit FTS/retrieval、query term expansion、QueryArticleHit 构建与 fallbackHits top10 供给逻辑。不要继续在 fallback conclusion builder 内为不存在的候选补排序规则。
+79. （已完成）agentD field-alias-enricher 运行时审计：编译 jobId=`a636416c`，enricher snapshot 存在（binding_id=4, model=gpt-5.5）。deposit_amount 和 late_fee_per_day 的 field_aliases_json、metadataJson、fts_text **均已包含中文别名**（"押金"、"押金金额"、"逾期日费"等）。enricher 运行正常。**唯一断点在检索召回层**。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/fq4_fg1_field_alias_enricher_runtime_audit_report.md`。
+80. （已完成）FQ4/FG1 terminal channel limit 只读 SQL 复算：当前库中目标字段和中文别名均存在，LIKE token 预算未丢 `押金` / `逾期` / `罚金`；按 mapper 等价 SQL，FQ4 `deposit_amount` 排 14/15，FG1 `late_fee_per_day` 排 15/17，每通道 limit=10 使目标字段进入 Java reranker 前已被截断。下一轮 agentA 只允许处理 terminal unit retrieval candidate supply：扩大原始候选窗口并让字段意图命中在 terminal unit channel 内优先于 value/context-only 命中。不再修改 fallback conclusion builder。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/fq4_fg1_terminal_channel_limit_root_cause_analysis_report.md`。
+81. （已完成，待 agentD 验证）agentA terminal channel candidate supply 修订：已补齐上一轮两个实现缺口，一是扩大 DB raw candidates 后在 `search()` 内截回原始 requested limit，二是 reranker 以 `terminalKeyMatchCount/fieldMatchCount` 字段意图信号作为 primary sort。报告显示 redline BLOCKER=0、定向测试与全量 `mvn test=995/0/0/0` 通过。下一步只交给 agentD 做 Fresh Eval 2 + Public Eval 1 清库 runtime gate，不在本轮继续改 fallback builder 或搜索题。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/fq4_fg1_terminal_channel_candidate_supply_fix_revision_report.md`。
+82. （已完成）agentD terminal candidate supply runtime gate 验证：编译 jobId=`69a59fd5`（经历 LLM 网关 502 恢复），persistedCount=3+approve 2=5。FQ4/FG1 FALLBACK 路径**仍 FAIL**（approval_required/api_endpoint）。candidate supply 修订（DB limit 扩展 + 字段意图优先）**未修复** FALLBACK 路径。Q6 PASS，Q12 新回归（FALLBACK 通用文档描述取代"Extended"）。需在 conclusion builder 内做 runtime trace 确认候选池中 deposit_amount/late_fee_per_day 的 fieldTokenMatchCount。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/fq4_fg1_terminal_channel_candidate_supply_runtime_gate_report.md`。
+83. （已完成）agentA 只修 FG1 `qf=false`：SLF4J `[TU_TRACE]` runtime gate 已确认 `late_fee_per_day` 进入 builder 候选池但 qf=false（tuQfPassed=0）。agentA 在 `isTerminalHitQueryFocused` 中新增通用 CJK bigram 重叠匹配，报告显示 redline BLOCKER=0、mvn compile 与 `mvn test=995/0/0/0` 通过；本窗口复跑 redline 仍为 BLOCKER=0。该修复未处理 FQ4 的 ftmc 平局 + fusedScore tie-break。详见 `fq4_fg1_terminal_builder_slf4j_trace_runtime_gate_report.md`、`fg1_qf_false_builder_fix_result_report.md`。
+84. （已完成）agentD 只验证 FG1 runtime gate：清库、编译并 approve review queue 后，FG1 `[TU_TRACE]` 已确认 `late_fee_per_day` 候选 `qf=true` 且 `tuQfPassed=4`。本轮门禁达成，但 FG1 最终 winner 仍错误：`equipment_types[1].type = 精密仪器`。说明 qf 修复已生效，但 FG1 尚未收口。详见 `fg1_qf_false_builder_runtime_gate_report.md`。
+85. （已完成，但未收口）agentA 只修 FG1 `fieldTokenMatchCount=0`：`countFieldLevelTokenMatches()` 已新增 CJK bigram overlap fallback，工程门禁通过。随后 agentD runtime gate 发现修复确实让 `equipment_types[1].type = 精密仪器` 的 `ftmc 0 -> 2`，但 `late_fee_per_day` 本轮完全未进入 builder 候选池，因此无法验证目标候选 `ftmc` 是否提升，也无法把 FG1 继续归因为 builder 内排序。详见 `fg1_ftmc_zero_builder_fix_result_report.md`、`fg1_ftmc_zero_builder_runtime_gate_report.md`。
+86. （下一轮最高优先级）agentB 或 agentD 只读审计 FG1 的 field-alias-enricher / 候选供给侧：围绕本轮 runtime 现场做只读排查，确认为什么同样是 Fresh Eval 2，上一轮 `late_fee_per_day` 已进入 builder 候选池且存在中文别名，而本轮 `late_fee_per_day` 完全未入池、118 个 terminal units 的中文 field aliases 为 0。禁止再改 `AnswerFallbackConclusionBuilder`，禁止继续把 FG1 当作 builder 排序问题处理，禁止顺手扩到 FQ4。
 
 ## 更新规则
 
@@ -317,3 +351,21 @@
 - 代码修复失败、回退、负收益也必须记录。
 - 不允许只在聊天里说明而不更新台账。
 - 本文件是质量打磨阶段的进度台账，不替代用户指定的计划文件；如果用户指定 `docs/**/plans/*.md`，仍以计划文件为唯一进度台账并随做随回写。
+
+- **2026-06-03（agentA）**：已在 `AnswerFallbackConclusionBuilder.buildTerminalUnitExactConclusionLines` 中加入 SLF4J `[TU_TRACE]` structured trace，覆盖 per-candidate `el/qf/ftmc/fs` 与 final selection。trace 已编译入 class（javap 确认 4 处引用），不影响业务逻辑。下一步交给 agentD：在正式 gate 中抓 persisted>0 + FALLBACK 失败现场的 `[TU_TRACE]` 日志。
+
+- **2026-06-03（agentA）**：FG1 `qf=false` builder 修复代码层完成，新增 CJK bigram 重叠匹配用于 query-focused 判定；FQ4 tie-break 未处理，仍作为独立根因。下一步交给 agentD 做 FG1-only runtime gate，不跑完整 Public Eval。
+
+- **2026-06-03（agentD）**：FG1-only runtime gate 已完成。`late_fee_per_day` 候选 `qf=false -> true`，`tuQfPassed 0 -> 4`，说明 qf 修复已在 runtime 生效；但 FG1 最终仍未收口，winner 变为 `equipment_types[1].type = 精密仪器`。新断点是 FG1 场景下多个 terminal unit 候选 `ftmc=0`，最终被 fusedScore 抢走。下一步只允许 agentA 修 FG1 的 `countFieldLevelTokenMatches()` 对 CJK 碎片 token 的通用匹配能力，不处理 FQ4 tie-break。
+
+- **2026-06-03（agentD）**：FG1 `ftmc` runtime gate 已完成，但结果反证了“继续修 builder 排序即可收口”的判断。`countFieldLevelTokenMatches()` 的 CJK bigram 修复确实在 runtime 生效（`equipment_types[1].type = 精密仪器` 的 `ftmc 0 -> 2`），但目标候选 `late_fee_per_day` 本轮根本未进入 builder 候选池；同时 118 个 terminal units 的中文 field aliases 为 0，与上一轮现场不一致。当前最高优先级转为 field-alias-enricher / terminal unit 候选供给侧只读审计，暂停继续修改 `AnswerFallbackConclusionBuilder`。
+
+- **2026-06-03（agentA）**：已完成 field-alias-enricher bootstrap guard 修复。根因：`LlmFactCardTerminalUnitFieldAliasEnricher.isLlmRouteAvailable()` 要求 `bindingId != null || isSnapshotBacked == true`，但 compile 清库后 bootstrap fallback 路由天然 `bindingId=null && isSnapshotBacked=false`，enricher 被静默跳过，0 条中文别名。修复：删除过严 guard，保留已有 modelName 有效性检查。redline `BLOCKER=0`，mvn test `995/0/0/0`。详见 `fg1_field_alias_enricher_bootstrap_guard_fix_result_report.md`。下一步只交给 agentD 做 FG1-only runtime gate。
+
+- **2026-06-04（agentA）**：已完成 FQ4 terminal tie-break 修复。在 `AnswerFallbackConclusionBuilder.buildTerminalUnitExactConclusionLines` 的 `ftmc` 与 `fusedScore` 之间插入 `aliasTokenMatchCount` 作为第二优先级 tie-break——只统计 query token 与 fieldAliases（非 displayText/fieldDescription）的匹配数。不改 `countFieldLevelTokenMatches()` 核心语义、不改 qf、不改候选供给。redline `BLOCKER=0`，mvn test `995/0/0/0`。详见 `fq4_terminal_tie_break_fix_result_report.md`。下一步交给 agentD 做 FQ4+FG1 双保护 runtime gate。
+
+- **2026-06-04（agentA）**：已完成多目标 terminal conclusion 聚合修复。在 `buildTerminalUnitExactConclusionLines` 中新增 Phase 2 附加候选收集：同 terminalKey + 不同 parentPath + qf=true + ftmc >= minThreshold + entityContextMatchesQuery。不改 qf/ftmc/atmc 语义。新增 `CandidateProfile` 内部类与 `extractTerminalKey`/`extractParentPath`/`entityContextMatchesQuery` 等 7 个通用 helper。单目标问题仍只返回 1 行（winnerTerminalKey 为空或附加候选为空时跳过 Phase 2）。redline `BLOCKER=0`，mvn test `995/0/0/0`。详见 `fq4_fg1_multi_target_terminal_conclusion_fix_result_report.md`。下一步交给 agentD 做 FQ4+FG1+FQ3 多目标/单保护 runtime gate。
+
+- **2026-06-04（agentA）**：已完成 terminal context guard 污染清理。`buildEntityContextHaystack` 移除 `hit.getContent()`（含 display_text + field_description + field_aliases_json 污染）和 `displayText`，仅保留 `parentPath`、`pathSegments` 及名称含 `context` 的字段值。entity context check 现在严格基于纯结构信号，单目标保护增强。但当前 metadataJson 无 entity display context 字段，多目标聚合需 Materializer 补充 `contextPath` 等字段后才能对 FQ4/FG1 生效。redline `BLOCKER=0`，mvn test `995/0/0/0`。详见 `fq4_fg1_multi_target_terminal_context_guard_fix_result_report.md`。
+
+- **2026-06-04（agentA）**：已完成 terminal entity context metadata 修复。在 `FactCardTerminalUnitMaterializer.buildMetadataJson()` 中新增 `contextDisplayValues` JSON 数组字段，数据来源为 `collectParentPathDescriptors()` 产出的同 parentPath CJK string sibling descriptor。不需 schema/mapper/record/enricher 变更。Query builder 的 `fieldName.contains("context")` 扫描自动发现。redline `BLOCKER=0`，mvn test `995/0/0/0`。详见 `fq4_fg1_terminal_entity_context_metadata_fix_result_report.md`。下一步交给 agentD 做完整多目标聚合 runtime gate。

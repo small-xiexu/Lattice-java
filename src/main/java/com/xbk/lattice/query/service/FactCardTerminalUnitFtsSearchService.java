@@ -73,9 +73,12 @@ public class FactCardTerminalUnitFtsSearchService {
     /**
      * 执行 terminal unit lexical 检索。
      *
+     * DB 侧用 expandedLimit 拉取充足的原始候选，经 Java reranker 排序后
+     * 再截回请求方指定的 limit，确保低 DB-score 的字段意图命中不被提前截断。
+     *
      * @param question 查询问题
-     * @param limit 返回数量
-     * @return 查询命中
+     * @param limit    请求方期望的返回数量
+     * @return 查询命中（最多 limit 条）
      */
     public List<QueryArticleHit> search(String question, int limit) {
         if (factCardTerminalUnitJdbcRepository == null) {
@@ -86,12 +89,13 @@ public class FactCardTerminalUnitFtsSearchService {
             return List.of();
         }
 
+        int requestedLimit = limit <= 0 ? 5 : limit;
+        int rawLimit = Math.max(requestedLimit * 3, 15);
         String tsConfig = ftsConfigResolver.resolveArticleTsConfig();
-        int safeLimit = safeLimit(limit);
         List<LexicalSearchRecord> records = factCardTerminalUnitJdbcRepository.searchLexical(
                 question,
                 queryTokens,
-                safeLimit,
+                rawLimit,
                 tsConfig
         );
         List<QueryArticleHit> hits = new ArrayList<QueryArticleHit>();
@@ -103,6 +107,9 @@ public class FactCardTerminalUnitFtsSearchService {
         }
         if (intentReranker != null) {
             hits = intentReranker.rerank(hits, question);
+        }
+        if (hits.size() > requestedLimit) {
+            return new ArrayList<QueryArticleHit>(hits.subList(0, requestedLimit));
         }
         return hits;
     }
@@ -127,15 +134,5 @@ public class FactCardTerminalUnitFtsSearchService {
                 record.getSourcePaths(),
                 adjustedScore
         );
-    }
-
-    /**
-     * 返回安全检索数量。
-     *
-     * @param limit 原始数量
-     * @return 安全数量
-     */
-    private int safeLimit(int limit) {
-        return limit <= 0 ? 5 : limit;
     }
 }

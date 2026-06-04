@@ -114,14 +114,10 @@ public class FactCardTerminalUnitIntentReranker {
             }
         }
 
-        long profilesWithFieldSignal = profiles.stream()
-                .filter(p -> p.fieldMatchCount > 0).count();
-        if (profilesWithFieldSignal == 0 && !queryHasNumericIntent) {
-            return hits;
-        }
 
         profiles.sort(Comparator
-                .comparingDouble(HitProfile::getAdjustedScore).reversed()
+                .comparingInt((HitProfile p) -> p.getFieldIntentSignal() > 0 ? 0 : 1)
+                .thenComparing(Comparator.comparingDouble(HitProfile::getAdjustedScore).reversed())
                 .thenComparingInt(HitProfile::getOriginalIndex));
 
         return profiles.stream().map(p -> p.hit).collect(Collectors.toList());
@@ -373,6 +369,10 @@ public class FactCardTerminalUnitIntentReranker {
         String valueType;
 
         String displayText;
+
+        int getFieldIntentSignal() {
+            return (terminalKeyMatchCount > 0 || fieldMatchCount > 0) ? 1 : 0;
+        }
 
         double getAdjustedScore() {
             return adjustedScore;
