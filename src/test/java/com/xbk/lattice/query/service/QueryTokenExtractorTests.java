@@ -26,6 +26,95 @@ class QueryTokenExtractorTests {
     }
 
     /**
+     * 验证纯中文 token 仍按既有 Han n-gram 规则提取。
+     */
+    @Test
+    void shouldKeepExistingPureChineseTokenBehavior() {
+        List<String> tokens = QueryTokenExtractor.extract("甲乙丙丁");
+
+        assertThat(tokens).contains("甲乙", "丙丁", "甲乙丙丁");
+        assertThat(tokens).doesNotContain("甲", "丁");
+    }
+
+    /**
+     * 验证纯 ASCII token 仍按既有长度规则提取。
+     */
+    @Test
+    void shouldKeepExistingPureAsciiTokenBehavior() {
+        List<String> tokens = QueryTokenExtractor.extract("healthz B");
+
+        assertThat(tokens).contains("healthz");
+        assertThat(tokens).doesNotContain("b");
+    }
+
+    /**
+     * 验证 Latin + Han 的混合脚本短片段会作为整体 token 保留。
+     */
+    @Test
+    void shouldExtractLatinHanMixedScriptToken() {
+        List<String> tokens = QueryTokenExtractor.extract("请查 X项 与 q段 的要求");
+
+        assertThat(tokens).contains("x项", "q段");
+    }
+
+    /**
+     * 验证连续 Latin + Han 的混合脚本短片段仍会作为整体 token 保留。
+     */
+    @Test
+    void shouldKeepContinuousLatinHanMixedScriptToken() {
+        List<String> tokens = QueryTokenExtractor.extract("请查 B级 的要求");
+
+        assertThat(tokens).contains("b级");
+    }
+
+    /**
+     * 验证数字 + Han 的混合脚本短片段会作为整体 token 保留。
+     */
+    @Test
+    void shouldExtractDigitHanMixedScriptToken() {
+        List<String> tokens = QueryTokenExtractor.extract("查看 2项 和 10段 的说明");
+
+        assertThat(tokens).contains("2项", "10段");
+    }
+
+    /**
+     * 验证空白分隔的短 Latin + Han 相邻片段会合并，但单片段不被放宽。
+     */
+    @Test
+    void shouldNotRelaxSingleLatinOrSingleHanTokens() {
+        List<String> singleLatinTokens = QueryTokenExtractor.extract("B");
+        List<String> singleHanTokens = QueryTokenExtractor.extract("级");
+        List<String> spacedMixedTokens = QueryTokenExtractor.extract("B 级");
+
+        assertThat(singleLatinTokens).doesNotContain("b");
+        assertThat(singleHanTokens).doesNotContain("级");
+        assertThat(spacedMixedTokens).contains("b级");
+        assertThat(spacedMixedTokens).doesNotContain("b", "级");
+    }
+
+    /**
+     * 验证空白分隔的短 Latin + Han 相邻片段按通用规则合并。
+     */
+    @Test
+    void shouldExtractSpacedLatinHanMixedScriptToken() {
+        List<String> tokens = QueryTokenExtractor.extract("请查 A 类 的要求");
+
+        assertThat(tokens).contains("a类");
+        assertThat(tokens).doesNotContain("a", "类");
+    }
+
+    /**
+     * 验证空白分隔的数字 + Han 相邻片段按通用规则合并。
+     */
+    @Test
+    void shouldExtractSpacedDigitHanMixedScriptToken() {
+        List<String> tokens = QueryTokenExtractor.extract("查看 2 项 的说明");
+
+        assertThat(tokens).contains("2项");
+        assertThat(tokens).doesNotContain("项");
+    }
+
+    /**
      * 验证路径、类名与配置键会被作为高信号 token 保留下来。
      */
     @Test

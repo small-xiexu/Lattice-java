@@ -33,6 +33,10 @@ public final class QueryTokenExtractor {
 
     private static final Pattern HAN_TEXT_PATTERN = Pattern.compile("[\\p{IsHan}]{2,}");
 
+    private static final int MAX_ADJACENT_ASCII_SEGMENT_LENGTH = 4;
+
+    private static final int MAX_ADJACENT_HAN_SEGMENT_LENGTH = 2;
+
     private QueryTokenExtractor() {
     }
 
@@ -62,6 +66,7 @@ public final class QueryTokenExtractor {
         while (hanMatcher.find()) {
             appendChineseTokens(tokens, hanMatcher.group());
         }
+        appendMixedScriptTokens(tokens, question);
         return new ArrayList<String>(tokens);
     }
 
@@ -144,6 +149,173 @@ public final class QueryTokenExtractor {
                 tokens.add(token);
             }
         }
+    }
+
+    /**
+     * 从原文中提取 Latin/数字 + Han 的短混合脚本片段。
+     *
+     * @param tokens token 集合
+     * @param question 查询问题
+     */
+    private static void appendMixedScriptTokens(Set<String> tokens, String question) {
+        StringBuilder segment = new StringBuilder();
+        String previousSegment = "";
+        boolean inDelimiterRun = false;
+        boolean delimiterRunWhitespaceOnly = false;
+        boolean segmentSeparatedByWhitespace = false;
+        for (int offset = 0; offset < question.length(); ) {
+            int codePoint = question.codePointAt(offset);
+            if (isSegmentDelimiter(codePoint)) {
+                if (segment.length() > 0) {
+                    String currentSegment = segment.toString();
+                    appendMixedScriptSegment(tokens, currentSegment);
+                    appendAdjacentMixedScriptSegment(tokens, previousSegment, currentSegment,
+                            segmentSeparatedByWhitespace);
+                    previousSegment = currentSegment;
+                    segment.setLength(0);
+                }
+                if (!inDelimiterRun) {
+                    delimiterRunWhitespaceOnly = Character.isWhitespace(codePoint);
+                    inDelimiterRun = true;
+                } else {
+                    delimiterRunWhitespaceOnly = delimiterRunWhitespaceOnly && Character.isWhitespace(codePoint);
+                }
+                offset += Character.charCount(codePoint);
+                continue;
+            }
+            if (segment.length() == 0 && inDelimiterRun) {
+                segmentSeparatedByWhitespace = delimiterRunWhitespaceOnly;
+                inDelimiterRun = false;
+            }
+            segment.appendCodePoint(codePoint);
+            offset += Character.charCount(codePoint);
+        }
+        if (segment.length() > 0) {
+            String currentSegment = segment.toString();
+            appendMixedScriptSegment(tokens, currentSegment);
+            appendAdjacentMixedScriptSegment(tokens, previousSegment, currentSegment,
+                    segmentSeparatedByWhitespace);
+        }
+    }
+
+    /**
+     * 将符合混合脚本条件的 segment 加入 token 集合。
+     *
+     * @param tokens token 集合
+     * @param segment 原始 segment
+     */
+    private static void appendMixedScriptSegment(Set<String> tokens, CharSequence segment) {
+        if (segment == null || segment.length() < 2) {
+            return;
+        }
+        boolean hasLatinOrDigit = false;
+        boolean hasHan = false;
+        for (int offset = 0; offset < segment.length(); ) {
+            int codePoint = Character.codePointAt(segment, offset);
+            if (Character.isDigit(codePoint)
+                    || Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.LATIN) {
+                hasLatinOrDigit = true;
+            }
+            if (Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.HAN) {
+                hasHan = true;
+            }
+            offset += Character.charCount(codePoint);
+        }
+        if (hasLatinOrDigit && hasHan) {
+            tokens.add(segment.toString().toLowerCase(Locale.ROOT));
+        }
+    }
+
+    /**
+     * 将纯空白分隔的短 ASCII/数字 + 短 Han 相邻 segment 合并为混合脚本 token。
+     *
+     * @param tokens token 集合
+     * @param leftSegment 左侧 segment
+     * @param rightSegment 右侧 segment
+     * @param separatedByWhitespace 两个 segment 是否由纯空白分隔
+     */
+    private static void appendAdjacentMixedScriptSegment(Set<String> tokens, String leftSegment,
+            String rightSegment, boolean separatedByWhitespace) {
+        if (!separatedByWhitespace
+                || !isShortAsciiOrDigitSegment(leftSegment)
+                || !isShortHanSegment(rightSegment)) {
+            return;
+        }
+        String mergedToken = leftSegment + rightSegment;
+        tokens.add(mergedToken.toLowerCase(Locale.ROOT));
+    }
+
+    /**
+     * 判断左侧 segment 是否为保守短 ASCII/数字片段。
+     *
+     * @param segment segment
+     * @return 是否短 ASCII/数字片段
+     */
+    private static boolean isShortAsciiOrDigitSegment(String segment) {
+        if (segment == null || segment.isBlank()) {
+            return false;
+        }
+        int codePointCount = segment.codePointCount(0, segment.length());
+        if (codePointCount > MAX_ADJACENT_ASCII_SEGMENT_LENGTH) {
+            return false;
+        }
+        boolean hasLatinOrDigit = false;
+        for (int offset = 0; offset < segment.length(); ) {
+            int codePoint = segment.codePointAt(offset);
+            if (!Character.isDigit(codePoint)
+                    && Character.UnicodeScript.of(codePoint) != Character.UnicodeScript.LATIN) {
+                return false;
+            }
+            hasLatinOrDigit = true;
+            offset += Character.charCount(codePoint);
+        }
+        return hasLatinOrDigit;
+    }
+
+    /**
+     * 判断右侧 segment 是否为短 Han 片段。
+     *
+     * @param segment segment
+     * @return 是否短 Han 片段
+     */
+    private static boolean isShortHanSegment(String segment) {
+        if (segment == null || segment.isBlank()) {
+            return false;
+        }
+        int codePointCount = segment.codePointCount(0, segment.length());
+        if (codePointCount > MAX_ADJACENT_HAN_SEGMENT_LENGTH) {
+            return false;
+        }
+        boolean hasHan = false;
+        for (int offset = 0; offset < segment.length(); ) {
+            int codePoint = segment.codePointAt(offset);
+            if (Character.UnicodeScript.of(codePoint) != Character.UnicodeScript.HAN) {
+                return false;
+            }
+            hasHan = true;
+            offset += Character.charCount(codePoint);
+        }
+        return hasHan;
+    }
+
+    /**
+     * 判断字符是否用于切分 query segment。
+     *
+     * @param codePoint Unicode code point
+     * @return 是否切分
+     */
+    private static boolean isSegmentDelimiter(int codePoint) {
+        if (Character.isWhitespace(codePoint)) {
+            return true;
+        }
+        int type = Character.getType(codePoint);
+        return type == Character.CONNECTOR_PUNCTUATION
+                || type == Character.DASH_PUNCTUATION
+                || type == Character.START_PUNCTUATION
+                || type == Character.END_PUNCTUATION
+                || type == Character.INITIAL_QUOTE_PUNCTUATION
+                || type == Character.FINAL_QUOTE_PUNCTUATION
+                || type == Character.OTHER_PUNCTUATION;
     }
 
     /**

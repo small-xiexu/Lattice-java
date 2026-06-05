@@ -99,6 +99,9 @@ public final class LexicalSearchTokenBudget {
             int baseScore = token.length() >= 4 ? 360 : 120;
             return baseScore + Math.min(token.length(), 40);
         }
+        if (isMixedCjkAsciiOrDigitToken(token)) {
+            return 260 + Math.min(token.length(), 40);
+        }
         if (isCjkToken(token)) {
             return token.length() >= 2 ? 230 - Math.min(token.length(), 8) : 0;
         }
@@ -148,6 +151,39 @@ public final class LexicalSearchTokenBudget {
             }
         }
         return true;
+    }
+
+    /**
+     * 判断 token 是否为 Han + Latin/数字的混合脚本 token。
+     *
+     * @param token token
+     * @return 是否混合脚本 token
+     */
+    private static boolean isMixedCjkAsciiOrDigitToken(String token) {
+        boolean hasHan = false;
+        boolean hasAsciiOrDigit = false;
+        for (int offset = 0; offset < token.length(); ) {
+            int codePoint = token.codePointAt(offset);
+            if (Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.HAN) {
+                hasHan = true;
+            }
+            if (Character.isDigit(codePoint) || isLatinAsciiLetter(codePoint)) {
+                hasAsciiOrDigit = true;
+            }
+            offset += Character.charCount(codePoint);
+        }
+        return hasHan && hasAsciiOrDigit;
+    }
+
+    /**
+     * 判断 code point 是否为 ASCII Latin 字母。
+     *
+     * @param codePoint Unicode code point
+     * @return 是否 ASCII Latin 字母
+     */
+    private static boolean isLatinAsciiLetter(int codePoint) {
+        return (codePoint >= 'a' && codePoint <= 'z')
+                || (codePoint >= 'A' && codePoint <= 'Z');
     }
 
     /**

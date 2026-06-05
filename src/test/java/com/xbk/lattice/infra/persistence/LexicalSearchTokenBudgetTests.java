@@ -141,6 +141,22 @@ class LexicalSearchTokenBudgetTests {
         assertThat(likeTokens.indexOf("1")).isGreaterThan(likeTokens.indexOf("42"));
     }
 
+    /**
+     * 验证 Han + Latin/数字的短混合脚本 token 有正分，可进入 LIKE token 预算。
+     */
+    @Test
+    void shouldSelectShortMixedScriptTokensForLikeConditions() {
+        List<String> likeTokens = LexicalSearchTokenBudget.selectLikeTokens(List.of(
+                "x项",
+                "2项",
+                "a",
+                "甲"
+        ));
+
+        assertThat(likeTokens).contains("x项", "2项");
+        assertThat(likeTokens).doesNotContain("甲");
+    }
+
     private static final String[] CJK_BIGRAM_POOL = {
             "一甲", "一乙", "一丙", "一丁", "一戊",
             "二甲", "二乙", "二丙", "二丁", "二戊",
