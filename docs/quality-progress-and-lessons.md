@@ -1,6 +1,6 @@
 # 项目质量打磨进度与踩坑台账
 
-更新时间：2026-06-04（agentA 已完成 pre-commit cleanup；建议进入 /code-commit）
+更新时间：2026-06-05（mixed script token extraction 已提交 `062d391`；FS4b "B级" 搜索 0→2 结果，FS1-FS4 全部 PASS）
 
 本台账记录质量打磨、Query/SWIP eval、baseline 修复与多 agent 协作的当前状态。后续推进前先读本文件；阶段结论变化后必须回写。
 
@@ -15,6 +15,7 @@
 - 报告 cleanup：本轮按 `report_cleanup_plan_after_bank_settlement_focus_snippet.md` 执行清理，删除 4 个过期中间报告，详见 `report_cleanup_after_bank_settlement_focus_snippet_result.md`。
 - 拆分提交与最终门禁（2026-05-31）：四个主题拆分提交（Phase 1I fused order + field alias enricher + SERVER_DIR source 移除 + admin SERVER_DIR 移除）已完成。最终门禁报告 `post_split_commits_final_gate_report.md` 确认：redline `BLOCKER=0`、mvn test `995/0/0/0`、四个拆分 commit 后工程基线 PASS。详见该报告。
 - 当前工作区剩余未提交：`docs/模型绑定配置参考.md`（私有配置，永远排除）、`special_cases_report.md`（redline 输出，不提交）、`docs/plans/2026-05-31-模型契约注释与Lombok治理计划.md`、`docs/reports/model_contract_javadoc_lombok_plan_review_analysis_report.md`、`docs/reports/model_contract_javadoc_lombok_plan_review_analysis_report_v2.md`。
+- mixed script token extraction 修复已提交 `062d391`：`QueryTokenExtractor` 新增 Han+Latin/数字混合脚本 token 提取及空白分隔短片段合并，`LexicalSearchTokenBudget` 补充混合短 token 正分。redline `BLOCKER=0`、定向测试 `QueryTokenExtractorTests=12/0/0/0` + `LexicalSearchTokenBudgetTests=7/0/0/0`、全量 `mvn test=1004/0/0/0`。FS4b "B级" 搜索 0→2 结果（PASS），"B 级" 搜索 2 结果（PASS），FS1-FS4 搜索 runtime 全部 PASS，保护性搜索"精密仪器""化学品分类存储"无回归。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/search_failures_s2_fs2_fs4b_analysis_report.md`、`mixed_script_token_extraction_fix_result_report.md`、`mixed_script_token_extraction_runtime_gate_report.md`。
 - QueryResponse 构造器收敛与字段契约注释已提交 `2888796`：类级 `@Getter`、唯一 `@JsonCreator` 全参构造器、`@Builder`、删除历史短构造器、所有调用点迁移为 builder。定向测试 34/0/0/0。DTO 分析报告 `dto_field_javadoc_lombok_refactor_analysis_report.md` 已随提交归档。`QuerySourceResponse` / `QueryArticleResponse` 已提交 `b38acdc`，后续全项目 DTO/domain/entity/config 契约治理统一按 `docs/plans/2026-05-31-模型契约注释与Lombok治理计划.md` 分批推进并回写。
 - compile review observability：后台可观测性改动已完成，API 与后台 UI 均已验证通过。验证报告见 `compile_review_observability_verification_report.md`，fix result report 见 `compile_review_observability_fix_result_report.md`。
 - compile review persist gate：`PersistArticlesNode` 已修复，不再合并 `needsHumanReviewArticlesRef`，只允许 `review_status=passed` 的 article 进入正式 persist。测试补强已完成，新增 `PersistArticlesNodeTests` 覆盖混合 status 旧风险路径。详见 `compile_review_persist_gate_fix_result_report.md`、`compile_review_persist_gate_runtime_verification_report.md`、`compile_review_persist_gate_test_result_report.md`。
@@ -88,8 +89,8 @@
 
 | 项 | 当前状态 | 说明 |
 |---|---|---|
-| redline | `BLOCKER=0` | 最新：`bash scripts/scan-redline.sh special_cases_report.md` 通过，汇总为 `BLOCKER=0`、`REVIEW=2077`、`ALLOWLIST=262`。 |
-| mvn test | `995/0/0/0` | 四个拆分 commit 后全量 `mvn test=995/0/0/0` 通过。详见 `post_split_commits_final_gate_report.md`。 |
+| redline | `BLOCKER=0` | 最新：`bash scripts/scan-redline.sh special_cases_report.md` 通过，汇总为 `BLOCKER=0`、`REVIEW=2096`、`ALLOWLIST=262`（mixed script 修复后）。 |
+| mvn test | `1004/0/0/0` | mixed script token extraction 修复后全量 `mvn test=1004/0/0/0` 通过。四个拆分 commit 后为 `995/0/0/0`。 |
 | main baseline | 阶段 gate 已通过 | `final_query_baseline_gate_report.md` 为 `9/10` 且 gate 通过；`phase12_final_clean_rebuild_gate_report.md` 为 `8/10` 且 6 项 gate 通过。 |
 | SWIP strict eval | 稳定区间 `15-17/23` | focus snippet patch 副作用复核三轮：16/23、17/23、15/23；BANK-SETTLEMENT-001 三轮稳定 PASS；保护 case 三轮稳定 PASS。详见 `swip_focus_snippet_patch_side_effect_review_report.md`。 |
 | 当前数据库状态 | Q6 验收 clean 库 | agentD 已重建 `ai-rag-knowledge.lattice` 并导入完整知识库验收资料；用户要求确认的 2 条 `needs_human_review` 已 approve 发布。当前计数：`source_files=6`、`articles=6`、`article_chunks=13`、`fact_cards=11`、`article_vector_index=6`、`article_chunk_vector_index=13`。该库用于 Q6 复验，不代表 SWIP clean 库或主 baseline 库。 |
@@ -126,6 +127,7 @@
 | FQ4/FG1 SLF4J [TU_TRACE] runtime gate | **断点确认在 builder 内，非 retrieval/reranker/candidate supply** | agentD 已抓取 `[TU_TRACE]` 日志。FQ4：`deposit_amount` 已进入 builder 候选池（cand#4/#5，qf=true, ftmc=3），但与 `approval_required`（ftmc=3, fs=10.0）打平，fusedScore tie-break 选中 `approval_required`（10.0 > 9.0）。FG1：`late_fee_per_day` 已进入 builder 候选池（cand#5/#6），但 qf=false（tuQfPassed=0），CJK 碎片 token（"器的逾期"）无法匹配 fieldAliases（"逾期日费"），`isTerminalHitQueryFocused` 全池淘汰。两个题断点均不在 retrieval/reranker/candidate supply。详见 `fq4_fg1_terminal_builder_slf4j_trace_runtime_gate_report.md`。 |
 | FG1 qf=false builder 修复 | **runtime 验证通过；但 FG1 最终未收口** | agentD 已验证：`late_fee_per_day` 候选 qf 从 false 变 true，`tuQfPassed` 从 0 升到 4，说明 CJK bigram 重叠匹配已生效。残留问题是 FG1 场景下多个 terminal unit 候选 `ftmc=0`，最终仍由更高 fusedScore 的 `equipment_types[1].type = 精密仪器` 胜出。该断点属于 **FG1 的 fieldTokenMatchCount 对 CJK 碎片 token 不敏感**，与 FQ4 的正向 `ftmc` 平局 + fusedScore tie-break 仍是独立根因。详见 `fg1_qf_false_builder_fix_result_report.md`、`fg1_qf_false_builder_runtime_gate_report.md`。 |
 | FG1 ftmc=0 builder runtime gate | **未验证到目标候选；builder 路径本轮不可收口** | agentD 针对 `countFieldLevelTokenMatches()` 的 CJK bigram 修复做 runtime gate 后发现：`equipment_types[1].type = 精密仪器` 的 `ftmc` 从 0 升到 2，说明修复本身已生效；但 `late_fee_per_day` 本轮完全未进入 builder 候选池（tuTotal=4，无任何 `late_fee_per_day` 候选），因此无法判断目标候选 `ftmc` 是否从 0 升到 >=1。更关键的是，本轮 118 个 terminal units 中未生成中文 field aliases（"逾期"/"押金" 等均为 0 条），与上一轮 runtime 现场不一致。当前不能继续把 FG1 归因为 builder 内排序；最高优先级应转为 **field-alias-enricher / terminal unit 候选供给侧只读审计**。详见 `fg1_ftmc_zero_builder_runtime_gate_report.md`。 |
+| mixed script token extraction | **已提交 `062d391` + runtime gate PASS** | `QueryTokenExtractor` 新增 Han+Latin/数字混合脚本 token 提取；`LexicalSearchTokenBudget` 补充混合短 token 正分。redline `BLOCKER=0`，定向测试 `12+7=19/0/0/0`，全量 `mvn test=1004/0/0/0`。FS4b "B级" 0→2（PASS），"B 级" 2（PASS），FS1-FS4 搜索全部 PASS，保护性搜索无回归。详见 `mixed_script_token_extraction_fix_result_report.md`、`mixed_script_token_extraction_runtime_gate_report.md`。 |
 
 ## 多 Agent 当前职责
 
@@ -190,6 +192,8 @@
 - SERVER_DIR 移除已分两个提交完成：`fa8b883`（source 支持）+ `35bf769`（管理页入口）。纯基础设施清理，与 terminal unit 无关。
 - 四个拆分提交后的最终门禁已由 agentD 验证并归档为 `305bfc6`：redline `BLOCKER=0`、mvn test `995/0/0/0`、工程基线 PASS。
 - Phase 1D/1E/1F/1G 共 22 个历史报告为 untracked 状态，属于中间实验/验证报告，待后续归档评估后决定是否提交或清理。
+- Mixed script token extraction 修复是通用 Unicode script + 空白/标点切分 + 长度规则，不是 FS4b/"B级" case 特判。规则同等适用于任意 Han + Latin/数字短混合脚本片段。
+- FS4b 不再是 open issue；S2 title/anchor 与 FS2 ranking 仍为独立问题，不在本轮 mixed script 修复范围。
 
 ## 踩坑记录
 
@@ -227,6 +231,7 @@
 | `compile_article_review_queue` 不区分 compile job | 多次 compile 产生的 `needs_human_review` 草稿混在同一队列，无 jobId 过滤 | 当前接受这种简化——人工确认场景本身就是低频率、逐条处理的 | 后续若需要按 job 维度管理人工确认，需给 `compile_article_review_queue` 增加 `job_id` 字段并支持筛选。 |
 | 前端编译进度卡片语义与轮次展示仍有缺口 | 前端进度卡片展示的步骤数、审查轮次、fix 轮次仍不完全反映 StateGraph 实际执行轮数 | 后端步骤和轮次信息已写入 job steps，前端尚未完全接入 | 不阻断当前提交。后续状态摘要和轮次展示迭代时统一接入。 |
 | LIKE token 预算不足导致中文 bigram 被挤出候选集 | 文件名前缀 token（"chemical-storage-grading.xlsx"）和 CJK 长 N-gram（quadgram "级危险化"等）消耗 `MAX_LIKE_TOKENS=8` 预算，导致 "存储"、"条件" 等真正能命中 terminal unit fts_text 的 CJK bigram 全部被挤出 LIKE 候选集，XLSX terminal unit 命中为 0 | 问题不在 dispatch、extractor、Materializer、Reranker——只在 `MAX_LIKE_TOKENS` 常量。CJK token 评分应优先短 N-gram（bigram > trigram > quadgram），因为 LIKE 子串匹配天然覆盖长串。详见 `terminal_unit_phase1c_xlsx_terminal_unit_root_cause_analysis_report.md` | 中文检索场景下，CJK token 的 LIKE 预算应充足（≥32），且短 N-gram 优先级应高于长 N-gram。文件名和其他结构化 token 不应挤占 CJK LIKE 候选预算。 |
+| Han+Latin 混合脚本 token 未被提取，导致 lexical 路径无可用 token | FS4b "B级"/"B 级" 搜索 0 结果。既有 `QueryTokenExtractor` 只覆盖纯 ASCII/纯 Han，Latin/数字+Han 混合脚本或空白分隔片段被漏掉；`LexicalSearchTokenBudget` 旧评分对混合 token 可能给 0 分 | 问题不在资料缺失，只在 query token 入口缺口。修复只用 Unicode script、数字、空白/标点切分和长度做通用判断，不绑定具体业务域 | 后续不要再在 mixed script token 上叠 case 特判。Query token 提取必须是通用文本结构规则，禁止写入业务词/题号/文件名。 |
 
 ## 当前禁止事项
 
@@ -250,6 +255,8 @@
 - 禁止 terminal unit Phase 1A 与 Query 复杂度治理并行改代码；两条线必须串行，治理线待 Phase 1A 验收通过后单开。
 - terminal unit 是 evidence 粒度建设，不是 query fallback 补丁；不得在 terminal unit 实现中向 query fallback 主链追加新 gate。
 - 禁止无限修题：长期目标是 5+2 eval 闭环（public eval 发现 → 修通用能力 → 回归保护 → hidden eval 验收），不是逐题追 PASS。
+- 禁止继续在 mixed script token 上叠加 case 特判：修复已用 Unicode script + 空白/标点切分 + 长度实现通用规则；不得写入"B级"/"FS4b"/文件名/题号等业务标识。
+- 后续 Query/Search 修复仍必须先 redline、mvn test、baseline/runtime gate，不得跳过门禁直接修代码。
 
 ## 下一步计划
 
@@ -286,6 +293,8 @@
 31. （已完成）agentC 剩余文档收口审计：已输出 `docs/test/remaining_docs_reports_commit_plan.md`，判定 5 组建议提交、2 组不建议提交、2 组永远排除、1 组因真实 API 密钥阻塞。详见该报告。
 
 生产代码 scoped commits 已全部收口（item 30 + 已提交 commit 清单 + 四个拆分提交）。剩余未提交项主要是：docs/report 归档（Phase 1D/1E/1F/1G 历史报告 22 个，已审计全部建议归档）、私有配置（`docs/模型绑定配置参考.md`，永远排除提交）与 redline 输出（`special_cases_report.md`，不建议提交）。S2 标题/anchor 搜索已完成只读归因与代码层修复，后续应由 agentD 做完整知识库端到端验收。
+
+58. （已完成）Mixed script token extraction 修复：`QueryTokenExtractor` 新增 Han+Latin/数字混合脚本 token 提取及空白分隔短片段合并；`LexicalSearchTokenBudget` 补充混合短 token 正分。已提交 `062d391`。redline `BLOCKER=0`、定向测试 `12+7=19/0/0/0`、全量 `mvn test=1004/0/0/0`。FS4b "B级" 0→2 PASS、"B 级" 2 PASS、FS1-FS4 搜索全部 PASS、保护性搜索无回归。S2 title/anchor 与 FS2 ranking 仍为独立问题，不在本轮范围。详见 `search_failures_s2_fs2_fs4b_analysis_report.md`、`mixed_script_token_extraction_fix_result_report.md`、`mixed_script_token_extraction_runtime_gate_report.md`。
 
 32. （已完成）S2 标题/anchor 搜索问题独立分析：agentB 单独排查 `下一步计划` 的标题/anchor 命中链路，确认不归因到 Q6 terminal field alias。详见 `docs/test/knowledge-base-e2e/s2_title_anchor_search_root_cause_analysis_report.md`。
 33. （已完成，待验收）S2 chunk/anchor identity 最小通用修复：agentA 保留 chunk 级 identity，避免 article chunk FTS / chunk vector 命中被整篇 article 折叠；redline `BLOCKER=0`，定向测试 `13/0/0`，全量 `mvn test=921/0/0`。详见 `docs/test/knowledge-base-e2e/s2_chunk_anchor_identity_fix_result_report.md`。
