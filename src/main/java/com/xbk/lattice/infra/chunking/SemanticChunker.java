@@ -15,6 +15,8 @@ public class SemanticChunker {
 
     private static final Pattern ORDERED_LIST_PATTERN = Pattern.compile("^\\d+\\.\\s+.*$");
 
+    private static final Pattern ATX_HEADING_PATTERN = Pattern.compile("^#{1,6}\\s.*");
+
     /**
      * 执行语义分块。
      *
@@ -38,8 +40,14 @@ public class SemanticChunker {
             int chunkStartOffset = units.get(startIndex).getCharOffset();
             StringBuilder builder = new StringBuilder();
 
+            boolean headingBreak = false;
+
             while (unitIndex < units.size()) {
                 TextUnit unit = units.get(unitIndex);
+                if (builder.length() > 0 && isAtxHeading(unit.getText())) {
+                    headingBreak = true;
+                    break;
+                }
                 if (builder.length() > 0 && builder.length() + unit.getText().length() > maxChars) {
                     break;
                 }
@@ -50,6 +58,7 @@ public class SemanticChunker {
             if (builder.length() == 0) {
                 TextUnit unit = units.get(unitIndex);
                 builder.append(unit.getText());
+                headingBreak = false;
                 unitIndex++;
             }
 
@@ -58,7 +67,9 @@ public class SemanticChunker {
             if (unitIndex >= units.size()) {
                 break;
             }
-            unitIndex = rewindForOverlap(units, startIndex, unitIndex, overlapChars);
+            if (!headingBreak) {
+                unitIndex = rewindForOverlap(units, startIndex, unitIndex, overlapChars);
+            }
         }
         return chunks;
     }
@@ -152,6 +163,22 @@ public class SemanticChunker {
                 || trimmed.startsWith("- ")
                 || trimmed.startsWith("* ")
                 || ORDERED_LIST_PATTERN.matcher(trimmed).matches();
+    }
+
+    /**
+     * 判断文本单元的首行是否为 Markdown ATX 标题（# 开头）。
+     *
+     * 在 parseUnits 中，heading 行与其后续内容可能合并为同一 TextUnit
+     * （heading 后无空行时，heading + content 存入一个单元）。因此只检查
+     * 单元的首行（first line）是否匹配 ATX 标题，不要求整个单元匹配。
+     */
+    private boolean isAtxHeading(String text) {
+        if (isBlank(text)) {
+            return false;
+        }
+        int newlineIndex = text.indexOf('\n');
+        String firstLine = newlineIndex >= 0 ? text.substring(0, newlineIndex).trim() : text.trim();
+        return ATX_HEADING_PATTERN.matcher(firstLine).matches();
     }
 
     private boolean isBlank(String value) {

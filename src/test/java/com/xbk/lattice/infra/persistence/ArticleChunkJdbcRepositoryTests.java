@@ -94,9 +94,9 @@ class ArticleChunkJdbcRepositoryTests {
         List<String> chunks = articleChunkJdbcRepository.findChunkTexts("payment");
 
         assertThat(rebuiltCount).isEqualTo(1);
-        assertThat(chunks).hasSize(1);
+        assertThat(chunks).hasSize(2);
         assertThat(chunks.get(0)).contains("# Payment");
-        assertThat(chunks.get(0)).contains("## Timeout Rules");
+        assertThat(chunks.get(1)).contains("## Timeout Rules");
         assertThat(chunks.get(0)).doesNotContain("existing-chunk");
     }
 

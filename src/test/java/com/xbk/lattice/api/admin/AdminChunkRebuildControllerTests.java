@@ -105,17 +105,17 @@ class AdminChunkRebuildControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.rebuiltArticleCount").value(1))
                 .andExpect(jsonPath("$.rebuiltSourceFileCount").value(1))
-                .andExpect(jsonPath("$.articleChunkCount").value(1))
-                .andExpect(jsonPath("$.sourceFileChunkCount").value(1))
+                .andExpect(jsonPath("$.articleChunkCount").value(2))
+                .andExpect(jsonPath("$.sourceFileChunkCount").value(2))
                 .andExpect(jsonPath("$.rebuiltAt").isNotEmpty());
 
         List<String> articleChunks = articleChunkJdbcRepository.findChunkTexts("payment-timeout");
         List<SourceFileChunkRecord> sourceChunks = sourceFileChunkJdbcRepository.findByFilePaths(List.of("payment/order.md"));
 
-        assertThat(articleChunks).hasSize(1);
+        assertThat(articleChunks).hasSize(2);
         assertThat(articleChunks.get(0)).contains("# Payment Timeout");
         assertThat(articleChunks.get(0)).doesNotContain("existing-article-chunk");
-        assertThat(sourceChunks).hasSize(1);
+        assertThat(sourceChunks).hasSize(2);
         assertThat(sourceChunks.get(0).getChunkText()).contains("# Payment Source");
         assertThat(sourceChunks.get(0).getChunkText()).doesNotContain("existing-source-chunk");
     }

@@ -63,9 +63,9 @@ class SourceFileChunkJdbcRepositoryTests {
         List<SourceFileChunkRecord> chunkRecords = sourceFileChunkJdbcRepository.findByFilePaths(List.of("payment/order.md"));
 
         assertThat(rebuiltCount).isEqualTo(1);
-        assertThat(chunkRecords).hasSize(1);
+        assertThat(chunkRecords).hasSize(2);
         assertThat(chunkRecords.get(0).getChunkText()).contains("# Payment Source");
-        assertThat(chunkRecords.get(0).getChunkText()).contains("## Timeout Rules");
+        assertThat(chunkRecords.get(1).getChunkText()).contains("## Timeout Rules");
         assertThat(chunkRecords.get(0).getChunkText()).doesNotContain("existing-source-chunk");
     }
 
