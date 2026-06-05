@@ -14,7 +14,7 @@
 - SWIP BANK-SETTLEMENT focus snippet 主线：副作用复核已通过，结论为可保留。`swip_focus_snippet_patch_side_effect_review_report.md` 确认：redline BLOCKER=0，BANK-SETTLEMENT-001 三轮稳定 PASS，保护 case 三轮稳定 PASS，无新增稳定回归。
 - 报告 cleanup：本轮按 `report_cleanup_plan_after_bank_settlement_focus_snippet.md` 执行清理，删除 4 个过期中间报告，详见 `report_cleanup_after_bank_settlement_focus_snippet_result.md`。
 - 拆分提交与最终门禁（2026-05-31）：四个主题拆分提交（Phase 1I fused order + field alias enricher + SERVER_DIR source 移除 + admin SERVER_DIR 移除）已完成。最终门禁报告 `post_split_commits_final_gate_report.md` 确认：redline `BLOCKER=0`、mvn test `995/0/0/0`、四个拆分 commit 后工程基线 PASS。详见该报告。
-- 当前工作区剩余未提交：`docs/模型绑定配置参考.md`（私有配置，永远排除）、`special_cases_report.md`（redline 输出，不提交）、`docs/plans/2026-05-31-模型契约注释与Lombok治理计划.md`、`docs/reports/model_contract_javadoc_lombok_plan_review_analysis_report.md`、`docs/reports/model_contract_javadoc_lombok_plan_review_analysis_report_v2.md`。
+- 当前工作区剩余未提交：`docs/核心架构/模型绑定配置参考.md`（私有配置，永远排除）、`special_cases_report.md`（redline 输出，不提交）、`docs/plans/2026-05-31-模型契约注释与Lombok治理计划.md`、`docs/reports/model_contract_javadoc_lombok_plan_review_analysis_report.md`、`docs/reports/model_contract_javadoc_lombok_plan_review_analysis_report_v2.md`。
 - mixed script token extraction 修复已提交 `062d391`：`QueryTokenExtractor` 新增 Han+Latin/数字混合脚本 token 提取及空白分隔短片段合并，`LexicalSearchTokenBudget` 补充混合短 token 正分。redline `BLOCKER=0`、定向测试 `QueryTokenExtractorTests=12/0/0/0` + `LexicalSearchTokenBudgetTests=7/0/0/0`、全量 `mvn test=1004/0/0/0`。FS4b "B级" 搜索 0→2 结果（PASS），"B 级" 搜索 2 结果（PASS），FS1-FS4 搜索 runtime 全部 PASS，保护性搜索"精密仪器""化学品分类存储"无回归。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/search_failures_s2_fs2_fs4b_analysis_report.md`、`mixed_script_token_extraction_fix_result_report.md`、`mixed_script_token_extraction_runtime_gate_report.md`。
 - QueryResponse 构造器收敛与字段契约注释已提交 `2888796`：类级 `@Getter`、唯一 `@JsonCreator` 全参构造器、`@Builder`、删除历史短构造器、所有调用点迁移为 builder。定向测试 34/0/0/0。DTO 分析报告 `dto_field_javadoc_lombok_refactor_analysis_report.md` 已随提交归档。`QuerySourceResponse` / `QueryArticleResponse` 已提交 `b38acdc`，后续全项目 DTO/domain/entity/config 契约治理统一按 `docs/plans/2026-05-31-模型契约注释与Lombok治理计划.md` 分批推进并回写。
 - compile review observability：后台可观测性改动已完成，API 与后台 UI 均已验证通过。验证报告见 `compile_review_observability_verification_report.md`，fix result report 见 `compile_review_observability_fix_result_report.md`。
@@ -292,7 +292,7 @@
 30. （已完成）Q6 terminal field alias scoped commit 已提交（4d5e8bc），不再扩大 Q6/fallback 主链。
 31. （已完成）agentC 剩余文档收口审计：已输出 `docs/test/remaining_docs_reports_commit_plan.md`，判定 5 组建议提交、2 组不建议提交、2 组永远排除、1 组因真实 API 密钥阻塞。详见该报告。
 
-生产代码 scoped commits 已全部收口（item 30 + 已提交 commit 清单 + 四个拆分提交）。剩余未提交项主要是：docs/report 归档（Phase 1D/1E/1F/1G 历史报告 22 个，已审计全部建议归档）、私有配置（`docs/模型绑定配置参考.md`，永远排除提交）与 redline 输出（`special_cases_report.md`，不建议提交）。S2 标题/anchor 搜索已完成只读归因与代码层修复，后续应由 agentD 做完整知识库端到端验收。
+生产代码 scoped commits 已全部收口（item 30 + 已提交 commit 清单 + 四个拆分提交）。剩余未提交项主要是：docs/report 归档（Phase 1D/1E/1F/1G 历史报告 22 个，已审计全部建议归档）、私有配置（`docs/核心架构/模型绑定配置参考.md`，永远排除提交）与 redline 输出（`special_cases_report.md`，不建议提交）。S2 标题/anchor 搜索已完成只读归因与代码层修复，后续应由 agentD 做完整知识库端到端验收。
 
 58. （已完成）Mixed script token extraction 修复：`QueryTokenExtractor` 新增 Han+Latin/数字混合脚本 token 提取及空白分隔短片段合并；`LexicalSearchTokenBudget` 补充混合短 token 正分。已提交 `062d391`。redline `BLOCKER=0`、定向测试 `12+7=19/0/0/0`、全量 `mvn test=1004/0/0/0`。FS4b "B级" 0→2 PASS、"B 级" 2 PASS、FS1-FS4 搜索全部 PASS、保护性搜索无回归。S2 title/anchor 与 FS2 ranking 仍为独立问题，不在本轮范围。详见 `search_failures_s2_fs2_fs4b_analysis_report.md`、`mixed_script_token_extraction_fix_result_report.md`、`mixed_script_token_extraction_runtime_gate_report.md`。
 

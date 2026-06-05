@@ -6,10 +6,10 @@
 
 | 主线 | 说明 | 入口文档 |
 |---|---|---|
-| 知识编译 | 原始资料如何变成文章、Fact Card、Terminal Unit、代码图谱和向量索引 | [`docs/编译流水线.md`](docs/%E7%BC%96%E8%AF%91%E6%B5%81%E6%B0%B4%E7%BA%BF.md) |
-| 查询检索 | 用户问题如何经过短路、检索、RRF 融合、答案生成、审查和引用核验 | [`docs/查询检索流水线.md`](docs/%E6%9F%A5%E8%AF%A2%E6%A3%80%E7%B4%A2%E6%B5%81%E6%B0%B4%E7%BA%BF.md) |
-| Deep Research | 复杂问题如何拆任务、检索证据、形成证据账本并合成引用答案 | [`docs/Deep-Research流水线.md`](docs/Deep-Research%E6%B5%81%E6%B0%B4%E7%BA%BF.md) |
-| 模型中心 | Provider 连接、模型档案、Agent 绑定、执行快照、Embedding 旁路如何工作 | [`docs/模型中心与执行快照.md`](docs/%E6%A8%A1%E5%9E%8B%E4%B8%AD%E5%BF%83%E4%B8%8E%E6%89%A7%E8%A1%8C%E5%BF%AB%E7%85%A7.md) |
+| 知识编译 | 原始资料如何变成文章、Fact Card、Terminal Unit、代码图谱和向量索引 | [`docs/核心架构/编译流水线.md`](docs/%E6%A0%B8%E5%BF%83%E6%9E%B6%E6%9E%84/%E7%BC%96%E8%AF%91%E6%B5%81%E6%B0%B4%E7%BA%BF.md) |
+| 查询检索 | 用户问题如何经过短路、检索、RRF 融合、答案生成、审查和引用核验 | [`docs/核心架构/查询检索流水线.md`](docs/%E6%A0%B8%E5%BF%83%E6%9E%B6%E6%9E%84/%E6%9F%A5%E8%AF%A2%E6%A3%80%E7%B4%A2%E6%B5%81%E6%B0%B4%E7%BA%BF.md) |
+| Deep Research | 复杂问题如何拆任务、检索证据、形成证据账本并合成引用答案 | [`docs/核心架构/Deep-Research流水线.md`](docs/%E6%A0%B8%E5%BF%83%E6%9E%B6%E6%9E%84/Deep-Research%E6%B5%81%E6%B0%B4%E7%BA%BF.md) |
+| 模型中心 | Provider 连接、模型档案、Agent 绑定、执行快照、Embedding 旁路如何工作 | [`docs/核心架构/模型中心与执行快照.md`](docs/%E6%A0%B8%E5%BF%83%E6%9E%B6%E6%9E%84/%E6%A8%A1%E5%9E%8B%E4%B8%AD%E5%BF%83%E4%B8%8E%E6%89%A7%E8%A1%8C%E5%BF%AB%E7%85%A7.md) |
 
 ## 当前技术基线
 
@@ -121,7 +121,7 @@ curl http://127.0.0.1:18082/actuator/health
 | `query` | `answer`、`reviewer`、`rewrite` |
 | `deep_research` | `planner`、`researcher`、`synthesizer`、`reviewer` |
 
-配置示例和注意事项见 [`docs/模型绑定配置参考.md`](docs/%E6%A8%A1%E5%9E%8B%E7%BB%91%E5%AE%9A%E9%85%8D%E7%BD%AE%E5%8F%82%E8%80%83.md)。
+配置示例和注意事项见 [`docs/核心架构/模型绑定配置参考.md`](docs/%E6%A0%B8%E5%BF%83%E6%9E%B6%E6%9E%84/%E6%A8%A1%E5%9E%8B%E7%BB%91%E5%AE%9A%E9%85%8D%E7%BD%AE%E5%8F%82%E8%80%83.md)。
 
 ## 代码目录
 
@@ -171,7 +171,7 @@ mvn test
 | 全链路真实验收怎么跑 | [`docs/项目全流程真实验收手册.md`](docs/%E9%A1%B9%E7%9B%AE%E5%85%A8%E6%B5%81%E7%A8%8B%E7%9C%9F%E5%AE%9E%E9%AA%8C%E6%94%B6%E6%89%8B%E5%86%8C.md) |
 | 数据库表和关系 | [`docs/数据库表结构详解.md`](docs/%E6%95%B0%E6%8D%AE%E5%BA%93%E8%A1%A8%E7%BB%93%E6%9E%84%E8%AF%A6%E8%A7%A3.md) |
 | 文档识别、OCR、解析路由 | [`docs/文档识别与OCR运行态说明.md`](docs/%E6%96%87%E6%A1%A3%E8%AF%86%E5%88%AB%E4%B8%8EOCR%E8%BF%90%E8%A1%8C%E6%80%81%E8%AF%B4%E6%98%8E.md) |
-| 模型中心配置步骤 | [`docs/模型绑定配置参考.md`](docs/%E6%A8%A1%E5%9E%8B%E7%BB%91%E5%AE%9A%E9%85%8D%E7%BD%AE%E5%8F%82%E8%80%83.md) |
+| 模型中心配置步骤 | [`docs/核心架构/模型绑定配置参考.md`](docs/%E6%A0%B8%E5%BF%83%E6%9E%B6%E6%9E%84/%E6%A8%A1%E5%9E%8B%E7%BB%91%E5%AE%9A%E9%85%8D%E7%BD%AE%E5%8F%82%E8%80%83.md) |
 | 质量推进与踩坑记录 | [`docs/quality-progress-and-lessons.md`](docs/quality-progress-and-lessons.md) |
 
 ## 项目判断
