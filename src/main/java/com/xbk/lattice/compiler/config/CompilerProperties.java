@@ -241,8 +241,8 @@ public class CompilerProperties {
         /** 多行轻量概念最少总字符数。默认 40。 */
         private int lightweightMinMultiLineChars = 40;
 
-        /** 小资料最多保留的内容行数。默认 8。 */
-        private int lightweightMaxContentLines = 8;
+        /** 小资料最多保留的内容行数。默认 24。 */
+        private int lightweightMaxContentLines = 24;
 
         /** 小资料最多扫描的正文行数。默认 60。 */
         private int lightweightMaxContentScanLines = 60;
