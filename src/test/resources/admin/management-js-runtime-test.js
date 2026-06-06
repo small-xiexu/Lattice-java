@@ -1045,6 +1045,52 @@ assert(historyModuleSourceText.includes("processing-history-panel"),
 assert(historyModuleSourceText.includes("historyPanel.open"),
     "history module should load terminal tasks when the history panel is opened");
 
+// Verify renderHistoryItem produces balanced div tags
+var singleItemMarkup = historyUi.renderHistoryItem({
+    sourceName: "测试.md",
+    title: "测试.md",
+    sourceType: "UPLOAD",
+    displayStatus: "SUCCEEDED",
+    requestedAt: "2026-05-20T08:00:00+08:00",
+    updatedAt: "2026-05-20T08:05:30+08:00",
+    persistedArticleCount: 3,
+    sourceId: 42
+});
+var openDivs = (singleItemMarkup.match(/<div/g) || []).length;
+var closeDivs = (singleItemMarkup.match(/<\/div>/g) || []).length;
+assert(openDivs === closeDivs,
+    "renderHistoryItem should produce balanced div tags, got " + openDivs + " opens vs " + closeDivs + " closes");
+
+// Verify two history items render as siblings, not nested
+var item1 = historyUi.renderHistoryItem({
+    sourceName: "资料A.md",
+    title: "资料A.md",
+    sourceType: "UPLOAD",
+    displayStatus: "SUCCEEDED",
+    requestedAt: "2026-05-20T08:00:00+08:00",
+    updatedAt: "2026-05-20T08:05:30+08:00",
+    persistedArticleCount: 2,
+    sourceId: 10
+});
+var item2 = historyUi.renderHistoryItem({
+    sourceName: "资料B.md",
+    title: "资料B.md",
+    sourceType: "DIRECT_COMPILE",
+    displayStatus: "FAILED",
+    requestedAt: "2026-05-21T09:00:00+08:00",
+    updatedAt: "2026-05-21T09:10:00+08:00",
+    persistedArticleCount: 0,
+    sourceId: 20
+});
+var joinedHtml = item1 + item2;
+var historyListItemCount = (joinedHtml.match(/class='list-item history-list-item'/g) || []).length;
+assert(historyListItemCount === 2,
+    "two history items should produce two list-item divs, got " + historyListItemCount);
+var firstItemEnd = joinedHtml.indexOf(item2);
+var firstItemOnly = joinedHtml.substring(0, firstItemEnd);
+assert(firstItemOnly.indexOf("class='list-item history-list-item'") >= 0,
+    "item2 should not be nested inside item1's unclosed div");
+
 // History panel should always call loadProcessingHistory when opened (no _historyLoaded guard)
 assert(!loadFnSource.includes("_historyLoaded"),
     "loadProcessingHistory should not gate on _historyLoaded; opened panel always loads");
