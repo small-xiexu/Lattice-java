@@ -91,6 +91,7 @@ public final class LatticePrompts {
             11. If the source materials do NOT directly provide an abnormal-case outcome, error code, state transition, or DB verification result, do NOT write a full expected result section from analogy. Instead, explicitly state that the source does not directly provide the conclusion, and limit the content to evidence-backed context plus the missing-evidence note.
             12. Phrases such as “可推断”, “合理推断”, “基于正向场景推导”, “源材料未直接提供” are warning signals, not permission to continue filling in precise outcomes. When such a signal appears, prefer omission plus evidence-gap disclosure over speculative completion.
             13. If a concept is mainly an evidence gap or unresolved abnormal scenario, it is acceptable to produce a short article whose main conclusion is “当前源材料未直接给出该结论”; do not force a fully elaborated article.
+            14. When source materials contain explicit section headings (e.g., Markdown `##` / `###` lines in structured sections), preserve the original heading text as the article section title whenever possible. If you need to reorganize, merge, or adjust headings for article flow, retain the original heading text near the beginning of the corresponding section as an alias, anchor, or searchable phrase — do not silently replace it with a semantically similar but differently worded new heading. Consistent heading text is essential for search retrieval, citation anchoring, and section-anchor stability.
 
             Output format — a Markdown article with YAML frontmatter:
 
