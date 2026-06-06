@@ -207,7 +207,8 @@ class QueryFinalizationGraphFragmentTests {
 
         CitationCheckService citationCheckService = new CitationCheckService(
                 new CitationExtractor(),
-                new CitationValidator(null, null)
+                new CitationValidator(null, null, null, null),
+                null
         );
 
         QueryGraphStateMapper stateMapper = new QueryGraphStateMapper();

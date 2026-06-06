@@ -12,6 +12,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Citation 检查服务
@@ -29,15 +30,23 @@ public class CitationCheckService {
 
     private final CitationValidator citationValidator;
 
+    private final QueryTraceManager traceManager;
+
     /**
      * 创建 Citation 检查服务。
      *
      * @param citationExtractor 引用提取器
      * @param citationValidator 引用校验器
+     * @param traceManager trace 管理器
      */
-    public CitationCheckService(CitationExtractor citationExtractor, CitationValidator citationValidator) {
+    public CitationCheckService(
+            CitationExtractor citationExtractor,
+            CitationValidator citationValidator,
+            QueryTraceManager traceManager
+    ) {
         this.citationExtractor = citationExtractor;
         this.citationValidator = citationValidator;
+        this.traceManager = traceManager;
     }
 
     /**
@@ -109,6 +118,8 @@ public class CitationCheckService {
         int projectionMismatchCount = unmatchedLiteralCount;
         boolean noCitation = claimSegments.stream().allMatch(claimSegment -> claimSegment.getCitations().isEmpty());
         double coverageRate = claimSegments.isEmpty() ? 0.0D : coveredClaimCount * 1.0D / claimSegments.size();
+        emitCheckTrace(claimSegments, verifiedCount, demotedCount, skippedCount, coverageRate,
+                validationResults, unusedProjectionCount, projectionMismatchCount);
         return new CitationCheckReport(
                 answerMarkdown,
                 claimSegments,
@@ -466,6 +477,38 @@ public class CitationCheckService {
             return answerProjection.getSourceType() == ProjectionCitationFormat.SOURCE_FILE;
         }
         return false;
+    }
+
+    private void emitCheckTrace(
+            List<ClaimSegment> claimSegments,
+            int verifiedCount,
+            int demotedCount,
+            int skippedCount,
+            double coverageRate,
+            List<CitationValidationResult> validationResults,
+            int unusedProjectionCount,
+            int projectionMismatchCount
+    ) {
+        if (traceManager == null) {
+            return;
+        }
+        Map<String, Object> fields = new LinkedHashMap<String, Object>();
+        fields.put("claim_segment_count", claimSegments.size());
+        int totalCitationCount = claimSegments.stream().mapToInt(cs -> cs.getCitations().size()).sum();
+        fields.put("total_citation_count", totalCitationCount);
+        fields.put("verified_count", verifiedCount);
+        fields.put("demoted_count", demotedCount);
+        fields.put("skipped_count", skippedCount);
+        fields.put("coverage_rate", coverageRate);
+        fields.put("unused_projection_count", unusedProjectionCount);
+        fields.put("projection_mismatch_count", projectionMismatchCount);
+        Map<String, Long> demotionReasons = validationResults.stream()
+                .filter(r -> r.isDemoted())
+                .collect(Collectors.groupingBy(CitationValidationResult::getReason, Collectors.counting()));
+        if (!demotionReasons.isEmpty()) {
+            fields.put("demotion_reason_distribution", demotionReasons);
+        }
+        traceManager.logL1Event("citation_check_completed", "citation_check", fields);
     }
 
     private CitationValidationResult projectionFailure(Citation citation, String reason) {

@@ -114,8 +114,11 @@ final class QueryGraphTestSupport {
                 citationExtractor,
                 new CitationValidator(
                         new CatalogArticleJdbcRepository(evidenceCatalog),
-                        new CatalogSourceFileJdbcRepository(evidenceCatalog)
-                )
+                        new CatalogSourceFileJdbcRepository(evidenceCatalog),
+                        null,
+                        null
+                ),
+                null
         );
         QueryGraphDefinitionFactory queryGraphDefinitionFactory = new QueryGraphDefinitionFactory(
                 ftsSearchService,

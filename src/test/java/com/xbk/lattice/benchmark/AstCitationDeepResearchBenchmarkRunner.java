@@ -1049,8 +1049,11 @@ class AstCitationDeepResearchBenchmarkRunner {
                 new CitationExtractor(),
                 new CitationValidator(
                         new BenchmarkArticleJdbcRepository(scenario.path("articles")),
-                        new BenchmarkSourceFileJdbcRepository(scenario.path("sourceFiles"))
-                )
+                        new BenchmarkSourceFileJdbcRepository(scenario.path("sourceFiles")),
+                        null,
+                        null
+                ),
+                null
         );
     }
 
@@ -2514,8 +2517,11 @@ class AstCitationDeepResearchBenchmarkRunner {
                     citationExtractor,
                     new CitationValidator(
                             new CatalogArticleJdbcRepository(List.of(articleHit)),
-                            new CatalogSourceFileJdbcRepository(List.of(articleHit))
-                    )
+                            new CatalogSourceFileJdbcRepository(List.of(articleHit)),
+                            null,
+                            null
+                    ),
+                    null
             );
             QueryGraphDefinitionFactory queryGraphDefinitionFactory = new QueryGraphDefinitionFactory(
                     new FixedFtsSearchService(List.of(articleHit)),

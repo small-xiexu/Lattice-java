@@ -2,8 +2,13 @@ package com.xbk.lattice.query.citation;
 
 import com.xbk.lattice.infra.persistence.ArticleJdbcRepository;
 import com.xbk.lattice.infra.persistence.ArticleRecord;
+import com.xbk.lattice.infra.persistence.FactCardTerminalUnitJdbcRepository;
+import com.xbk.lattice.infra.persistence.FactCardTerminalUnitRecord;
 import com.xbk.lattice.infra.persistence.SourceFileJdbcRepository;
 import com.xbk.lattice.infra.persistence.SourceFileRecord;
+import com.xbk.lattice.query.evidence.domain.AnswerShape;
+import com.xbk.lattice.query.evidence.domain.FactCardReviewStatus;
+import com.xbk.lattice.query.evidence.domain.FactCardType;
 import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
@@ -28,7 +33,9 @@ class CitationValidatorTests {
     void shouldVerifyArticleCitationAgainstTargetArticleContent() {
         CitationValidator citationValidator = new CitationValidator(
                 new FixedArticleJdbcRepository(),
-                new FixedSourceFileJdbcRepository()
+                new FixedSourceFileJdbcRepository(),
+                null,
+                null
         );
 
         CitationValidationResult result = citationValidator.validate(new Citation(
@@ -52,7 +59,9 @@ class CitationValidatorTests {
     void shouldDemoteArticleCitationWhenTargetContentDoesNotSupportClaim() {
         CitationValidator citationValidator = new CitationValidator(
                 new FixedArticleJdbcRepository(),
-                new FixedSourceFileJdbcRepository()
+                new FixedSourceFileJdbcRepository(),
+                null,
+                null
         );
 
         CitationValidationResult result = citationValidator.validate(new Citation(
@@ -72,7 +81,9 @@ class CitationValidatorTests {
     void shouldVerifySourceCitationAgainstSourceContent() {
         CitationValidator citationValidator = new CitationValidator(
                 new FixedArticleJdbcRepository(),
-                new FixedSourceFileJdbcRepository()
+                new FixedSourceFileJdbcRepository(),
+                null,
+                null
         );
 
         CitationValidationResult result = citationValidator.validate(new Citation(
@@ -92,7 +103,9 @@ class CitationValidatorTests {
     void shouldVerifySourceCitationByDirectLineMatchWhenClaimWrapsEvidenceLine() {
         CitationValidator citationValidator = new CitationValidator(
                 new FixedArticleJdbcRepository(),
-                new FixedSourceFileJdbcRepository()
+                new FixedSourceFileJdbcRepository(),
+                null,
+                null
         );
 
         CitationValidationResult result = citationValidator.validate(new Citation(
@@ -112,7 +125,9 @@ class CitationValidatorTests {
     void shouldVerifyNearCompleteEnumerationOverlapForSpreadsheetFacts() {
         CitationValidator citationValidator = new CitationValidator(
                 new FixedArticleJdbcRepository(),
-                new FixedSourceFileJdbcRepository()
+                new FixedSourceFileJdbcRepository(),
+                null,
+                null
         );
 
         CitationValidationResult result = citationValidator.validate(new Citation(
@@ -135,7 +150,9 @@ class CitationValidatorTests {
     void shouldVerifyNumericFactsEmbeddedInChineseText() {
         CitationValidator citationValidator = new CitationValidator(
                 new FixedArticleJdbcRepository(),
-                new FixedSourceFileJdbcRepository()
+                new FixedSourceFileJdbcRepository(),
+                null,
+                null
         );
 
         CitationValidationResult result = citationValidator.validate(new Citation(
@@ -155,7 +172,9 @@ class CitationValidatorTests {
     void shouldSkipClaimWithoutHardFactLiterals() {
         CitationValidator citationValidator = new CitationValidator(
                 new FixedArticleJdbcRepository(),
-                new FixedSourceFileJdbcRepository()
+                new FixedSourceFileJdbcRepository(),
+                null,
+                null
         );
 
         CitationValidationResult result = citationValidator.validate(new Citation(
@@ -175,7 +194,9 @@ class CitationValidatorTests {
     void shouldVerifyLatinTermClaimInsideChineseSentence() {
         CitationValidator citationValidator = new CitationValidator(
                 new FixedArticleJdbcRepository(),
-                new FixedSourceFileJdbcRepository()
+                new FixedSourceFileJdbcRepository(),
+                null,
+                null
         );
 
         CitationValidationResult result = citationValidator.validate(new Citation(
@@ -195,7 +216,9 @@ class CitationValidatorTests {
     void shouldVerifySourceCitationUsingSameParagraphContextWhenClaimHasPartialSupport() {
         CitationValidator citationValidator = new CitationValidator(
                 new FixedArticleJdbcRepository(),
-                new FixedSourceFileJdbcRepository()
+                new FixedSourceFileJdbcRepository(),
+                null,
+                null
         );
 
         CitationValidationResult result = citationValidator.validate(new Citation(
@@ -218,7 +241,9 @@ class CitationValidatorTests {
     void shouldDemoteContextCitationWhenClaimIntroducesUnsupportedStrictFact() {
         CitationValidator citationValidator = new CitationValidator(
                 new FixedArticleJdbcRepository(),
-                new FixedSourceFileJdbcRepository()
+                new FixedSourceFileJdbcRepository(),
+                null,
+                null
         );
 
         CitationValidationResult result = citationValidator.validate(new Citation(
@@ -241,7 +266,9 @@ class CitationValidatorTests {
     void shouldFailSourceCitationWhenSourceFileIsMissing() {
         CitationValidator citationValidator = new CitationValidator(
                 new FixedArticleJdbcRepository(),
-                new FixedSourceFileJdbcRepository()
+                new FixedSourceFileJdbcRepository(),
+                null,
+                null
         );
 
         CitationValidationResult result = citationValidator.validate(new Citation(
@@ -264,7 +291,9 @@ class CitationValidatorTests {
     void shouldRejectCitationWithoutTargetKey() {
         CitationValidator citationValidator = new CitationValidator(
                 new FixedArticleJdbcRepository(),
-                new FixedSourceFileJdbcRepository()
+                new FixedSourceFileJdbcRepository(),
+                null,
+                null
         );
 
         CitationValidationResult result = citationValidator.validate(new Citation(
@@ -335,6 +364,269 @@ class CitationValidatorTests {
         }
     }
 
+    /**
+     * 验证 SOURCE_FILE citation 能通过 terminal unit 结构化证据验证。
+     */
+    @Test
+    void shouldVerifySourceCitationByTerminalUnitEvidence() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository(),
+                new FixedTerminalUnitJdbcRepository(),
+                null
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[→ src/main/java/payment/RoutePlanner.java]",
+                CitationSourceType.SOURCE_FILE,
+                "src/main/java/payment/RoutePlanner.java",
+                "RoutePlanner.exposed_path = /payments",
+                "RoutePlanner.exposed_path = /payments [→ src/main/java/payment/RoutePlanner.java]"
+        ));
+
+        assertThat(result.isVerified()).isTrue();
+        assertThat(result.getReason()).isIn("terminal_unit_evidence_verified",
+                "terminal_unit_evidence_near_complete_verified");
+    }
+
+    /**
+     * 验证 5-token claim 含 3 个匹配（overlap=0.60）在 0.60 阈值下通过
+     * high-confidence partial overlap 验证。
+     */
+    @Test
+    void shouldVerifyGreaterTokenClaimWithThreeMatchOverlap() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository(),
+                null,
+                null
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[→ config/system-guide.yaml]",
+                CitationSourceType.SOURCE_FILE,
+                "config/system-guide.yaml",
+                "xx-yy-zz = 10",
+                "xx-yy-zz = 10 [→ config/system-guide.yaml]"
+        ));
+
+        assertThat(result.isVerified()).isTrue();
+        assertThat(result.getReason()).isEqualTo("source_near_complete_overlap_verified");
+    }
+
+    /**
+     * 验证 4-token claim 仅含 2 个匹配（overlap=0.50）低于 0.60 阈值仍被 DEMOTED。
+     */
+    @Test
+    void shouldDemoteClaimBelowMinimumOverlapThreshold() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository(),
+                null,
+                null
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[→ config/system-guide.yaml]",
+                CitationSourceType.SOURCE_FILE,
+                "config/system-guide.yaml",
+                "aa-bb = 10",
+                "aa-bb = 10 [→ config/system-guide.yaml]"
+        ));
+
+        assertThat(result.isDemoted()).isTrue();
+    }
+
+    /**
+     * 验证 SOURCE_FILE citation 有 terminal unit 但值不匹配时不会 VERIFIED，
+     * 而是回退或 DEMOTED。
+     */
+    @Test
+    void shouldNotVerifyTerminalUnitEvidenceWhenValueMismatch() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository(),
+                new FixedTerminalUnitJdbcRepository(),
+                null
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[→ src/main/java/payment/RoutePlanner.java]",
+                CitationSourceType.SOURCE_FILE,
+                "src/main/java/payment/RoutePlanner.java",
+                "RoutePlanner.exposed_path = /unknown-path",
+                "RoutePlanner.exposed_path = /unknown-path [→ src/main/java/payment/RoutePlanner.java]"
+        ));
+
+        assertThat(result.isDemoted()).isTrue();
+        assertThat(result.getReason()).isEqualTo("source_insufficient_overlap");
+    }
+
+    /**
+     * 验证没有 terminal unit 的 source 行为不变，仍走原有 overlap 验证。
+     */
+    @Test
+    void shouldFallbackToSourceOverlapWhenNoTerminalUnitExists() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository(),
+                new FixedTerminalUnitJdbcRepository(),
+                null
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[→ standard-guide.pdf]",
+                CitationSourceType.SOURCE_FILE,
+                "standard-guide.pdf",
+                "到2030年，标准数量超过300项",
+                "到2030年，标准数量超过300项 [→ standard-guide.pdf]"
+        ));
+
+        assertThat(result.isVerified()).isTrue();
+        assertThat(result.getReason()).isIn("source_direct_line_match_verified", "source_rule_overlap_verified");
+    }
+
+    /**
+     * 验证跨 source file 的 terminal unit 不会被误用于验证。
+     */
+    @Test
+    void shouldNotCrossMatchTerminalUnitsFromDifferentSourceFile() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository(),
+                new FixedTerminalUnitJdbcRepository(),
+                null
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[→ gateway-field-definitions.xlsx]",
+                CitationSourceType.SOURCE_FILE,
+                "gateway-field-definitions.xlsx",
+                "渠道 = 01",
+                "渠道 = 01 [→ gateway-field-definitions.xlsx]"
+        ));
+
+        assertThat(result.getReason()).isNotEqualTo("terminal_unit_evidence_verified");
+        assertThat(result.getReason()).isNotEqualTo("terminal_unit_evidence_near_complete_verified");
+    }
+
+    /**
+     * 验证同 source file 下多个 terminal unit 不会因拼接而导致假阳性。
+     *
+     * Unit A 覆盖 path/key，Unit B 覆盖 value，但没有任何单条 unit 同时覆盖两者。
+     * 旧拼接实现会因整体高 overlap 而 VERIFIED，逐条验证必须返回 null 并回退。
+     */
+    @Test
+    void shouldNotVerifyTerminalUnitEvidenceByCombiningDifferentUnits() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository(),
+                new FixedTerminalUnitJdbcRepository(),
+                null
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[→ src/main/java/payment/RoutePlanner.java]",
+                CitationSourceType.SOURCE_FILE,
+                "src/main/java/payment/RoutePlanner.java",
+                "RoutePlanner.exposed_path = 30s",
+                "RoutePlanner.exposed_path = 30s [→ src/main/java/payment/RoutePlanner.java]"
+        ));
+
+        assertThat(result.getReason()).isNotEqualTo("terminal_unit_evidence_verified");
+        assertThat(result.getReason()).isNotEqualTo("terminal_unit_evidence_near_complete_verified");
+    }
+
+    /**
+     * 验证非 key=value 格式 claim 即使 source 下有 terminal units 也不走
+     * terminal unit 证据路径，仍保持原有 source overlap 验证。
+     */
+    @Test
+    void shouldSkipTerminalUnitEvidenceForNonKeyValueClaim() {
+        CitationValidator citationValidator = new CitationValidator(
+                new FixedArticleJdbcRepository(),
+                new FixedSourceFileJdbcRepository(),
+                new FixedTerminalUnitJdbcRepository(),
+                null
+        );
+
+        CitationValidationResult result = citationValidator.validate(new Citation(
+                0,
+                "[→ src/main/java/payment/RoutePlanner.java]",
+                CitationSourceType.SOURCE_FILE,
+                "src/main/java/payment/RoutePlanner.java",
+                "RoutePlanner 暴露了 /payments 路径",
+                "RoutePlanner 暴露了 /payments 路径 [→ src/main/java/payment/RoutePlanner.java]"
+        ));
+
+        assertThat(result.isVerified()).isTrue();
+        assertThat(result.getReason()).isIn("source_direct_line_match_verified", "source_rule_overlap_verified");
+    }
+
+    private static class FixedTerminalUnitJdbcRepository extends FactCardTerminalUnitJdbcRepository {
+
+        private FixedTerminalUnitJdbcRepository() {
+            super(null);
+        }
+
+        @Override
+        public boolean tableAvailable() {
+            return true;
+        }
+
+        @Override
+        public List<FactCardTerminalUnitRecord> findBySourceFileId(Long sourceFileId) {
+            if (sourceFileId != null && sourceFileId == 101L) {
+                return List.of(
+                        new FactCardTerminalUnitRecord(
+                                null, "unit-1", "terminal-unit:unit-1",
+                                1L, "payment-routing-card",
+                                1L, 101L,
+                                List.of(), List.of(),
+                                FactCardType.FACT_ENUM, AnswerShape.POLICY,
+                                "key_value_list", 0,
+                                "RoutePlanner.exposed_path", "RoutePlanner",
+                                "exposed_path", "[]",
+                                "exposed_path", "[]",
+                                "RoutePlanner exposes /payments path",
+                                "RoutePlanner.exposed_path = /payments",
+                                "/payments", "/payments",
+                                "path", "{}", "/payments RoutePlanner.exposed_path",
+                                "{}", FactCardReviewStatus.LOW_CONFIDENCE,
+                                0.8, "hash-1",
+                                null, null
+                        ),
+                        new FactCardTerminalUnitRecord(
+                                null, "unit-2", "terminal-unit:unit-2",
+                                1L, "payment-routing-card",
+                                1L, 101L,
+                                List.of(), List.of(),
+                                FactCardType.FACT_ENUM, AnswerShape.POLICY,
+                                "key_value_list", 1,
+                                "RoutePlanner.timeout", "RoutePlanner",
+                                "timeout", "[]",
+                                "timeout", "[]",
+                                "RoutePlanner timeout setting",
+                                "RoutePlanner.timeout = 30s",
+                                "30s", "30s",
+                                "string", "{}", "30s RoutePlanner.timeout",
+                                "{}", FactCardReviewStatus.LOW_CONFIDENCE,
+                                0.8, "hash-2",
+                                null, null
+                        )
+                );
+            }
+            return List.of();
+        }
+    }
+
     private static class FixedSourceFileJdbcRepository extends SourceFileJdbcRepository {
 
         private FixedSourceFileJdbcRepository() {
@@ -397,6 +689,22 @@ class CitationValidatorTests {
                         "{}",
                         false,
                         "standard-guide.pdf"
+                ));
+            }
+            if ("config/system-guide.yaml".equals(filePath)) {
+                return Optional.of(new SourceFileRecord(
+                        105L,
+                        1L,
+                        "config/system-guide.yaml",
+                        "config/system-guide.yaml",
+                        null,
+                        "YAML",
+                        "YAML",
+                        256L,
+                        "xx yy 10",
+                        "{}",
+                        false,
+                        "config/system-guide.yaml"
                 ));
             }
             if ("docs/interface-contract.md".equals(filePath)) {

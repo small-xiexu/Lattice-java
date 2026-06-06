@@ -83,7 +83,8 @@ class QueryResponseCitationAssemblerTests {
         );
         CitationCheckReport citationCheckReport = new CitationCheckService(
                 new CitationExtractor(),
-                new FixedCitationValidator()
+                new FixedCitationValidator(),
+                null
         ).check(answer, answerProjectionBundle);
 
         List<QueryCitationMarkerResponse> markers = QueryResponseCitationAssembler.toCitationMarkerResponses(
@@ -158,7 +159,8 @@ class QueryResponseCitationAssemblerTests {
         );
         CitationCheckReport citationCheckReport = new CitationCheckService(
                 new CitationExtractor(),
-                new FixedCitationValidator()
+                new FixedCitationValidator(),
+                null
         ).check(answer, answerProjectionBundle);
 
         List<QueryCitationMarkerResponse> markers = QueryResponseCitationAssembler.toCitationMarkerResponses(
@@ -229,7 +231,8 @@ class QueryResponseCitationAssemblerTests {
         );
         CitationCheckReport citationCheckReport = new CitationCheckService(
                 new CitationExtractor(),
-                new FixedCitationValidator()
+                new FixedCitationValidator(),
+                null
         ).check(answer, answerProjectionBundle);
 
         List<QueryCitationMarkerResponse> markers = QueryResponseCitationAssembler.toCitationMarkerResponses(
@@ -561,7 +564,7 @@ class QueryResponseCitationAssemblerTests {
          * 创建固定结果 citation 校验器。
          */
         private FixedCitationValidator() {
-            super(null, null);
+            super(null, null, null, null);
         }
 
         /**

@@ -20,6 +20,20 @@ lattice:
         enabled: ${LATTICE_QUERY_SEARCH_VECTOR_ENABLED:true}
         embedding-model: ${LATTICE_QUERY_SEARCH_VECTOR_MODEL:embedding-3}
         expected-dimensions: ${LATTICE_QUERY_SEARCH_VECTOR_DIMENSIONS:2000}
+    trace:
+      enabled: false
+      stages:
+        query_entry: false
+        rewrite: false
+        retrieval: false
+        rerank: false
+        rrf_fusion: false
+        evidence_selector: false
+        fallback_outcome: false
+        citation_check: false
+        citation_validation: false
+        answer_generation: false
+        finalize: false
   deep-research:
     working-set:
       store: ${LATTICE_DEEP_RESEARCH_WORKING_SET_STORE:redis}

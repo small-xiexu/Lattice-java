@@ -26,7 +26,8 @@ class CitationCheckServiceTests {
     void shouldCheckClaimsAndAggregateCoverage() {
         CitationCheckService citationCheckService = new CitationCheckService(
                 new CitationExtractor(),
-                new FixedCitationValidator()
+                new FixedCitationValidator(),
+                null
         );
 
         CitationCheckReport report = citationCheckService.check("""
@@ -56,7 +57,8 @@ class CitationCheckServiceTests {
     void shouldRepairDemotedAndNoCitationClaims() {
         CitationCheckService citationCheckService = new CitationCheckService(
                 new CitationExtractor(),
-                new FixedCitationValidator()
+                new FixedCitationValidator(),
+                null
         );
         String answer = """
                 支付路由采用标准链路 [[unknown-article]]
@@ -79,7 +81,8 @@ class CitationCheckServiceTests {
     void shouldCountProjectionMismatchAndUnusedProjectionWhenBundleProvided() {
         CitationCheckService citationCheckService = new CitationCheckService(
                 new CitationExtractor(),
-                new FixedCitationValidator()
+                new FixedCitationValidator(),
+                null
         );
         AnswerProjectionBundle answerProjectionBundle = new AnswerProjectionBundle(
                 "支付路由采用标准链路 [[payment-routing]]",
@@ -127,7 +130,8 @@ class CitationCheckServiceTests {
     void shouldFailClosedWhenProjectionBundleIsEmpty() {
         CitationCheckService citationCheckService = new CitationCheckService(
                 new CitationExtractor(),
-                new FixedCitationValidator()
+                new FixedCitationValidator(),
+                null
         );
         AnswerProjectionBundle answerProjectionBundle = new AnswerProjectionBundle(
                 "支付路由采用标准链路 [[payment-routing]]",
@@ -152,7 +156,8 @@ class CitationCheckServiceTests {
     void shouldDemoteAmbiguousActiveProjectionLiteral() {
         CitationCheckService citationCheckService = new CitationCheckService(
                 new CitationExtractor(),
-                new FixedCitationValidator()
+                new FixedCitationValidator(),
+                null
         );
         AnswerProjectionBundle answerProjectionBundle = new AnswerProjectionBundle(
                 "支付路由采用标准链路 [[payment-routing]]",
@@ -198,7 +203,8 @@ class CitationCheckServiceTests {
     void shouldRejectProjectionWithoutAnchorId() {
         CitationCheckService citationCheckService = new CitationCheckService(
                 new CitationExtractor(),
-                new FixedCitationValidator()
+                new FixedCitationValidator(),
+                null
         );
         AnswerProjectionBundle answerProjectionBundle = new AnswerProjectionBundle(
                 "支付路由采用标准链路 [[payment-routing]]",
@@ -230,7 +236,8 @@ class CitationCheckServiceTests {
     void shouldRejectProjectionSourceTypeMismatch() {
         CitationCheckService citationCheckService = new CitationCheckService(
                 new CitationExtractor(),
-                new FixedCitationValidator()
+                new FixedCitationValidator(),
+                null
         );
         AnswerProjectionBundle answerProjectionBundle = new AnswerProjectionBundle(
                 "支付路由采用标准链路 [[payment-routing]]",
@@ -262,7 +269,8 @@ class CitationCheckServiceTests {
     void shouldNotTreatUnusedProjectionAsProjectionMismatch() {
         CitationCheckService citationCheckService = new CitationCheckService(
                 new CitationExtractor(),
-                new FixedCitationValidator()
+                new FixedCitationValidator(),
+                null
         );
         AnswerProjectionBundle answerProjectionBundle = new AnswerProjectionBundle(
                 "支付路由采用标准链路 [[payment-routing]]",
@@ -308,7 +316,8 @@ class CitationCheckServiceTests {
     void shouldAppendProjectionHistoryWhenRepairRemovesFailedLiteral() {
         CitationCheckService citationCheckService = new CitationCheckService(
                 new CitationExtractor(),
-                new FixedCitationValidator()
+                new FixedCitationValidator(),
+                null
         );
         AnswerProjectionBundle answerProjectionBundle = new AnswerProjectionBundle(
                 "退款一定会触发人工复核 [[unknown-article]]",
@@ -350,7 +359,8 @@ class CitationCheckServiceTests {
     void shouldTreatSkippedClaimWithCitationAsCovered() {
         CitationCheckService citationCheckService = new CitationCheckService(
                 new CitationExtractor(),
-                new SkipNoHardFactCitationValidator()
+                new SkipNoHardFactCitationValidator(),
+                null
         );
 
         CitationCheckReport report = citationCheckService.check("""
@@ -367,7 +377,7 @@ class CitationCheckServiceTests {
     private static class FixedCitationValidator extends CitationValidator {
 
         private FixedCitationValidator() {
-            super(null, null);
+            super(null, null, null, null);
         }
 
         @Override
@@ -409,7 +419,7 @@ class CitationCheckServiceTests {
     private static class SkipNoHardFactCitationValidator extends CitationValidator {
 
         private SkipNoHardFactCitationValidator() {
-            super(null, null);
+            super(null, null, null, null);
         }
 
         @Override

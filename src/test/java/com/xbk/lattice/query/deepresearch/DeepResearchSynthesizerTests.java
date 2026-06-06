@@ -249,7 +249,8 @@ class DeepResearchSynthesizerTests {
 
         private NoopCitationCheckService() {
             super(new com.xbk.lattice.query.citation.CitationExtractor(),
-                    new com.xbk.lattice.query.citation.CitationValidator(null, null));
+                    new com.xbk.lattice.query.citation.CitationValidator(null, null, null, null),
+                    null);
         }
 
         @Override
