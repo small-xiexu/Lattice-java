@@ -6,6 +6,7 @@ import com.alibaba.cloud.ai.graph.action.AsyncNodeAction;
 import com.xbk.lattice.compiler.graph.node.AnalyzeBatchesNode;
 import com.xbk.lattice.compiler.graph.node.CaptureRepoSnapshotNode;
 import com.xbk.lattice.compiler.graph.node.CompileNewArticlesNode;
+import com.xbk.lattice.compiler.graph.node.BuildLightweightArticlesNode;
 import com.xbk.lattice.compiler.graph.node.EnhanceExistingArticlesNode;
 import com.xbk.lattice.compiler.graph.node.ExtractAstGraphNode;
 import com.xbk.lattice.compiler.graph.node.FinalizeJobNode;
@@ -61,6 +62,8 @@ public class CompileGraphDefinitionFactory {
 
     private final CompileNewArticlesNode compileNewArticlesNode;
 
+    private final BuildLightweightArticlesNode buildLightweightArticlesNode;
+
     private final ReviewArticlesNode reviewArticlesNode;
 
     private final FixReviewIssuesNode fixReviewIssuesNode;
@@ -100,6 +103,7 @@ public class CompileGraphDefinitionFactory {
      * @param planChangesNode 增量规划节点
      * @param enhanceExistingArticlesNode 增强既有文章节点
      * @param compileNewArticlesNode 编译新文章节点
+     * @param buildLightweightArticlesNode 构建轻量文章节点
      * @param reviewArticlesNode 审查文章节点
      * @param fixReviewIssuesNode 修复审查问题节点
      * @param persistArticlesNode 落库文章节点
@@ -126,6 +130,7 @@ public class CompileGraphDefinitionFactory {
             PlanChangesNode planChangesNode,
             EnhanceExistingArticlesNode enhanceExistingArticlesNode,
             CompileNewArticlesNode compileNewArticlesNode,
+            BuildLightweightArticlesNode buildLightweightArticlesNode,
             ReviewArticlesNode reviewArticlesNode,
             FixReviewIssuesNode fixReviewIssuesNode,
             PersistArticlesNode persistArticlesNode,
@@ -151,6 +156,7 @@ public class CompileGraphDefinitionFactory {
         this.planChangesNode = planChangesNode;
         this.enhanceExistingArticlesNode = enhanceExistingArticlesNode;
         this.compileNewArticlesNode = compileNewArticlesNode;
+        this.buildLightweightArticlesNode = buildLightweightArticlesNode;
         this.reviewArticlesNode = reviewArticlesNode;
         this.fixReviewIssuesNode = fixReviewIssuesNode;
         this.persistArticlesNode = persistArticlesNode;
@@ -185,6 +191,7 @@ public class CompileGraphDefinitionFactory {
         stateGraph.addNode("plan_changes", AsyncNodeAction.node_async(planChangesNode::execute));
         stateGraph.addNode("enhance_existing_articles", AsyncNodeAction.node_async(enhanceExistingArticlesNode::execute));
         stateGraph.addNode("compile_new_articles", AsyncNodeAction.node_async(compileNewArticlesNode::execute));
+        stateGraph.addNode("build_lightweight_articles", AsyncNodeAction.node_async(buildLightweightArticlesNode::execute));
         stateGraph.addNode("review_articles", AsyncNodeAction.node_async(reviewArticlesNode::execute));
         stateGraph.addNode("fix_review_issues", AsyncNodeAction.node_async(fixReviewIssuesNode::execute));
         stateGraph.addNode("persist_articles", AsyncNodeAction.node_async(persistArticlesNode::execute));
@@ -210,7 +217,8 @@ public class CompileGraphDefinitionFactory {
                 )),
                 Map.of(
                         "plan_changes", "plan_changes",
-                        "compile_new_articles", "compile_new_articles"
+                        "compile_new_articles", "compile_new_articles",
+                        "build_lightweight_articles", "build_lightweight_articles"
                 )
         );
         stateGraph.addConditionalEdges(
@@ -221,11 +229,13 @@ public class CompileGraphDefinitionFactory {
                 Map.of(
                         "finalize_job", "finalize_job",
                         "enhance_existing_articles", "enhance_existing_articles",
-                        "compile_new_articles", "compile_new_articles"
+                        "compile_new_articles", "compile_new_articles",
+                        "build_lightweight_articles", "build_lightweight_articles"
                 )
         );
         stateGraph.addEdge("enhance_existing_articles", "compile_new_articles");
         stateGraph.addEdge("compile_new_articles", "review_articles");
+        stateGraph.addEdge("build_lightweight_articles", "persist_articles");
         stateGraph.addConditionalEdges(
                 "review_articles",
                 AsyncEdgeAction.edge_async(state -> reviewDecisionPolicy.decide(

@@ -16,6 +16,10 @@ public class CompileExecutionRequest {
 
     public static final String REVIEW_MODE_LLM = "LLM";
 
+    public static final String CONTENT_PROFILE_DOCUMENT = "DOCUMENT";
+
+    public static final String CONTENT_PROFILE_CODE_LIGHT = "CODE_LIGHT";
+
     private final String jobId;
 
     private final Path sourceDir;
@@ -31,6 +35,8 @@ public class CompileExecutionRequest {
     private final Long sourceSyncRunId;
 
     private final String reviewMode;
+
+    private final String contentProfile;
 
     /**
      * 创建编译执行请求。
@@ -52,7 +58,7 @@ public class CompileExecutionRequest {
             String sourceCode,
             Long sourceSyncRunId
     ) {
-        this(jobId, sourceDir, incremental, orchestrationMode, sourceId, sourceCode, sourceSyncRunId, null);
+        this(jobId, sourceDir, incremental, orchestrationMode, sourceId, sourceCode, sourceSyncRunId, null, null);
     }
 
     /**
@@ -77,6 +83,33 @@ public class CompileExecutionRequest {
             Long sourceSyncRunId,
             String reviewMode
     ) {
+        this(jobId, sourceDir, incremental, orchestrationMode, sourceId, sourceCode, sourceSyncRunId, reviewMode, null);
+    }
+
+    /**
+     * 创建编译执行请求。
+     *
+     * @param jobId 作业标识
+     * @param sourceDir 源目录
+     * @param incremental 是否增量编译
+     * @param orchestrationMode 编排模式
+     * @param sourceId 资料源主键
+     * @param sourceCode 资料源编码
+     * @param sourceSyncRunId 资料源同步运行主键
+     * @param reviewMode 审查模式
+     * @param contentProfile 内容画像
+     */
+    public CompileExecutionRequest(
+            String jobId,
+            Path sourceDir,
+            boolean incremental,
+            String orchestrationMode,
+            Long sourceId,
+            String sourceCode,
+            Long sourceSyncRunId,
+            String reviewMode,
+            String contentProfile
+    ) {
         this.jobId = jobId;
         this.sourceDir = sourceDir;
         this.incremental = incremental;
@@ -85,6 +118,7 @@ public class CompileExecutionRequest {
         this.sourceCode = sourceCode;
         this.sourceSyncRunId = sourceSyncRunId;
         this.reviewMode = normalizeReviewMode(reviewMode);
+        this.contentProfile = normalizeContentProfile(contentProfile);
     }
 
     /**
@@ -115,6 +149,33 @@ public class CompileExecutionRequest {
             return REVIEW_MODE_LLM;
         }
         return normalizeReviewMode(reviewMode);
+    }
+
+    /**
+     * 规范化内容画像。
+     *
+     * @param contentProfile 原始内容画像
+     * @return 规范化内容画像
+     */
+    public static String normalizeContentProfile(String contentProfile) {
+        if (contentProfile == null || contentProfile.isBlank()) {
+            return CONTENT_PROFILE_DOCUMENT;
+        }
+        String normalized = contentProfile.trim().toUpperCase(Locale.ROOT).replace('-', '_');
+        if (CONTENT_PROFILE_CODE_LIGHT.equals(normalized)) {
+            return CONTENT_PROFILE_CODE_LIGHT;
+        }
+        return CONTENT_PROFILE_DOCUMENT;
+    }
+
+    /**
+     * 判断是否为 CODE_LIGHT 内容画像。
+     *
+     * @param contentProfile 内容画像
+     * @return 是否为 CODE_LIGHT
+     */
+    public static boolean isCodeLightProfile(String contentProfile) {
+        return CONTENT_PROFILE_CODE_LIGHT.equals(normalizeContentProfile(contentProfile));
     }
 
     /**
@@ -197,5 +258,14 @@ public class CompileExecutionRequest {
      */
     public String getReviewMode() {
         return reviewMode;
+    }
+
+    /**
+     * 返回内容画像。
+     *
+     * @return 内容画像
+     */
+    public String getContentProfile() {
+        return contentProfile;
     }
 }

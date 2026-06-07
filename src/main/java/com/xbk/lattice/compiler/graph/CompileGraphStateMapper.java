@@ -36,6 +36,7 @@ public class CompileGraphStateMapper {
         state.setCompileMode(readString(stateMap, CompileGraphStateKeys.COMPILE_MODE));
         state.setOrchestrationMode(readString(stateMap, CompileGraphStateKeys.ORCHESTRATION_MODE));
         state.setReviewMode(readString(stateMap, CompileGraphStateKeys.REVIEW_MODE));
+        state.setContentProfile(readString(stateMap, CompileGraphStateKeys.CONTENT_PROFILE));
         state.setRawSourcesRef(readString(stateMap, CompileGraphStateKeys.RAW_SOURCES_REF));
         state.setGroupedSourcesRef(readString(stateMap, CompileGraphStateKeys.GROUPED_SOURCES_REF));
         state.setSourceBatchesRef(readString(stateMap, CompileGraphStateKeys.SOURCE_BATCHES_REF));
@@ -101,6 +102,7 @@ public class CompileGraphStateMapper {
         values.put(CompileGraphStateKeys.COMPILE_MODE, state.getCompileMode());
         values.put(CompileGraphStateKeys.ORCHESTRATION_MODE, state.getOrchestrationMode());
         values.put(CompileGraphStateKeys.REVIEW_MODE, state.getReviewMode());
+        values.put(CompileGraphStateKeys.CONTENT_PROFILE, state.getContentProfile());
         values.put(CompileGraphStateKeys.RAW_SOURCES_REF, state.getRawSourcesRef());
         values.put(CompileGraphStateKeys.GROUPED_SOURCES_REF, state.getGroupedSourcesRef());
         values.put(CompileGraphStateKeys.SOURCE_BATCHES_REF, state.getSourceBatchesRef());

@@ -1,5 +1,6 @@
 package com.xbk.lattice.compiler.graph;
 
+import com.xbk.lattice.compiler.service.CompileExecutionRequest;
 import com.xbk.lattice.compiler.service.CompileOrchestrationModes;
 import org.springframework.stereotype.Component;
 
@@ -20,6 +21,12 @@ public class CompileGraphConditions {
      * @return 条件路由键
      */
     public String routeAfterMerge(CompileGraphState state) {
+        if (CompileExecutionRequest.isCodeLightProfile(state.getContentProfile())) {
+            if ("incremental".equalsIgnoreCase(state.getCompileMode())) {
+                return "plan_changes";
+            }
+            return "build_lightweight_articles";
+        }
         if ("incremental".equalsIgnoreCase(state.getCompileMode())) {
             return "plan_changes";
         }
@@ -35,6 +42,14 @@ public class CompileGraphConditions {
     public String routeAfterPlanChanges(CompileGraphState state) {
         if (state.isNothingToDo()) {
             return "finalize_job";
+        }
+        if (CompileExecutionRequest.isCodeLightProfile(state.getContentProfile())) {
+            if (state.isHasCreates()) {
+                return "build_lightweight_articles";
+            }
+            if (state.isHasEnhancements()) {
+                return "enhance_existing_articles";
+            }
         }
         if (state.isHasEnhancements()) {
             return "enhance_existing_articles";

@@ -438,7 +438,8 @@ public class CompileJobService {
                     compileJobRecord.getSourceId(),
                     knowledgeSource == null ? null : knowledgeSource.getSourceCode(),
                     compileJobRecord.getSourceSyncRunId(),
-                    compileJobRecord.getReviewMode()
+                    compileJobRecord.getReviewMode(),
+                    knowledgeSource == null ? null : knowledgeSource.getContentProfile()
             );
             CompileResult compileResult = compileOrchestratorRegistry.execute(executionRequest);
             compileJobJdbcRepository.markSucceeded(jobId, compileResult.getPersistedCount(), OffsetDateTime.now());

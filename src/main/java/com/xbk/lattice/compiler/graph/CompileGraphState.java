@@ -42,6 +42,8 @@ public class CompileGraphState {
     private String orchestrationMode;
     /** 审查模式。 */
     private String reviewMode;
+    /** 内容画像（DOCUMENT / CODE_LIGHT）。 */
+    private String contentProfile;
 
     // ── 阶段工作集引用 ──
     private String rawSourcesRef;

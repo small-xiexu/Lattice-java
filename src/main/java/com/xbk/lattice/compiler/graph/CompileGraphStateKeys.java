@@ -31,6 +31,8 @@ public final class CompileGraphStateKeys {
 
     public static final String REVIEW_MODE = "reviewMode";
 
+    public static final String CONTENT_PROFILE = "contentProfile";
+
     public static final String RAW_SOURCES_REF = "rawSourcesRef";
 
     public static final String GROUPED_SOURCES_REF = "groupedSourcesRef";

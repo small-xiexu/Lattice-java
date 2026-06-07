@@ -81,6 +81,7 @@ public class StateGraphCompileOrchestrator implements CompileOrchestrator {
             initialState.setSourceId(executionRequest.getSourceId());
             initialState.setSourceCode(executionRequest.getSourceCode());
             initialState.setSourceSyncRunId(executionRequest.getSourceSyncRunId());
+            initialState.setContentProfile(executionRequest.getContentProfile());
             initialState.setTraceId(resolveCurrentMdcValue("traceId"));
             initialState.setSpanId(resolveCurrentMdcValue("spanId"));
             initialState.setRootTraceId(resolveRootTraceId(initialState.getTraceId()));
