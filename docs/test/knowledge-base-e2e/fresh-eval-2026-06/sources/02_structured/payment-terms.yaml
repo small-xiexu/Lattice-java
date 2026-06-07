@@ -1,0 +1,39 @@
+# 付款条款结构化配置
+# 来源：IT-PROC-2026-0042 合同第三条 + 补充协议第二条
+# 注意：补充协议已将预付款从 30% 改为 50%，取消尾款
+
+payment_terms:
+  - milestone: "合同签订"
+    percentage: 50
+    amount: 250000
+    due_days: 5
+    responsible: "甲方"
+    invoice_required: true
+
+  - milestone: "验收合格"
+    percentage: 50
+    amount: 250000
+    due_days: 20
+    responsible: "甲方"
+    invoice_required: true
+
+contract_total: 500000
+currency: "CNY"
+invoice_type: "增值税专用发票"
+
+late_penalty:
+  rate_percent: 0.05
+  basis: "per_day"
+  cap_percent: 10
+  description: "每延期一日按合同总金额的万分之五支付违约金，总额不超过合同总金额的 10%"
+
+buyer_late_penalty:
+  rate_percent: 0.03
+  basis: "per_day"
+  description: "甲方逾期付款，每逾期一日按逾期金额的万分之三支付违约金"
+
+warranty:
+  duration_months: 48
+  response_hours: 4
+  onsite_hours: 24
+  repair_hours: 72
