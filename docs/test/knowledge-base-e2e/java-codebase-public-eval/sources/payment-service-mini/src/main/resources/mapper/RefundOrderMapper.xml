@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.payment.mapper.RefundOrderMapper">
+
+    <resultMap id="RefundOrderMap" type="com.example.payment.domain.RefundOrder">
+        <id column="id" property="id"/>
+        <result column="refund_id" property="refundId"/>
+        <result column="order_id" property="orderId"/>
+        <result column="refund_amount" property="refundAmount"/>
+        <result column="fee_amount" property="feeAmount"/>
+        <result column="reason" property="reason"/>
+        <result column="status" property="status"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <select id="selectByRefundId" resultMap="RefundOrderMap">
+        SELECT id, refund_id, order_id, refund_amount, fee_amount,
+               reason, status, created_at
+        FROM refund_orders
+        WHERE refund_id = #{refundId}
+    </select>
+</mapper>

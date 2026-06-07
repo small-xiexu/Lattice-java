@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/payment_dev?useSSL=false&serverTimezone=UTC
+    username: dev_user
+    password: dev_pass_123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  redis:
+    host: localhost
+
+logging:
+  level:
+    com.example.payment: DEBUG
+    com.example.payment.mapper: TRACE

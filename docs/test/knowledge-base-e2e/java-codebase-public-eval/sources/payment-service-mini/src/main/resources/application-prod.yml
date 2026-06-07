@@ -1,0 +1,18 @@
+spring:
+  datasource:
+    primary:
+      url: jdbc:mysql://prod-db-master.internal:3306/payment_prod?useSSL=true&serverTimezone=UTC
+      username: prod_user
+      password: ${DB_PASSWORD}
+    secondary:
+      url: jdbc:mysql://prod-db-slave.internal:3306/payment_prod?useSSL=true&serverTimezone=UTC
+      username: prod_readonly
+      password: ${DB_READONLY_PASSWORD}
+  redis:
+    host: prod-redis-cluster.internal
+    port: 6380
+
+logging:
+  level:
+    com.example.payment: WARN
+    com.example.payment.api: INFO

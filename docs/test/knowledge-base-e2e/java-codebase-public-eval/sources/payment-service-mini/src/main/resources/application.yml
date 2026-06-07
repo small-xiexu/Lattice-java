@@ -1,0 +1,32 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: payment-service-mini
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: 6379
+    timeout: 3000ms
+    lettuce:
+      pool:
+        max-active: 20
+        max-idle: 10
+        min-idle: 5
+
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.example.payment.domain
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+payment:
+  refund-window-minutes: 30
+  partial-refund-window-minutes: 120
+  partial-refund-fee-percent: 5
+  max-order-amount: 50000
+  idempotency-key-ttl-seconds: 86400
