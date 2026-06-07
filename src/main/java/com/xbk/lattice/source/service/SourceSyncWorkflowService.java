@@ -21,7 +21,7 @@ import java.util.Locale;
 /**
  * 资料源同步工作流服务。
  *
- * 职责：承载 Git 资料源创建、校验与同步编排；UPLOAD 仍由 SourceUploadService 处理
+ * 职责：承载 GIT / INTERNAL_MIRROR 资料源创建、校验与同步编排；UPLOAD 仍由 SourceUploadService 处理
  *
  * @author xiexu
  */
@@ -62,6 +62,17 @@ public class SourceSyncWorkflowService {
     @Transactional(rollbackFor = Exception.class)
     public KnowledgeSource createGitSource(AdminSourceCreateRequest request) {
         return createSource(request, "GIT");
+    }
+
+    /**
+     * 创建内部镜像资料源。
+     *
+     * @param request 请求
+     * @return 资料源详情
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public KnowledgeSource createInternalMirrorSource(AdminSourceCreateRequest request) {
+        return createSource(request, "INTERNAL_MIRROR");
     }
 
     /**
@@ -142,6 +153,10 @@ public class SourceSyncWorkflowService {
             if (StringUtils.hasText(request.getCredentialRef())) {
                 configNode.put("credentialRef", request.getCredentialRef().trim());
             }
+        }
+        else if ("INTERNAL_MIRROR".equals(sourceType)) {
+            configNode.put("mirrorRootRef", requireText(request.getMirrorRootRef(), "mirrorRootRef"));
+            configNode.put("projectPath", requireText(request.getProjectPath(), "projectPath"));
         }
         else {
             throw new IllegalArgumentException("unsupported source type: " + sourceType);

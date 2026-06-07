@@ -49,7 +49,7 @@ public class AdminSourceController {
 
     private static final Set<String> ALLOWED_SYNC_MODES = Set.of("AUTO", "FULL", "INCREMENTAL");
 
-    private static final Set<String> ALLOWED_SOURCE_TYPES = Set.of("UPLOAD", "GIT");
+    private static final Set<String> ALLOWED_SOURCE_TYPES = Set.of("UPLOAD", "GIT", "INTERNAL_MIRROR");
 
     private final SourceService sourceService;
 
@@ -131,6 +131,17 @@ public class AdminSourceController {
     @PostMapping("/git")
     public AdminKnowledgeSourceDetailResponse createGitSource(@RequestBody AdminSourceCreateRequest request) {
         return toDetailResponse(sourceSyncWorkflowService.createGitSource(request));
+    }
+
+    /**
+     * 创建内部镜像资料源。
+     *
+     * @param request 创建请求
+     * @return 资料源详情
+     */
+    @PostMapping("/internal-mirror")
+    public AdminKnowledgeSourceDetailResponse createInternalMirrorSource(@RequestBody AdminSourceCreateRequest request) {
+        return toDetailResponse(sourceSyncWorkflowService.createInternalMirrorSource(request));
     }
 
     /**
@@ -519,7 +530,7 @@ public class AdminSourceController {
          */
         private String primaryDocumentTitle;
 
-        /** 资料源类型（{@code UPLOAD} / {@code GIT}）。 */
+        /** 资料源类型（{@code UPLOAD} / {@code GIT} / {@code INTERNAL_MIRROR}）。 */
         private String sourceType;
 
         /** 内容画像（如 {@code code} / {@code document} / {@code mixed}）。 */
@@ -575,7 +586,7 @@ public class AdminSourceController {
         /** 主要文档标题（从 metadataJson.bundleSummary.titleHints 提取）。 */
         private String primaryDocumentTitle;
 
-        /** 资料源类型（{@code UPLOAD} / {@code GIT}）。 */
+        /** 资料源类型（{@code UPLOAD} / {@code GIT} / {@code INTERNAL_MIRROR}）。 */
         private String sourceType;
 
         /** 内容画像。 */

@@ -3,7 +3,8 @@ package com.xbk.lattice.api.admin;
 /**
  * 资料源创建请求。
  *
- * <p>承载 Git 资料源创建所需的配置参数，由 Spring MVC 从 JSON 请求体绑定。
+ * <p>承载资料源创建所需的配置参数，由 Spring MVC 从 JSON 请求体绑定。
+ * 支持 UPLOAD / GIT / INTERNAL_MIRROR 三种类型。
  * remoteUrl 可能包含 access token（如 https://token@host/repo.git），
  * 禁止对此类加 {@code @Data} 或任何会在 toString() 中输出该字段的注解。
  *
@@ -72,6 +73,21 @@ public class AdminSourceCreateRequest {
      */
     private String credentialRef;
 
+    /**
+     * 镜像根引用名（INTERNAL_MIRROR 专用）。
+     *
+     * <p>对应 lattice.source.admin.mirror-roots 中的 key。
+     * 不允许直接传绝对路径。</p>
+     */
+    private String mirrorRootRef;
+
+    /**
+     * 镜像根下的相对项目路径（INTERNAL_MIRROR 专用）。
+     *
+     * <p>必须为相对路径，不允许含 .. 或绝对路径。</p>
+     */
+    private String projectPath;
+
     public String getSourceCode() {
         return sourceCode;
     }
@@ -134,5 +150,21 @@ public class AdminSourceCreateRequest {
 
     public void setCredentialRef(String credentialRef) {
         this.credentialRef = credentialRef;
+    }
+
+    public String getMirrorRootRef() {
+        return mirrorRootRef;
+    }
+
+    public void setMirrorRootRef(String mirrorRootRef) {
+        this.mirrorRootRef = mirrorRootRef;
+    }
+
+    public String getProjectPath() {
+        return projectPath;
+    }
+
+    public void setProjectPath(String projectPath) {
+        this.projectPath = projectPath;
     }
 }

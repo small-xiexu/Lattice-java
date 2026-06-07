@@ -3,3 +3,6 @@ lattice:
   source:
     admin:
       staging-root-dir: ${LATTICE_SOURCE_ADMIN_STAGING_ROOT_DIR:${java.io.tmpdir}/lattice-source-sync}
+      # 内部镜像根 allowlist：key=镜像引用名，value=服务器绝对路径
+      # 未配置时不允许创建 INTERNAL_MIRROR 资料源
+      mirror-roots: {}
