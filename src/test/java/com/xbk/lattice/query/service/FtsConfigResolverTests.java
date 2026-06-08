@@ -14,7 +14,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FtsConfigResolverTests {
 
     /**
-     * 验证检测到首选 ts config 时，会优先启用增强配置。
+     * 验证查询端 ts config 固定为 simple，与写入端 to_tsvector('simple', ...) 保持一致。
+     * 原 preferred-ts-config 优先行为已移除，避免查询端与写入端 ts config 不匹配
+     * 导致结构化字段值（如 "A"、"SUP-001"、"2.5"）FTS 匹配失败。
      */
     @Test
     void shouldUsePreferredTsConfigWhenCapabilityExists() {
@@ -27,7 +29,7 @@ class FtsConfigResolverTests {
                 new FixedSearchCapabilityService(true, true, true)
         );
 
-        assertThat(ftsConfigResolver.resolveArticleTsConfig()).isEqualTo("lattice_jieba_copy");
+        assertThat(ftsConfigResolver.resolveArticleTsConfig()).isEqualTo("simple");
     }
 
     /**

@@ -123,6 +123,43 @@ public final class LexicalSearchTokenBudget {
     }
 
     /**
+     * 从 LIKE token 构建 FTS OR 查询文本。
+     *
+     * 将 token 按 to_tsvector('simple') 的分词边界拆分后以 | 连接，
+     * 确保 tsquery 的每个子 token 与索引中的 token 精确匹配。
+     * 当 likeTokens 为空时回退到 question 文本的同样归一化处理。
+     *
+     * @param question 原始查询问题（回退用）
+     * @param likeTokens 已选择的 LIKE token
+     * @return OR 连接的 FTS 查询文本
+     */
+    public static String buildFtsQueryText(String question, List<String> likeTokens) {
+        if (likeTokens != null && !likeTokens.isEmpty()) {
+            List<String> parts = new ArrayList<>();
+            for (String token : likeTokens) {
+                for (String part : token.split("[^\\p{L}\\p{N}]+")) {
+                    if (!part.isEmpty()) {
+                        parts.add(part.toLowerCase(Locale.ROOT));
+                    }
+                }
+            }
+            if (!parts.isEmpty()) {
+                return String.join(" | ", parts);
+            }
+        }
+        if (question == null || question.isBlank()) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        for (String part : question.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+")) {
+            if (!part.isEmpty()) {
+                parts.add(part);
+            }
+        }
+        return parts.isEmpty() ? question.toLowerCase(Locale.ROOT).trim() : String.join(" | ", parts);
+    }
+
+    /**
      * 判断 token 是否为数字。
      *
      * @param token token

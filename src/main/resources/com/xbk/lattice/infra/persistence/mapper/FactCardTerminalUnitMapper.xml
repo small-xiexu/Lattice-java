@@ -193,7 +193,7 @@
 
     <select id="searchLexical" resultMap="LexicalSearchRecordResultMap">
         with query as (
-            select plainto_tsquery(cast(#{tsConfig} as regconfig), #{question}) as tsq
+            select to_tsquery(cast(#{tsConfig} as regconfig), #{question}) as tsq
         )
         select unit.source_id,
                unit.terminal_unit_identity as item_key,

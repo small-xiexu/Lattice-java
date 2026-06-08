@@ -174,13 +174,14 @@ public class FactCardTerminalUnitJdbcRepository {
         if (!hasText(question) && normalizedTokens.isEmpty()) {
             return List.of();
         }
-        List<String> likePatterns = LexicalSearchTokenBudget.selectLikeTokens(normalizedTokens)
-                .stream()
+        List<String> likeTokens = LexicalSearchTokenBudget.selectLikeTokens(normalizedTokens);
+        List<String> likePatterns = likeTokens.stream()
                 .map(this::likePattern)
                 .toList();
+        String ftsQueryText = LexicalSearchTokenBudget.buildFtsQueryText(question, likeTokens);
         return factCardTerminalUnitMapper.searchLexical(
                 normalizeTsConfig(tsConfig),
-                question == null ? "" : question,
+                ftsQueryText,
                 likePatterns,
                 safeLimit(limit)
         );

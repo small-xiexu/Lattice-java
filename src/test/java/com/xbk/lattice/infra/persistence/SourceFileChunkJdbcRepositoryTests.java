@@ -165,8 +165,8 @@ class SourceFileChunkJdbcRepositoryTests {
         );
 
         assertThat(hits).isNotEmpty();
-        assertThat(hits.get(0).getItemKey()).isEqualTo("manual.md#1");
-        assertThat(hits.get(0).getContent()).contains("/alpha/beta");
+        assertThat(hits.get(0).getItemKey()).isEqualTo("manual.md#0");
+        assertThat(hits.get(0).getContent()).contains("alpha beta gamma");
     }
 
     /**

@@ -72,9 +72,10 @@ public class ContributionJdbcRepository {
         List<String> likePatterns = likeTokens.stream()
                 .map(this::likePattern)
                 .toList();
+        String ftsQueryText = LexicalSearchTokenBudget.buildFtsQueryText(question, likeTokens);
         return contributionMapper.searchLexical(
                 normalizeTsConfig(tsConfig),
-                question == null ? "" : question,
+                ftsQueryText,
                 likePatterns,
                 safeLimit(limit)
         );

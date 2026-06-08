@@ -40,23 +40,15 @@ public class FtsConfigResolver {
     /**
      * 解析文章检索使用的 ts config。
      *
-     * @return ts config 名称
+     * 始终返回 simple 以保持与写入端 to_tsvector('simple', ...) 一致。
+     * 写入端所有表的 search_tsv 列均使用 simple 配置生成，
+     * 若查询端使用不同配置（如 jiebacfg），会导致 tsquery 与 tsvector 的 token 化不匹配，
+     * 结构化字段值（如 "A"、"SUP-001"、"2.5"）以及中文字符级匹配均无法命中。
+     *
+     * @return ts config 名称，始终为 "simple"
      */
     public String resolveArticleTsConfig() {
-        QuerySearchProperties.FtsProperties ftsProperties = querySearchProperties.getFts();
-        String fallbackTsConfig = normalizeTsConfig(ftsProperties.getFallbackTsConfig());
-        if (!ftsProperties.isEnabled()) {
-            return fallbackTsConfig;
-        }
-
-        String preferredTsConfig = normalizeTsConfig(ftsProperties.getPreferredTsConfig());
-        if (preferredTsConfig.isBlank()) {
-            return fallbackTsConfig;
-        }
-        if (searchCapabilityService.supportsTextSearchConfig(preferredTsConfig)) {
-            return preferredTsConfig;
-        }
-        return fallbackTsConfig;
+        return "simple";
     }
 
     /**

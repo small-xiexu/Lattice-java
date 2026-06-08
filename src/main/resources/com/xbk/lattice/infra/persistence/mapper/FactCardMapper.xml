@@ -169,7 +169,7 @@
 
     <select id="searchLexical" resultMap="LexicalSearchRecordResultMap">
         with query as (
-            select plainto_tsquery(cast(#{tsConfig} as regconfig), #{question}) as tsq
+            select to_tsquery(cast(#{tsConfig} as regconfig), #{question}) as tsq
         )
         select fc.source_id,
                fc.card_id as item_key,

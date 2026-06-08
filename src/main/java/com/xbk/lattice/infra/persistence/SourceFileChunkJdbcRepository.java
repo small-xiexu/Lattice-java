@@ -199,9 +199,10 @@ public class SourceFileChunkJdbcRepository {
                 .filter(this::shouldScoreStructuredAssignment)
                 .map(this::structuredAssignmentPattern)
                 .toList();
+        String ftsQueryText = LexicalSearchTokenBudget.buildFtsQueryText(question, likeTokens);
         return sourceFileChunkMapper.searchLexical(
                 normalizeTsConfig(tsConfig),
-                question == null ? "" : question,
+                ftsQueryText,
                 likePatterns,
                 assignmentPatterns,
                 safeLimit(limit)
