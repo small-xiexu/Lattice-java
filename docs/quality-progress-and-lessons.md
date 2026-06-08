@@ -1,6 +1,6 @@
 # 项目质量打磨进度与踩坑台账
 
-更新时间：2026-06-05（mixed script token extraction 已提交 `062d391`；FS4b "B级" 搜索 0→2 结果，FS1-FS4 全部 PASS）
+更新时间：2026-06-08（HEAD `34394bd`；线 B FTS OR Query 已提交；PE4 线 B 提交后回归 PASS）
 
 本台账记录质量打磨、Query/SWIP eval、baseline 修复与多 agent 协作的当前状态。后续推进前先读本文件；阶段结论变化后必须回写。
 
@@ -14,7 +14,18 @@
 - SWIP BANK-SETTLEMENT focus snippet 主线：副作用复核已通过，结论为可保留。`swip_focus_snippet_patch_side_effect_review_report.md` 确认：redline BLOCKER=0，BANK-SETTLEMENT-001 三轮稳定 PASS，保护 case 三轮稳定 PASS，无新增稳定回归。
 - 报告 cleanup：本轮按 `report_cleanup_plan_after_bank_settlement_focus_snippet.md` 执行清理，删除 4 个过期中间报告，详见 `report_cleanup_after_bank_settlement_focus_snippet_result.md`。
 - 拆分提交与最终门禁（2026-05-31）：四个主题拆分提交（Phase 1I fused order + field alias enricher + SERVER_DIR source 移除 + admin SERVER_DIR 移除）已完成。最终门禁报告 `post_split_commits_final_gate_report.md` 确认：redline `BLOCKER=0`、mvn test `995/0/0/0`、四个拆分 commit 后工程基线 PASS。详见该报告。
-- 当前工作区剩余未提交：`docs/核心架构/模型绑定配置参考.md`（私有配置，永远排除）、`special_cases_report.md`（redline 输出，不提交）、`docs/plans/2026-05-31-模型契约注释与Lombok治理计划.md`、`docs/reports/model_contract_javadoc_lombok_plan_review_analysis_report.md`、`docs/reports/model_contract_javadoc_lombok_plan_review_analysis_report_v2.md`。
+- 当前工作区剩余未提交：`special_cases_report.md`（redline 输出，不提交）；未跟踪报告：`pe1_q2_acronym_*`（3 个缩略词分析，方案未实施）、`post_compiler_admin_fixes_report_archive_plan.md`（过期归档建议）、`post_s2_writer_title_preservation_*`（S2 状态报告，已被后续提交覆盖）、线 A StructuredQueryPlanner 实验报告（7 个，待恢复后处理）。
+- 线 B（FTS OR Query）已提交 `34394bd`：`LexicalSearchTokenBudget.buildFtsQueryText` 将 LIKE token 转为 OR 连接的 tsquery 文本，所有 6 个 FTS 通道的 JdbcRepository + Mapper XML 统一替换。**通用基础设施优化**，不绑定 PE5。redline `BLOCKER=0`，mvn test `BUILD SUCCESS`。详见 `pe5_line_b_fts_or_query_isolated_gate_report.md`、`pe5_line_b_fts_or_query_pre_commit_quality_review_report.md`。
+- PE4 线 B 提交后清库重建回归 PASS：Search 6/6、FG 3/3、Hallucination 0、Answer 10/12（FQ3/FQ4 PARTIAL 为 LLM 完整性而非线 B 引入）。确认线 B 对 PE1-PE4 无回归。详见 `pe4_post_line_b_fts_or_query_clean_rebuild_long_wait_gate_report.md`。
+- CODE_LIGHT contentProfile 已提交 `755c213`：新增 `CODE_LIGHT` 内容分析模式，用于轻量级代码索引。redline `BLOCKER=0`，mvn test `BUILD SUCCESS`。
+- INTERNAL_MIRROR source type 已提交 `d35d7ba`：新增 `INTERNAL_MIRROR` 源码仓库 source 类型，支持本地 Java 项目代码导入与 AST 图谱抽取。
+- Java Codebase Public Eval 资产包已提交 `d0f8200`：21 文件虚构 Spring Boot 项目 fixture（payment-service-mini），含 12 FQ + 6 FS + 3 FG。CODE_LIGHT 最小 runtime gate **专项 PASS**，但全量题集（12 FQ + 6 FS + 3 FG）尚未验收。
+- PE3 fresh-eval-2026-06 资产包已提交 `8942389`：5 文件采购合同/SLA/付款条款资料包（PDF×2 + YAML + XLSX + CSV），含 12 FQ + 6 FS + 3 FG。Acceptance **PASS**。
+- PE5 fresh-eval-2026-08 资产包已提交：5 文件供应链来料质检资料包（Markdown + YAML + XLSX + CSV + PDF），含 12 FQ + 6 FS（6 子项）+ 3 FG。题集一致性已修正。线 B（FTS OR Query）已提交 `34394bd`，PE4 线 B 提交后清库重建回归 PASS（Search 6/6、FG 3/3、Hallucination 0）。PE5 全量验收待 StructuredQueryPlanner（线 A）恢复后继续。evidence packing 试验已回滚，不作为当前状态。
+- PE1 Q2 轻量文档内容捕获修复已提交 `e974b6f`：`CompilerProperties.lightweightMaxContentLines` 从 8 增至 24 行，避免 PDF 小文档的中后段内容（如角色定义表）被截断。redline `BLOCKER=0`，全量保护无回归。详见 `pe1_q2_lightweight_small_doc_content_lines_fix_result_report.md`、`pe1_q2_lightweight_small_doc_runtime_gate_report.md`。
+- Admin 处理历史嵌套卡片修复已提交 `2b5ecea`：修复 `management-history-part.js` 缺失的 `</div>` 导致浏览器嵌套渲染。详见 `admin_processing_history_nested_card_fix_result_report.md`。
+- S2 Writer 标题保真修复已提交 `00237a9`：Writer system prompt 新增规则 14（源文档标题保真）+ `LatticePrompts.java` 机械同步。redline `BLOCKER=0`，mvn test `BUILD SUCCESS`。S2 搜索从 PARTIAL 变为 PASS（首次显示"下一步计划"作为 section anchor）。详见 `pe1_s2_writer_title_preservation_runtime_gate_report.md`。
+- 最新完整 Public Eval Gate（HEAD `00237a9`）：PE1 Answer Accuracy **11/12**（Q1 PARTIAL），PE2 Answer Accuracy **13/14**（FQ1 PARTIAL, FQ10 BLOCKED），PE1/PE2 Search Accuracy 均 **6/6**（首次全部 PASS），FALLBACK Citation **6/6 cov=1.0**，Hallucination **0**，Abstain **2/2 + 2/2**。结论：**PASS — 可进入内部试用**。详见 `docs/test/knowledge-base-e2e/post_s2_writer_title_preservation_current_head_full_eval_gate_report.md`。
 - mixed script token extraction 修复已提交 `062d391`：`QueryTokenExtractor` 新增 Han+Latin/数字混合脚本 token 提取及空白分隔短片段合并，`LexicalSearchTokenBudget` 补充混合短 token 正分。redline `BLOCKER=0`、定向测试 `QueryTokenExtractorTests=12/0/0/0` + `LexicalSearchTokenBudgetTests=7/0/0/0`、全量 `mvn test=1004/0/0/0`。FS4b "B级" 搜索 0→2 结果（PASS），"B 级" 搜索 2 结果（PASS），FS1-FS4 搜索 runtime 全部 PASS，保护性搜索"精密仪器""化学品分类存储"无回归。详见 `docs/test/knowledge-base-e2e/fresh-eval-2026-05/search_failures_s2_fs2_fs4b_analysis_report.md`、`mixed_script_token_extraction_fix_result_report.md`、`mixed_script_token_extraction_runtime_gate_report.md`。
 - QueryResponse 构造器收敛与字段契约注释已提交 `2888796`：类级 `@Getter`、唯一 `@JsonCreator` 全参构造器、`@Builder`、删除历史短构造器、所有调用点迁移为 builder。定向测试 34/0/0/0。DTO 分析报告 `dto_field_javadoc_lombok_refactor_analysis_report.md` 已随提交归档。`QuerySourceResponse` / `QueryArticleResponse` 已提交 `b38acdc`，后续全项目 DTO/domain/entity/config 契约治理统一按 `docs/plans/2026-05-31-模型契约注释与Lombok治理计划.md` 分批推进并回写。
 - compile review observability：后台可观测性改动已完成，API 与后台 UI 均已验证通过。验证报告见 `compile_review_observability_verification_report.md`，fix result report 见 `compile_review_observability_fix_result_report.md`。
@@ -89,8 +100,8 @@
 
 | 项 | 当前状态 | 说明 |
 |---|---|---|
-| redline | `BLOCKER=0` | 最新：`bash scripts/scan-redline.sh special_cases_report.md` 通过，汇总为 `BLOCKER=0`、`REVIEW=2096`、`ALLOWLIST=262`（mixed script 修复后）。 |
-| mvn test | `1004/0/0/0` | mixed script token extraction 修复后全量 `mvn test=1004/0/0/0` 通过。四个拆分 commit 后为 `995/0/0/0`。 |
+| redline | `BLOCKER=0` | HEAD `34394bd` 最新：`BLOCKER=0`。 |
+| mvn test | `BUILD SUCCESS` | HEAD `34394bd` 全量 mvn test `BUILD SUCCESS`。 |
 | main baseline | 阶段 gate 已通过 | `final_query_baseline_gate_report.md` 为 `9/10` 且 gate 通过；`phase12_final_clean_rebuild_gate_report.md` 为 `8/10` 且 6 项 gate 通过。 |
 | SWIP strict eval | 稳定区间 `15-17/23` | focus snippet patch 副作用复核三轮：16/23、17/23、15/23；BANK-SETTLEMENT-001 三轮稳定 PASS；保护 case 三轮稳定 PASS。详见 `swip_focus_snippet_patch_side_effect_review_report.md`。 |
 | 当前数据库状态 | Q6 验收 clean 库 | agentD 已重建 `ai-rag-knowledge.lattice` 并导入完整知识库验收资料；用户要求确认的 2 条 `needs_human_review` 已 approve 发布。当前计数：`source_files=6`、`articles=6`、`article_chunks=13`、`fact_cards=11`、`article_vector_index=6`、`article_chunk_vector_index=13`。该库用于 Q6 复验，不代表 SWIP clean 库或主 baseline 库。 |
@@ -128,6 +139,13 @@
 | FG1 qf=false builder 修复 | **runtime 验证通过；但 FG1 最终未收口** | agentD 已验证：`late_fee_per_day` 候选 qf 从 false 变 true，`tuQfPassed` 从 0 升到 4，说明 CJK bigram 重叠匹配已生效。残留问题是 FG1 场景下多个 terminal unit 候选 `ftmc=0`，最终仍由更高 fusedScore 的 `equipment_types[1].type = 精密仪器` 胜出。该断点属于 **FG1 的 fieldTokenMatchCount 对 CJK 碎片 token 不敏感**，与 FQ4 的正向 `ftmc` 平局 + fusedScore tie-break 仍是独立根因。详见 `fg1_qf_false_builder_fix_result_report.md`、`fg1_qf_false_builder_runtime_gate_report.md`。 |
 | FG1 ftmc=0 builder runtime gate | **未验证到目标候选；builder 路径本轮不可收口** | agentD 针对 `countFieldLevelTokenMatches()` 的 CJK bigram 修复做 runtime gate 后发现：`equipment_types[1].type = 精密仪器` 的 `ftmc` 从 0 升到 2，说明修复本身已生效；但 `late_fee_per_day` 本轮完全未进入 builder 候选池（tuTotal=4，无任何 `late_fee_per_day` 候选），因此无法判断目标候选 `ftmc` 是否从 0 升到 >=1。更关键的是，本轮 118 个 terminal units 中未生成中文 field aliases（"逾期"/"押金" 等均为 0 条），与上一轮 runtime 现场不一致。当前不能继续把 FG1 归因为 builder 内排序；最高优先级应转为 **field-alias-enricher / terminal unit 候选供给侧只读审计**。详见 `fg1_ftmc_zero_builder_runtime_gate_report.md`。 |
 | mixed script token extraction | **已提交 `062d391` + runtime gate PASS** | `QueryTokenExtractor` 新增 Han+Latin/数字混合脚本 token 提取；`LexicalSearchTokenBudget` 补充混合短 token 正分。redline `BLOCKER=0`，定向测试 `12+7=19/0/0/0`，全量 `mvn test=1004/0/0/0`。FS4b "B级" 0→2（PASS），"B 级" 2（PASS），FS1-FS4 搜索全部 PASS，保护性搜索无回归。详见 `mixed_script_token_extraction_fix_result_report.md`、`mixed_script_token_extraction_runtime_gate_report.md`。 |
+| CODE_LIGHT contentProfile | **已提交 `755c213` + runtime gate PASS** | 新增 `CODE_LIGHT` 内容分析模式，轻量级代码索引。redline `BLOCKER=0`，mvn test `BUILD SUCCESS`。 |
+| INTERNAL_MIRROR source type | **已提交 `d35d7ba`** | 新增 `INTERNAL_MIRROR` source 类型，支持本地 Java 项目代码导入与 AST 图谱抽取。 |
+| Java Codebase Public Eval | **资产已提交 `d0f8200`，全量题集待验收** | 21 文件 fixture 已提交。CODE_LIGHT runtime gate PASS。但 12 FQ + 6 FS + 3 FG 全量验收尚未执行。 |
+| PE3 fresh-eval-2026-06 | **已提交 `8942389` + acceptance PASS** | 采购合同/SLA/付款条款 5 文件资料包。AgentD acceptance 已通过。 |
+| PE1 + PE2 保护回归 | PE1/PE2 均已通过 | Search 双 6/6、Hallucination=0、FALLBACK Citation 全 1.0。`post_s2_writer_title_preservation_current_head_full_eval_gate_report.md`。 |
+| 线 B FTS OR Query | **已提交 `34394bd` + gate PASS** | `buildFtsQueryText` 通用 FTS tsquery 优化。隔离验证 PASS、pre-commit 复核通过、PE5 清库重建 gate PASS。`pe5_line_b_fts_or_query_*.md`。 |
+| PE4 线 B 提交后回归 | **PASS** | Search 6/6、FG 3/3、Hallucination 0、Answer 10/12。确认线 B 无回归。`pe4_post_line_b_fts_or_query_clean_rebuild_long_wait_gate_report.md`。 |
 
 ## 多 Agent 当前职责
 
@@ -194,6 +212,16 @@
 - Phase 1D/1E/1F/1G 共 22 个历史报告为 untracked 状态，属于中间实验/验证报告，待后续归档评估后决定是否提交或清理。
 - Mixed script token extraction 修复是通用 Unicode script + 空白/标点切分 + 长度规则，不是 FS4b/"B级" case 特判。规则同等适用于任意 Han + Latin/数字短混合脚本片段。
 - FS4b 不再是 open issue；S2 title/anchor 与 FS2 ranking 仍为独立问题，不在本轮 mixed script 修复范围。
+- Compiler lightweight doc 内容捕获 8→24 行是通用参数变更：不影响 Writer context 预算，只确保 PDF 小文档的中后段内容完整进入 Writer prompt。无业务特判。
+- S2 Writer 标题保真 prompt 修复是通用规则（规则 14）：不依赖具体文档标题文本、sourceTitle 或题号。验证确认 S2 从 PARTIAL→PASS（"下一步计划"首次出现在搜索结果 anchor 中）。
+- 当前 HEAD `00237a9` 已具备进入内部试用的质量基线：PE1 Answer 11/12、PE2 Answer 13/14、Search 双 6/6、Hallucination=0、FALLBACK Citation 全 1.0。
+- 剩余 Q1/FQ1 PARTIAL 为 LLM 回答完整性问题（内容正确但"当前证据不足"标记偏多），建议后续通过 prompt 优化而非代码修改。
+- Q2 SL/TL/IM 缩略词为已知 FTS tokenization 限制（全名查询 PASS），按已知限制处理。
+- FQ10 PDF BLOCKED 为独立 infra 问题（source name varchar(32) 限制），不阻塞内部试用。
+- CODE_LIGHT contentProfile 是通用编译参数：不绑定具体项目名、代码结构或业务域。INTERNAL_MIRROR source type 是通用 source 扩展。两者不涉及 query/answer/citation 主链。
+- PE3 验收通过说明系统在合同类文档的条款级定位、金额/百分比/期限提取、多文档冲突判断、SLA 表格查询、拒答等 8 项新能力上已达到 public eval 通过线。
+- Java Codebase Eval 资产已就绪，CODE_LIGHT 最小 runtime gate PASS，但 21 文件 fixture 的全量 Answer/Search/Citation 验收仍未执行。
+- PE4 fresh-eval-2026-07 仅有设计报告，尚未落地资料包或验收。
 
 ## 踩坑记录
 
@@ -257,6 +285,9 @@
 - 禁止无限修题：长期目标是 5+2 eval 闭环（public eval 发现 → 修通用能力 → 回归保护 → hidden eval 验收），不是逐题追 PASS。
 - 禁止继续在 mixed script token 上叠加 case 特判：修复已用 Unicode script + 空白/标点切分 + 长度实现通用规则；不得写入"B级"/"FS4b"/文件名/题号等业务标识。
 - 后续 Query/Search 修复仍必须先 redline、mvn test、baseline/runtime gate，不得跳过门禁直接修代码。
+- 禁止围绕 Q1/FQ1 PARTIAL 修改 AnswerGeneration/RRF/citation/fallback 主链代码：问题在 LLM 回答完整性和 prompt 优化，不在代码逻辑缺陷。
+- 禁止为 Q2 缩略词写 FTS tokenization 特判：全名查询已 PASS（cov=1.0），缩略词是已知通用限制，不是业务缺陷。
+- 内部试用阶段禁止在 AnswerGeneration/RRF/citation/fallback 主链新增 gate 式补丁；所有优化必须走 prompt、compile 抽取或通用检索参数调整。
 
 ## 下一步计划
 
@@ -295,6 +326,19 @@
 生产代码 scoped commits 已全部收口（item 30 + 已提交 commit 清单 + 四个拆分提交）。剩余未提交项主要是：docs/report 归档（Phase 1D/1E/1F/1G 历史报告 22 个，已审计全部建议归档）、私有配置（`docs/核心架构/模型绑定配置参考.md`，永远排除提交）与 redline 输出（`special_cases_report.md`，不建议提交）。S2 标题/anchor 搜索已完成只读归因与代码层修复，后续应由 agentD 做完整知识库端到端验收。
 
 58. （已完成）Mixed script token extraction 修复：`QueryTokenExtractor` 新增 Han+Latin/数字混合脚本 token 提取及空白分隔短片段合并；`LexicalSearchTokenBudget` 补充混合短 token 正分。已提交 `062d391`。redline `BLOCKER=0`、定向测试 `12+7=19/0/0/0`、全量 `mvn test=1004/0/0/0`。FS4b "B级" 0→2 PASS、"B 级" 2 PASS、FS1-FS4 搜索全部 PASS、保护性搜索无回归。S2 title/anchor 与 FS2 ranking 仍为独立问题，不在本轮范围。详见 `search_failures_s2_fs2_fs4b_analysis_report.md`、`mixed_script_token_extraction_fix_result_report.md`、`mixed_script_token_extraction_runtime_gate_report.md`。
+59. （已完成）Compiler lightweight doc 内容捕获修复：`lightweightMaxContentLines` 8→24。已提交 `e974b6f`。PE1 Q2 PDF 从 BLOCKED → PASS。详见 `pe1_q2_lightweight_small_doc_content_lines_fix_result_report.md`。
+60. （已完成）Admin 处理历史嵌套卡片修复：`management-history-part.js` 缺失 `</div>` 修复。已提交 `2b5ecea`。详见 `admin_processing_history_nested_card_fix_result_report.md`。
+61. （已完成）S2 Writer 标题保真修复：Writer prompt 规则 14（源文档标题保真）+ `LatticePrompts.java` 同步。已提交 `00237a9`。S2 PASS（"下一步计划"首次出现在搜索结果 anchor 中）。详见 `pe1_s2_writer_title_preservation_runtime_gate_report.md`。
+62. （已完成）当前 HEAD 完整 Public Eval Gate：PE1 Answer 11/12、PE2 Answer 13/14、Search 6/6+6/6、FALLBACK Citation 6/6 cov=1.0、Hallucination=0。结论：PASS，可进入内部试用。详见 `post_s2_writer_title_preservation_current_head_full_eval_gate_report.md`。
+63. （后续，非阻塞）Q1/FQ1 PARTIAL：LLM 回答完整性问题，建议 prompt 优化，不改代码主链。
+64. （后续，非阻塞）Q2 缩略词：已知 FTS tokenization 限制，全名查询 PASS，按已知限制处理。
+65. （后续，非阻塞）FQ10 PDF BLOCKED：source name varchar(32) infra 限制，独立处理。
+66. （已完成）CODE_LIGHT contentProfile：新增轻量级代码索引模式。已提交 `755c213`。
+67. （已完成）INTERNAL_MIRROR source type：新增源码仓库 source 类型。已提交 `d35d7ba`。
+68. （已完成）Java Codebase Public Eval 资产包：21 文件 fixture 已提交 `d0f8200`。
+69. （已完成）PE3 fresh-eval-2026-06 资产包 + acceptance：5 文件资料包已提交 `8942389`，acceptance PASS。
+70. （后续）Java Codebase Eval 全量验收：agentD 执行 12 FQ + 6 FS + 3 FG，采集 Answer/Search/Citation。通过后 Java 代码库问答能力可正式进入验收闭环。
+71. （后续）PE4 fresh-eval-2026-07：当前仅有设计报告，需落地资料包并验收。
 
 32. （已完成）S2 标题/anchor 搜索问题独立分析：agentB 单独排查 `下一步计划` 的标题/anchor 命中链路，确认不归因到 Q6 terminal field alias。详见 `docs/test/knowledge-base-e2e/s2_title_anchor_search_root_cause_analysis_report.md`。
 33. （已完成，待验收）S2 chunk/anchor identity 最小通用修复：agentA 保留 chunk 级 identity，避免 article chunk FTS / chunk vector 命中被整篇 article 折叠；redline `BLOCKER=0`，定向测试 `13/0/0`，全量 `mvn test=921/0/0`。详见 `docs/test/knowledge-base-e2e/s2_chunk_anchor_identity_fix_result_report.md`。

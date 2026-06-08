@@ -1,0 +1,101 @@
+suppliers:
+  - id: "SUP-001"
+    name: "精密零部件供应商A"
+    category: "机械加工"
+    rating: "A"
+    last_audit_date: "2026-03-15"
+    next_audit_due: "2026-09-15"
+    score_quality: 92
+    score_delivery: 88
+    score_response: 95
+    status: "合格"
+    contact: "张经理"
+    phone: "021-5555-1001"
+
+  - id: "SUP-002"
+    name: "电子元器件供应商B"
+    category: "电子元件"
+    rating: "B"
+    last_audit_date: "2026-02-20"
+    next_audit_due: "2026-08-20"
+    score_quality: 85
+    score_delivery: 78
+    score_response: 82
+    status: "合格"
+    contact: "李经理"
+    phone: "0755-6666-2002"
+
+  - id: "SUP-003"
+    name: "金属原材料供应商C"
+    category: "金属材料"
+    rating: "C"
+    last_audit_date: "2026-01-10"
+    next_audit_due: "2026-07-10"
+    score_quality: 72
+    score_delivery: 68
+    score_response: 75
+    status: "观察期"
+    observation_reason: "交付评分连续两季度低于70"
+
+  - id: "SUP-004"
+    name: "包装材料供应商D"
+    category: "包装材料"
+    rating: "D"
+    last_audit_date: "2025-11-05"
+    next_audit_due: "2026-05-05"
+    score_quality: 58
+    score_delivery: 62
+    score_response: 55
+    status: "暂停"
+    suspension_reason: "连续两季度评为D级"
+
+  - id: "SUP-005"
+    name: "精密加工供应商E"
+    category: "机械加工"
+    rating: "A"
+    last_audit_date: "2026-04-01"
+    next_audit_due: "2026-10-01"
+    score_quality: 95
+    score_delivery: 92
+    score_response: 90
+    status: "合格"
+    contact: "王经理"
+    phone: "010-8888-3005"
+
+  - id: "SUP-006"
+    name: "标准件供应商F"
+    category: "紧固件"
+    rating: "B"
+    last_audit_date: "2026-03-28"
+    next_audit_due: "2026-09-28"
+    score_quality: 83
+    score_delivery: 90
+    score_response: 80
+    status: "合格"
+    contact: "赵经理"
+    phone: "028-7777-4006"
+
+  - id: "SUP-007"
+    name: "表面处理供应商G"
+    category: "表面处理"
+    rating: "B"
+    last_audit_date: "2026-05-10"
+    next_audit_due: "2026-11-10"
+    score_quality: 88
+    score_delivery: 76
+    score_response: 85
+    status: "合格"
+    contact: "陈经理"
+    phone: "0571-9999-5007"
+
+  - id: "SUP-008"
+    name: "线束组件供应商H"
+    category: "电气组件"
+    rating: "C"
+    last_audit_date: "2026-04-15"
+    next_audit_due: "2026-10-15"
+    score_quality: 75
+    score_delivery: 70
+    score_response: 68
+    status: "观察期"
+    observation_reason: "响应评分连续两季度低于70"
