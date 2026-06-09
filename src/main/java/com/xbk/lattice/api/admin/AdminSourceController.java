@@ -115,7 +115,7 @@ public class AdminSourceController {
      * @param sourceId 资料源主键
      * @return 资料源详情
      */
-    @GetMapping("/{sourceId}")
+    @GetMapping("/{sourceId:\\d+}")
     public AdminKnowledgeSourceDetailResponse getSource(@PathVariable Long sourceId) {
         KnowledgeSource source = sourceService.findById(sourceId)
                 .orElseThrow(() -> new IllegalArgumentException("source not found: " + sourceId));
@@ -152,7 +152,7 @@ public class AdminSourceController {
      * @param request 更新请求
      * @return 更新后的资料源详情
      */
-    @PatchMapping("/{sourceId}")
+    @PatchMapping("/{sourceId:\\d+}")
     public AdminKnowledgeSourceDetailResponse updateSource(
             @PathVariable Long sourceId,
             @RequestBody AdminKnowledgeSourcePatchRequest request
@@ -195,7 +195,7 @@ public class AdminSourceController {
      * @return 校验结果
      * @throws java.io.IOException IO 异常
      */
-    @PostMapping("/{sourceId}/validate")
+    @PostMapping("/{sourceId:\\d+}/validate")
     public AdminSourceValidationResponse validateSource(@PathVariable Long sourceId) throws java.io.IOException {
         SourceValidationResult validationResult = sourceSyncWorkflowService.validateSource(sourceId);
         return new AdminSourceValidationResponse(
@@ -215,7 +215,7 @@ public class AdminSourceController {
      * @return 同步运行详情
      * @throws java.io.IOException IO 异常
      */
-    @PostMapping("/{sourceId}/sync")
+    @PostMapping("/{sourceId:\\d+}/sync")
     public SourceSyncRunDetail syncSource(@PathVariable Long sourceId) throws java.io.IOException {
         return sourceSyncWorkflowService.syncSource(sourceId);
     }
@@ -226,7 +226,7 @@ public class AdminSourceController {
      * @param sourceId 资料源主键
      * @return 文件列表
      */
-    @GetMapping("/{sourceId}/files")
+    @GetMapping("/{sourceId:\\d+}/files")
     public List<AdminSourceFileResponse> listSourceFiles(@PathVariable Long sourceId) {
         List<AdminSourceFileResponse> responses = new ArrayList<AdminSourceFileResponse>();
         for (SourceFileRecord sourceFileRecord : sourceService.listSourceFiles(sourceId)) {

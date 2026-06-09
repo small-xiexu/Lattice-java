@@ -31,6 +31,11 @@ spring:
       host: ${LATTICE_REDIS_HOST:127.0.0.1}
       port: ${LATTICE_REDIS_PORT:6379}
 
+server:
+  tomcat:
+    max-part-count: ${SERVER_TOMCAT_MAX_PART_COUNT:10000}
+    max-part-header-size: ${SERVER_TOMCAT_MAX_PART_HEADER_SIZE:8KB}
+
 mybatis:
   mapper-locations: classpath*:/com/xbk/lattice/**/mapper/*.xml
   configuration:

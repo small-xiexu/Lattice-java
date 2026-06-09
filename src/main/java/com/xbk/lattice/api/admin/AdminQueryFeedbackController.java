@@ -76,7 +76,7 @@ public class AdminQueryFeedbackController {
      * @param feedbackId 反馈主键
      * @return 反馈详情
      */
-    @GetMapping("/{feedbackId}")
+    @GetMapping("/{feedbackId:\\d+}")
     public AdminQueryFeedbackDetailResponse detail(@PathVariable long feedbackId) {
         AnswerFeedbackRecord feedbackRecord = answerFeedbackService.get(feedbackId);
         List<AnswerFeedbackAuditRecord> auditRecords = answerFeedbackService.listAudits(feedbackId);
@@ -94,7 +94,7 @@ public class AdminQueryFeedbackController {
      * @param request 处理请求
      * @return 更新后的反馈
      */
-    @PostMapping("/{feedbackId}/resolve")
+    @PostMapping("/{feedbackId:\\d+}/resolve")
     public AdminQueryFeedbackResponse resolve(
             @PathVariable long feedbackId,
             @RequestBody AdminQueryFeedbackHandleRequest request
@@ -110,7 +110,7 @@ public class AdminQueryFeedbackController {
      * @param request 处理请求
      * @return 更新后的反馈
      */
-    @PostMapping("/{feedbackId}/dismiss")
+    @PostMapping("/{feedbackId:\\d+}/dismiss")
     public AdminQueryFeedbackResponse dismiss(
             @PathVariable long feedbackId,
             @RequestBody AdminQueryFeedbackHandleRequest request

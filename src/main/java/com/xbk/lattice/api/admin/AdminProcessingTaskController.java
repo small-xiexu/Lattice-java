@@ -52,7 +52,7 @@ public class AdminProcessingTaskController {
      * @param limit 返回数量
      * @return 指定资料源处理历史
      */
-    @GetMapping("/sources/{sourceId}/processing-tasks")
+    @GetMapping("/sources/{sourceId:\\d+}/processing-tasks")
     public AdminProcessingTaskListResponse listSourceProcessingTasks(
             @PathVariable Long sourceId,
             @RequestParam(defaultValue = "10") Integer limit

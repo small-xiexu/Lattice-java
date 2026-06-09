@@ -65,7 +65,7 @@ public class AdminCompileReviewQueueController {
      * @param id 队列主键
      * @return 队列详情
      */
-    @GetMapping("/{id}")
+    @GetMapping("/{id:\\d+}")
     public AdminCompileReviewQueueItemResponse get(@PathVariable long id) {
         return toItemResponse(adminCompileArticleReviewQueueService.get(id));
     }
@@ -77,7 +77,7 @@ public class AdminCompileReviewQueueController {
      * @param request 动作请求
      * @return 动作响应
      */
-    @PostMapping("/{id}/approve")
+    @PostMapping("/{id:\\d+}/approve")
     public AdminCompileReviewQueueActionResponse approve(
             @PathVariable long id,
             @RequestBody(required = false) AdminCompileReviewQueueActionRequest request
@@ -96,7 +96,7 @@ public class AdminCompileReviewQueueController {
      * @param request 动作请求
      * @return 动作响应
      */
-    @PostMapping("/{id}/reject")
+    @PostMapping("/{id:\\d+}/reject")
     public AdminCompileReviewQueueActionResponse reject(
             @PathVariable long id,
             @RequestBody(required = false) AdminCompileReviewQueueActionRequest request

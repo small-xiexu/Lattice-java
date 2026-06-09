@@ -1675,7 +1675,7 @@ button.metric-card {
 
 .import-file-item-main {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 10px;
     min-width: 0;
 }
@@ -1741,6 +1741,9 @@ button.metric-card {
     color: var(--muted);
     font-size: 11px;
     line-height: 1.55;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .import-file-picker-feedback {
@@ -3714,17 +3717,63 @@ button.list-item {
 }
 
 .answer-markdown code {
-    display: inline-flex;
-    align-items: center;
-    min-height: 24px;
-    padding: 0 8px;
+    display: inline-block;
+    max-width: 100%;
+    padding: 1px 6px;
     border: 1px solid rgba(143, 190, 255, 0.14);
-    border-radius: 999px;
+    border-radius: 6px;
     background: rgba(18, 31, 54, 0.72);
     color: #f1f7ff;
     font-family: var(--mono);
     font-size: 12px;
     line-height: 1.4;
+    overflow-wrap: anywhere;
+    vertical-align: baseline;
+    white-space: normal;
+}
+
+.answer-table-shell {
+    max-width: 100%;
+    overflow-x: auto;
+    border: 1px solid rgba(143, 190, 255, 0.12);
+    border-radius: 10px;
+    background: rgba(12, 22, 39, 0.28);
+}
+
+.answer-markdown-table {
+    width: 100%;
+    min-width: 560px;
+    border-collapse: collapse;
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+.answer-markdown-table th,
+.answer-markdown-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(143, 190, 255, 0.1);
+    color: #dce8fb;
+    text-align: left;
+    vertical-align: top;
+}
+
+.answer-markdown-table th {
+    background: rgba(18, 31, 54, 0.58);
+    color: #f6fbff;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.answer-markdown-table tr:last-child td {
+    border-bottom: 0;
+}
+
+.answer-markdown-table .align-center {
+    text-align: center;
+}
+
+.answer-markdown-table .align-right {
+    text-align: right;
 }
 
 .citation-marker {
@@ -6349,6 +6398,22 @@ input[type="file"]::file-selector-button:hover {
 .answer-markdown code {
     border-color: rgba(30, 57, 50, 0.12);
     background: rgba(239, 234, 223, 0.94);
+    color: var(--primary-strong);
+}
+
+.answer-table-shell {
+    border-color: rgba(30, 57, 50, 0.12);
+    background: rgba(255, 251, 245, 0.86);
+}
+
+.answer-markdown-table th,
+.answer-markdown-table td {
+    border-bottom-color: rgba(30, 57, 50, 0.1);
+    color: #334136;
+}
+
+.answer-markdown-table th {
+    background: rgba(239, 234, 223, 0.78);
     color: var(--primary-strong);
 }
 

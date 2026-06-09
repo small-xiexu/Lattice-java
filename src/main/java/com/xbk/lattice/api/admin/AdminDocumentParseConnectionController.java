@@ -100,7 +100,7 @@ public class AdminDocumentParseConnectionController {
      * @param request 请求体
      * @return 连接响应
      */
-    @PutMapping("/{id}")
+    @PutMapping("/{id:\\d+}")
     public AdminDocumentParseConnectionResponse updateConnection(
             @PathVariable Long id,
             @RequestBody AdminDocumentParseConnectionRequest request
@@ -120,7 +120,7 @@ public class AdminDocumentParseConnectionController {
      * @param id 主键
      * @return 删除响应
      */
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/{id:\\d+}")
     public AdminMutationResponse deleteConnection(@PathVariable Long id) {
         documentParseConnectionAdminService.deleteConnection(id);
         return new AdminMutationResponse(id, "deleted");

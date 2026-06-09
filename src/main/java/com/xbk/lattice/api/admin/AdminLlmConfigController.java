@@ -93,7 +93,7 @@ public class AdminLlmConfigController {
      * @param request 请求体
      * @return 连接配置响应
      */
-    @PutMapping("/connections/{id}")
+    @PutMapping("/connections/{id:\\d+}")
     public AdminLlmConnectionResponse updateConnection(
             @PathVariable Long id,
             @RequestBody AdminLlmConnectionRequest request
@@ -109,7 +109,7 @@ public class AdminLlmConfigController {
      * @param id 主键
      * @return 删除响应
      */
-    @DeleteMapping("/connections/{id}")
+    @DeleteMapping("/connections/{id:\\d+}")
     public AdminMutationResponse deleteConnection(@PathVariable Long id) {
         llmConfigAdminService.deleteConnection(id);
         return new AdminMutationResponse(id, "deleted");
@@ -148,7 +148,7 @@ public class AdminLlmConfigController {
      * @param request 请求体
      * @return 模型配置响应
      */
-    @PutMapping("/models/{id}")
+    @PutMapping("/models/{id:\\d+}")
     public AdminLlmModelResponse updateModel(
             @PathVariable Long id,
             @RequestBody AdminLlmModelRequest request
@@ -164,7 +164,7 @@ public class AdminLlmConfigController {
      * @param id 主键
      * @return 删除响应
      */
-    @DeleteMapping("/models/{id}")
+    @DeleteMapping("/models/{id:\\d+}")
     public AdminMutationResponse deleteModel(@PathVariable Long id) {
         llmConfigAdminService.deleteModelProfile(id);
         return new AdminMutationResponse(id, "deleted");
@@ -203,7 +203,7 @@ public class AdminLlmConfigController {
      * @param request 请求体
      * @return Agent 绑定响应
      */
-    @PutMapping("/bindings/{id}")
+    @PutMapping("/bindings/{id:\\d+}")
     public AdminLlmBindingResponse updateBinding(
             @PathVariable Long id,
             @RequestBody AdminLlmBindingRequest request
@@ -219,7 +219,7 @@ public class AdminLlmConfigController {
      * @param id 主键
      * @return 删除响应
      */
-    @DeleteMapping("/bindings/{id}")
+    @DeleteMapping("/bindings/{id:\\d+}")
     public AdminMutationResponse deleteBinding(@PathVariable Long id) {
         llmConfigAdminService.deleteBinding(id);
         return new AdminMutationResponse(id, "deleted");

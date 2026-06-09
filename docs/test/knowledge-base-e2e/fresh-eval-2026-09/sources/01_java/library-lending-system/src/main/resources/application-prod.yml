@@ -1,0 +1,9 @@
+spring.datasource.primary.url: jdbc:mysql://prod-db.internal:3306/library_prod
+spring.datasource.primary.username: prod_user
+spring.datasource.primary.password: ${DB_PASSWORD}
+library:
+  fine:
+    rate-1-7: 2.0
+    rate-8-14: 4.0
+    rate-15-plus: 10.0
+logging.level.com.example.library: WARN

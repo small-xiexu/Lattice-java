@@ -132,7 +132,7 @@
                                         <div class="import-entry-box">
                                             <div class="import-entry-box-title">上传资料</div>
                                             <div id="compile-file-picker" class="file-picker import-file-picker">
-                                                <input id="compile-files" class="import-file-input" type="file" multiple accept=".doc,.docx,.pptx,.pdf,.xlsx,.xls,.csv,.md,.markdown,.txt,.json,.html,.xml,.yml,.yaml,.properties,.js,.css,.java,.sh,.py">
+                                                <input id="compile-files" class="import-file-input" type="file" multiple accept=".doc,.docx,.pptx,.pdf,.xlsx,.xls,.csv,.md,.markdown,.txt,.json,.html,.xml,.yml,.yaml,.properties,.js,.css,.java,.sh,.py,.sql">
                                                 <div class="import-file-picker-hero" aria-hidden="true">
                                                     <span class="import-file-picker-badge">本地资料导入</span>
                                                     <span class="import-file-picker-hint">文件夹拖拽上传</span>
@@ -154,7 +154,7 @@
                                                 <div id="compile-file-list" class="import-file-picker-list" hidden></div>
                                                 <div id="compile-file-feedback" class="import-file-picker-feedback" hidden></div>
                                             </div>
-                                            <p class="import-entry-meta">支持 PDF、Word（.doc/.docx）、PPT、Excel、CSV、Markdown、TXT、JSON、HTML、XML 等常见资料格式；如果拖入整个文件夹，系统会尽量保留原始目录结构，并自动忽略当前暂不支持的文件类型。</p>
+                                            <p class="import-entry-meta">支持 PDF、Word（.doc/.docx）、PPT、Excel、CSV、Markdown、TXT、JSON、HTML、XML、SQL 等常见资料格式；如果拖入整个文件夹，系统会尽量保留原始目录结构，并自动忽略当前暂不支持的文件类型。</p>
                                         </div>
                                     </div>
                                     <div class="button-row wrap import-entry-actions">
@@ -265,7 +265,7 @@
                             <div class="panel-title-row">
                                 <div>
                                     <h2>导入进度</h2>
-                                    <p>这里优先展示正在处理、失败或待人工确认的资料。想确认“现在卡在哪、下一步做什么”，先看这里。</p>
+                                    <p>所有处理任务按时间排列：运行中、待确认和失败的排前面，已完成的往下滑就能看到。想确认”现在卡在哪、下一步做什么”，先看这里。</p>
                                 </div>
                                 <div class="processing-refresh-actions">
                                     <button id="refresh-jobs" class="ghost-btn" type="button">刷新进度</button>
@@ -311,32 +311,6 @@
                             </div>
                         </section>
 
-                        <details id="processing-history-panel" class="panel workbench-disclosure-panel processing-history-panel">
-                            <summary class="workbench-disclosure-summary">
-                                <span>
-                                    <span class="workbench-disclosure-kicker">任务记录</span>
-                                    <strong>处理历史</strong>
-                                    <span>查看已经结束的导入、同步、入库或失败记录；日常确认结果优先看上面的导入进度和已入库内容。</span>
-                                </span>
-                            </summary>
-                            <div class="workbench-disclosure-body">
-                                <div class="history-toolbar">
-                                    <div class="history-filter-bar" role="tablist" aria-label="处理历史筛选">
-                                        <button data-history-filter="all" class="pill active" type="button">全部</button>
-                                        <button data-history-filter="succeeded" class="pill" type="button">已入库</button>
-                                        <button data-history-filter="failed" class="pill" type="button">失败</button>
-                                        <button data-history-filter="skipped" class="pill" type="button">已跳过</button>
-                                    </div>
-                                    <div class="history-toolbar-actions">
-                                        <p id="history-status" class="history-status-pill" aria-live="polite"></p>
-                                        <button id="refresh-history" class="secondary-btn" type="button">刷新历史</button>
-                                    </div>
-                                </div>
-
-                                <div id="history-list"></div>
-                            </div>
-                        </details>
-
                         <details id="source-diagnostic-panel" class="panel workbench-disclosure-panel source-diagnostic-panel">
                             <summary class="workbench-disclosure-summary">
                                 <span>
@@ -376,7 +350,7 @@
                                         <section class="detail-section">
                                             <div class="detail-section-header">
                                                 <div>
-                                                    <h4>处理历史</h4>
+                                                    <h4>同步记录</h4>
                                                     <p class="detail-section-copy">先看摘要列表，选中后再看当前这次处理的完整详情。</p>
                                                 </div>
                                             </div>
@@ -627,7 +601,7 @@
                                             </div>
                                         </section>
                                         <section class="detail-section">
-                                            <h4>处理历史</h4>
+                                            <h4>反馈处理记录</h4>
                                             <div id="query-feedback-history" class="review-history-list"></div>
                                         </section>
                                     </div>
@@ -658,7 +632,7 @@
                             <details class="advanced-panel" data-help-faq-key="upload-delay">
                                 <summary>为什么上传后一直看不到入库结果</summary>
                                 <div class="advanced-panel-body">
-                                    <p class="muted">先到“导入进度”看任务是不是还在排队或运行中；如果已经失败，再展开“处理历史”或“资料源诊断”，判断是资料格式、解析链路还是连接问题。</p>
+                                    <p class="muted">先到“导入进度”看任务是不是还在排队或运行中；如果已经失败，继续看同一个导入进度列表里的任务卡片，必要时再展开“资料源诊断”。</p>
                                     <div class="help-action-row">
                                         <button class="secondary-btn" type="button" data-tab-open="knowledge-runs">查看导入进度</button>
                                         <button class="ghost-btn" type="button" data-tab-open="knowledge-upload">回资料导入</button>

@@ -72,7 +72,7 @@ public class SourceMaterializationService {
     private static final Set<String> DEFAULT_INCLUDED_EXTENSIONS = Set.of(
             ".java", ".xml", ".yml", ".yaml", ".properties", ".json",
             ".sql", ".md", ".txt", ".sh", ".js", ".ts", ".vue", ".css", ".html",
-            ".gradle"
+            ".gradle", ".xlsx", ".xls", ".csv", ".pdf"
     );
 
     /** 默认纳入的精确文件名（无后缀或特殊文件名）。 */

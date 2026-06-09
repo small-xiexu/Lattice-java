@@ -91,7 +91,7 @@ public class AdminFactCardController {
      * @param id Fact Card 主键
      * @return Fact Card 明细
      */
-    @GetMapping("/{id}")
+    @GetMapping("/{id:\\d+}")
     public AdminFactCardItemResponse detail(@PathVariable Long id) {
         FactCardRecord factCardRecord = factCardJdbcRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("fact card not found: " + id));

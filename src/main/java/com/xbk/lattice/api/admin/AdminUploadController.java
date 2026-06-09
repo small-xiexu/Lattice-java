@@ -69,7 +69,7 @@ public class AdminUploadController {
      * @param runId 运行主键
      * @return 同步运行详情
      */
-    @GetMapping("/source-runs/{runId}")
+    @GetMapping("/source-runs/{runId:\\d+}")
     public SourceSyncRunDetail getRun(@PathVariable Long runId) {
         return sourceUploadService.getRunDetail(runId);
     }
@@ -93,7 +93,7 @@ public class AdminUploadController {
      * @param request 人工确认请求
      * @return 同步运行详情
      */
-    @PostMapping("/source-runs/{runId}/confirm")
+    @PostMapping("/source-runs/{runId:\\d+}/confirm")
     public SourceSyncRunDetail confirmRun(
             @PathVariable Long runId,
             @RequestBody AdminSourceRunConfirmRequest request
@@ -107,7 +107,7 @@ public class AdminUploadController {
      * @param runId 运行主键
      * @return 重试后的同步运行详情
      */
-    @PostMapping("/source-runs/{runId}/retry")
+    @PostMapping("/source-runs/{runId:\\d+}/retry")
     public SourceSyncRunDetail retryRun(@PathVariable Long runId) {
         return sourceUploadService.retryRun(runId);
     }
@@ -118,7 +118,7 @@ public class AdminUploadController {
      * @param sourceId 资料源主键
      * @return 同步历史
      */
-    @GetMapping("/sources/{sourceId}/runs")
+    @GetMapping("/sources/{sourceId:\\d+}/runs")
     public List<SourceSyncRunDetail> listRuns(@PathVariable Long sourceId) {
         return sourceUploadService.listRunDetails(sourceId);
     }
@@ -130,7 +130,7 @@ public class AdminUploadController {
      * @param runId 运行主键
      * @return 同步运行详情
      */
-    @GetMapping("/sources/{sourceId}/runs/{runId}")
+    @GetMapping("/sources/{sourceId:\\d+}/runs/{runId:\\d+}")
     public SourceSyncRunDetail getSourceRun(
             @PathVariable Long sourceId,
             @PathVariable Long runId

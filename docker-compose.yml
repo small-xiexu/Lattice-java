@@ -1,33 +1,37 @@
 services:
-  postgres:
-    image: pgvector/pgvector:pg16
-    container_name: lattice_b1_postgres
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lattice-java:local
+    container_name: lattice_app
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ai-rag-knowledge
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      SPRING_PROFILES_ACTIVE: local-dev
+      SERVER_PORT: 18082
+      SPRING_DATASOURCE_URL: jdbc:postgresql://vector_db:5432/ai-rag-knowledge?currentSchema=lattice
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      LATTICE_REDIS_HOST: redis
+      LATTICE_REDIS_PORT: 6379
+      LATTICE_SOURCE_ADMIN_STAGING_ROOT_DIR: /data/lattice-source-sync
+      LATTICE_SOURCE_ADMIN_MIRROR_ROOTS_DEFAULT: /mirror-roots
+      LATTICE_LLM_DEEP_RESEARCH_STARTUP_VALIDATION_ENABLED: "false"
+      SPRING_AI_OPENAI_API_KEY: ${SPRING_AI_OPENAI_API_KEY:-any-non-empty-value}
+      SPRING_AI_OPENAI_BASE_URL: ${SPRING_AI_OPENAI_BASE_URL:-https://api.openai.com}
+      SPRING_AI_ANTHROPIC_API_KEY: ${SPRING_AI_ANTHROPIC_API_KEY:-any-non-empty-value}
+      SPRING_AI_ANTHROPIC_BASE_URL: ${SPRING_AI_ANTHROPIC_BASE_URL:-https://api.anthropic.com}
     ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d ai-rag-knowledge"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - "${LATTICE_APP_HOST_PORT:-18082}:18082"
     volumes:
-      - lattice_b1_pgdata:/var/lib/postgresql/data
-
-  redis:
-    image: redis:7.4-alpine
-    container_name: lattice_b3_redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - lattice_app_data:/data
+      - ${LATTICE_MIRROR_ROOT_HOST_DIR:-./docker/mirror-roots}:/mirror-roots:ro
+    networks:
+      - binghe-network
 
 volumes:
-  lattice_b1_pgdata:
+  lattice_app_data:
+
+networks:
+  binghe-network:
+    external: true

@@ -1,0 +1,21 @@
+server.port: 8080
+spring.application.name: library-lending-system
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  global-config.db-config.logic-delete-field: deleted
+library:
+  lending:
+    max-books-per-user: 5
+    max-borrow-days: 30
+  credit:
+    enabled: true
+    deduct-1-7-days: 2
+    deduct-8-14-days: 5
+    deduct-15-plus-days: 10
+    restore-after-clean-days: 30
+    restore-amount: 3
+  fine:
+    rate-1-7: 1.0
+    rate-8-14: 2.0
+    rate-15-plus: 5.0
+    max-days: 60

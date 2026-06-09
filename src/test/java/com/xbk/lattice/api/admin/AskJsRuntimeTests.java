@@ -226,6 +226,19 @@ class AskJsRuntimeTests {
                     "section-scoped answer should hide raw article literal");
                 assert(!renderedSourceSectionAnswer.includes("1.1 业务背景"),
                     "section-scoped answer should hide source section suffix from body");
+                const renderedTableAnswer = ask.renderMarkdownLite(
+                    "| 字段 | 说明 |\\n|---|---|\\n| `due_date` | 应还日期 |\\n| `return_date` | 实际归还日期 |",
+                    []
+                );
+                assert(renderedTableAnswer.includes("answer-markdown-table"),
+                    "markdown table should render as a table");
+                assert(renderedTableAnswer.includes("<code>due_date</code>"),
+                    "markdown table cells should keep inline code formatting");
+                assert(!renderedTableAnswer.includes("|---|---|"),
+                    "markdown table separator should not render as plain text");
+                const renderedPipeParagraph = ask.renderMarkdownLite("字段 A | 字段 B 只是普通说明", []);
+                assert(!renderedPipeParagraph.includes("answer-markdown-table"),
+                    "single pipe paragraph should not be treated as a table");
                 assert(ask.shouldAlignCitationPopoverRight({left: 900}, 1000),
                     "citation popover should align right near viewport edge");
                 assert(!ask.shouldAlignCitationPopoverRight({left: 120}, 1000),

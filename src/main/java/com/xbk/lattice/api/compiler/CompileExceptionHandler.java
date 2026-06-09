@@ -6,6 +6,7 @@ import com.xbk.lattice.shared.error.LatticeIntegrationException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tomcat.util.http.fileupload.impl.FileSizeLimitExceededException;
 import org.apache.tomcat.util.http.fileupload.impl.SizeLimitExceededException;
+import org.apache.tomcat.util.http.fileupload.impl.FileCountLimitExceededException;
 import org.springframework.boot.autoconfigure.web.servlet.MultipartProperties;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -113,10 +114,24 @@ public class CompileExceptionHandler {
      */
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<CompileErrorResponse> handleMultipartException(MultipartException ex) {
+        FileCountLimitExceededException fileCountException = findCause(ex, FileCountLimitExceededException.class);
+        if (fileCountException != null) {
+            log.warn("Compile request rejected because multipart part count exceeded: limit={}, message={}",
+                    fileCountException.getLimit(), ex.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new CompileErrorResponse("COMPILE_UPLOAD_TOO_MANY_PARTS", "上传文件过多，请分批后重试"));
+        }
         if (isUploadSizeExceeded(ex)) {
             return buildUploadTooLargeResponse(ex);
         }
-        log.warn("Compile request rejected due to multipart exception: {}", ex.getMessage());
+        Throwable rootCause = findRootCause(ex);
+        if (rootCause != null && rootCause != ex) {
+            log.warn("Compile request rejected due to multipart exception: {}: {}",
+                    rootCause.getClass().getSimpleName(), rootCause.getMessage());
+        }
+        else {
+            log.warn("Compile request rejected due to multipart exception: {}", ex.getMessage());
+        }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new CompileErrorResponse("COMPILE_REQUEST_INVALID", "上传请求解析失败，请检查文件后重试"));
     }
@@ -258,5 +273,19 @@ public class CompileExceptionHandler {
             current = current.getCause();
         }
         return null;
+    }
+
+    /**
+     * 从异常链中查找最底层根因。
+     *
+     * @param ex 异常
+     * @return 根因；若不存在则返回当前异常
+     */
+    private Throwable findRootCause(Throwable ex) {
+        Throwable current = ex;
+        while (current != null && current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current;
     }
 }

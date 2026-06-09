@@ -81,7 +81,7 @@ public class AdminRepoSnapshotController {
      * @return diff 摘要
      * @throws IOException IO 异常
      */
-    @GetMapping("/api/v1/admin/snapshot/repo/{snapshotId}/diff")
+    @GetMapping("/api/v1/admin/snapshot/repo/{snapshotId:\\d+}/diff")
     public AdminRepoDiffResponse diff(
             @PathVariable long snapshotId,
             @RequestParam String vaultDir
