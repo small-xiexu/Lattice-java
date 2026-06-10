@@ -10382,3 +10382,110 @@ body.admin-page {
         white-space: normal;
     }
 }
+
+/* ---- Admin design system v10: readable list-card buttons and feedback queue ---- */
+
+.admin-page button.list-item {
+    display: grid;
+    align-items: start;
+    justify-content: stretch;
+    gap: var(--admin-space-2);
+    min-height: 0;
+    padding: var(--admin-space-4);
+    text-align: left;
+    line-height: 1.5;
+    white-space: normal;
+}
+
+.admin-page button.list-item > * {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.admin-page .query-feedback-workspace {
+    grid-template-columns: minmax(360px, 0.42fr) minmax(0, 1fr);
+    gap: var(--admin-space-5);
+    align-items: start;
+}
+
+.admin-page #query-feedback-list {
+    gap: var(--admin-space-3);
+    padding-right: var(--admin-space-2);
+}
+
+.admin-page .query-feedback-list-item {
+    border-color: rgba(40, 62, 52, 0.14);
+    background: var(--admin-color-surface);
+    box-shadow: var(--admin-shadow-card);
+}
+
+.admin-page .query-feedback-list-item .meta-row {
+    gap: 6px;
+    align-items: center;
+}
+
+.admin-page .query-feedback-list-item .item-kicker {
+    margin: 0;
+    color: var(--admin-color-muted-strong);
+    font-size: 12px;
+    font-weight: 650;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.admin-page .query-feedback-list-item h4,
+.admin-page .query-feedback-list-item .item-summary,
+.admin-page .query-feedback-list-item .item-caption {
+    margin: 0;
+    overflow: hidden;
+    overflow-wrap: break-word;
+    word-break: normal;
+}
+
+.admin-page .query-feedback-list-item h4 {
+    display: -webkit-box;
+    color: var(--admin-color-heading);
+    font-size: 14px;
+    font-weight: 650;
+    line-height: 1.48;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.admin-page .query-feedback-list-item .item-summary {
+    display: -webkit-box;
+    color: var(--admin-color-muted-strong);
+    font-size: 13px;
+    line-height: 1.58;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+}
+
+.admin-page .query-feedback-list-item .item-caption {
+    color: var(--admin-color-muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.admin-page .query-feedback-workspace .detail-panel {
+    min-width: 0;
+}
+
+.admin-page .query-feedback-workspace .summary-box,
+.admin-page .query-feedback-workspace .tag-list .pill,
+.admin-page .query-feedback-workspace .review-history-item {
+    overflow-wrap: break-word;
+    word-break: normal;
+}
+
+@media (max-width: 1180px) {
+    .admin-page .query-feedback-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-page #query-feedback-list {
+        max-height: none;
+        overflow: visible;
+        padding-right: 0;
+    }
+}
