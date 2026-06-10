@@ -175,8 +175,14 @@ public class QueryFinalizationGraphFragment {
         QueryResponse queryResponse = buildSuccessResponse(state);
         String responseRef = queryWorkingSetStore.saveResponse(state.getQueryId(), queryResponse);
         if (shouldCacheResponse(queryResponse, state.isAnswerCacheable(), report)) {
-            queryCacheStore.put(state.getNormalizedQuestion(), withoutQueryId(queryResponse));
-            state.setCachedResponseRef(responseRef);
+            String cacheKey = QueryCacheKeyCanonicalizer.resolveSafe(
+                    state.getCanonicalCacheKey(),
+                    state.getNormalizedQuestion() != null && !state.getNormalizedQuestion().isBlank()
+                            ? state.getNormalizedQuestion() : state.getQuestion());
+            if (!cacheKey.isEmpty()) {
+                queryCacheStore.put(cacheKey, withoutQueryId(queryResponse));
+                state.setCachedResponseRef(responseRef);
+            }
         }
         state.setFinalResponseRef(responseRef);
         return queryGraphStateMapper.toDeltaMap(state);

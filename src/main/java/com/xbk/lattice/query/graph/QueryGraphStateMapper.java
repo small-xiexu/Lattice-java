@@ -27,6 +27,7 @@ public class QueryGraphStateMapper {
         state.setQueryId(queryId);
         state.setQuestion(readString(stateMap, QueryGraphStateKeys.QUESTION));
         state.setNormalizedQuestion(readString(stateMap, QueryGraphStateKeys.NORMALIZED_QUESTION));
+        state.setCanonicalCacheKey(readString(stateMap, QueryGraphStateKeys.CANONICAL_CACHE_KEY));
         state.setRewrittenQuestion(readString(stateMap, QueryGraphStateKeys.REWRITTEN_QUESTION));
         state.setQueryIntent(readString(stateMap, QueryGraphStateKeys.QUERY_INTENT));
         state.setAnswerShape(readString(stateMap, QueryGraphStateKeys.ANSWER_SHAPE));
@@ -92,6 +93,7 @@ public class QueryGraphStateMapper {
         values.put(QueryGraphStateKeys.QUERY_ID, state.getQueryId());
         values.put(QueryGraphStateKeys.QUESTION, state.getQuestion());
         values.put(QueryGraphStateKeys.NORMALIZED_QUESTION, state.getNormalizedQuestion());
+        values.put(QueryGraphStateKeys.CANONICAL_CACHE_KEY, state.getCanonicalCacheKey());
         values.put(QueryGraphStateKeys.REWRITTEN_QUESTION, state.getRewrittenQuestion());
         values.put(QueryGraphStateKeys.QUERY_INTENT, state.getQueryIntent());
         values.put(QueryGraphStateKeys.ANSWER_SHAPE, state.getAnswerShape());

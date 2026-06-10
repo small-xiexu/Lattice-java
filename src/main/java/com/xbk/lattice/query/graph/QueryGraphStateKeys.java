@@ -15,6 +15,8 @@ public final class QueryGraphStateKeys {
 
     public static final String NORMALIZED_QUESTION = "normalizedQuestion";
 
+    public static final String CANONICAL_CACHE_KEY = "canonicalCacheKey";
+
     public static final String REWRITTEN_QUESTION = "rewrittenQuestion";
 
     public static final String QUERY_INTENT = "queryIntent";

@@ -137,10 +137,13 @@ abstract class QueryGraphAnswerSupport extends QueryGraphRetrievalSupport {
         );
     }
 
+    private final QueryCacheKeyCanonicalizer queryCacheKeyCanonicalizer = new QueryCacheKeyCanonicalizer();
+
     protected Map<String, Object> normalizeQuestion(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
         QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
         String question = state.getQuestion() == null ? "" : state.getQuestion();
         state.setNormalizedQuestion(question.trim());
+        state.setCanonicalCacheKey(queryCacheKeyCanonicalizer.canonicalize(question));
         if (state.getLlmScopeType() == null || state.getLlmScopeType().isBlank()) {
             state.setLlmScopeType(ExecutionLlmSnapshotService.QUERY_SCOPE_TYPE);
         }
@@ -184,7 +187,15 @@ abstract class QueryGraphAnswerSupport extends QueryGraphRetrievalSupport {
     }
     protected Map<String, Object> checkCache(com.alibaba.cloud.ai.graph.OverAllState overAllState) {
         QueryGraphState state = queryGraphStateMapper.fromMap(overAllState.data());
-        QueryResponse cachedResponse = queryCacheStore.get(state.getNormalizedQuestion()).orElse(null);
+        String cacheKey = QueryCacheKeyCanonicalizer.resolveSafe(
+                state.getCanonicalCacheKey(),
+                state.getNormalizedQuestion() != null && !state.getNormalizedQuestion().isBlank()
+                        ? state.getNormalizedQuestion() : state.getQuestion());
+        if (cacheKey.isEmpty()) {
+            state.setCacheHit(false);
+            return queryGraphStateMapper.toDeltaMap(state);
+        }
+        QueryResponse cachedResponse = queryCacheStore.get(cacheKey).orElse(null);
         if (cachedResponse != null) {
             QueryResponse responseForCurrentQuery = withQueryId(cachedResponse, state.getQueryId());
             state.setCacheHit(true);

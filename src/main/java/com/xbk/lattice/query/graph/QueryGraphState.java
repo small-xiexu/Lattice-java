@@ -22,6 +22,8 @@ public class QueryGraphState {
     private String question;
     /** 归一化后的问题文本。 */
     private String normalizedQuestion;
+    /** 标准化缓存键（仅用于 query cache get/put，不影响 rewrite/intent/retrieval/audit）。 */
+    private String canonicalCacheKey;
     /** 经 LLM 改写后的问题文本。 */
     private String rewrittenQuestion;
     /** 查询意图分类。 */
