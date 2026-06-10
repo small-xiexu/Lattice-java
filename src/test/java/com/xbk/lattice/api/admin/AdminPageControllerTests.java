@@ -28,6 +28,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class AdminPageControllerTests {
 
+    private static final String ADMIN_CSS_VERSION = "20260610-admin-design-system-9";
+    private static final String ASK_JS_VERSION = "20260610-ask-evidence-disclosure-1";
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -93,10 +96,11 @@ class AdminPageControllerTests {
                 .andExpect(content().string(containsString("id=\"dismiss-query-feedback\"")))
                 .andExpect(content().string(containsString("id=\"knowledge-help-card\"")))
                 .andExpect(content().string(containsString("id=\"health-indicator-note\"")))
+                .andExpect(content().string(containsString("<body class=\"admin-page workbench-page\">")))
                 .andExpect(content().string(containsString("src=\"/admin/admin-tabs.js?v=20260502-tabs-scroll-2\"")))
                 .andExpect(content().string(containsString("src=\"/admin/admin-common.js?v=20260508-common-1\"")))
-                .andExpect(content().string(containsString("href=\"/admin/admin.css?v=20260526-diagnostic-ui-align-1\"")))
-                .andExpect(content().string(containsString("type=\"module\" src=\"/admin/management.js?v=20260526-diagnostic-ui-align-1\"")))
+                .andExpect(content().string(containsString("href=\"/admin/admin.css?v=" + ADMIN_CSS_VERSION + "\"")))
+                .andExpect(content().string(containsString("type=\"module\" src=\"/admin/management.js?v=" + ADMIN_CSS_VERSION + "\"")))
                 .andExpect(content().string(containsString("href=\"/admin/ask\"")))
                 .andExpect(content().string(containsString("href=\"/admin/settings\"")))
                 .andExpect(content().string(containsString("href=\"/admin/developer-access\"")))
@@ -133,11 +137,13 @@ class AdminPageControllerTests {
                 .andExpect(content().string(containsString("id=\"ask-source-summary\"")))
                 .andExpect(content().string(containsString("id=\"ask-sources\"")))
                 .andExpect(content().string(containsString("id=\"page-notice\"")))
+                .andExpect(content().string(containsString("<body class=\"admin-page ask-page\">")))
+                .andExpect(content().string(containsString("href=\"/admin/admin.css?v=" + ADMIN_CSS_VERSION + "\"")))
                 .andExpect(content().string(containsString("href=\"/admin/settings\"")))
                 .andExpect(content().string(containsString("href=\"/admin/developer-access\"")))
                 .andExpect(content().string(containsString("data-help-faq-key=\"no-citation\"")))
                 .andExpect(content().string(containsString("src=\"/admin/admin-common.js?v=20260508-common-1\"")))
-                .andExpect(content().string(containsString("type=\"module\" src=\"/admin/ask.js?v=20260508-module-1\"")))
+                .andExpect(content().string(containsString("type=\"module\" src=\"/admin/ask.js?v=" + ASK_JS_VERSION + "\"")))
                 .andExpect(content().string(not(containsString("文档解析连接"))))
                 .andExpect(content().string(not(containsString("id=\"test-document-parse-connection\""))))
                 .andExpect(content().string(not(containsString("id=\"global-status\""))))
@@ -160,6 +166,8 @@ class AdminPageControllerTests {
 
         mockMvc.perform(get("/admin/settings.html"))
                 .andExpect(status().isOk())
+                .andExpect(content().string(containsString("<body class=\"admin-page settings-page\">")))
+                .andExpect(content().string(containsString("href=\"/admin/admin.css?v=" + ADMIN_CSS_VERSION + "\"")))
                 .andExpect(content().string(containsString("id=\"settings-page-notice\"")))
                 .andExpect(content().string(containsString("data-tab-group=\"admin-console\"")))
                 .andExpect(content().string(containsString("data-tab-query-key=\"tab\"")))
@@ -220,6 +228,8 @@ class AdminPageControllerTests {
 
         mockMvc.perform(get("/admin/developer-access.html"))
                 .andExpect(status().isOk())
+                .andExpect(content().string(containsString("<body class=\"admin-page developer-access-page\">")))
+                .andExpect(content().string(containsString("href=\"/admin/admin.css?v=" + ADMIN_CSS_VERSION + "\"")))
                 .andExpect(content().string(containsString("id=\"refresh-developer-access\"")))
                 .andExpect(content().string(containsString("data-tab-group=\"developer-access-sections\"")))
                 .andExpect(content().string(containsString("data-tab-query-key=\"tab\"")))
@@ -255,6 +265,7 @@ class AdminPageControllerTests {
         mockMvc.perform(get("/admin/management.js"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("management-runtime-part-01.js")))
+                .andExpect(content().string(containsString("management-runtime-part-03.js?v=" + ADMIN_CSS_VERSION)))
                 .andExpect(content().string(containsString("new Function(runtimeParts.join")));
 
         mockMvc.perform(get("/admin/modules/management-runtime-part-02.js"))
@@ -291,6 +302,19 @@ class AdminPageControllerTests {
 
         mockMvc.perform(get("/admin/admin.css"))
                 .andExpect(status().isOk())
+                .andExpect(content().string(containsString("/* ---- Admin design system v3: shared tokens and components ---- */")))
+                .andExpect(content().string(containsString("--admin-color-bg")))
+                .andExpect(content().string(containsString("--admin-font-sans")))
+                .andExpect(content().string(containsString("--admin-color-surface-elevated")))
+                .andExpect(content().string(containsString("--admin-radius-panel")))
+                .andExpect(content().string(containsString("--admin-shadow-card")))
+                .andExpect(content().string(containsString("--admin-transition-fast")))
+                .andExpect(content().string(containsString(".admin-page .simple-table")))
+                .andExpect(content().string(containsString(".admin-page .primary-btn")))
+                .andExpect(content().string(containsString(".admin-page .badge")))
+                .andExpect(content().string(containsString(".admin-page.ask-page")))
+                .andExpect(content().string(not(containsString("/* ---- Admin design system v2 ---- */"))))
+                .andExpect(content().string(not(containsString("/* ---- Ask page UX redesign ---- */"))))
                 .andExpect(content().string(containsString(".article-toolbar")))
                 .andExpect(content().string(containsString(".run-runtime-grid")))
                 .andExpect(content().string(containsString(".run-runtime-item")))

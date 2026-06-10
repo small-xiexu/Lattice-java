@@ -21,6 +21,43 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AskJsRuntimeTests {
 
     @Test
+    void shouldKeepAskPageUiRegressionGuards() throws Exception {
+        String userDir = System.getProperty("user.dir");
+        Path askHtmlPath = Path.of(userDir, "src/main/resources/static/admin/ask.html");
+        Path adminCssPath = Path.of(userDir, "src/main/resources/static/admin/admin.css");
+        assertThat(Files.exists(askHtmlPath)).isTrue();
+        assertThat(Files.exists(adminCssPath)).isTrue();
+
+        String askHtml = Files.readString(askHtmlPath, StandardCharsets.UTF_8);
+        String adminCss = Files.readString(adminCssPath, StandardCharsets.UTF_8);
+        assertThat(askHtml)
+                .contains("<body class=\"admin-page ask-page\">")
+                .contains("/admin/admin.css?v=20260610-admin-design-system-9")
+                .contains("<details id=\"ask-feedback-panel\"")
+                .contains("class=\"detail-section answer-feedback-panel top-gap\"")
+                .contains("class=\"ask-feedback-summary\"")
+                .contains("class=\"ask-feedback-toggle\"");
+        assertThat(adminCss)
+                .doesNotContain("/* ---- Ask page UX redesign ---- */")
+                .contains(".admin-page .simple-table thead")
+                .contains(".admin-page .query-audit-hit-table .query-audit-col-title")
+                .contains(".admin-page .query-audit-title-cell .query-audit-cell-text")
+                .contains("font-weight: 400;")
+                .contains(".admin-page.ask-page .answer-feedback-panel[hidden]");
+        assertThat(adminCss)
+                .doesNotContain("/* ---- Admin design system v2 ---- */")
+                .contains("/* ---- Admin design system v3: shared tokens and components ---- */")
+                .contains("--admin-color-bg")
+                .contains("--admin-color-surface")
+                .contains("--admin-color-surface-elevated")
+                .contains("--admin-radius-sm")
+                .contains("--admin-shadow-card")
+                .contains("--admin-transition-fast")
+                .contains(".admin-page.ask-page")
+                .contains("--ask-surface: var(--admin-color-surface);");
+    }
+
+    @Test
     void shouldVerifyAskPageRuntimeHelpersViaNode(@TempDir Path tempDir) throws Exception {
         String userDir = System.getProperty("user.dir");
         Path adminCommonJsPath = Path.of(userDir, "src/main/resources/static/admin/admin-common.js");
@@ -116,6 +153,52 @@ class AskJsRuntimeTests {
                 }
 
                 assert(ask, "missing __LATTICE_ADMIN_TEST__.ask export");
+                assert(source.includes("setAskResultDetailsVisible(false)"),
+                    "loading state should hide secondary answer detail panels");
+                assert(source.includes("setAskResultDetailsVisible(true);\\n            renderAnswer"),
+                    "answer detail panels should be shown again before rendering the answer");
+                assert(!source.includes("正在判断这次回答的结果态、模型态、证据态和复核态"),
+                    "loading state should not render a second progress row under the answer");
+                assert(!source.includes("setStatus(\\"正在生成回答...\\", \\"info\\")"),
+                    "submitting state should not render a duplicate page-level loading notice");
+                assert(!source.includes("回答已生成，但当前证据仍偏弱"),
+                    "completed weak-evidence state should stay in the result guide instead of page-level notice");
+                assert(source.includes("clearStatus();\\n        toggleAskResultExperience(true);"),
+                    "submitting a new question should clear stale page-level notices");
+                assert(source.includes("syncAskFaqOpenState();\\n            clearStatus();"),
+                    "successful answers should not keep page-level completion notices visible");
+                assert(source.includes("renderAuditTableTextCell(title, \\"query-audit-title-cell\\")"),
+                    "retrieval audit table should wrap title cells for stable truncation");
+                assert(source.includes("<col class='query-audit-col-source'>"),
+                    "retrieval audit table should define stable column widths");
+                assert(source.includes("query-audit-run-table"),
+                    "retrieval channel runs should render as a compact table instead of a card wall");
+                assert(!source.includes("channelRuns.map(renderRetrievalChannelRunCard)"),
+                    "retrieval channel runs should not render a dense wall of cards");
+                assert(source.includes("function getRetrievalChannelMeta(channelName)"),
+                    "retrieval audit should expose human-readable channel names");
+                assert(source.includes("article_chunk_fts: {label: \\"文章段落\\""),
+                    "retrieval audit should show Chinese labels beside channel ids");
+                assert(source.includes("<details class='query-audit-hit-details'>"),
+                    "retrieval channel hit details should be collapsed behind a disclosure");
+                assert(!source.includes("<details class='query-audit-hit-details' open>"),
+                    "retrieval channel hit details should not expand by default");
+                assert(source.includes("data-full-text='"),
+                    "retrieval audit cells should keep full text without showing every tooltip by default");
+                assert(source.includes("function syncAuditOverflowTooltips(root)"),
+                    "retrieval audit should enable tooltips only after checking rendered overflow");
+                assert(source.includes("function isAuditTextOverflowing(element)"),
+                    "retrieval audit should detect whether a cell is actually truncated");
+                assert(source.includes("cell.removeAttribute(\\"data-tooltip\\")"),
+                    "retrieval audit should remove tooltips from cells that are fully visible");
+                assert(source.includes("bindAuditHitDetailsTooltips(container);"),
+                    "collapsed hit details should measure overflow after the user expands them");
+                assert(source.includes("panel.open = false;"),
+                    "answer feedback disclosure should collapse again when the answer experience resets");
+                assert(source.includes("function bindFeedbackDisclosureToggle()"),
+                    "answer feedback disclosure should bind a real toggle label instead of CSS-only text");
+                assert(source.includes("syncFeedbackDisclosureLabel(panel);"),
+                    "answer feedback disclosure should keep the visible toggle label in sync");
 
                 const sanitized = ask.trimSnippet(`---
                 title: "项目启动配置清单"

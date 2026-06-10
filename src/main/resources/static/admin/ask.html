@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>邪修智库｜知识问答</title>
-    <link rel="stylesheet" href="/admin/admin.css?v=20260505-answer-feedback-1">
+    <link rel="stylesheet" href="/admin/admin.css?v=20260610-admin-design-system-9">
 </head>
-<body>
+<body class="admin-page ask-page">
 <div class="app-shell">
     <div class="app-window">
         <aside class="sidebar">
@@ -105,40 +105,43 @@
                         <p>提交问题后，这里会优先显示这次回答最直接依赖的来源，以及是否已经形成稳定引用。</p>
                     </div>
                     <div id="ask-answer-metrics" class="metric-grid compact top-gap"></div>
-                    <section id="ask-feedback-panel" class="detail-section answer-feedback-panel top-gap">
-                        <div class="detail-section-header">
-                            <div>
-                                <h4>结果反馈</h4>
-                                <p class="detail-section-copy">把这次回答和引用来源送入治理队列。</p>
+                    <details id="ask-feedback-panel" class="detail-section answer-feedback-panel top-gap">
+                        <summary class="ask-feedback-summary">
+                            <span>
+                                <strong>结果反馈</strong>
+                                <small>把这次回答和引用来源送入治理队列。</small>
+                            </span>
+                            <span class="ask-feedback-toggle" data-open-label="收起" data-closed-label="展开">展开</span>
+                        </summary>
+                        <div class="ask-feedback-body">
+                            <div class="form-grid">
+                                <label>
+                                    <span>结果判断</span>
+                                    <select id="ask-feedback-type">
+                                        <option value="reliable">答案可靠</option>
+                                        <option value="answer_problem">答案有问题</option>
+                                        <option value="source_conflict">来源冲突</option>
+                                        <option value="needs_manual_confirmation">需要人工确认</option>
+                                    </select>
+                                </label>
+                                <label>
+                                    <span>反馈人</span>
+                                    <input id="ask-feedback-reporter" type="text" placeholder="anonymous">
+                                </label>
+                                <label class="field-span-2">
+                                    <span>补充说明</span>
+                                    <textarea id="ask-feedback-comment" rows="3" placeholder="可填写这次结果哪里可靠、哪里不稳或需要核对什么"></textarea>
+                                </label>
+                            </div>
+                            <div class="button-row wrap">
+                                <button id="submit-answer-feedback" class="secondary-btn" type="button">提交反馈</button>
+                                <span id="ask-feedback-status" class="detail-note" aria-live="polite"></span>
                             </div>
                         </div>
-                        <div class="form-grid">
-                            <label>
-                                <span>结果判断</span>
-                                <select id="ask-feedback-type">
-                                    <option value="reliable">答案可靠</option>
-                                    <option value="answer_problem">答案有问题</option>
-                                    <option value="source_conflict">来源冲突</option>
-                                    <option value="needs_manual_confirmation">需要人工确认</option>
-                                </select>
-                            </label>
-                            <label>
-                                <span>反馈人</span>
-                                <input id="ask-feedback-reporter" type="text" placeholder="anonymous">
-                            </label>
-                            <label class="field-span-2">
-                                <span>补充说明</span>
-                                <textarea id="ask-feedback-comment" rows="3" placeholder="可填写这次结果哪里可靠、哪里不稳或需要核对什么"></textarea>
-                            </label>
-                        </div>
-                        <div class="button-row wrap">
-                            <button id="submit-answer-feedback" class="secondary-btn" type="button">提交反馈</button>
-                            <span id="ask-feedback-status" class="detail-note" aria-live="polite"></span>
-                        </div>
-                    </section>
+                    </details>
                 </section>
 
-                <section id="ask-source-panel" class="panel" hidden>
+                <section id="ask-source-panel" class="panel ask-source-panel" hidden>
                     <div class="panel-title-row">
                         <div>
                             <h2>引用来源</h2>
@@ -156,7 +159,7 @@
                     </div>
                 </section>
 
-                <section id="ask-retrieval-audit-panel" class="panel" hidden>
+                <section id="ask-retrieval-audit-panel" class="panel ask-retrieval-audit-panel" hidden>
                     <div class="panel-title-row">
                         <div>
                             <h2>检索审计</h2>
@@ -171,7 +174,7 @@
                     <div id="ask-retrieval-channel-hits" class="table-shell top-gap"></div>
                 </section>
 
-                <section class="panel">
+                <section class="panel ask-faq-panel">
                     <div class="panel-title-row">
                         <div>
                             <h2>提问卡住时先看这里</h2>
@@ -236,6 +239,6 @@
     </div>
 </div>
 <script src="/admin/admin-common.js?v=20260508-common-1"></script>
-<script type="module" src="/admin/ask.js?v=20260508-module-1"></script>
+<script type="module" src="/admin/ask.js?v=20260610-ask-evidence-disclosure-1"></script>
 </body>
 </html>
