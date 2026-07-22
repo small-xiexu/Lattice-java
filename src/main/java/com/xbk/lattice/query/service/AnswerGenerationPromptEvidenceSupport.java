@@ -41,6 +41,9 @@ abstract class AnswerGenerationPromptEvidenceSupport extends AnswerGenerationFal
 
     private static final int PROMPT_FOCUS_WINDOW_FORWARD_LINE_LIMIT = 6;
 
+    /** 当文章内容行数超过此阈值时，启用段落多样性选择，避免仅从文章前段取 snippet。 */
+    private static final int PROMPT_FOCUS_LONG_CONTENT_LINE_THRESHOLD = 60;
+
     /**
      * 创建无 LLM 的答案生成拆分支持。
      */
@@ -441,7 +444,7 @@ Map<QueryEvidenceType, List<QueryArticleHit>> groupHitsByEvidenceType(List<Query
                 rightCandidate.score,
                 leftCandidate.score
         ));
-        return selectNonOverlappingPromptFocusWindows(candidates, limit);
+        return selectNonOverlappingPromptFocusWindows(candidates, limit, contentLines.size());
     }
 
     /**
@@ -673,9 +676,92 @@ Map<QueryEvidenceType, List<QueryArticleHit>> groupHitsByEvidenceType(List<Query
      *
      * @param candidates 候选窗口
      * @param limit 数量上限
+     * @param contentLineCount 正文行总数
      * @return 选中的窗口文本
      */
     private List<String> selectNonOverlappingPromptFocusWindows(
+            List<PromptFocusWindowCandidate> candidates,
+            int limit,
+            int contentLineCount
+    ) {
+        if (candidates.isEmpty() || limit <= 0) {
+            return List.of();
+        }
+        if (contentLineCount > PROMPT_FOCUS_LONG_CONTENT_LINE_THRESHOLD && candidates.size() >= 3) {
+            return selectSegmentDiversePromptFocusWindows(candidates, limit, contentLineCount);
+        }
+        return selectGreedyPromptFocusWindows(candidates, limit);
+    }
+
+    /**
+     * 按段落多样性挑选局部窗口，确保长文章的 snippet 覆盖前、中、后段。
+     *
+     * @param candidates 候选窗口
+     * @param limit 数量上限
+     * @param contentLineCount 正文行总数
+     * @return 选中的窗口文本
+     */
+    private List<String> selectSegmentDiversePromptFocusWindows(
+            List<PromptFocusWindowCandidate> candidates,
+            int limit,
+            int contentLineCount
+    ) {
+        int segmentCount = Math.min(limit, 3);
+        int segmentSize = Math.max(1, contentLineCount / segmentCount);
+        List<String> snippets = new ArrayList<String>();
+        List<PromptFocusWindowCandidate> selectedCandidates = new ArrayList<PromptFocusWindowCandidate>();
+        Set<String> coveredTokens = new LinkedHashSet<String>();
+        for (int segmentIndex = 0; segmentIndex < segmentCount; segmentIndex++) {
+            int segmentStart = segmentIndex * segmentSize;
+            int segmentEnd = segmentIndex < segmentCount - 1
+                    ? (segmentIndex + 1) * segmentSize
+                    : contentLineCount;
+            PromptFocusWindowCandidate bestInSegment = null;
+            for (PromptFocusWindowCandidate candidate : candidates) {
+                if (candidate.anchorIndex < segmentStart || candidate.anchorIndex >= segmentEnd) {
+                    continue;
+                }
+                if (bestInSegment == null || candidate.score > bestInSegment.score) {
+                    bestInSegment = candidate;
+                }
+            }
+            if (bestInSegment == null) {
+                continue;
+            }
+            if (overlapsSelectedPromptFocusWindow(bestInSegment, selectedCandidates)
+                    && coveredTokens.containsAll(bestInSegment.coveredTokens)) {
+                continue;
+            }
+            snippets.add(bestInSegment.snippet);
+            selectedCandidates.add(bestInSegment);
+            coveredTokens.addAll(bestInSegment.coveredTokens);
+        }
+        for (PromptFocusWindowCandidate candidate : candidates) {
+            if (snippets.size() >= limit) {
+                break;
+            }
+            if (selectedCandidates.contains(candidate)) {
+                continue;
+            }
+            if (overlapsSelectedPromptFocusWindow(candidate, selectedCandidates)
+                    && coveredTokens.containsAll(candidate.coveredTokens)) {
+                continue;
+            }
+            snippets.add(candidate.snippet);
+            selectedCandidates.add(candidate);
+            coveredTokens.addAll(candidate.coveredTokens);
+        }
+        return snippets;
+    }
+
+    /**
+     * 按覆盖增益贪心挑选互不重复的局部窗口（原有行为）。
+     *
+     * @param candidates 候选窗口
+     * @param limit 数量上限
+     * @return 选中的窗口文本
+     */
+    private List<String> selectGreedyPromptFocusWindows(
             List<PromptFocusWindowCandidate> candidates,
             int limit
     ) {
