@@ -122,6 +122,59 @@ class WeightedRrfFusionTest {
     }
 
     /**
+     * 验证 POLICY 形态的结构化 guardrail 也会保留多样性，而不是被单一 article 占满。
+     */
+    @Test
+    void shouldApplyDiversityInPolicyStructuredGuardrail() {
+        RrfFusionService rrfFusionService = new RrfFusionService();
+        Map<String, List<QueryArticleHit>> channelHits = new LinkedHashMap<String, List<QueryArticleHit>>();
+        channelHits.put(
+                RetrievalStrategyResolver.CHANNEL_ARTICLE_VECTOR,
+                List.of(
+                        articleChunkHit("policy-article", "配置上限说明 / 背景 1", 1),
+                        articleChunkHit("policy-article", "配置上限说明 / 背景 2", 2),
+                        articleChunkHit("policy-article", "配置上限说明 / 背景 3", 3),
+                        articleChunkHit("policy-article", "配置上限说明 / 背景 4", 4)
+                )
+        );
+        channelHits.put(
+                RetrievalStrategyResolver.CHANNEL_FACT_CARD_FTS,
+                List.of(factCardHit(
+                        "policy-limit-card",
+                        "valid",
+                        "配置上限说明",
+                        "最大配置上限为 60，超过后不再继续增加。"
+                ))
+        );
+        channelHits.put(
+                RetrievalStrategyResolver.CHANNEL_SOURCE_CHUNK_FTS,
+                List.of(sourceHit(
+                        "policy-limit-source",
+                        "application.yml",
+                        "limit.max-days: 60"
+                ))
+        );
+
+        List<QueryArticleHit> fusedHits = rrfFusionService.fuse(
+                channelHits,
+                structuredRetrievalStrategy(AnswerShape.POLICY, "配置上限是多少？"),
+                4
+        );
+
+        assertThat(fusedHits).hasSize(4);
+        assertThat(fusedHits)
+                .extracting(QueryArticleHit::getEvidenceType)
+                .contains(QueryEvidenceType.FACT_CARD, QueryEvidenceType.SOURCE);
+        assertThat(fusedHits)
+                .extracting(QueryArticleHit::getConceptId)
+                .contains("policy-limit-card", "policy-limit-source");
+        assertThat(fusedHits)
+                .extracting(QueryArticleHit::getArticleKey)
+                .filteredOn(articleKey -> "policy-article".equals(articleKey))
+                .hasSizeLessThanOrEqualTo(2);
+    }
+
+    /**
      * 验证普通问题中 vector 通道文章作为主证据与 fact_card/source 平等竞争。
      *
      * <p>article_vector / chunk_vector 现纳入主证据白名单，在 GENERAL 形态下
@@ -554,5 +607,169 @@ class WeightedRrfFusionTest {
                 List.of("source.md"),
                 1.0D
         );
+    }
+
+    /**
+     * 构造带 articleKey 与 chunkIdentity 的 article chunk 命中。
+     *
+     * @param articleKey article 身份
+     * @param title 标题
+     * @param chunkIndex chunk 序号
+     * @return article chunk 命中
+     */
+    private QueryArticleHit articleChunkHit(String articleKey, String title, int chunkIndex) {
+        String metadataJson = "{\"chunkIdentity\":\"ARTICLE_CHUNK:"
+                + articleKey + "#" + chunkIndex
+                + "\",\"chunkIndex\":" + chunkIndex + "}";
+        return new QueryArticleHit(
+                QueryEvidenceType.ARTICLE,
+                null,
+                articleKey,
+                "concept-" + articleKey,
+                title,
+                "Content of " + title,
+                metadataJson,
+                null,
+                List.of("source-" + articleKey + ".md"),
+                0.0D
+        );
+    }
+
+    /**
+     * 验证同一 article 的多个 chunk 不会占满全部 topK，为其他来源留出位置。
+     */
+    @Test
+    void shouldLimitSameArticleChunksInTopK() {
+        RrfFusionService rrfFusionService = new RrfFusionService();
+
+        List<QueryArticleHit> hits = List.of(
+                articleChunkHit("article-a", "A Chunk 1", 1),
+                articleChunkHit("article-a", "A Chunk 2", 2),
+                articleChunkHit("article-a", "A Chunk 3", 3),
+                articleChunkHit("article-a", "A Chunk 4", 4),
+                articleChunkHit("article-a", "A Chunk 5", 5),
+                articleChunkHit("article-b", "B Chunk 1", 1),
+                articleChunkHit("article-b", "B Chunk 2", 2),
+                articleChunkHit("article-c", "C Chunk 1", 1)
+        );
+
+        List<QueryArticleHit> fused = rrfFusionService.fuse(
+                Map.of("fts", hits),
+                Map.of("fts", 1.0),
+                5,
+                60
+        );
+
+        assertThat(fused).hasSize(5);
+        long countA = fused.stream().filter(h -> "article-a".equals(h.getArticleKey())).count();
+        long countB = fused.stream().filter(h -> "article-b".equals(h.getArticleKey())).count();
+        long countC = fused.stream().filter(h -> "article-c".equals(h.getArticleKey())).count();
+
+        assertThat(countA)
+                .as("article-a should not monopolize topK")
+                .isLessThanOrEqualTo(2);
+        assertThat(countB)
+                .as("article-b should enter topK")
+                .isGreaterThan(0);
+        assertThat(countC)
+                .as("article-c should enter topK")
+                .isGreaterThan(0);
+    }
+
+    /**
+     * 验证 limit 较小时仍按分数优先，且不丢失结果。
+     */
+    @Test
+    void shouldKeepScoreOrderWithSmallLimit() {
+        RrfFusionService rrfFusionService = new RrfFusionService();
+
+        List<QueryArticleHit> hits = List.of(
+                articleChunkHit("article-a", "A Chunk 1", 1),
+                articleChunkHit("article-a", "A Chunk 2", 2),
+                articleChunkHit("article-a", "A Chunk 3", 3),
+                articleChunkHit("article-b", "B Chunk 1", 1)
+        );
+
+        List<QueryArticleHit> fused = rrfFusionService.fuse(
+                Map.of("fts", hits),
+                Map.of("fts", 1.0),
+                2,
+                60
+        );
+
+        assertThat(fused).hasSize(2);
+        long countA = fused.stream().filter(h -> "article-a".equals(h.getArticleKey())).count();
+        assertThat(countA)
+                .as("small limit should still allow same-article hits up to diversity cap")
+                .isEqualTo(2);
+        assertThat(fused.get(0).getTitle()).isEqualTo("A Chunk 1");
+        assertThat(fused.get(1).getTitle()).isEqualTo("A Chunk 2");
+    }
+
+    /**
+     * 验证不同 article 的命中不会被错误合并到同一 diversity group。
+     */
+    @Test
+    void shouldNotMergeDifferentArticleGroups() {
+        RrfFusionService rrfFusionService = new RrfFusionService();
+
+        List<QueryArticleHit> hits = List.of(
+                articleChunkHit("article-a", "A Chunk 1", 1),
+                articleChunkHit("article-a", "A Chunk 2", 2),
+                articleChunkHit("article-a", "A Chunk 3", 3),
+                articleChunkHit("article-b", "B Chunk 1", 1),
+                articleChunkHit("article-b", "B Chunk 2", 2),
+                articleChunkHit("article-b", "B Chunk 3", 3)
+        );
+
+        List<QueryArticleHit> fused = rrfFusionService.fuse(
+                Map.of("fts", hits),
+                Map.of("fts", 1.0),
+                4,
+                60
+        );
+
+        assertThat(fused).hasSize(4);
+        long countA = fused.stream().filter(h -> "article-a".equals(h.getArticleKey())).count();
+        long countB = fused.stream().filter(h -> "article-b".equals(h.getArticleKey())).count();
+        assertThat(countA)
+                .as("different articles should each get their own diversity quota")
+                .isEqualTo(2);
+        assertThat(countB)
+                .as("different articles should each get their own diversity quota")
+                .isEqualTo(2);
+    }
+
+    /**
+     * 验证不足 limit 时回填剩余高分命中。
+     */
+    @Test
+    void shouldBackfillWhenNotEnoughDiversityHits() {
+        RrfFusionService rrfFusionService = new RrfFusionService();
+
+        List<QueryArticleHit> hits = List.of(
+                articleChunkHit("article-a", "A Chunk 1", 1),
+                articleChunkHit("article-a", "A Chunk 2", 2),
+                articleChunkHit("article-a", "A Chunk 3", 3),
+                articleChunkHit("article-a", "A Chunk 4", 4),
+                articleChunkHit("article-b", "B Chunk 1", 1)
+        );
+
+        List<QueryArticleHit> fused = rrfFusionService.fuse(
+                Map.of("fts", hits),
+                Map.of("fts", 1.0),
+                5,
+                60
+        );
+
+        assertThat(fused).hasSize(5);
+        long countA = fused.stream().filter(h -> "article-a".equals(h.getArticleKey())).count();
+        long countB = fused.stream().filter(h -> "article-b".equals(h.getArticleKey())).count();
+        assertThat(countA)
+                .as("after diversity cap, should backfill remaining article-a hits")
+                .isGreaterThan(2);
+        assertThat(countB)
+                .as("article-b should still be present")
+                .isEqualTo(1);
     }
 }

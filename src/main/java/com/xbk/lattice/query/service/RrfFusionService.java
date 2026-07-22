@@ -30,6 +30,9 @@ public class RrfFusionService {
 
     private static final int DEFAULT_RRF_K = 60;
 
+    /** 同一 diversity group（article/source）在 fused topK 中最多保留的命中数 */
+    private static final int MAX_HITS_PER_DIVERSITY_GROUP = 2;
+
     private final QueryRetrievalSettingsService queryRetrievalSettingsService;
 
     /**
@@ -214,10 +217,7 @@ public class RrfFusionService {
                 || hasRelevantDirectEvidence(retrievalQuestion, fusedHits, channelMap)) {
             return applyStructuredEvidenceGuardrail(fusedHits, channelMap, limit, retrievalQuestion);
         }
-        if (fusedHits.size() <= limit) {
-            return fusedHits;
-        }
-        return fusedHits.subList(0, limit);
+        return selectWithDiversity(fusedHits, limit);
     }
 
     /**
@@ -238,7 +238,7 @@ public class RrfFusionService {
             return sortStructuredHits(fusedHits, channelMap, retrievalQuestion);
         }
         List<QueryArticleHit> rankedHits = sortStructuredHits(fusedHits, channelMap, retrievalQuestion);
-        List<QueryArticleHit> selectedHits = new ArrayList<QueryArticleHit>(rankedHits.subList(0, limit));
+        List<QueryArticleHit> selectedHits = selectWithDiversity(rankedHits, limit);
         Map<String, QueryArticleHit> selectedHitMap = toHitMap(selectedHits);
         for (QueryArticleHit fusedHit : rankedHits) {
             if (!isPrimaryStructuredEvidence(fusedHit, channelMap)) {
@@ -452,6 +452,68 @@ public class RrfFusionService {
                 || answerShape == AnswerShape.SEQUENCE
                 || answerShape == AnswerShape.STATUS
                 || answerShape == AnswerShape.POLICY;
+    }
+
+    /**
+     * 带多样性约束选择 topK。
+     *
+     * <p>第一轮每个 diversity group（article/source）最多保留
+     * {@link #MAX_HITS_PER_DIVERSITY_GROUP} 个命中，按 RRF 分数降序选取。
+     * 若不足 limit，第二轮从剩余命中中按原始分数顺序回填。</p>
+     *
+     * @param sortedHits 按 RRF 分数降序排列的全量命中
+     * @param limit 返回数量上限
+     * @return 多样性选择后的 topK 命中
+     */
+    private List<QueryArticleHit> selectWithDiversity(List<QueryArticleHit> sortedHits, int limit) {
+        if (sortedHits.size() <= limit) {
+            return new ArrayList<QueryArticleHit>(sortedHits);
+        }
+        List<QueryArticleHit> selected = new ArrayList<QueryArticleHit>();
+        Map<String, Integer> groupCounts = new LinkedHashMap<String, Integer>();
+        List<QueryArticleHit> remaining = new ArrayList<QueryArticleHit>();
+        for (QueryArticleHit hit : sortedHits) {
+            String groupKey = buildDiversityGroupKey(hit);
+            int count = groupCounts.getOrDefault(groupKey, 0);
+            if (count < MAX_HITS_PER_DIVERSITY_GROUP) {
+                selected.add(hit);
+                groupCounts.put(groupKey, count + 1);
+                if (selected.size() >= limit) {
+                    return selected;
+                }
+                continue;
+            }
+            remaining.add(hit);
+        }
+        for (QueryArticleHit hit : remaining) {
+            if (selected.size() >= limit) {
+                break;
+            }
+            selected.add(hit);
+        }
+        return selected;
+    }
+
+    /**
+     * 构建多样性分组键。
+     *
+     * <p>优先使用 articleKey，确保同一 article 的所有 chunk 归入同一 group。
+     * articleKey 为空时依次 fallback 到 conceptId、sourcePaths。</p>
+     *
+     * @param hit 查询命中
+     * @return 多样性分组键
+     */
+    private String buildDiversityGroupKey(QueryArticleHit hit) {
+        if (hit.getArticleKey() != null && !hit.getArticleKey().isBlank()) {
+            return "article:" + hit.getArticleKey();
+        }
+        if (hit.getConceptId() != null && !hit.getConceptId().isBlank()) {
+            return "concept:" + hit.getConceptId();
+        }
+        if (hit.getSourcePaths() != null && !hit.getSourcePaths().isEmpty()) {
+            return "source:" + String.join(",", hit.getSourcePaths());
+        }
+        return "hit:" + buildHitKey(hit);
     }
 
     /**
