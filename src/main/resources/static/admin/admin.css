@@ -10478,6 +10478,28 @@ body.admin-page {
     word-break: normal;
 }
 
+/* ---- Admin design system v11: table citation popovers escape horizontal scroll ---- */
+
+.admin-page.ask-page .answer-table-shell .citation-marker-in-table .citation-popover {
+    position: fixed;
+    top: var(--citation-popover-fixed-top, 20vh);
+    bottom: auto;
+    left: var(--citation-popover-fixed-left, 12px);
+    right: auto;
+    width: min(460px, 86vw);
+    max-height: min(360px, 62vh);
+    transform: translateY(calc(-100% - 8px));
+}
+
+.admin-page.ask-page .answer-table-shell .citation-marker-in-table.citation-marker-fixed-below .citation-popover {
+    transform: none;
+}
+
+.admin-page.ask-page .answer-table-shell .citation-marker-in-table::after,
+.admin-page.ask-page .answer-table-shell .citation-marker-in-table .citation-popover::after {
+    display: none;
+}
+
 @media (max-width: 1180px) {
     .admin-page .query-feedback-workspace {
         grid-template-columns: 1fr;
