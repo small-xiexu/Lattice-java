@@ -1,0 +1,68 @@
+:root {
+  --color-canvas: #f7f8fa;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f1f3f5;
+  --color-surface-hover: #e9edf2;
+  --color-text: #171a1f;
+  --color-text-secondary: #505966;
+  --color-text-muted: #667180;
+  --color-border: #dde1e6;
+  --color-border-strong: #b8c0cc;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-subtle: #eff6ff;
+  --color-info: #0e7490;
+  --color-success: #15803d;
+  --color-warning: #a16207;
+  --color-danger: #b91c1c;
+  --color-focus: #2563eb;
+  --color-info-subtle: #ecfeff;
+  --color-success-subtle: #f0fdf4;
+  --color-warning-subtle: #fffbeb;
+  --color-danger-subtle: #fef2f2;
+  --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  --sidebar-width: 216px;
+  --sidebar-collapsed-width: 64px;
+  --topbar-height: 56px;
+  --radius-small: 4px;
+  --radius-control: 6px;
+  --radius-panel: 8px;
+  --shadow-popover: 0 12px 32px rgb(15 23 42 / 14%);
+  --motion-fast: 120ms;
+  --motion-default: 180ms;
+  --motion-panel: 240ms;
+  --motion-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-popover: 30;
+  --z-drawer: 40;
+  --z-modal: 50;
+  color: var(--color-text);
+  background: var(--color-canvas);
+  font-family: var(--font-sans);
+  font-synthesis: none;
+  letter-spacing: 0;
+  text-rendering: optimizeLegibility;
+}
+
+[data-theme="dark"] {
+  --color-canvas: #101214;
+  --color-surface: #171a1d;
+  --color-surface-subtle: #202428;
+  --color-surface-hover: #292e34;
+  --color-text: #f5f7fa;
+  --color-text-secondary: #c3cad4;
+  --color-text-muted: #a7b0bc;
+  --color-border: #32383f;
+  --color-border-strong: #4a535e;
+  --color-primary: #78a7ff;
+  --color-primary-hover: #9abdff;
+  --color-primary-subtle: #17264a;
+  --color-info: #67d3e8;
+  --color-success: #62d58b;
+  --color-warning: #f0c45c;
+  --color-danger: #ff8a8a;
+  --color-focus: #78a7ff;
+}

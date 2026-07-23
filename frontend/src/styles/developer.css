@@ -1,0 +1,324 @@
+.developer-page {
+  padding-bottom: 48px;
+}
+
+.developer-refresh-button {
+  width: 40px;
+  height: 40px;
+}
+
+.developer-layout {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.45fr) minmax(480px, 1.35fr) minmax(240px, 0.6fr);
+  min-height: 660px;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.developer-directory {
+  min-width: 0;
+  padding: 18px 14px 18px 0;
+  border-right: 1px solid var(--color-border);
+}
+
+.developer-directory > p {
+  margin: 0 0 10px 10px;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.developer-directory button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px;
+  color: var(--color-text-secondary);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-left: 3px solid transparent;
+}
+
+.developer-directory button:hover {
+  background: var(--color-surface-hover);
+}
+
+.developer-directory button.is-selected {
+  color: var(--color-primary);
+  background: var(--color-primary-subtle);
+  border-left-color: var(--color-primary);
+}
+
+.developer-directory button > svg {
+  margin-top: 2px;
+}
+
+.developer-directory button span {
+  display: grid;
+  min-width: 0;
+}
+
+.developer-directory button strong {
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.developer-directory button small {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.developer-content {
+  min-width: 0;
+  padding: 22px 28px 36px;
+}
+
+.developer-document > header {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.developer-document > header > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--color-primary);
+}
+
+.developer-document h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
+}
+
+.developer-document > header p {
+  margin: 3px 0 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.developer-template {
+  margin-top: 22px;
+}
+
+.developer-template > header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+  margin-bottom: 8px;
+}
+
+.developer-template h3 {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.developer-template .secondary-button {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.developer-template pre {
+  max-width: 100%;
+  padding: 14px;
+  margin: 0;
+  overflow: auto;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+
+.developer-template code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 18px;
+  white-space: pre;
+}
+
+.developer-verification-list {
+  display: grid;
+  gap: 8px;
+  padding-left: 22px;
+  margin: 24px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.developer-copy-status {
+  min-height: 18px;
+  margin: 20px 0 0;
+  color: var(--color-success);
+  font-size: 11px;
+}
+
+.developer-runtime {
+  min-width: 0;
+  padding: 22px 0 30px 20px;
+  border-left: 1px solid var(--color-border);
+}
+
+.developer-runtime > header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.developer-runtime > header svg {
+  color: var(--color-text-muted);
+}
+
+.developer-runtime h2 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.developer-runtime-address,
+.developer-health-block {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  padding: 13px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.developer-runtime-address > span,
+.developer-health-block > span {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.developer-runtime-address code {
+  padding-right: 40px;
+  overflow-wrap: anywhere;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.developer-runtime-address .icon-button {
+  position: absolute;
+  right: 0;
+  bottom: 8px;
+  width: 32px;
+  height: 32px;
+}
+
+.developer-health-block strong {
+  width: fit-content;
+  padding: 3px 7px;
+  font-size: 11px;
+  border-radius: var(--radius-small);
+}
+
+.developer-health-block strong.is-success {
+  color: var(--color-success);
+  background: var(--color-success-subtle);
+}
+
+.developer-health-block strong.is-warning {
+  color: var(--color-warning);
+  background: var(--color-warning-subtle);
+}
+
+.developer-health-block strong.is-error {
+  color: var(--color-danger);
+  background: var(--color-danger-subtle);
+}
+
+.developer-health-block p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  line-height: 16px;
+}
+
+@media (max-width: 1279px) {
+  .developer-layout {
+    grid-template-columns: minmax(180px, 0.45fr) minmax(480px, 1.55fr);
+  }
+
+  .developer-runtime {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0 20px;
+    padding-left: 0;
+    border-top: 1px solid var(--color-border);
+    border-left: 0;
+  }
+
+  .developer-runtime > header {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 767px) {
+  .developer-layout {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .developer-directory {
+    display: flex;
+    gap: 1px;
+    padding: 0 0 14px;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .developer-directory > p {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .developer-directory button {
+    flex: 1 0 116px;
+    min-height: 54px;
+  }
+
+  .developer-directory button small {
+    display: none;
+  }
+
+  .developer-content {
+    padding: 20px 0 28px;
+  }
+
+  .developer-runtime {
+    grid-column: 1;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding: 20px 0 28px;
+  }
+
+  .developer-runtime > header {
+    grid-column: 1;
+  }
+
+  .developer-template pre {
+    padding: 12px;
+  }
+}

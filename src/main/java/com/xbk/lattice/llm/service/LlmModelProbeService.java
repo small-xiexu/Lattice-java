@@ -262,7 +262,7 @@ public class LlmModelProbeService {
                     resolvedConfig.apiKey,
                     resolvedConfig.modelName,
                     toDouble(resolvedConfig.temperature),
-                    Integer.valueOf(resolveChatMaxTokens(resolvedConfig.maxTokens)),
+                    resolveOpenAiChatMaxTokens(resolvedConfig.maxTokens),
                     Integer.valueOf(resolveTimeout(resolvedConfig.timeoutSeconds)),
                     resolvedConfig.extraOptionsJson
             ).call("你是模型测试助手，请只回答 OK。", "请只回答 OK");
@@ -415,6 +415,19 @@ public class LlmModelProbeService {
             return DEFAULT_CHAT_MAX_TOKENS;
         }
         return Math.min(maxTokens.intValue(), DEFAULT_CHAT_MAX_TOKENS);
+    }
+
+    /**
+     * 解析 OpenAI 兼容模型探针的最大输出 token。
+     *
+     * @param maxTokens 已配置值
+     * @return 最终 token 数，未配置时返回 null
+     */
+    private Integer resolveOpenAiChatMaxTokens(Integer maxTokens) {
+        if (maxTokens == null || maxTokens.intValue() <= 0) {
+            return null;
+        }
+        return Integer.valueOf(Math.min(maxTokens.intValue(), DEFAULT_CHAT_MAX_TOKENS));
     }
 
     /**

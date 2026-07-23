@@ -373,7 +373,7 @@ class ArticleCorrectionServiceTests {
         assertThatThrownBy(() -> articleCorrectionService.correct("payment-config", "重试次数应为 5"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("README 演示 LLM 连接")
-                .hasMessageContaining("/admin/settings")
+                .hasMessageContaining("/app/settings/models")
                 .hasMessageContaining("compile.writer");
         assertThat(snapshotService.freezeCount).isEqualTo(1);
         assertThat(compileClient.getSystemPrompts()).isEmpty();

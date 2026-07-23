@@ -14,7 +14,7 @@ java_over_limit="$(
 )"
 
 js_over_limit="$(
-  find "$ROOT_DIR/src/main/resources/static/admin" -type f -name '*.js' -print0 \
+  find "$ROOT_DIR/frontend/src" -type f \( -name '*.js' -o -name '*.ts' -o -name '*.tsx' \) -print0 \
     | xargs -0 wc -c \
     | awk -v max="$MAX_JS_BYTES" '$2 != "total" && $1 > max {print $1 " " $2}'
 )"
@@ -26,7 +26,7 @@ if [[ -n "$java_over_limit" ]]; then
 fi
 
 if [[ -n "$js_over_limit" ]]; then
-  echo "Admin JS files over ${MAX_JS_BYTES} bytes:"
+  echo "Frontend source files over ${MAX_JS_BYTES} bytes:"
   echo "$js_over_limit"
   status=1
 fi

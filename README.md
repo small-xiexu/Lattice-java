@@ -1,6 +1,6 @@
 # 邪修智库（Lattice-java）
 
-邪修智库是一个 Java 知识后端：先把资料编译成可检索、可审计的知识资产，再提供普通问答、Deep Research、反馈治理、模型中心和多入口接入能力。
+邪修智库是一个证据型知识问答与治理工作台：先把资料编译成可检索、可审计的知识资产，再通过 React 工作台、HTTP API、CLI 和 MCP 提供问答、Deep Research、反馈与知识治理能力。
 
 它不是“上传文档 -> 切 chunk -> 问模型”的最小 RAG demo。当前项目的核心是四条主线：
 
@@ -16,6 +16,8 @@
 | 项 | 当前口径 |
 |---|---|
 | JDK | 21 |
+| Node / npm | `24.18.0` / `11.16.0` |
+| 前端 | React 19 + TypeScript 6 + Vite 8，源码位于 `frontend/` |
 | Spring Boot | 3.5.1 |
 | Spring AI | 1.1.2 |
 | Spring AI Alibaba Graph | 1.1.2.0 |
@@ -24,6 +26,7 @@
 | 向量 | pgvector，当前索引表按 `src/main/resources/db/schema.sql` 创建 |
 | DDL | 不使用 Flyway；显式执行 `scripts/reset-lattice-schema.sh` |
 | 本地开发入口 | `scripts/run-local-dev.sh`，默认端口 `18082` |
+| 生产制品 | Maven 内置隔离 Node/npm 工具链，将 `/app/*` 打入单一 Spring Boot JAR |
 
 ## 系统骨架
 
@@ -49,10 +52,16 @@ flowchart LR
 
 | 页面 | 用途 |
 |---|---|
-| `/admin` | 资料导入、处理任务、编译任务、系统概览 |
-| `/admin/ask` | 真实提问、查看答案、引用、证据状态和反馈 |
-| `/admin/settings` | LLM 模型中心、向量配置、文档解析路由、编译审查配置 |
-| `/admin/developer-access` | HTTP API、CLI、MCP 接入说明 |
+| `/app/ask` | 智能/快速/深度问答、引用核验与反馈 |
+| `/app/library/sources` | 本地文件、Git、Internal Mirror、服务端目录和直接编译入口 |
+| `/app/library/articles` | 文章搜索、详情、来源追溯与文章治理 |
+| `/app/library/quality` | 质量、覆盖率、知识检查、链接增强与 Fact Card |
+| `/app/activity` | source run、processing task 和 compile job 统一处理中心 |
+| `/app/reviews` / `/app/feedback` | 编译审核、Query Pending 和结果反馈治理 |
+| `/app/settings/*` | 模型、向量、解析、检索参数和高风险维护 |
+| `/app/developer` | HTTP API、CLI、MCP 接入说明与健康检查 |
+
+`/app` 进入问答页，所有无扩展名的 `/app/*` 深链接支持 SPA fallback。旧 `/admin/*` 页面已直接退役并返回 404，`/api/v1/admin/*` 业务 API 不受影响。
 
 ### HTTP API
 
@@ -95,15 +104,25 @@ curl http://127.0.0.1:18082/actuator/health
 
 然后打开：
 
-- `http://127.0.0.1:18082/admin/settings`
-- `http://127.0.0.1:18082/admin`
-- `http://127.0.0.1:18082/admin/ask`
+- `http://127.0.0.1:18082/app/ask`
+- `http://127.0.0.1:18082/app/library/sources`
+- `http://127.0.0.1:18082/app/settings/models`
+
+修改前端源码时，保持后端 `18082` 运行，另开终端启动 Vite HMR：
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+开发态访问 `http://127.0.0.1:5173/app/ask`，Vite 会将 `/api`、`/actuator` 和 `/mcp` 代理到 `18082`。
 
 更完整的依赖、数据库、容器和验收步骤见 [`docs/项目启动配置清单.md`](docs/%E9%A1%B9%E7%9B%AE%E5%90%AF%E5%8A%A8%E9%85%8D%E7%BD%AE%E6%B8%85%E5%8D%95.md)。
 
 ## 模型与向量配置
 
-首次启动后，需要在 `/admin/settings` 或 Admin API 中配置：
+首次启动后，需要在 `/app/settings/models`、`/app/settings/vector`、`/app/settings/parsing` 或 Admin API 中配置：
 
 | 配置 | 说明 |
 |---|---|
@@ -137,7 +156,10 @@ curl http://127.0.0.1:18082/actuator/health
 | `src/main/java/com/xbk/lattice/cli/**` | CLI 命令入口 |
 | `src/main/java/com/xbk/lattice/mcp/**` | MCP 工具注册与桥接 |
 | `src/main/resources/db/schema.sql` | 当前唯一 DDL 基线 |
-| `src/main/resources/static/admin/**` | 后台管理页面 |
+| `src/main/java/com/xbk/lattice/api/web/**` | `/app/*` SPA fallback 与静态资源缓存边界 |
+| `frontend/src/**` | React 工作台源码、类型化 API Client 和组件测试 |
+| `frontend/e2e/**` | Playwright 路由、可访问性与响应式门禁 |
+| `target/generated-resources/frontend/static/app/**` | Vite 生产产物；由构建生成，不提交 Git |
 
 ## 常用命令
 
@@ -157,8 +179,19 @@ curl http://127.0.0.1:18082/actuator/health
 # 红线扫描
 bash scripts/scan-redline.sh special_cases_report.md
 
-# Maven 测试
-mvn test
+# 前端独立门禁
+cd frontend
+npm ci
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+npm run test:e2e
+
+# JDK 21 Maven 单制品构建：会使用隔离 Node/npm 重跑前端门禁
+cd ..
+export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
+mvn -s .codex/maven-settings.xml clean package
 ```
 
 如果本机 Maven 镜像握手不稳定，可临时使用项目内 `.codex/maven-settings.xml`。当前项目约定仍以全局本地仓库 `/Users/sxie/maven/repository` 为主。

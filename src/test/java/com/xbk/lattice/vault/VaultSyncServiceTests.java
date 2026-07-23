@@ -188,6 +188,71 @@ class VaultSyncServiceTests {
         assertThat(articleJdbcRepository.findByConceptId("payment-timeout").orElseThrow().getTitle()).isEqualTo("Payment Timeout DB");
     }
 
+    /**
+     * 验证安全同步报告冲突后，强制同步会以文件版本覆盖当前数据库记录。
+     *
+     * @param tempDir 临时目录
+     * @throws Exception 测试异常
+     */
+    @Test
+    void shouldForceSyncFileVersionAfterSafeSyncConflict(@TempDir Path tempDir) throws Exception {
+        resetTables();
+        Path vaultDir = tempDir.resolve("vault");
+        Long sourceId = createManagedSourceId();
+        seedArticle(sourceId, "# Payment Timeout\n\nretry=3\n", "Payment Timeout");
+        vaultExportService.export(vaultDir);
+
+        articleJdbcRepository.upsert(new ArticleRecord(
+                sourceId,
+                "payments-docs--payment-timeout",
+                "payment-timeout",
+                "Payment Timeout DB",
+                "# Payment Timeout\n\nretry=4\n",
+                "ACTIVE",
+                OffsetDateTime.parse("2026-04-16T22:00:00+08:00"),
+                List.of("payment/a.md"),
+                "{\"description\":\"db-mutated\"}",
+                "db mutated",
+                List.of("retry=4"),
+                List.of(),
+                List.of(),
+                "medium",
+                "pending"
+        ));
+        Path articleFile = vaultDir.resolve("concepts/payments-docs--payment-timeout.md");
+        Files.writeString(
+                articleFile,
+                """
+                        ---
+                        title: "Payment Timeout File"
+                        summary: "file restored"
+                        referential_keywords: ["retry=5"]
+                        ---
+
+                        # Payment Timeout
+
+                        retry=5
+                        """,
+                StandardCharsets.UTF_8
+        );
+
+        VaultSyncResult safeResult = vaultSyncService.sync(vaultDir, false);
+        ArticleRecord conflictedRecord = articleJdbcRepository.findByConceptId("payment-timeout").orElseThrow();
+        VaultSyncResult forcedResult = vaultSyncService.sync(vaultDir, true);
+        ArticleRecord restoredRecord = articleJdbcRepository.findByConceptId("payment-timeout").orElseThrow();
+
+        assertThat(safeResult.getSyncedFiles()).isZero();
+        assertThat(safeResult.getConflictCount()).isEqualTo(1);
+        assertThat(conflictedRecord.getTitle()).isEqualTo("Payment Timeout DB");
+        assertThat(conflictedRecord.getContent()).contains("retry=4");
+        assertThat(forcedResult.getSyncedFiles()).isEqualTo(1);
+        assertThat(forcedResult.getConflictCount()).isZero();
+        assertThat(restoredRecord.getTitle()).isEqualTo("Payment Timeout File");
+        assertThat(restoredRecord.getSummary()).isEqualTo("file restored");
+        assertThat(restoredRecord.getReferentialKeywords()).containsExactly("retry=5");
+        assertThat(restoredRecord.getContent()).contains("retry=5").doesNotContain("retry=4");
+    }
+
     private void seedArticle(Long sourceId, String contentBody, String title) {
         articleJdbcRepository.upsert(new ArticleRecord(
                 sourceId,

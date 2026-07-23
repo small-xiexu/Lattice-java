@@ -359,7 +359,7 @@ public class ArticleCorrectionService {
                 "Admin 纠错当前命中 README 演示 LLM 连接"
                         + "（routeLabel=" + safeRouteValue(routeLabel)
                         + ", baseUrl=" + safeRouteValue(baseUrl)
-                        + "），请先在 /admin/settings 为 compile.writer 切换到真实可用连接后重试"
+                        + "），请先在 /app/settings/models 为 compile.writer 切换到真实可用连接后重试"
         );
     }
 

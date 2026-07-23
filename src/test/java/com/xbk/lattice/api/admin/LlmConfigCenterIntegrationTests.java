@@ -555,6 +555,7 @@ class LlmConfigCenterIntegrationTests {
     void shouldProbeUnsavedChatModel() throws Exception {
         resetTables();
         AtomicReference<String> authorizationHeader = new AtomicReference<String>();
+        AtomicReference<String> requestBody = new AtomicReference<String>();
         int port = startJsonServer(
                 "/v1/chat/completions",
                 new FixedJsonHandler(
@@ -563,7 +564,8 @@ class LlmConfigCenterIntegrationTests {
                                 + "\"usage\":{\"prompt_tokens\":8,\"completion_tokens\":1}"
                                 + "}",
                         "Authorization",
-                        authorizationHeader
+                        authorizationHeader,
+                        requestBody
                 )
         );
         Long connectionId = createConnection(
@@ -587,6 +589,7 @@ class LlmConfigCenterIntegrationTests {
                 .andExpect(jsonPath("$.message").value(containsString("已返回对话结果")));
 
         assertThat(authorizationHeader.get()).isEqualTo("Bearer sk-model-123456");
+        assertThat(requestBody.get()).doesNotContain("\"max_tokens\"");
     }
 
     /**
@@ -851,14 +854,26 @@ class LlmConfigCenterIntegrationTests {
 
         private final AtomicReference<String> capturedHeader;
 
+        private final AtomicReference<String> capturedBody;
+
         private FixedJsonHandler(
                 String responseBody,
                 String headerName,
                 AtomicReference<String> capturedHeader
         ) {
+            this(responseBody, headerName, capturedHeader, null);
+        }
+
+        private FixedJsonHandler(
+                String responseBody,
+                String headerName,
+                AtomicReference<String> capturedHeader,
+                AtomicReference<String> capturedBody
+        ) {
             this.responseBody = responseBody;
             this.headerName = headerName;
             this.capturedHeader = capturedHeader;
+            this.capturedBody = capturedBody;
         }
 
         /**
@@ -870,6 +885,9 @@ class LlmConfigCenterIntegrationTests {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             capturedHeader.set(exchange.getRequestHeaders().getFirst(headerName));
+            if (capturedBody != null) {
+                capturedBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            }
             byte[] responseBytes = responseBody.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", APPLICATION_JSON_VALUE);
             exchange.sendResponseHeaders(200, responseBytes.length);

@@ -51,6 +51,9 @@ build/
 ### Local JS Tool Caches ###
 .npm-cache/
 .playwright-browsers/
+frontend/node_modules/
+frontend/coverage/
+frontend/playwright-report/
 
 ### Local Temp Outputs ###
 tmp/
