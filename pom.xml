@@ -15,7 +15,16 @@
     <artifactId>lattice-java</artifactId>
     <version>1.0-SNAPSHOT</version>
     <name>lattice-java</name>
-    <description>Lattice Java baseline spike</description>
+    <description>Evidence-grounded knowledge compilation, retrieval, Deep Research, and governance workbench</description>
+    <url>https://github.com/small-xiexu/Lattice-java</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
 
     <properties>
         <java.version>21</java.version>

@@ -1,5 +1,7 @@
 # 邪修智库（Lattice-java）
 
+[![CI](https://github.com/small-xiexu/Lattice-java/actions/workflows/ci.yml/badge.svg)](https://github.com/small-xiexu/Lattice-java/actions/workflows/ci.yml) [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+
 邪修智库是一个证据型知识问答与治理工作台：先把资料编译成可检索、可审计的知识资产，再通过 React 工作台、HTTP API、CLI 和 MCP 提供问答、Deep Research、反馈与知识治理能力。
 
 它不是“上传文档 -> 切 chunk -> 问模型”的最小 RAG demo。当前项目的核心是四条主线：
@@ -194,7 +196,15 @@ export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
 mvn -s .codex/maven-settings.xml clean package
 ```
 
-如果本机 Maven 镜像握手不稳定，可临时使用项目内 `.codex/maven-settings.xml`。当前项目约定仍以全局本地仓库 `/Users/sxie/maven/repository` 为主。
+如果本机 Maven 镜像握手不稳定，可临时使用项目内 `.codex/maven-settings.xml`。该文件使用 `${user.home}/maven/repository`，不会绑定维护者的绝对路径。
+
+## 参与维护
+
+- 提交 Issue 或 Pull Request 前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，按 JDK 21、红线扫描和 Maven 单制品门禁提供可复现证据。
+- 安全问题请按 [SECURITY.md](SECURITY.md) 私密报告，不要在公开 Issue 中披露漏洞细节、凭据或私有数据。
+- 项目采用 [Apache License 2.0](LICENSE)；提交贡献即表示该贡献按此许可证提供，除非贡献者另有明确说明。
+- GitHub Actions 会在 `main` 和每个 Pull Request 上使用隔离的 pgvector/PostgreSQL 与 Redis 服务，执行红线扫描、前端门禁、Java 测试与打包；不会连接真实模型 Provider。
+- Bug、Feature 和 PR 已提供结构化模板；Maven、npm 与 GitHub Actions 依赖由 Dependabot 每周检查。
 
 ## 文档导航
 
@@ -206,6 +216,9 @@ mvn -s .codex/maven-settings.xml clean package
 | 文档识别、OCR、解析路由 | [`docs/文档识别与OCR运行态说明.md`](docs/%E6%96%87%E6%A1%A3%E8%AF%86%E5%88%AB%E4%B8%8EOCR%E8%BF%90%E8%A1%8C%E6%80%81%E8%AF%B4%E6%98%8E.md) |
 | 模型中心配置步骤 | [`docs/核心架构/模型绑定配置参考.md`](docs/%E6%A0%B8%E5%BF%83%E6%9E%B6%E6%9E%84/%E6%A8%A1%E5%9E%8B%E7%BB%91%E5%AE%9A%E9%85%8D%E7%BD%AE%E5%8F%82%E8%80%83.md) |
 | 质量推进与踩坑记录 | [`docs/quality-progress-and-lessons.md`](docs/quality-progress-and-lessons.md) |
+| 如何贡献与运行本地门禁 | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| 如何私密报告安全问题 | [`SECURITY.md`](SECURITY.md) |
+| 项目的开源许可条款 | [`LICENSE`](LICENSE) |
 
 ## 项目判断
 

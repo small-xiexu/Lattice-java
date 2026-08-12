@@ -1,0 +1,52 @@
+name: Bug report
+description: 报告可复现的缺陷；安全漏洞请勿使用此模板
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先确认问题不包含漏洞细节、凭据或私有数据。安全问题请阅读 SECURITY.md。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述
+      description: 说明实际行为、预期行为和影响。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 最小复现步骤
+      description: 使用非敏感数据给出最小、稳定的复现步骤。
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit 或版本
+      placeholder: main / commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境
+      description: 操作系统、JDK、浏览器，以及相关 PostgreSQL/Redis 版本。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 日志与证据
+      description: 粘贴已脱敏的错误、日志或截图；不要包含 Key、Token、Cookie、私有内容或绝对凭据路径。
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已确认这不是需要私密报告的安全漏洞。
+          required: true
+        - label: 我已删除凭据、私有数据和其他敏感信息。
+          required: true

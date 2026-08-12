@@ -1,0 +1,47 @@
+name: Feature request
+description: 提议可验证的新能力或改进
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: use_case
+    attributes:
+      label: 使用场景
+      description: 谁遇到了什么问题，现有方式为什么不足？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+      description: 描述预期行为、输入输出和可验收标准，不要只给界面草图。
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 替代方案
+      description: 已尝试或考虑过哪些方式？
+  - type: dropdown
+    id: surface
+    attributes:
+      label: 主要影响面
+      options:
+        - 知识编译与资料源
+        - 检索、问答与引用
+        - Deep Research
+        - Web 工作台
+        - HTTP API、CLI 或 MCP
+        - 模型、向量与配置
+        - 安全、治理或供应链
+        - 文档与开发体验
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: 安全与兼容性影响
+      description: 是否涉及文件、Shell、网络、凭据、模型调用、权限、数据删除或第三方依赖？
+    validations:
+      required: true

@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: JDK 21 build and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: pgvector/pgvector@sha256:0a07c4114ba6d1d04effcce3385e9f5ce305eb02e56a3d35948a415a52f193ec # pg16
+        env:
+          POSTGRES_DB: ai-rag-knowledge-test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ai-rag-knowledge-test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis@sha256:25c0ae32c6c2301798579f5944af53729766a18eff5660bbef196fc2e6214a9c # Redis 8.0.3
+        ports:
+          - "6379:6379"
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Initialize PostgreSQL test schema
+        run: |
+          docker exec "${{ job.services.postgres.id }}" \
+            psql -U postgres -d ai-rag-knowledge-test -v ON_ERROR_STOP=1 \
+            -c "CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public"
+          docker exec -i "${{ job.services.postgres.id }}" \
+            psql -U postgres -d ai-rag-knowledge-test -v ON_ERROR_STOP=1 \
+            < src/main/resources/db/schema.sql
+
+      - name: Run query redline scan
+        run: bash scripts/scan-redline.sh "$RUNNER_TEMP/special_cases_report.md"
+
+      - name: Build and test the application
+        run: >-
+          mvn --batch-mode --no-transfer-progress
+          -Dlattice.test.jdbc-url=jdbc:postgresql://127.0.0.1:5432/ai-rag-knowledge-test
+          clean package
