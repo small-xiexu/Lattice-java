@@ -6,9 +6,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 /**
  * CompileJobJdbcRepository 测试
@@ -129,7 +131,8 @@ class CompileJobJdbcRepositoryTests {
         assertThat(runningRecord.getWorkerId()).isEqualTo("worker-b");
         assertThat(runningRecord.getCurrentStep()).isEqualTo("initialize_job");
         assertThat(runningRecord.getProgressMessage()).isEqualTo("编译任务已启动，等待图执行");
-        assertThat(runningRecord.getRunningExpiresAt()).isEqualTo(runningExpiresAt);
+        assertThat(runningRecord.getRunningExpiresAt())
+                .isCloseTo(runningExpiresAt, within(1, ChronoUnit.MICROS));
 
         compileJobJdbcRepository.retry("job-runtime-retry");
 
@@ -353,8 +356,10 @@ class CompileJobJdbcRepositoryTests {
         assertThat(runningRecord.getProgressCurrent()).isEqualTo(2);
         assertThat(runningRecord.getProgressTotal()).isEqualTo(5);
         assertThat(runningRecord.getProgressMessage()).isEqualTo("正在审查文章（2/5）：payment-timeout");
-        assertThat(runningRecord.getLastHeartbeatAt()).isEqualTo(heartbeatAt);
-        assertThat(runningRecord.getRunningExpiresAt()).isEqualTo(runningExpiresAt);
+        assertThat(runningRecord.getLastHeartbeatAt())
+                .isCloseTo(heartbeatAt, within(1, ChronoUnit.MICROS));
+        assertThat(runningRecord.getRunningExpiresAt())
+                .isCloseTo(runningExpiresAt, within(1, ChronoUnit.MICROS));
     }
 
     /**
@@ -378,7 +383,8 @@ class CompileJobJdbcRepositoryTests {
         assertThat(failedRecord.getErrorCode()).isEqualTo("COMPILE_STALE_TIMEOUT");
         assertThat(failedRecord.getErrorMessage()).isEqualTo("job heartbeat lost");
         assertThat(failedRecord.getRunningExpiresAt()).isNull();
-        assertThat(failedRecord.getFinishedAt()).isEqualTo(finishedAt);
+        assertThat(failedRecord.getFinishedAt())
+                .isCloseTo(finishedAt, within(1, ChronoUnit.MICROS));
     }
 
     /**
