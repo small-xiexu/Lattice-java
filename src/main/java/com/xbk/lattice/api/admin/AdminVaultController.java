@@ -1,5 +1,6 @@
 package com.xbk.lattice.api.admin;
 
+import com.xbk.lattice.shared.security.PathTraversalGuard;
 import com.xbk.lattice.vault.VaultExportResult;
 import com.xbk.lattice.vault.VaultExportService;
 import com.xbk.lattice.vault.VaultSyncResult;
@@ -46,10 +47,9 @@ public class AdminVaultController {
      */
     @PostMapping("/export")
     public VaultExportResult export(@RequestBody AdminVaultExportRequest request) throws IOException {
-        if (request == null || request.getVaultDir() == null || request.getVaultDir().isBlank()) {
-            throw new IllegalArgumentException("vaultDir 不能为空");
-        }
-        return vaultExportService.export(Path.of(request.getVaultDir()));
+        Path vaultDir = PathTraversalGuard.validateAndNormalize(
+                request == null ? null : request.getVaultDir(), "vaultDir");
+        return vaultExportService.export(vaultDir);
     }
 
     /**
@@ -61,9 +61,8 @@ public class AdminVaultController {
      */
     @PostMapping("/sync")
     public VaultSyncResult sync(@RequestBody AdminVaultSyncRequest request) throws IOException {
-        if (request == null || request.getVaultDir() == null || request.getVaultDir().isBlank()) {
-            throw new IllegalArgumentException("vaultDir 不能为空");
-        }
-        return vaultSyncService.sync(Path.of(request.getVaultDir()), request.isForce());
+        Path vaultDir = PathTraversalGuard.validateAndNormalize(
+                request == null ? null : request.getVaultDir(), "vaultDir");
+        return vaultSyncService.sync(vaultDir, request.isForce());
     }
 }

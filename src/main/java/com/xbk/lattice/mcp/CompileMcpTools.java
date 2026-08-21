@@ -3,6 +3,7 @@ package com.xbk.lattice.mcp;
 import com.xbk.lattice.api.query.QueryResponse;
 import com.xbk.lattice.compiler.service.CompileApplicationFacade;
 import com.xbk.lattice.compiler.service.CompileResult;
+import com.xbk.lattice.shared.security.PathTraversalGuard;
 import com.xbk.lattice.compiler.service.DocumentSectionSelector;
 import com.xbk.lattice.governance.ArticleCorrectionResult;
 import com.xbk.lattice.governance.ArticleCorrectionService;
@@ -91,7 +92,7 @@ abstract class CompileMcpTools extends SourceMcpTools {
             @McpToolParam(description = "The source directory to compile") String sourceDir,
             @McpToolParam(description = "Whether to run incremental compile") boolean incremental
     ) throws IOException {
-        Path compileSourceDir = Path.of(sourceDir);
+        Path compileSourceDir = PathTraversalGuard.validateAndNormalize(sourceDir, "sourceDir");
         CompileResult compileResult = requireCompileApplicationFacade().compile(compileSourceDir, incremental, null);
         return "{"
                 + "\"persistedCount\":" + compileResult.getPersistedCount() + ","

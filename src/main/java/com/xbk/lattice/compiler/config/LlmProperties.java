@@ -38,10 +38,10 @@ public class LlmProperties {
     /**
      * 密钥加密种子。
      *
-     * <p><b>安全警告：</b>默认值是开发/测试占位种子，<b>生产环境必须覆盖</b>。
+     * <p><b>安全警告：</b>默认值为空，未通过环境变量设置时应用启动将 fail-fast。
      * 此值用于派生 {@code LlmSecretCryptoService} 的加密密钥。</p>
      */
-    private String secretEncryptionKey = "lattice-phase8-bootstrap-key-change-me";
+    private String secretEncryptionKey = "";
 
     /**
      * LLM 调用预算上限（美元）。

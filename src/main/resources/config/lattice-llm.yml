@@ -6,7 +6,7 @@ lattice:
     config-source: ${LATTICE_LLM_CONFIG_SOURCE:hybrid}
     bootstrap-enabled: ${LATTICE_LLM_BOOTSTRAP_ENABLED:true}
     deep-research-startup-validation-enabled: ${LATTICE_LLM_DEEP_RESEARCH_STARTUP_VALIDATION_ENABLED:true}
-    secret-encryption-key: ${LATTICE_LLM_SECRET_ENCRYPTION_KEY:lattice-phase8-bootstrap-key-change-me}
+    secret-encryption-key: ${LATTICE_LLM_SECRET_ENCRYPTION_KEY:}
     budget-usd: ${LATTICE_LLM_BUDGET_USD:10.0}
     cache-ttl-seconds: ${LATTICE_LLM_CACHE_TTL_SECONDS:86400}
     cache-key-prefix: ${LATTICE_LLM_CACHE_KEY_PREFIX:llm:cache:}
